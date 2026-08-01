@@ -2478,7 +2478,13 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
         if thinking_budget_str:
             try:
                 params["extra_body"] = {
-                    "google": {"thinking_config": {"thinking_budget": int(thinking_budget_str)}}
+                    "extra_body": {
+                        "google": {
+                            "thinking_config": {
+                                "thinking_budget": int(thinking_budget_str)
+                            }
+                        }
+                    }
                 }
             except (ValueError, TypeError):
                 pass

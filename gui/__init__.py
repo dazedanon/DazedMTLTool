@@ -12,6 +12,7 @@ from .rpgmaker_tab import RPGMakerTab
 from .log_viewer import LogViewer
 from .file_manager import FileManager
 from .workflow_tab import WorkflowTab
+from .evaluation_tab import EvaluationTab
 
 __all__ = [
     "DazedMTLGUI",
@@ -20,4 +21,5 @@ __all__ = [
     "LogViewer",
     "FileManager",
     "WorkflowTab",
+    "EvaluationTab",
 ]

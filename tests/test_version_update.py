@@ -1416,7 +1416,7 @@ class VersionUpdateUITests(unittest.TestCase):
                 window.content_stack.widget(window.PAGE_VERSION_UPDATE),
                 VersionUpdateTab,
             )
-            self.assertEqual(len(window.nav_buttons), 8)
+            self.assertEqual(len(window.nav_buttons), 9)
         finally:
             window.close()
 

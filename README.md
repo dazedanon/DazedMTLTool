@@ -19,6 +19,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 - [Tips](#tips)
 - [Mistral API (free tier)](#mistral-api-free-tier)
 - [Batch Translation (Claude, GPT, and Gemini)](#batch-translation-claude-gpt-and-gemini)
+- [Translation Model Evaluation](#translation-model-evaluation)
 - [Folder Structure](#folder-structure)
 - [Finding Untranslated Text (Snipping Tool OCR)](#finding-untranslated-text-snipping-tool-ocr)
 - [RPG Maker Translation Workflow](#rpg-maker-translation-workflow)
@@ -298,6 +299,58 @@ the 50% batch discount applied.
 
 `python selftest_batch.py` round-trips the whole flow offline (no API key needed) if you want
 to verify the pipeline after making changes.
+
+---
+
+## Translation Model Evaluation
+
+The **Evaluation** page compares any two or more models through native Batch APIs
+or immediate live requests without translating an entire game.
+Every row can use its own API URL, saved key, and model dropdown. Official
+OpenAI, Gemini, and Anthropic URLs are available from the adjacent **Presets**
+menu; other URLs use an OpenAI-compatible API. Model discovery runs
+automatically when the URL, preset, or saved key changes; **Scan** remains as a
+manual retry, and its results populate the model dropdown. Each row can run as
+**Batch** or **Live**. Batch requires compatible model-list, Files, and Batch
+routes, while Live supports chat-completions-only and keyless local servers. The
+selected RPG Maker MV/MZ JSON folder is scanned for eligible event text,
+database text, and control-code-heavy lines, then a deterministic sample is
+balanced across scenes and files. Each model gets the same source, system
+prompt, matched glossary, previous Japanese source lines, output schema, and
+hidden consistency-check schedule.
+
+Preparing a benchmark is offline. **Test size** offers understandable Quick,
+Standard, and Thorough presets, and preparation reports how many eligible lines
+and files were found and selected. Before paid batch jobs are sent, the page
+shows a conservative estimate for every model and asks for confirmation; the
+default hard limit is $10 per model, with submission blocked above an 80%
+safety threshold and the same 4,096-token response ceiling applied to every request.
+The ceiling's theoretical cost must also fit the budget. Results are checked
+for missing lines, Japanese residue, and broken
+placeholders/control codes. The results table reports consistency in plain
+language, and the final CSV hides model identities independently on every row
+for a letter/TIE human review. Exporting that CSV creates the hidden scoring
+key; complete its winner column before importing it back into the same run.
+Run manifests and results are kept under
+`log/evaluations/`; saved API-key secrets are never copied into them.
+
+Evaluation Batch jobs are also registered in Batch History. They are marked
+as Evaluation jobs and can be monitored or canceled there, but cannot be
+resumed or consumed as normal game translation batches. Live rows finish in
+the Evaluation page and do not create Batch History entries.
+
+Every run remains available in the **Evaluation history** table; preparing a
+new benchmark does not replace earlier results. A selected run can be exported
+as a portable `.dazedeval` archive and imported on another installation. The
+archive contains its frozen manifest, result files, validation summaries, and
+blind-review state, but never saved API-key secrets. Imports always create a
+new history entry rather than overwriting an existing run. An imported run
+that still has provider jobs in progress remains paused until the user chooses
+**Refresh results** and confirms reconnecting its saved API URLs.
+
+Batch requests do not share memory with one another. All required context is
+therefore embedded in every individual request. In the evaluator, that context
+is frozen in the manifest before any provider-specific request is generated.
 
 ---
 

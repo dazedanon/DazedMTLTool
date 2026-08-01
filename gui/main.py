@@ -712,6 +712,7 @@ from gui.image_manager import ImageManager
 from gui.version_update_tab import VersionUpdateTab
 from gui.skills_tab import SkillsTab
 from gui.batch_tab import BatchTab
+from gui.evaluation_tab import EvaluationTab
 
 class DazedMTLGUI(QMainWindow):
     """Main GUI window for DazedTL."""
@@ -724,6 +725,7 @@ class DazedMTLGUI(QMainWindow):
     PAGE_BATCHES = 5
     PAGE_SKILLS = 6
     PAGE_CONFIG = 7
+    PAGE_EVALUATION = 8
 
     def __init__(self):
         super().__init__()
@@ -1051,6 +1053,17 @@ class DazedMTLGUI(QMainWindow):
         btn_config.clicked.connect(lambda: self.switch_page(self.PAGE_CONFIG))
         sidebar_layout.addWidget(btn_config)
         self.nav_buttons.append(btn_config)
+
+        # Translation model evaluation
+        btn_evaluation = self.create_nav_button("⚖", "Evaluation")
+        btn_evaluation.setToolTip(
+            "Evaluation - blinded, budget-capped translation model comparison"
+        )
+        btn_evaluation.clicked.connect(
+            lambda: self.switch_page(self.PAGE_EVALUATION)
+        )
+        sidebar_layout.addWidget(btn_evaluation)
+        self.nav_buttons.append(btn_evaluation)
         
         sidebar_layout.addStretch()
 
@@ -1140,6 +1153,10 @@ class DazedMTLGUI(QMainWindow):
         self.config_tab = ConfigTab()
         self.config_tab.config_changed.connect(self.on_config_changed)
         self.content_stack.addWidget(self.config_tab)
+
+        # Translation Evaluation Tab (index 8)
+        self.evaluation_tab = EvaluationTab(self)
+        self.content_stack.addWidget(self.evaluation_tab)
 
     def _create_workflow_container(self) -> QWidget:
         """Wrap the RPGMaker and Wolf guided workflows behind an engine selector."""
@@ -1241,6 +1258,8 @@ class DazedMTLGUI(QMainWindow):
                 refresh_widths = getattr(tab, "refresh_wrap_widths_from_env", None)
                 if callable(refresh_widths):
                     refresh_widths()
+            if hasattr(self, "evaluation_tab"):
+                self.evaluation_tab._refresh_keys()
         except Exception as e:
             print(f"Warning: Could not apply configuration changes: {e}")
             

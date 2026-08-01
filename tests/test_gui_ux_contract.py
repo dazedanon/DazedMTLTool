@@ -164,6 +164,7 @@ class GUIUXContractTests(unittest.TestCase):
             "batch_tab.py",
             "skills_tab.py",
             "config_tab.py",
+            "evaluation_tab.py",
         )
         for filename in ordinary_pages:
             source = (ROOT / "gui" / filename).read_text(encoding="utf-8")
@@ -203,6 +204,7 @@ class GUIUXContractTests(unittest.TestCase):
         source = (ROOT / "scripts/capture_app_ui.py").read_text(encoding="utf-8")
         self.assertIn("TemporaryDirectory", source)
         self.assertIn('patch.object(DazedMTLGUI, "start_background_update_check"', source)
+        self.assertIn('("evaluation", window.PAGE_EVALUATION, None)', source)
         self.assertIn('patch("gui.config_tab.ConfigTab.fetch_models"', source)
         self.assertIn('patch("util.translation._load_litellm_pricing"', source)
         self.assertIn('patch("util.batch_history.list_local_batches"', source)

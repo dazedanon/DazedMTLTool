@@ -44,7 +44,7 @@ Application navigation
 ```
 
 - The left application rail owns movement between Guide, Workflow, Images,
-  Version Update, Translation, Batches, Skills, and Configuration.
+  Version Update, Translation, Batches, Skills, Configuration, and Evaluation.
 - A page may add one secondary navigation level when it represents real peer
   sections, such as Configuration categories. Do not add navigation for a
   single form or for actions.
@@ -368,6 +368,7 @@ An active screen is migrated only when it has:
 | Batch History | `PageHeader`, toolbar card, shared table/editor card |
 | Skills & Prompts | `PageHeader`, shared editor card, tabs, actions and status |
 | Configuration | `PageHeader`, labeled secondary navigation, aligned setting cards in every engine category |
+| Evaluation | `PageHeader`, dynamic provider/key/model rows, simple test-size and budget controls, explicit paid-submit confirmation, expanding results table, and bounded activity log |
 | Tool Update dialog | semantic title, card, status steps, and action variants |
 
 The application capture harness covers these top-level destinations, every

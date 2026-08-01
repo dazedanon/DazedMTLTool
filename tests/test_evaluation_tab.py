@@ -1,0 +1,308 @@
+from __future__ import annotations
+
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PyQt5.QtWidgets import QApplication
+
+from gui.config_tab import ModelFetchThread
+from gui.evaluation_tab import EvaluationTab
+
+
+class EvaluationTabTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        patches = (
+            mock.patch("gui.evaluation_tab.evaluation.latest_run", return_value=None),
+            mock.patch("gui.evaluation_tab.evaluation.list_runs", return_value=[]),
+            mock.patch("gui.evaluation_tab.api_key_vault.ensure_vault"),
+            mock.patch(
+                "gui.evaluation_tab.api_key_vault.list_names",
+                return_value=["OpenAI", "Gemini", "Claude"],
+            ),
+            mock.patch("gui.evaluation_tab.api_key_vault.get_active_name", return_value="OpenAI"),
+            mock.patch(
+                "gui.evaluation_tab.api_key_vault.get_endpoint",
+                side_effect=lambda name: {
+                    "OpenAI": "https://api.openai.com/v1",
+                    "Gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
+                    "Claude": "https://api.anthropic.com/v1",
+                }.get(name, ""),
+            ),
+            mock.patch(
+                "gui.evaluation_tab.api_key_vault.is_keyless", return_value=False
+            ),
+            mock.patch.object(
+                EvaluationTab, "_schedule_candidate_model_scan", autospec=True
+            ),
+        )
+        self.patchers = list(patches)
+        for patcher in self.patchers:
+            patcher.start()
+        self.tab = EvaluationTab()
+        self.tab.show()
+        self.app.processEvents()
+
+    def tearDown(self):
+        self.tab.close()
+        self.app.processEvents()
+        for patcher in reversed(self.patchers):
+            patcher.stop()
+
+    def test_defaults_expose_model_dropdowns_and_simple_safe_actions(self):
+        self.assertEqual(self.tab.test_size_combo.currentData(), (360, 120))
+        self.assertEqual(self.tab.budget_spin.value(), 10.0)
+        self.assertEqual(
+            [row["model"].currentText() for row in self.tab._candidate_widgets],
+            ["gpt-5.6-terra", "gemini-3.6-flash", "claude-sonnet-5"],
+        )
+        self.assertEqual(
+            [row["endpoint"].text() for row in self.tab._candidate_widgets],
+            [
+                "https://api.openai.com/v1",
+                "https://generativelanguage.googleapis.com/v1beta/openai/",
+                "https://api.anthropic.com",
+            ],
+        )
+        self.assertTrue(
+            all(not row["model"].isEditable() for row in self.tab._candidate_widgets)
+        )
+        self.assertEqual(
+            [row["execution"].currentData() for row in self.tab._candidate_widgets],
+            ["batch", "batch", "batch"],
+        )
+        self.assertTrue(all(row["scan"].isEnabled() for row in self.tab._candidate_widgets))
+        self.assertTrue(self.tab.prepare_btn.isEnabled())
+        self.assertFalse(self.tab.submit_btn.isEnabled())
+        self.assertFalse(self.tab.export_btn.isEnabled())
+        self.assertFalse(self.tab.open_history_btn.isEnabled())
+        self.assertTrue(self.tab.import_evaluation_btn.isEnabled())
+
+    def test_history_lists_and_selects_previous_evaluations(self):
+        older = Path("/tmp/evaluation-older")
+        newer = Path("/tmp/evaluation-newer")
+        runs = [
+            {
+                "run_dir": newer,
+                "run_id": "newer",
+                "created_at": "2026-08-02T12:00:00+00:00",
+                "status": "completed",
+                "models": ["model-a", "model-b"],
+                "modes": ["batch", "live"],
+                "selected_segments": 360,
+                "reviewed": 100,
+            },
+            {
+                "run_dir": older,
+                "run_id": "older",
+                "created_at": "2026-08-01T12:00:00+00:00",
+                "status": "prepared",
+                "models": ["model-c", "model-d"],
+                "modes": ["batch", "batch"],
+                "selected_segments": 120,
+                "reviewed": 0,
+            },
+        ]
+        with mock.patch(
+            "gui.evaluation_tab.evaluation.list_runs", return_value=runs
+        ):
+            self.tab._refresh_history(older)
+
+        self.assertEqual(self.tab.history_table.rowCount(), 2)
+        self.assertEqual(self.tab.history_table.item(0, 1).text(), "model-a, model-b")
+        self.assertEqual(self.tab.history_table.item(0, 2).text(), "Batch, Live")
+        self.assertEqual(self.tab._selected_history_run(), older)
+        self.assertTrue(self.tab.open_history_btn.isEnabled())
+        self.assertTrue(self.tab.export_evaluation_btn.isEnabled())
+
+    def test_key_suggestions_are_provider_specific(self):
+        self.assertEqual(
+            self.tab._candidate_widgets[0]["key"].currentText(), "OpenAI"
+        )
+        self.assertEqual(
+            self.tab._candidate_widgets[1]["key"].currentText(), "Gemini"
+        )
+        self.assertEqual(
+            self.tab._candidate_widgets[2]["key"].currentText(), "Claude"
+        )
+
+    def test_models_can_be_added_removed_and_reassigned(self):
+        self.tab._add_candidate_row("gemini", "gemini-3.6-flash")
+        self.assertEqual(len(self.tab._candidate_widgets), 4)
+        added = self.tab._candidate_widgets[-1]
+        self.assertEqual(
+            added["endpoint"].text(),
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+        self.assertEqual(self.tab._provider_for_endpoint(added["endpoint"].text()), "gemini")
+        self.assertEqual(added["model"].currentText(), "gemini-3.6-flash")
+        self.tab._remove_candidate_row(added)
+        self.assertEqual(len(self.tab._candidate_widgets), 3)
+
+    def test_custom_url_uses_openai_compatible_protocol(self):
+        row = self.tab._candidate_widgets[0]
+        row["endpoint"].setText("http://127.0.0.1:8000/v1")
+        row["model"].clear()
+        row["model"].addItem("local-translation-model")
+        with mock.patch(
+            "gui.evaluation_tab.api_key_vault.is_keyless", return_value=True
+        ):
+            candidate = self.tab._candidate_config()[0]
+        self.assertEqual(candidate["provider"], "openai")
+        self.assertEqual(candidate["endpoint"], "http://127.0.0.1:8000/v1")
+        self.assertTrue(candidate["keyless"])
+
+    def test_provider_and_key_changes_schedule_automatic_model_scan(self):
+        scheduler = EvaluationTab._schedule_candidate_model_scan
+        scheduler.reset_mock()
+        row = self.tab._candidate_widgets[0]
+        self.tab._apply_endpoint_preset(
+            row, "https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
+        self.assertTrue(any(row in call.args for call in scheduler.call_args_list))
+
+        scheduler.reset_mock()
+        row["key"].setCurrentText("Claude")
+        self.app.processEvents()
+        self.assertTrue(any(row in call.args for call in scheduler.call_args_list))
+
+    def test_scanned_models_replace_unavailable_selection(self):
+        row = self.tab._candidate_widgets[0]
+        self.tab._apply_candidate_models(row, ["gpt-listed-b", "gpt-listed-a"])
+        self.assertEqual(row["model"].currentText(), "gpt-listed-a")
+        self.assertEqual(
+            [row["model"].itemText(index) for index in range(row["model"].count())],
+            ["gpt-listed-a", "gpt-listed-b"],
+        )
+
+    def test_scanned_models_keep_selection_when_provider_still_offers_it(self):
+        row = self.tab._candidate_widgets[0]
+        self.tab._apply_candidate_models(
+            row, ["gpt-listed-b", "gpt-5.6-terra", "gpt-listed-a"]
+        )
+        self.assertEqual(row["model"].currentText(), "gpt-5.6-terra")
+
+    def test_model_scan_uses_selected_provider_key_and_endpoint(self):
+        row = self.tab._candidate_widgets[1]
+        fake_worker = mock.Mock()
+        fake_worker.isRunning.return_value = False
+        with (
+            mock.patch(
+                "gui.evaluation_tab.api_key_vault.get_entry",
+                return_value={
+                    "secret": "hidden-secret",
+                    "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/",
+                    "keyless": False,
+                },
+            ),
+            mock.patch(
+                "gui.evaluation_tab.ModelFetchThread", return_value=fake_worker
+            ) as worker_class,
+        ):
+            self.tab._fetch_candidate_models(row)
+
+        worker_class.assert_called_once_with(
+            "hidden-secret",
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+            parent=self.tab,
+            provider="gemini",
+        )
+        fake_worker.start.assert_called_once_with()
+
+    def test_explicit_provider_scan_does_not_probe_other_providers(self):
+        worker = ModelFetchThread("hidden-secret", "", provider="anthropic")
+        with (
+            mock.patch.object(worker, "_fetch_openai") as openai_fetch,
+            mock.patch.object(
+                worker, "_fetch_anthropic", return_value=["claude-listed"]
+            ) as anthropic_fetch,
+            mock.patch.object(worker, "_fetch_gemini") as gemini_fetch,
+        ):
+            worker.run()
+
+        anthropic_fetch.assert_called_once_with()
+        openai_fetch.assert_not_called()
+        gemini_fetch.assert_not_called()
+
+    def test_terminal_provider_status_displays_as_completed_after_processing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            self.tab.current_run_dir = Path(temporary)
+            self.tab._display_state({
+                "status": "completed",
+                "candidates": [{
+                    "id": "candidate-1",
+                    "model": "claude-opus-5",
+                    "provider": "anthropic",
+                    "endpoint": "https://api.anthropic.com",
+                    "status": "completed",
+                    "api_status": "ended",
+                    "estimate": {"cost_usd": 1.0},
+                    "summary": {},
+                }],
+            })
+            self.assertEqual(self.tab.table.item(0, 3).text(), "Completed")
+            self.assertTrue(self.tab.import_btn.isEnabled())
+
+    def test_failed_evaluation_displays_failure_and_disables_review_actions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            self.tab.current_run_dir = Path(temporary)
+            self.tab._display_state({
+                "status": "failed",
+                "candidates": [{
+                    "id": "candidate-1",
+                    "model": "broken-model",
+                    "provider": "gemini",
+                    "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/",
+                    "status": "failed",
+                    "api_status": "completed",
+                    "estimate": {"cost_usd": 1.0},
+                    "summary": {
+                        "total_segments": 10,
+                        "valid_rate": 0.0,
+                    },
+                }],
+            })
+            self.assertEqual(self.tab.table.item(0, 3).text(), "Failed")
+            self.assertFalse(self.tab.export_btn.isEnabled())
+            self.assertFalse(self.tab.import_btn.isEnabled())
+
+    def test_import_explains_that_blind_export_is_required(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            self.tab.current_run_dir = Path(temporary)
+            with (
+                mock.patch("gui.evaluation_tab.QMessageBox.information") as info,
+                mock.patch("gui.evaluation_tab.QFileDialog.getOpenFileName") as picker,
+            ):
+                self.tab.import_review()
+            info.assert_called_once()
+            self.assertIn("Export the blind review first", info.call_args.args[2])
+            picker.assert_not_called()
+
+    def test_compact_width_keeps_setup_and_result_columns_readable(self):
+        self.tab.resize(900, 720)
+        self.app.processEvents()
+        self.tab._refresh_responsive_geometry()
+        self.assertGreaterEqual(
+            self.tab.setup_card.height(), self.tab.setup_card.sizeHint().height()
+        )
+        self.assertGreater(self.tab.page_scroll.verticalScrollBar().maximum(), 0)
+        for widgets in self.tab._candidate_widgets:
+            self.assertGreaterEqual(widgets["endpoint_field"].width(), 320)
+            self.assertGreaterEqual(widgets["key"].width(), 220)
+            self.assertGreaterEqual(widgets["model"].width(), 260)
+        for widget in (self.tab.test_size_combo, self.tab.budget_spin):
+            self.assertGreaterEqual(widget.width(), 132)
+        for index, minimum in enumerate((210, 240, 80, 120, 100, 90, 80, 140, 110)):
+            self.assertGreaterEqual(self.tab.table.columnWidth(index), minimum)
+
+
+if __name__ == "__main__":
+    unittest.main()

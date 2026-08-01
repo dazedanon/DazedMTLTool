@@ -69,8 +69,59 @@ class BatchProviderDetectionTests(unittest.TestCase):
         self.assertIn("猫 (Cat)", params["messages"][0]["content"])
         self.assertTrue(any(m.get("content") == "prior" for m in params["messages"]))
 
+    def test_keyless_custom_openai_client_uses_sdk_placeholder(self):
+        with mock.patch.object(BP.openai, "OpenAI") as client_class:
+            BP.get_client(
+                "openai", api_key="", api_url="http://127.0.0.1:8000/v1"
+            )
+        client_class.assert_called_once_with(
+            api_key="not-needed", base_url="http://127.0.0.1:8000/v1"
+        )
+
+    def test_gemini_builder_and_batch_adapter_use_correct_extension_nesting(self):
+        with mock.patch.dict(
+            "os.environ", {"GEMINI_THINKING_BUDGET": "0"}, clear=False
+        ):
+            params = T.buildOpenAIRequest(
+                "system", '{"Line1":"猫"}', [], 0, "json",
+                "gemini-2.5-flash", 1, api_provider="gemini",
+            )
+        self.assertEqual(
+            params["extra_body"]["extra_body"]["google"]
+            ["thinking_config"]["thinking_budget"],
+            0,
+        )
+        body = BP._openai_batch_body("gemini", params)
+        self.assertNotIn("google", body)
+        self.assertEqual(
+            body["extra_body"]["google"]["thinking_config"]["thinking_budget"],
+            0,
+        )
+
 
 class OpenAIBatchAdapterTests(unittest.TestCase):
+    def test_live_request_returns_batch_compatible_result_shape(self):
+        response = {
+            "choices": [{"message": {"content": '{"Line1":"Cat"}'}}],
+            "usage": {
+                "prompt_tokens": 50,
+                "completion_tokens": 10,
+                "prompt_tokens_details": {"cached_tokens": 20},
+            },
+        }
+        create = mock.Mock(return_value=response)
+        client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        )
+        result = BP.execute_live_request(
+            "openai",
+            {"model": "local", "messages": [], "response_format": {"type": "json_object"}},
+            client=client,
+        )
+        self.assertEqual(result["text"], '{"Line1":"Cat"}')
+        self.assertEqual(result["prompt_tokens"], 50)
+        self.assertEqual(result["cache_read_input_tokens"], 20)
+
     def test_submit_uploads_official_jsonl_shape(self):
         files = _OpenAIFiles()
         batches = _Batches(SimpleNamespace())
@@ -129,7 +180,7 @@ class OpenAIBatchAdapterTests(unittest.TestCase):
 
 
 class GeminiBatchAdapterTests(unittest.TestCase):
-    def test_submit_uses_google_file_upload_and_materializes_extra_body(self):
+    def test_submit_uses_google_upload_and_preserves_gemini_extra_body(self):
         uploaded = {}
 
         class Files:
@@ -153,18 +204,38 @@ class GeminiBatchAdapterTests(unittest.TestCase):
                     "schema": {"type": "object"},
                 },
             },
-            "extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}},
+            "extra_body": {
+                "extra_body": {
+                    "google": {"thinking_config": {"thinking_budget": 0}}
+                }
+            },
         }
         with mock.patch.object(BP, "_google_client", return_value=google_client):
             result = BP.submit_batch(
                 "gemini", [{"custom_id": "req-1", "params": params}], client=openai_client
             )
         body = uploaded["row"]["body"]
-        self.assertNotIn("extra_body", body)
+        self.assertNotIn("google", body)
         self.assertEqual(body["model"], "gemini-3.1-pro")
         self.assertEqual(body["response_format"], {"type": "json_object"})
-        self.assertEqual(body["google"]["thinking_config"]["thinking_budget"], 0)
+        self.assertEqual(
+            body["extra_body"]["google"]["thinking_config"]["thinking_budget"], 0
+        )
         self.assertEqual(result["input_file_id"], "files/gemini-input")
+
+    def test_legacy_single_level_extension_never_becomes_top_level_google(self):
+        body = BP._openai_batch_body("gemini", {
+            "model": "gemini-3.6-flash",
+            "messages": [],
+            "extra_body": {
+                "google": {"thinking_config": {"thinking_level": "minimal"}}
+            },
+        })
+        self.assertNotIn("google", body)
+        self.assertEqual(
+            body["extra_body"]["google"]["thinking_config"]["thinking_level"],
+            "minimal",
+        )
 
     def test_download_keeps_google_client_alive_until_request_finishes(self):
         class Files:

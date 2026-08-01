@@ -173,6 +173,24 @@ class HistorySurvivalTests(BatchHistoryTestBase):
         self.assertTrue(BH.BATCH_HISTORY_FILE.exists())
         self.assertEqual(len(BH.read_history()["batches"]), 1)
 
+    def test_evaluation_history_uses_its_saved_key_reference(self):
+        sentinel = object()
+        entry = {
+            "provider": "openai",
+            "key_name": "Eval OpenAI",
+        }
+        with (
+            mock.patch("util.api_keys.get_secret", return_value="eval-secret"),
+            mock.patch("util.api_keys.get_endpoint", return_value="https://api.openai.com/v1"),
+            mock.patch("util.api_keys.is_keyless", return_value=False),
+            mock.patch.object(BH, "get_provider_client", return_value=sentinel) as client,
+        ):
+            resolved = BH._client_for_entry(entry)
+        self.assertIs(resolved, sentinel)
+        client.assert_called_once_with(
+            "openai", api_key="eval-secret", api_url="https://api.openai.com/v1"
+        )
+
 
 class ProviderSubmissionTests(BatchHistoryTestBase):
     def test_openai_submission_persists_provider_and_recovery_map(self):

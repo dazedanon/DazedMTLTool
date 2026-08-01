@@ -31,18 +31,20 @@ class ModelFetchThread(QThread):
 
     # Fallback list shown when no API key is set or a fetch fails
     DEFAULTS = [
-        "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini",
+        "gpt-5.6-terra", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini",
         "o3", "o4-mini",
-        "claude-opus-4-5", "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-haiku-4-5",
-        "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro",
+        "claude-sonnet-5", "claude-opus-4-5", "claude-sonnet-4-6",
+        "claude-sonnet-4-5", "claude-haiku-4-5",
+        "gemini-3.6-flash", "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro",
         "deepseek-chat",
         "mistral-medium-3.5",  # free-tier recommendation; avoid -latest (older 3.1)
     ]
 
-    def __init__(self, api_key, api_url, parent=None):
+    def __init__(self, api_key, api_url, parent=None, provider=None):
         super().__init__(parent)
         self.api_key = api_key
         self.api_url = api_url.strip()
+        self.provider = (provider or "").strip().lower()
 
     def run(self):
         models = []
@@ -51,11 +53,25 @@ class ModelFetchThread(QThread):
         # Only attempt each provider's fetcher when the configured URL matches.
         # Avoids sending a DeepSeek (or other) key to Anthropic and getting a
         # spurious 401 authentication error.
-        fetchers = [self._fetch_openai]
-        if not _url or "anthropic" in _url:
-            fetchers.append(self._fetch_anthropic)
-        if not _url or "googleapis" in _url or "gemini" in _url:
-            fetchers.append(self._fetch_gemini)
+        provider_fetchers = {
+            "openai": self._fetch_openai,
+            "anthropic": self._fetch_anthropic,
+            "gemini": self._fetch_gemini,
+        }
+        if self.provider:
+            fetcher = provider_fetchers.get(self.provider)
+            if fetcher is None:
+                self.fetch_error.emit(
+                    f"Unsupported model-list provider: {self.provider}"
+                )
+                return
+            fetchers = [fetcher]
+        else:
+            fetchers = [self._fetch_openai]
+            if not _url or "anthropic" in _url:
+                fetchers.append(self._fetch_anthropic)
+            if not _url or "googleapis" in _url or "gemini" in _url:
+                fetchers.append(self._fetch_gemini)
         for fetcher in fetchers:
             try:
                 models.extend(fetcher())
@@ -85,7 +101,13 @@ class ModelFetchThread(QThread):
 
     def _fetch_anthropic(self):
         import anthropic
-        client = anthropic.Anthropic(api_key=self.api_key)
+        kwargs = {"api_key": self.api_key}
+        if self.api_url:
+            base_url = self.api_url.rstrip("/")
+            if "api.anthropic.com" in base_url.lower() and base_url.endswith("/v1"):
+                base_url = base_url[:-3]
+            kwargs["base_url"] = base_url
+        client = anthropic.Anthropic(**kwargs)
         return sorted(m.id for m in client.models.list(limit=100))
 
     def _fetch_gemini(self):

@@ -69,6 +69,7 @@ class BatchTab(QWidget):
 
     COLUMNS = [
         "Batch ID",
+        "Workflow",
         "Provider",
         "Status",
         "Created",
@@ -217,14 +218,18 @@ class BatchTab(QWidget):
             )
         )
         self.usage_btn.setEnabled(not busy and n == 1)
+        if n == 1 and entries[0].get("workflow") == "evaluation":
+            self.usage_btn.setEnabled(False)
         self.redownload_btn.setEnabled(
             not busy
             and n == 1
+            and entries[0].get("workflow") != "evaluation"
             and entries[0].get("status") in ("ended", "fetched", "consumed", "submitted", "canceling")
         )
         self.resume_btn.setEnabled(
             not busy
             and n == 1
+            and entries[0].get("workflow") != "evaluation"
             and entries[0].get("status")
             in ("submitted", "canceling", "ended", "fetched")
         )
@@ -284,6 +289,11 @@ class BatchTab(QWidget):
                     est_s = f"${float(est['batch_cached_cost']):.2f}"
                 except (TypeError, ValueError):
                     est_s = ""
+            elif isinstance(est, dict) and est.get("cost_usd") is not None:
+                try:
+                    est_s = f"${float(est['cost_usd']):.2f}"
+                except (TypeError, ValueError):
+                    est_s = ""
             actual = entry.get("actual_cost")
             actual_s = f"${actual:.4f}" if isinstance(actual, (int, float)) else ""
             files = entry.get("file_set") or []
@@ -294,6 +304,7 @@ class BatchTab(QWidget):
                 files_s += f" (+{len(files) - 3})"
             values = [
                 str(entry.get("id") or ""),
+                "Evaluation" if entry.get("workflow") == "evaluation" else "Translation",
                 str(entry.get("provider") or "anthropic").title(),
                 str(entry.get("status") or ""),
                 str(entry.get("created_at") or "")[:19],

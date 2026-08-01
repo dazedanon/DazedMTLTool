@@ -72,29 +72,55 @@ def _api_key() -> str:
     return key
 
 
-def get_client(provider: str):
-    """Create the SDK client needed for status/create/cancel operations."""
-    key = _api_key()
+def get_client(provider: str, *, api_key: str | None = None,
+               api_url: str | None = None):
+    """Create the SDK client needed for status/create/cancel operations.
+
+    ``api_key`` and ``api_url`` let isolated workflows (notably model
+    evaluations) use several providers without mutating the process-wide
+    ``key`` / ``api`` environment selected by the normal Translation page.
+    Existing callers keep the environment-backed behavior.
+    """
+    if api_key is None:
+        key = _api_key()
+    else:
+        key = str(api_key or "").strip()
+        if not key and provider == PROVIDER_OPENAI and (api_url or "").strip():
+            # OpenAI-compatible local servers commonly require the SDK's key
+            # field but do not authenticate it.
+            key = "not-needed"
+        elif not key:
+            raise RuntimeError(f"{batch_provider_label(provider)} requires an API key")
     if provider == PROVIDER_ANTHROPIC:
-        return anthropic.Anthropic(api_key=key)
+        kwargs = {"api_key": key}
+        if (api_url or "").strip():
+            base_url = str(api_url).strip().rstrip("/")
+            if "api.anthropic.com" in base_url.lower() and base_url.endswith("/v1"):
+                base_url = base_url[:-3]
+            kwargs["base_url"] = base_url
+        return anthropic.Anthropic(**kwargs)
     if provider == PROVIDER_GEMINI:
         return openai.OpenAI(
             api_key=key,
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            base_url=(api_url or "").strip()
+            or "https://generativelanguage.googleapis.com/v1beta/openai/",
         )
     if provider == PROVIDER_OPENAI:
-        return openai.OpenAI(api_key=key)
+        kwargs = {"api_key": key}
+        if (api_url or "").strip():
+            kwargs["base_url"] = str(api_url).strip()
+        return openai.OpenAI(**kwargs)
     raise ValueError(f"Unsupported batch provider: {provider}")
 
 
-def _google_client():
+def _google_client(api_key: str | None = None):
     try:
         from google import genai
     except ImportError as exc:
         raise RuntimeError(
             "Gemini batching requires google-genai. Install project requirements first."
         ) from exc
-    return genai.Client(api_key=_api_key())
+    return genai.Client(api_key=(api_key or "").strip() or _api_key())
 
 
 def _write_jsonl(requests: Iterable[dict]) -> Path:
@@ -125,7 +151,18 @@ def _openai_batch_body(provider: str, params: dict) -> dict:
     body = dict(params)
     extra_body = body.pop("extra_body", None)
     if isinstance(extra_body, dict):
-        body.update(extra_body)
+        if provider == PROVIDER_GEMINI:
+            # The OpenAI Python SDK merges its outer ``extra_body`` argument
+            # into the HTTP body. Gemini then expects its provider extensions
+            # under the API field also named ``extra_body``. Canonical live
+            # requests therefore contain two levels, while older queued rows
+            # may contain only the inner level. Normalize both without ever
+            # producing the invalid top-level ``google`` field.
+            extensions = extra_body.get("extra_body", extra_body)
+            if isinstance(extensions, dict) and extensions:
+                body["extra_body"] = extensions
+        else:
+            body.update(extra_body)
 
     if provider == PROVIDER_GEMINI:
         model = str(body.get("model") or "")
@@ -137,7 +174,8 @@ def _openai_batch_body(provider: str, params: dict) -> dict:
     return body
 
 
-def submit_batch(provider: str, requests: list[dict], *, client=None) -> dict:
+def submit_batch(provider: str, requests: list[dict], *, client=None,
+                 google_client=None) -> dict:
     """Submit normalized ``{custom_id, params}`` requests and return metadata."""
     client = client or get_client(provider)
     if provider == PROVIDER_ANTHROPIC:
@@ -149,9 +187,8 @@ def submit_batch(provider: str, requests: list[dict], *, client=None) -> dict:
 
     rows = []
     for item in requests:
-        # ``extra_body`` is an OpenAI Python SDK transport option, not an API
-        # field. A raw JSONL row must contain those vendor fields at top level,
-        # matching the body the SDK sends for a live Gemini request.
+        # Normalize SDK-only transport nesting into the exact raw JSONL body
+        # expected by the selected provider.
         body = _openai_batch_body(provider, item["params"])
         rows.append({
             "custom_id": item["custom_id"],
@@ -162,7 +199,7 @@ def submit_batch(provider: str, requests: list[dict], *, client=None) -> dict:
     path = _write_jsonl(rows)
     try:
         if provider == PROVIDER_GEMINI:
-            google_client = _google_client()
+            google_client = google_client or _google_client()
             try:
                 from google.genai import types
                 config = types.UploadFileConfig(
@@ -324,7 +361,8 @@ def _openai_result(
     return result, None
 
 
-def _download_file_text(provider: str, file_id: str, *, client=None) -> str:
+def _download_file_text(provider: str, file_id: str, *, client=None,
+                        google_client=None) -> str:
     if not file_id:
         return ""
     if provider == PROVIDER_GEMINI:
@@ -334,7 +372,7 @@ def _download_file_text(provider: str, file_id: str, *, client=None) -> str:
         # can therefore collect the temporary Client before ``download`` sends
         # the request, producing: "Cannot send a request, as the client has
         # been closed."
-        google_client = _google_client()
+        google_client = google_client or _google_client()
         data = google_client.files.download(file=file_id)
         return data.decode("utf-8") if isinstance(data, bytes) else str(data)
     content = client.files.content(file_id)
@@ -346,7 +384,7 @@ def _download_file_text(provider: str, file_id: str, *, client=None) -> str:
 
 
 def download_results(provider: str, batch_id: str, custom_ids: dict,
-                     *, client=None) -> tuple[dict, list, dict]:
+                     *, client=None, google_client=None) -> tuple[dict, list, dict]:
     """Return ``(cache-key results, errors, aggregate usage)``."""
     client = client or get_client(provider)
     if provider == PROVIDER_ANTHROPIC:
@@ -356,7 +394,9 @@ def download_results(provider: str, batch_id: str, custom_ids: dict,
     output_id = getattr(batch, "output_file_id", None)
     error_id = getattr(batch, "error_file_id", None)
     results, errors, totals = {}, [], _empty_usage()
-    for line in _download_file_text(provider, output_id, client=client).splitlines():
+    for line in _download_file_text(
+        provider, output_id, client=client, google_client=google_client
+    ).splitlines():
         if not line.strip():
             continue
         row = json.loads(line)
@@ -375,7 +415,9 @@ def download_results(provider: str, batch_id: str, custom_ids: dict,
         totals["output_tokens"] += result["completion_tokens"]
         totals["cache_read_input_tokens"] += result["cache_read_input_tokens"]
         totals["thinking_tokens"] += result.get("thinking_tokens", 0)
-    for line in _download_file_text(provider, error_id, client=client).splitlines():
+    for line in _download_file_text(
+        provider, error_id, client=client, google_client=google_client
+    ).splitlines():
         if line.strip():
             row = json.loads(line)
             errors.append((row.get("custom_id") or "unknown", str(row.get("error") or row)[:500]))
@@ -415,3 +457,74 @@ def _download_anthropic(client, batch_id: str, custom_ids: dict):
         totals["cache_creation_input_tokens"] += cw
         totals["thinking_tokens"] += thinking
     return results, errors, totals
+
+
+def execute_live_request(provider: str, params: dict, *, client=None) -> dict:
+    """Execute one evaluator request immediately and normalize text/usage.
+
+    This deliberately returns the same shape as downloaded batch rows so the
+    evaluator's validation and scoring path is identical for both transports.
+    """
+    client = client or get_client(provider)
+    if provider == PROVIDER_ANTHROPIC:
+        message = client.messages.create(**dict(params))
+        usage = message.usage
+        inp = int(getattr(usage, "input_tokens", 0) or 0)
+        out = int(getattr(usage, "output_tokens", 0) or 0)
+        cached = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+        cache_write = int(
+            getattr(usage, "cache_creation_input_tokens", 0) or 0
+        )
+        thinking = int(getattr(usage, "thinking_tokens", 0) or 0)
+        return {
+            "text": "".join(
+                getattr(block, "text", "") or "" for block in message.content
+            ),
+            "prompt_tokens": inp + cached + cache_write,
+            "completion_tokens": out,
+            "cache_read_input_tokens": cached,
+            "cache_creation_input_tokens": cache_write,
+            "thinking_tokens": thinking,
+        }
+
+    body = _openai_batch_body(provider, params)
+    try:
+        response = client.chat.completions.create(**body)
+    except Exception:
+        response_format = body.get("response_format") or {}
+        if response_format.get("type") != "json_schema":
+            raise
+        # Many OpenAI-compatible local servers implement JSON mode but not
+        # strict schemas. Match the normal Translation page's compatibility
+        # fallback while keeping the requested output object identical.
+        body["response_format"] = {"type": "json_object"}
+        response = client.chat.completions.create(**body)
+
+    if hasattr(response, "model_dump"):
+        response_body = response.model_dump()
+    elif isinstance(response, dict):
+        response_body = response
+    else:
+        choices = getattr(response, "choices", None) or []
+        usage = getattr(response, "usage", None)
+        response_body = {
+            "choices": [{
+                "message": {
+                    "content": getattr(
+                        getattr(choices[0], "message", None), "content", ""
+                    )
+                }
+            }] if choices else [],
+            "usage": usage.model_dump() if hasattr(usage, "model_dump") else {
+                "prompt_tokens": getattr(usage, "prompt_tokens", 0),
+                "completion_tokens": getattr(usage, "completion_tokens", 0),
+                "total_tokens": getattr(usage, "total_tokens", 0),
+            },
+        }
+    result, error = _openai_result({
+        "response": {"status_code": 200, "body": response_body},
+        "error": None,
+    }, provider)
+    if error or result is None:
+        raise RuntimeError(error or "Live API returned no usable response")
+    return result

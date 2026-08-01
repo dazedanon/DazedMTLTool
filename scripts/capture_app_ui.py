@@ -380,6 +380,7 @@ def _capture_targets(window) -> list[tuple[str, int, int | None]]:
         ("configuration-wolf", window.PAGE_CONFIG, 2),
         ("configuration-csv", window.PAGE_CONFIG, 3),
         ("configuration-srpg", window.PAGE_CONFIG, 4),
+        ("evaluation", window.PAGE_EVALUATION, None),
     ]
     return targets
 
@@ -559,6 +560,12 @@ def capture(
             with (
                 patch.object(DazedMTLGUI, "start_background_update_check", lambda self: None),
                 patch("gui.config_tab.ConfigTab.fetch_models", lambda self, silent=False: None),
+                patch(
+                    "gui.evaluation_tab.EvaluationTab._schedule_candidate_model_scan",
+                    lambda self, widgets, **kwargs: None,
+                ),
+                patch("gui.evaluation_tab.evaluation.latest_run", return_value=None),
+                patch("gui.evaluation_tab.evaluation.list_runs", return_value=[]),
                 patch("util.translation._load_litellm_pricing", return_value={}),
                 patch("util.batch_history.list_local_batches", return_value=[]),
                 patch("gui.main.QSettings", return_value=fixture_settings),

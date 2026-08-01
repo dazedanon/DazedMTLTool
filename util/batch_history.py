@@ -90,6 +90,23 @@ def _find_entry(history: dict, batch_id: str) -> Optional[dict]:
     return None
 
 
+def _client_for_entry(entry: dict):
+    """Use an evaluation row's saved credential without persisting its secret."""
+    provider = entry.get("provider") or "anthropic"
+    key_name = str(entry.get("key_name") or "")
+    if key_name:
+        from util import api_keys as api_key_vault
+
+        secret = api_key_vault.get_secret(key_name) or ""
+        endpoint = api_key_vault.get_endpoint(key_name) or ""
+        if not secret and not api_key_vault.is_keyless(key_name):
+            raise ValueError(f"Saved API key {key_name!r} is unavailable")
+        return get_provider_client(
+            provider, api_key=secret or "not-needed", api_url=endpoint or None
+        )
+    return _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
+
+
 def upsert_history_entry(batch_id: str, **fields: Any) -> dict:
     """Create or update one history row. Returns the updated entry (copy)."""
     with BATCH_LOCK:
@@ -219,7 +236,7 @@ def refresh_batch_status(batch_id: str) -> dict:
     history = read_history()
     existing = _find_entry(history, batch_id) or {}
     provider = existing.get("provider") or "anthropic"
-    client = _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
+    client = _client_for_entry(existing)
     normalized = provider_retrieve_batch(provider, batch_id, client=client)
     api_status = normalized["api_status"]
     counts_dict = normalized["counts"]
@@ -270,7 +287,7 @@ def cancel_batches(batch_ids: Iterable[str]) -> list[dict]:
         try:
             entry = _find_entry(history, bid) or {}
             provider = entry.get("provider") or "anthropic"
-            client = _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
+            client = _client_for_entry(entry)
             status_info = provider_retrieve_batch(provider, bid, client=client)
             api_status = status_info["api_status"]
             if api_status not in CANCELABLE_API:
