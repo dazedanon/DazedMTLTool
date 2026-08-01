@@ -1052,7 +1052,9 @@ class EvaluationTab(QWidget):
         key_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         model_combo = ConfigComboBox()
-        model_combo.setEditable(False)
+        # Model discovery is optional for chat-only local servers. Keep the
+        # suggestions, but allow an operator to enter a server-specific ID.
+        model_combo.setEditable(True)
         model_combo.setMaxVisibleItems(12)
         model_combo.setToolTip(
             "Models available from the selected API URL and saved key"

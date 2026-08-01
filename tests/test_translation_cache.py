@@ -145,6 +145,22 @@ class CacheRoundTripTests(CacheTestBase):
             T.peek_cached_translation(payload, "English", "カイン (Cain)")
         )
 
+    def test_restored_japanese_control_parameter_is_masked_for_validation(self):
+        source = r"\SE[タイプライター]こんにちは"
+        protected_source, replacements = T.protect_script_codes(source)
+        cached = r"\SE[タイプライター]Hello"
+        protected_cached = T._reprotect_cached_codes(cached, replacements)
+
+        valid, invalid, reasons = T.validate_translation_content(
+            [protected_source],
+            [protected_cached],
+            r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+",
+        )
+
+        self.assertTrue(valid, reasons)
+        self.assertFalse(invalid)
+        self.assertIn("__PROTECTED_0__", protected_cached)
+
 
 class PendingMarkerTests(CacheTestBase):
     def test_miss_writes_pending_then_peek_sees_it_as_none(self):

@@ -490,9 +490,27 @@ def execute_live_request(provider: str, params: dict, *, client=None) -> dict:
     body = _openai_batch_body(provider, params)
     try:
         response = client.chat.completions.create(**body)
-    except Exception:
+    except Exception as exc:
         response_format = body.get("response_format") or {}
-        if response_format.get("type") != "json_schema":
+        status_code = getattr(exc, "status_code", None)
+        error_text = str(exc).lower()
+        schema_rejected = (
+            status_code in (400, 422)
+            and any(
+                marker in error_text
+                for marker in (
+                    "json_schema",
+                    "json schema",
+                    "response_format",
+                    "response format",
+                    "structured output",
+                )
+            )
+        )
+        if (
+            response_format.get("type") != "json_schema"
+            or not schema_rejected
+        ):
             raise
         # Many OpenAI-compatible local servers implement JSON mode but not
         # strict schemas. Match the normal Translation page's compatibility

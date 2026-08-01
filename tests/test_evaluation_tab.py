@@ -95,7 +95,7 @@ class EvaluationTabTests(unittest.TestCase):
             ["https://api.openai.com/v1"],
         )
         self.assertTrue(
-            all(not row["model"].isEditable() for row in self.tab._candidate_widgets)
+            all(row["model"].isEditable() for row in self.tab._candidate_widgets)
         )
 
     def test_custom_template_enables_sample_and_repeat_controls(self):

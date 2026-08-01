@@ -168,6 +168,44 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                 self.assertFalse(worker._prepare_mvmz_speakers(worker.selected_files))
             finalize.assert_not_called()
 
+    def test_mvmz_scan_failure_fails_preflight_before_translation(self):
+        with tempfile.TemporaryDirectory() as raw:
+            worker = self._worker(Path(raw))
+            with (
+                patch.object(mvmz, "resetSpeakerState"),
+                patch.object(mvmz, "setSpeakerParseMode"),
+                patch.object(mvmz, "handleMVMZ", side_effect=ValueError("bad JSON")),
+                patch.object(mvmz, "pendingSpeakerNames") as pending,
+                patch.object(mvmz, "finalizeSpeakerParse") as finalize,
+            ):
+                self.assertFalse(
+                    worker._prepare_mvmz_speakers(worker.selected_files)
+                )
+
+            pending.assert_not_called()
+            finalize.assert_not_called()
+
+    def test_wolf_scan_failure_fails_preflight_before_translation(self):
+        import modules.wolfdawn as wolfdawn
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "files").mkdir()
+            (root / "files" / "broken.json").write_text("{bad", encoding="utf-8")
+            worker = TranslationWorker(
+                root,
+                ["Wolf RPG (WolfDawn)", ["json"], None],
+                selected_files=["broken.json"],
+            )
+            with (
+                patch.object(wolfdawn, "pendingSpeakerNames") as pending,
+                patch.object(wolfdawn, "translateSpeakerNames") as translate,
+            ):
+                self.assertFalse(worker._prepare_wolf_speakers(["broken.json"]))
+
+            pending.assert_not_called()
+            translate.assert_not_called()
+
     def test_game_root_uses_workflow_settings_key(self):
         class Settings:
             def value(self, key, default=""):

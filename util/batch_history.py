@@ -11,6 +11,7 @@ re-submitting (and re-billing) work.
 from __future__ import annotations
 
 import copy
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -107,6 +108,29 @@ def _client_for_entry(entry: dict):
     return _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
 
 
+def _active_key_name_for_environment() -> str:
+    """Return the active vault name only when it matches the submitted route."""
+    try:
+        from util import api_keys as api_key_vault
+
+        name = api_key_vault.get_active_name()
+        if not name:
+            return ""
+        secret = api_key_vault.get_secret(name) or ""
+        endpoint = (api_key_vault.get_endpoint(name) or "").rstrip("/")
+        env_secret = os.getenv("key", "")
+        env_endpoint = os.getenv("api", "").rstrip("/")
+        if api_key_vault.is_keyless(name):
+            return name if endpoint and endpoint == env_endpoint else ""
+        if secret != env_secret:
+            return ""
+        if endpoint and endpoint != env_endpoint:
+            return ""
+        return name
+    except Exception:
+        return ""
+
+
 def upsert_history_entry(batch_id: str, **fields: Any) -> dict:
     """Create or update one history row. Returns the updated entry (copy)."""
     with BATCH_LOCK:
@@ -148,6 +172,7 @@ def record_submit(
     provider: str = "anthropic",
     file_set: Optional[list] = None,
     cost_estimate: Optional[dict] = None,
+    key_name: Optional[str] = None,
 ) -> None:
     """Record newly submitted provider batches into durable history."""
     file_set = list(file_set or [])
@@ -161,6 +186,11 @@ def record_submit(
             status=STATUS_SUBMITTED,
             model=model or (cost_estimate or {}).get("model") or "",
             provider=info.get("provider") or provider,
+            key_name=(
+                key_name
+                if key_name is not None
+                else _active_key_name_for_environment()
+            ),
             request_count=len(custom_ids),
             file_set=file_set,
             cost_estimate=copy.deepcopy(cost_estimate) if cost_estimate else None,
@@ -399,7 +429,7 @@ def usage_for_batch(batch_id: str, model: Optional[str] = None) -> dict:
         raise ValueError(f"Unknown batch id (not in local history): {batch_id}")
 
     provider = entry.get("provider") or "anthropic"
-    client = _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
+    client = _client_for_entry(entry)
     status_info = provider_retrieve_batch(provider, batch_id, client=client)
     api_status = status_info["api_status"]
     if not status_info["ended"]:
@@ -507,7 +537,7 @@ def redownload_batch(batch_id: str) -> dict:
         raise ValueError(f"Batch {batch_id} has no stored custom_ids - cannot redownload")
 
     provider = entry.get("provider") or "anthropic"
-    client = _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
+    client = _client_for_entry(entry)
     status_info = provider_retrieve_batch(provider, batch_id, client=client)
     api_status = status_info["api_status"]
     if not status_info["ended"]:

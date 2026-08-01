@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 # Product identity (QSettings / desktop / window titles).
@@ -16,6 +15,7 @@ GLOSSARY_FILENAME = "glossary.txt"
 LEGACY_GLOSSARY_FILENAME = "vocab.txt"
 GLOSSARY_BASE_PATH = DATA_DIR / "glossary_base.txt"
 LEGACY_GLOSSARY_BASE_PATH = DATA_DIR / "vocab_base.txt"
+LEGACY_GLOBAL_GLOSSARY_PATH = DATA_DIR / LEGACY_GLOSSARY_FILENAME
 SKILLS_DIR = DATA_DIR / "skills"
 HELP_DIR = DATA_DIR / "help"
 # Runtime translation system skill (formerly data/prompt.txt).
@@ -36,6 +36,7 @@ LEGACY_GAME_SKILL_RELATIVE = Path("skills") / "translation.md"
 GAME_SKILL_RESERVED_NAMES = frozenset({"quirks.md", "game.md", "translation.md"})
 
 _ROOT_DATA_FILES = (
+    "vocab.txt",
     "vocab_base.txt",
     "prompt.txt",
     "last_update_sha.txt",
@@ -124,14 +125,42 @@ def ensure_game_glossary(game_root: str | Path | None) -> Path:
     if path.is_file():
         return path
 
-    legacy = path.with_name(LEGACY_GLOSSARY_FILENAME)
-    if legacy.is_file():
+    # Prefer a glossary that already lived with this game. Older releases used
+    # one global data/vocab.txt instead; seed every newly selected game from
+    # that file so upgrades do not silently lose the user's custom terms.
+    for legacy in (
+        path.with_name(LEGACY_GLOSSARY_FILENAME),
+        LEGACY_GLOBAL_GLOSSARY_PATH,
+    ):
+        if not legacy.is_file():
+            continue
         try:
             legacy_text = legacy.read_text(encoding="utf-8")
         except (OSError, UnicodeError):
             legacy_text = ""
-        if LEGACY_GLOSSARY_BASE_SEPARATOR in legacy_text:
-            shutil.copy2(legacy, path)
+        if (
+            LEGACY_GLOSSARY_BASE_SEPARATOR in legacy_text
+            or GLOSSARY_BASE_SEPARATOR in legacy_text
+        ):
+            separator_indexes = [
+                legacy_text.find(separator)
+                for separator in (
+                    LEGACY_GLOSSARY_BASE_SEPARATOR,
+                    GLOSSARY_BASE_SEPARATOR,
+                )
+                if legacy_text.find(separator) >= 0
+            ]
+            custom_text = legacy_text[:min(separator_indexes)].rstrip("\n")
+            base_path = glossary_base_path()
+            base = (
+                base_path.read_text(encoding="utf-8")
+                if base_path.is_file()
+                else ""
+            )
+            path.write_text(
+                custom_text + "\n\n" + GLOSSARY_BASE_SEPARATOR + base,
+                encoding="utf-8",
+            )
             return path
 
     base_path = glossary_base_path()

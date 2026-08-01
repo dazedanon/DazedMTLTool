@@ -700,6 +700,7 @@ class TranslationWorker(QThread):
         setSpeakerParseMode(True)
         total_files = len(matching_files)
         completed = 0
+        scan_failures = []
         try:
             self.status_signal.emit("Scanning speakers…")
             self.emit_log(
@@ -712,6 +713,7 @@ class TranslationWorker(QThread):
                 try:
                     handleMVMZ(filename, False)
                 except Exception as exc:
+                    scan_failures.append(filename)
                     tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                     self.emit_log(
                         f"❌ Error scanning speakers in {filename}: {exc} | Line: {tb_line}"
@@ -723,6 +725,13 @@ class TranslationWorker(QThread):
                 )
                 if emit_progress:
                     self.emit_progress(completed, total_files, filename)
+
+            if scan_failures:
+                self.emit_log(
+                    f"❌ Speaker scan failed for {len(scan_failures)}/{total_files} "
+                    "file(s). No speaker translations were submitted."
+                )
+                return False
 
             pending = pendingSpeakerNames()
             if not pending:
@@ -797,6 +806,7 @@ class TranslationWorker(QThread):
 
         collected = []
         seen = set()
+        scan_failures = []
         total_files = len(matching_files)
         self.status_signal.emit("Scanning WOLF speakers…")
         self.emit_log(
@@ -814,10 +824,19 @@ class TranslationWorker(QThread):
                         seen.add(speaker)
                         collected.append(speaker)
             except Exception as exc:
-                self.emit_log(f"⚠ Could not scan WOLF speakers in {filename}: {exc}")
+                scan_failures.append(filename)
+                self.emit_log(f"❌ Could not scan WOLF speakers in {filename}: {exc}")
+                self.file_error_signal.emit(filename, str(exc))
             self.status_signal.emit(
                 f"Scanning WOLF speakers… {index}/{total_files}"
             )
+
+        if scan_failures:
+            self.emit_log(
+                f"❌ WOLF speaker scan failed for {len(scan_failures)}/{total_files} "
+                "file(s). No speaker translations were submitted."
+            )
+            return False
 
         pending = pendingSpeakerNames(collected)
         if not pending:
@@ -3473,6 +3492,15 @@ class TranslationTab(QWidget):
                 from util.translation import clearBatchFiles, batchRunState as _brs
                 prior = _brs()
                 if prior:
+                    if prior == "corrupt":
+                        QMessageBox.critical(
+                            self,
+                            "Corrupt Batch Recovery",
+                            "One or more batch recovery files are corrupt. The run was "
+                            "left untouched and submission was blocked to prevent duplicate "
+                            "paid work. Inspect the batch files under log/ before clearing them.",
+                        )
+                        return
                     QMessageBox.warning(
                         self,
                         "Existing Batch Run",
@@ -3484,6 +3512,16 @@ class TranslationTab(QWidget):
                 batch_resume_state = None
             else:
                 batch_resume_state = batchRunState()
+                if batch_resume_state == "corrupt":
+                    QMessageBox.critical(
+                        self,
+                        "Corrupt Batch Recovery",
+                        "One or more batch recovery files are corrupt. The run was left "
+                        "untouched and submission was blocked to prevent duplicate paid work.\n\n"
+                        "Inspect log/batch_state.json, log/batch_requests.json, and "
+                        "log/batch_results.json before clearing the run.",
+                    )
+                    return
                 if batch_resume_state:
                     if batch_resume_state == "queued":
                         reply = QMessageBox.question(

@@ -676,6 +676,32 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertEqual(summary["validation_failures"], summary["total_segments"])
         self.assertEqual(summary["valid_rate"], 0.0)
 
+    def test_received_but_wholly_invalid_output_marks_candidate_failed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            (run_dir / "results").mkdir()
+            first_execution = self.manifest["executions"][0]
+            candidate = {
+                "id": "candidate-invalid",
+                "provider": "openai",
+                "model": "gpt-5.6-terra",
+                "status": "submitted",
+            }
+
+            summary = evaluation._complete_candidate(
+                run_dir,
+                self.manifest,
+                candidate,
+                {first_execution["id"]: {"text": "{}"}},
+                [],
+                {},
+            )
+
+            self.assertEqual(summary["received_requests"], 1)
+            self.assertEqual(summary["valid_segments"], 0)
+            self.assertEqual(candidate["status"], "failed")
+            self.assertIn("No valid translated segments", candidate["failure_reason"])
+
     def test_corrupt_repetition_is_invalid_and_remains_reviewable(self):
         manifest = {
             "executions": [{

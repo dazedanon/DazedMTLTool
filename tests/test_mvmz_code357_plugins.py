@@ -11,6 +11,9 @@ import modules.rpgmakermvmz as mvmz
 
 
 class TestMVMZCode357Plugins(unittest.TestCase):
+    def test_log_message_remains_in_enabled_plugin_filter(self):
+        self.assertIn("LogMessage", mvmz.ENABLED_PLUGINS_357)
+
     def test_log_message_text_is_collected_and_written_back(self):
         source = "ドキドキしちゃう♡"
         translation = "My heart is pounding♡"

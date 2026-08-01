@@ -1402,11 +1402,25 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
 def _summary_has_no_successes(summary: dict) -> bool:
     expected = int(summary.get("expected_requests", 0) or 0)
     received = int(summary.get("received_requests", 0) or 0)
-    return expected > 0 and received == 0
+    if expected <= 0:
+        return False
+    # New summaries distinguish transport success from usable output. A model
+    # returning malformed or wholly invalid text must not be archived as a
+    # completed 0% evaluation merely because an HTTP response arrived.
+    if "valid_segments" in summary:
+        return int(summary.get("valid_segments", 0) or 0) == 0
+    return received == 0
 
 
 def _no_successes_reason(summary: dict) -> str:
     expected = int(summary.get("expected_requests", 0) or 0)
+    received = int(summary.get("received_requests", 0) or 0)
+    total_segments = int(summary.get("total_segments", 0) or 0)
+    if received > 0 and "valid_segments" in summary:
+        return (
+            f"No valid translated segments were produced (0/{total_segments}) "
+            f"from {received}/{expected} received requests."
+        )
     error_count = len(summary.get("provider_errors") or [])
     return (
         f"No successful requests were received (0/{expected}). "

@@ -399,6 +399,18 @@ def restore_script_codes(text, replacements):
         return text
 
 
+def _reprotect_cached_codes(text, replacements):
+    """Reapply known placeholders before validating a restored cache value."""
+    protected = str(text)
+    for placeholder, original in replacements.items():
+        index = protected.find(str(original))
+        if index < 0:
+            continue
+        end = index + len(str(original))
+        protected = protected[:index] + placeholder + protected[end:]
+    return protected
+
+
 def validate_placeholders(original_text, translated_text, replacements):
     """
     Validate that all placeholders from the original text appear in the translation.
@@ -987,18 +999,36 @@ def _batch_file_lock():
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
-def _read_batch_file(path):
-    """Read a batch JSON file; return an empty dict if it is unavailable."""
+class BatchFileCorruptionError(RuntimeError):
+    """A durable batch file exists but cannot be trusted for paid recovery."""
+
+
+def _read_batch_file(path, *, strict=False):
+    """Read a batch JSON object.
+
+    Missing files remain equivalent to an empty object. ``strict`` is used at
+    paid submission/recovery boundaries, where treating corruption as an empty
+    run could submit the same work twice.
+    """
+    error = None
     try:
         if path.exists():
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, dict):
                     return data
-                print(f"[BATCH] Corrupt batch file (not a JSON object): {path}", flush=True)
+                error = "document is not a JSON object"
     except Exception as exc:
-        # State/history corruption must not look like an empty run - log it.
-        print(f"[BATCH] Failed to read {path}: {exc}", flush=True)
+        error = str(exc)
+    if error is not None:
+        message = f"Batch recovery file is corrupt: {path} ({error})"
+        print(f"[BATCH] {message}", flush=True)
+        if strict:
+            raise BatchFileCorruptionError(
+                message
+                + ". Submission was blocked to prevent duplicate paid work. "
+                "Restore or inspect the file before clearing the batch run."
+            )
     return {}
 
 
@@ -1146,18 +1176,24 @@ def batchRunState():
       'submitted' - provider batch(es) in flight (or ended but not fetched)
       'fetched'   - results on disk waiting for consume
       'queued'    - collect finished / submit declined; queue still on disk
+      'corrupt'   - a recovery document exists but cannot be trusted
       None        - nothing to resume
     """
-    with _batch_file_lock():
-        state = _read_batch_file(BATCH_STATE_FILE)
-        if state.get("status") == "partially_submitted" and state.get("batches"):
-            return "partially_submitted"
-        if state.get("batches"):
-            return "submitted"
-        if state.get("status") == "fetched" or _read_batch_file(BATCH_RESULTS_FILE):
-            return "fetched"
-        if _read_batch_file(BATCH_QUEUE_FILE):
-            return "queued"
+    try:
+        with _batch_file_lock():
+            state = _read_batch_file(BATCH_STATE_FILE, strict=True)
+            results = _read_batch_file(BATCH_RESULTS_FILE, strict=True)
+            queue = _read_batch_file(BATCH_QUEUE_FILE, strict=True)
+            if state.get("status") == "partially_submitted" and state.get("batches"):
+                return "partially_submitted"
+            if state.get("batches"):
+                return "submitted"
+            if state.get("status") == "fetched" or results:
+                return "fetched"
+            if queue:
+                return "queued"
+    except BatchFileCorruptionError:
+        return "corrupt"
     return None
 
 
@@ -1428,8 +1464,8 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
     """
     flush_batch_queue()
     with _batch_file_lock():
-        queue = _read_batch_file(BATCH_QUEUE_FILE)
-        previous_state = _read_batch_file(BATCH_STATE_FILE)
+        queue = _read_batch_file(BATCH_QUEUE_FILE, strict=True)
+        previous_state = _read_batch_file(BATCH_STATE_FILE, strict=True)
     if not queue:
         print("[BATCH] No batch requests queued.", flush=True)
         return []
@@ -1637,6 +1673,7 @@ def fetchTranslationBatches(batches=None):
         "thinking_tokens": 0,
     }
     batch_ids = []
+    history_parts = []
     for info in batch_list:
         bid = info.get("id")
         provider = info.get("provider") or state.get("provider") or "anthropic"
@@ -1647,24 +1684,25 @@ def fetchTranslationBatches(batches=None):
             part, err_part, usage_part = download_batch_results(
                 bid, id_map, provider=provider
             )
-            results.update(part)
-            errored.extend(err_part)
-            for k, v in usage_part.items():
-                usage_totals[k] = usage_totals.get(k, 0) + (v or 0)
-            continue
         else:
             from util.batch_providers import download_results
             part, err_part, usage_part = download_results(provider, bid, id_map)
-            results.update(part)
-            errored.extend(err_part)
-            for k, v in usage_part.items():
-                usage_totals[k] = usage_totals.get(k, 0) + (v or 0)
+        results.update(part)
+        errored.extend(err_part)
+        for k, v in usage_part.items():
+            usage_totals[k] = usage_totals.get(k, 0) + (v or 0)
+        history_parts.append((bid, provider, part, err_part, usage_part))
 
     model = state.get("model") or os.getenv("model", "")
+    aggregate_provider = state.get("provider") or (
+        batch_list[0].get("provider") if batch_list else "anthropic"
+    )
     actual_cost = None
     if _price_usage is not None and model:
         try:
-            actual_cost = _price_usage(usage_totals, model)
+            actual_cost = _price_usage(
+                usage_totals, model, aggregate_provider or "anthropic"
+            )
         except Exception:
             actual_cost = None
 
@@ -1698,16 +1736,23 @@ def fetchTranslationBatches(batches=None):
         _batch_results = None
 
     if record_fetch is not None:
-        try:
-            record_fetch(
-                batch_ids,
-                succeeded=len(results),
-                errored=len(errored),
-                usage=usage_totals,
-                actual_cost=actual_cost,
-            )
-        except Exception as exc:
-            print(f"[BATCH] history record_fetch failed: {exc}", flush=True)
+        for bid, provider, part, err_part, usage_part in history_parts:
+            try:
+                part_cost = None
+                if _price_usage is not None and model:
+                    part_cost = _price_usage(usage_part, model, provider)
+                record_fetch(
+                    [bid],
+                    succeeded=len(part),
+                    errored=len(err_part),
+                    usage=usage_part,
+                    actual_cost=part_cost,
+                )
+            except Exception as exc:
+                print(
+                    f"[BATCH] history record_fetch failed for {bid}: {exc}",
+                    flush=True,
+                )
 
     print(f"[BATCH] fetched {len(results)} results ({len(errored)} errored).", flush=True)
     if actual_cost is not None:
@@ -3442,8 +3487,15 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             controls_ok, _control_errors = validate_control_codes(
                 source_values, cached_values, all_replacements
             )
+            protected_source_values = (
+                protected_items if isinstance(protected_items, list) else [protected_items]
+            )
+            cached_content_values = [
+                _reprotect_cached_codes(value, all_replacements.get(line, {}))
+                for line, value in enumerate(cached_values)
+            ]
             content_ok, _invalid_indices, _content_reasons = validate_translation_content(
-                source_values, cached_values, config.langRegex
+                protected_source_values, cached_content_values, config.langRegex
             )
             if len(source_values) != len(cached_values) or not controls_ok or not content_ok:
                 # Ignore stale/corrupt cache entries. A successful live result

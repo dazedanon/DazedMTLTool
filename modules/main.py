@@ -96,6 +96,12 @@ tqdm.write(
 def main():
     from util.translation import clear_cache
 
+    # The legacy CLI stages one game under files/. Treat that directory as the
+    # active game so it gets the same persistent glossary semantics as the GUI.
+    files_game_root = Path("files").resolve()
+    files_game_root.mkdir(parents=True, exist_ok=True)
+    os.environ["DAZED_GAME_ROOT"] = str(files_game_root)
+
     estimate = ""
     batch_mode = False
     speaker_parse = False  # Deferred until after engine select
@@ -126,6 +132,15 @@ def main():
         # An interrupted batch run can be resumed instead of re-collecting
         # (a second submission would be billed again).
         resume_state = batchRunState()
+        if resume_state == "corrupt":
+            tqdm.write(
+                Fore.RED
+                + "[BATCH] Recovery files are corrupt. Submission is blocked to "
+                "prevent duplicate paid work. Inspect log/batch_state.json, "
+                "log/batch_requests.json, and log/batch_results.json."
+                + Fore.RESET
+            )
+            return
         if resume_state:
             confirm = ""
             while confirm not in ("y", "n"):
@@ -270,7 +285,7 @@ files to translate are in the /files folder and that you picked the right game e
                     dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
 
                     for fname in filenames:
-                        if fname == ".gitkeep":
+                        if fname in {".gitkeep", "glossary.txt", "vocab.txt"}:
                             continue
 
                         abs_path = os.path.join(root, fname)
@@ -324,6 +339,8 @@ files to translate are in the /files folder and that you picked the right game e
             for root, dirs, filenames in os.walk(files_root):
                 dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
                 for filename in filenames:
+                    if filename in {"glossary.txt", "vocab.txt"}:
+                        continue
                     if filename == ".gitkeep":
                         continue
                     relative = os.path.relpath(
