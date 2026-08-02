@@ -16,23 +16,31 @@ from util import wolfdawn  # noqa: E402
 
 
 class WolfInjectCountsTests(unittest.TestCase):
-    def test_parse_names_inject_counts(self):
-        out = (
-            "applied 2336 name change(s) (0 drifted/unmatched); "
-            "wrote 78 file(s) in place\n"
-            "WARNING: 2 line(s) left UNTRANSLATED by a safety guard\n"
+    def test_parse_names_inject_count_cases(self):
+        cases = (
+            (
+                "applied",
+                "applied 2336 name change(s) (0 drifted/unmatched); "
+                "wrote 78 file(s) in place\n"
+                "WARNING: 2 line(s) left UNTRANSLATED by a safety guard\n",
+                2336,
+                0,
+                True,
+            ),
+            (
+                "dry run",
+                "would apply 0 name change(s) (0 drifted/unmatched); "
+                "dry run — did NOT write",
+                0,
+                0,
+                False,
+            ),
         )
-        applied, drifted = wolfdawn.parse_names_inject_counts(out)
-        self.assertEqual(applied, 2336)
-        self.assertEqual(drifted, 0)
-        self.assertTrue(wolfdawn.inject_had_applied(applied))
-
-    def test_parse_names_inject_dry_run_counts(self):
-        out = "would apply 0 name change(s) (0 drifted/unmatched); dry run — did NOT write"
-        applied, drifted = wolfdawn.parse_names_inject_counts(out)
-        self.assertEqual(applied, 0)
-        self.assertEqual(drifted, 0)
-        self.assertFalse(wolfdawn.inject_had_applied(applied))
+        for label, output, expected_applied, expected_drifted, had_applied in cases:
+            with self.subTest(label):
+                applied, drifted = wolfdawn.parse_names_inject_counts(output)
+                self.assertEqual((applied, drifted), (expected_applied, expected_drifted))
+                self.assertEqual(wolfdawn.inject_had_applied(applied), had_applied)
 
     def test_parse_strings_inject_counts(self):
         out = "applied 91 translation(s) (3 drifted); wrote Map001.mps\n"

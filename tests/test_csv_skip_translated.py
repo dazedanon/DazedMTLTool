@@ -27,22 +27,24 @@ class TargetTranslatedDetectionTests(unittest.TestCase):
         for key, value in self._orig.items():
             setattr(csv_mod, key, value)
 
-    def test_empty_target_not_translated(self):
-        self.assertFalse(csv_mod._target_is_translated(["こんにちは", ""]))
-
-    def test_missing_target_column_not_translated(self):
-        self.assertFalse(csv_mod._target_is_translated(["こんにちは"]))
-
-    def test_english_target_is_translated(self):
-        self.assertTrue(csv_mod._target_is_translated(["こんにちは", "Hello"]))
-
-    def test_japanese_target_not_translated(self):
-        self.assertFalse(csv_mod._target_is_translated(["こんにちは", "こんにちは"]))
-
-    def test_write_to_next_column_checks_next(self):
-        csv_mod.WRITE_TO_NEXT_COLUMN = True
-        self.assertFalse(csv_mod._target_is_translated(["こんにちは", "Hello", ""]))
-        self.assertTrue(csv_mod._target_is_translated(["こんにちは", "Hello", "Hello there"]))
+    def test_detects_translated_target_cases(self):
+        cases = (
+            ("empty target", ["こんにちは", ""], False, False),
+            ("missing target column", ["こんにちは"], False, False),
+            ("English target", ["こんにちは", "Hello"], False, True),
+            ("Japanese target", ["こんにちは", "こんにちは"], False, False),
+            ("empty next column", ["こんにちは", "Hello", ""], True, False),
+            (
+                "translated next column",
+                ["こんにちは", "Hello", "Hello there"],
+                True,
+                True,
+            ),
+        )
+        for label, row, write_to_next, expected in cases:
+            with self.subTest(label):
+                csv_mod.WRITE_TO_NEXT_COLUMN = write_to_next
+                self.assertEqual(csv_mod._target_is_translated(row), expected)
 
 
 class SkipTranslatedBatchIndexTests(unittest.TestCase):

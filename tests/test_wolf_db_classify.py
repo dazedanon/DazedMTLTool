@@ -92,40 +92,46 @@ NARRATIVE_DB = {
 
 
 class TestClassifyGroupTier(unittest.TestCase):
-    def test_standard_skill_sheet_is_foundation(self):
-        tier = wdb.classify_group_tier(
-            "Skill · 技能",
-            STANDARD_DB["groups"][0]["lines"],
+    def test_classify_group_tier_cases(self):
+        cases = (
+            (
+                "standard skill",
+                "Skill · 技能",
+                STANDARD_DB["groups"][0]["lines"],
+                wdb.TIER_FOUNDATION,
+            ),
+            (
+                "custom event",
+                "■イベント(セルリア)",
+                NARRATIVE_DB["groups"][0]["lines"],
+                wdb.TIER_NARRATIVE,
+            ),
+            (
+                "profile",
+                "├■プロフィール（元数値）",
+                NARRATIVE_DB["groups"][1]["lines"],
+                wdb.TIER_NARRATIVE,
+            ),
         )
-        self.assertEqual(tier, wdb.TIER_FOUNDATION)
-
-    def test_custom_event_sheet_is_narrative(self):
-        tier = wdb.classify_group_tier(
-            "■イベント(セルリア)",
-            NARRATIVE_DB["groups"][0]["lines"],
-        )
-        self.assertEqual(tier, wdb.TIER_NARRATIVE)
-
-    def test_profile_sheet_is_narrative(self):
-        tier = wdb.classify_group_tier(
-            "├■プロフィール（元数値）",
-            NARRATIVE_DB["groups"][1]["lines"],
-        )
-        self.assertEqual(tier, wdb.TIER_NARRATIVE)
+        for label, name, lines, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(wdb.classify_group_tier(name, lines), expected)
 
 
 class TestClassifyDbDocument(unittest.TestCase):
-    def test_standard_doc_groups(self):
-        groups = wdb.classify_db_document(STANDARD_DB)
-        self.assertEqual(len(groups), 2)
-        self.assertTrue(all(g.tier == wdb.TIER_FOUNDATION for g in groups))
-        self.assertTrue(all(g.default_checked for g in groups))
-
-    def test_narrative_doc_groups(self):
-        groups = wdb.classify_db_document(NARRATIVE_DB)
-        self.assertEqual(len(groups), 2)
-        self.assertTrue(all(g.tier == wdb.TIER_NARRATIVE for g in groups))
-        self.assertTrue(all(not g.default_checked for g in groups))
+    def test_classify_db_document_cases(self):
+        cases = (
+            ("standard", STANDARD_DB, wdb.TIER_FOUNDATION, True),
+            ("narrative", NARRATIVE_DB, wdb.TIER_NARRATIVE, False),
+        )
+        for label, document, expected_tier, expected_checked in cases:
+            with self.subTest(label):
+                groups = wdb.classify_db_document(document)
+                self.assertEqual(len(groups), 2)
+                self.assertTrue(all(group.tier == expected_tier for group in groups))
+                self.assertTrue(
+                    all(group.default_checked == expected_checked for group in groups)
+                )
 
 
 class TestContentDistribution(unittest.TestCase):

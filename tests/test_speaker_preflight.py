@@ -220,22 +220,23 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
 
         self.assertEqual(_configured_game_root(Settings()), "/current/game")
 
-    def test_rpgmaker_translation_does_not_repeat_workflow_speaker_collection(self):
-        self.assertFalse(
-            _should_prepare_speakers_automatically("RPG Maker MV/MZ")
-        )
-
-    def test_wolfdawn_keeps_automatic_speaker_preflight(self):
-        self.assertTrue(
-            _should_prepare_speakers_automatically("Wolf RPG (WolfDawn)")
-        )
-        self.assertFalse(
-            _should_prepare_speakers_automatically(
+    def test_automatic_speaker_preflight_cases(self):
+        cases = (
+            ("RPG Maker workflow already collected", "RPG Maker MV/MZ", {}, False),
+            ("WolfDawn normal translation", "Wolf RPG (WolfDawn)", {}, True),
+            (
+                "WolfDawn fetched batch",
                 "Wolf RPG (WolfDawn)",
-                batch_mode=True,
-                batch_resume_state="fetched",
-            )
+                {"batch_mode": True, "batch_resume_state": "fetched"},
+                False,
+            ),
         )
+        for label, module_name, kwargs, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(
+                    _should_prepare_speakers_automatically(module_name, **kwargs),
+                    expected,
+                )
 
 
 if __name__ == "__main__":

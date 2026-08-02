@@ -6,16 +6,20 @@ from util.translation import _lookup_model_price, getPricingConfig
 
 
 class PricingBatchSizeOverrideTests(unittest.TestCase):
-    def test_env_batchsize_overrides_model_default(self):
-        with patch.dict(os.environ, {"batchsize": "2"}, clear=False):
-            cfg = getPricingConfig("claude-sonnet-4-6")
-        self.assertEqual(cfg["batchSize"], 2)
-
-    def test_missing_env_keeps_model_default(self):
-        env = {k: v for k, v in os.environ.items() if k != "batchsize"}
-        with patch.dict(os.environ, env, clear=True):
-            cfg = getPricingConfig("claude-sonnet-4-6")
-        self.assertEqual(cfg["batchSize"], 30)
+    def test_batch_size_environment_cases(self):
+        without_batchsize = {k: v for k, v in os.environ.items() if k != "batchsize"}
+        cases = (
+            ("override", {"batchsize": "2"}, False, 2),
+            ("model default", without_batchsize, True, 30),
+        )
+        for label, environment, clear, expected in cases:
+            with self.subTest(label), patch.dict(
+                os.environ, environment, clear=clear
+            ):
+                self.assertEqual(
+                    getPricingConfig("claude-sonnet-4-6")["batchSize"],
+                    expected,
+                )
 
     def test_google_resource_model_name_uses_bare_model_pricing(self):
         pricing_db = {

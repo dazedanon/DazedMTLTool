@@ -18,19 +18,33 @@ from util.wolfdawn import (
 
 
 class WolfUnpackProgressTests(unittest.TestCase):
-    def test_unpack_archive_line_regex(self):
-        line = "  MapData.wolf -> /tmp/out/MapData (74 files)"
-        match = _UNPACK_ARCHIVE_DONE_RE.match(line)
-        self.assertIsNotNone(match)
-        self.assertEqual(match.group("name"), "MapData.wolf")
-        self.assertEqual(match.group("files"), "74")
-
-    def test_unpack_summary_regex(self):
-        line = "unpack-all: 24 archive(s), 60265 files"
-        match = _UNPACK_SUMMARY_RE.match(line)
-        self.assertIsNotNone(match)
-        self.assertEqual(match.group("archives"), "24")
-        self.assertEqual(match.group("files"), "60265")
+    def test_unpack_progress_regex_cases(self):
+        cases = (
+            (
+                "archive",
+                _UNPACK_ARCHIVE_DONE_RE,
+                "  MapData.wolf -> /tmp/out/MapData (74 files)",
+                {"name": "MapData.wolf", "files": "74"},
+            ),
+            (
+                "summary",
+                _UNPACK_SUMMARY_RE,
+                "unpack-all: 24 archive(s), 60265 files",
+                {"archives": "24", "files": "60265"},
+            ),
+            (
+                "single archive",
+                _UNPACK_ONE_DONE_RE,
+                "unpacked 74 files -> /tmp/out/MapData",
+                {"files": "74"},
+            ),
+        )
+        for label, pattern, line, expected_groups in cases:
+            with self.subTest(label):
+                match = pattern.match(line)
+                self.assertIsNotNone(match)
+                for group, expected in expected_groups.items():
+                    self.assertEqual(match.group(group), expected)
 
     def test_count_unpack_archives_explicit_list(self):
         import tempfile
@@ -49,12 +63,6 @@ class WolfUnpackProgressTests(unittest.TestCase):
             (base / "MapData.wolf").write_bytes(b"")
             (base / "BasicData.wolf").write_bytes(b"")
             self.assertEqual(count_unpack_archives([base]), 2)
-
-    def test_unpack_one_done_regex(self):
-        line = "unpacked 74 files -> /tmp/out/MapData"
-        match = _UNPACK_ONE_DONE_RE.match(line)
-        self.assertIsNotNone(match)
-        self.assertEqual(match.group("files"), "74")
 
     def test_unpack_all_uses_separate_subprocess_per_archive(self):
         import tempfile

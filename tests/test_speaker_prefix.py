@@ -8,16 +8,23 @@ from util.speakers import (
 
 
 class SpeakerPrefixTests(unittest.TestCase):
-    def test_strip_plain_speaker(self):
-        self.assertEqual(strip_speaker_prefix("[Kurone]: Hello"), "Hello")
-
-    def test_strip_color_coded_speaker(self):
-        line = r"[\C[10]Hp Drink\C[0]]: Received item!"
-        self.assertEqual(strip_speaker_prefix(line), "Received item!")
-
-    def test_strip_fullwidth_colon(self):
-        line = r"[\C[10]HPドリンク\C[0]]：をもらった！"
-        self.assertEqual(strip_speaker_prefix(line), "をもらった！")
+    def test_strips_supported_speaker_prefixes(self):
+        cases = (
+            ("plain", "[Kurone]: Hello", "Hello"),
+            (
+                "color coded",
+                r"[\C[10]Hp Drink\C[0]]: Received item!",
+                "Received item!",
+            ),
+            (
+                "fullwidth colon",
+                r"[\C[10]HPドリンク\C[0]]：をもらった！",
+                "をもらった！",
+            ),
+        )
+        for label, line, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(strip_speaker_prefix(line), expected)
 
     def test_tag_captures_color_coded_speaker(self):
         line = r"[\C[10]Hp Drink\C[0]]: 【\c[10]HPドリンク\c[0]】をもらった！"

@@ -18,34 +18,43 @@ class ControlCodeProtectionTests(unittest.TestCase):
         self.assertNotIn(r"\I[14]", protected)
         self.assertEqual(tr.restore_script_codes(protected, replacements), source)
 
-    def test_control_validation_rejects_changed_parameter_and_added_escape(self):
-        source = r"\SHADOW[3]Trial \I[14]"
-        translated = r"\SHADOW[08]Trial \I[14]\Coming"
-
-        valid, reasons = tr.validate_control_codes(source, translated)
-
-        self.assertFalse(valid)
-        self.assertIn(r"\SHADOW[3]", reasons[0])
-        self.assertIn(r"\SHADOW[08]", reasons[0])
-        self.assertIn(r"\Coming", reasons[0])
-
-    def test_control_validation_preserves_duplicate_counts(self):
-        valid, _ = tr.validate_control_codes(r"\I[14]a\I[14]", r"\I[14]a")
-        self.assertFalse(valid)
-
-    def test_control_validation_allows_complete_scope_to_move_with_grammar(self):
-        valid, reasons = tr.validate_control_codes(
-            r"\C[2]Name\C[0] \I[14]", r"\I[14] \C[2]Name\C[0]"
+    def test_control_validation_cases(self):
+        cases = (
+            (
+                "changed parameter and added escape",
+                r"\SHADOW[3]Trial \I[14]",
+                r"\SHADOW[08]Trial \I[14]\Coming",
+                False,
+                (r"\SHADOW[3]", r"\SHADOW[08]", r"\Coming"),
+            ),
+            (
+                "duplicate count",
+                r"\I[14]a\I[14]",
+                r"\I[14]a",
+                False,
+                (),
+            ),
+            (
+                "complete scope moves with grammar",
+                r"\C[2]Name\C[0] \I[14]",
+                r"\I[14] \C[2]Name\C[0]",
+                True,
+                (),
+            ),
+            (
+                "reversed formatting scope",
+                r"\C[2]Name\C[0]",
+                r"\C[0]\C[2]Name",
+                False,
+                ("formatting scope order changed",),
+            ),
         )
-        self.assertTrue(valid, reasons)
-
-    def test_control_validation_rejects_reversed_formatting_scope(self):
-        valid, reasons = tr.validate_control_codes(
-            r"\C[2]Name\C[0]", r"\C[0]\C[2]Name"
-        )
-
-        self.assertFalse(valid)
-        self.assertIn("formatting scope order changed", reasons[0])
+        for label, source, translated, expected_valid, reason_parts in cases:
+            with self.subTest(label):
+                valid, reasons = tr.validate_control_codes(source, translated)
+                self.assertEqual(valid, expected_valid, reasons)
+                for part in reason_parts:
+                    self.assertIn(part, reasons[0])
 
     def test_mapped_value_code_can_move_with_translated_subject(self):
         source = (
@@ -91,50 +100,61 @@ class ControlCodeProtectionTests(unittest.TestCase):
 
 
 class TranslationContentValidationTests(unittest.TestCase):
-    def test_allows_ideographic_space_used_as_choice_padding(self):
-        valid, indices, reasons = tr.validate_translation_content(
-            ["‣モラル崩壊　　　　　必要な欠片：10"],
-            ["‣Moral Collapse　　　　　Fragments Required: 10"],
-            r"[\u3000一-龠ぁ-ゔァ-ヴー]+",
+    def test_translation_content_validation_cases(self):
+        language_regex = r"[\u3000一-龠ぁ-ゔァ-ヴー]+"
+        cases = (
+            (
+                "ideographic choice padding",
+                "‣モラル崩壊　　　　　必要な欠片：10",
+                "‣Moral Collapse　　　　　Fragments Required: 10",
+                None,
+                True,
+                None,
+            ),
+            (
+                "source-language residue",
+                "そのとおり",
+                "Exactly(そのとおり)!!",
+                None,
+                False,
+                "Source-language text remains",
+            ),
+            ("Chinese CJK", "騎士", "骑士", "Chinese", True, None),
+            (
+                "Japanese kana in Chinese",
+                "こんにちは",
+                "こんにちは",
+                "Chinese",
+                False,
+                "Japanese kana remains",
+            ),
+            (
+                "Japanese prolonged sound mark",
+                "ほげぇぇぇーーっ！！",
+                "Hrooooghhhhhーー!!",
+                None,
+                False,
+                "Source-language text remains",
+            ),
+            (
+                "leaked line marker",
+                "役人",
+                "}Line1:",
+                None,
+                False,
+                "Structured response marker",
+            ),
         )
-
-        self.assertTrue(valid, reasons)
-        self.assertEqual(indices, [])
-
-    def test_rejects_source_language_residue(self):
-        valid, indices, reasons = tr.validate_translation_content(
-            ["そのとおり"], ["Exactly(そのとおり)!!"], r"[一-龠ぁ-ゔァ-ヴー]+"
-        )
-        self.assertFalse(valid)
-        self.assertEqual(indices, [0])
-        self.assertIn("Source-language text remains", reasons[0])
-
-    def test_allows_cjk_characters_for_chinese_target(self):
-        valid, indices, reasons = tr.validate_translation_content(
-            ["騎士"], ["骑士"], r"[一-龠ぁ-ゔァ-ヴー]+", "Chinese"
-        )
-
-        self.assertTrue(valid, reasons)
-        self.assertEqual(indices, [])
-
-    def test_rejects_unchanged_japanese_kana_for_chinese_target(self):
-        valid, indices, reasons = tr.validate_translation_content(
-            ["こんにちは"], ["こんにちは"], r"[一-龠ぁ-ゔァ-ヴー]+", "Chinese"
-        )
-
-        self.assertFalse(valid)
-        self.assertEqual(indices, [0])
-        self.assertIn("Japanese kana remains", reasons[0])
-
-    def test_rejects_japanese_prolonged_sound_mark(self):
-        valid, indices, reasons = tr.validate_translation_content(
-            ["ほげぇぇぇーーっ！！"], ["Hrooooghhhhhーー!!"],
-            r"[一-龠ぁ-ゔァ-ヴー]+",
-        )
-
-        self.assertFalse(valid)
-        self.assertEqual(indices, [0])
-        self.assertIn("Source-language text remains", reasons[0])
+        for label, source, translated, language, expected_valid, reason in cases:
+            with self.subTest(label):
+                kwargs = {"target_language": language} if language else {}
+                valid, indices, reasons = tr.validate_translation_content(
+                    [source], [translated], language_regex, **kwargs
+                )
+                self.assertEqual(valid, expected_valid, reasons)
+                self.assertEqual(indices, [] if expected_valid else [0])
+                if reason:
+                    self.assertIn(reason, reasons[0])
 
     def test_short_translation_is_hard_failure(self):
         source = "これはとても長い日本語の文章です"
@@ -166,14 +186,6 @@ class TranslationContentValidationTests(unittest.TestCase):
         self.assertIn("Excessive character repetition", reasons[0])
         self.assertEqual(warning_indices, [0])
         self.assertIn("Excessive character repetition", warnings[0])
-
-    def test_rejects_leaked_line_marker(self):
-        valid, indices, reasons = tr.validate_translation_content(
-            ["役人"], ["}Line1:"], r"[一-龠ぁ-ゔァ-ヴー]+"
-        )
-        self.assertFalse(valid)
-        self.assertEqual(indices, [0])
-        self.assertIn("Structured response marker", reasons[0])
 
 
 if __name__ == "__main__":

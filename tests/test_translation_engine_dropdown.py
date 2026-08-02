@@ -59,32 +59,36 @@ class TranslationEngineDropdownTests(unittest.TestCase):
         self.assertEqual(actual, expected)
         self.assertTrue(all(callable(module[2]) for module in tab.modules))
 
-    def test_batch_translate_is_default_for_native_openai(self) -> None:
-        self.assertEqual(
-            default_translation_mode("gpt-5.2", "https://api.openai.com/v1"),
-            "Batch Translate",
-        )
-
-    def test_batch_translate_is_default_for_native_claude(self) -> None:
-        self.assertEqual(
-            default_translation_mode("claude-sonnet-4-6", "https://api.anthropic.com/v1"),
-            BATCH_MODE_LABEL,
-        )
-
-    def test_batch_translate_is_default_for_native_gemini(self) -> None:
-        self.assertEqual(
-            default_translation_mode(
-                "gemini-3.1-pro", "https://generativelanguage.googleapis.com/v1beta/openai/",
-                "gemini",
+    def test_selects_default_translation_mode_for_provider_routes(self) -> None:
+        cases = (
+            (
+                "native OpenAI",
+                ("gpt-5.2", "https://api.openai.com/v1"),
+                BATCH_MODE_LABEL,
             ),
-            BATCH_MODE_LABEL,
+            (
+                "native Anthropic",
+                ("claude-sonnet-4-6", "https://api.anthropic.com/v1"),
+                BATCH_MODE_LABEL,
+            ),
+            (
+                "native Gemini",
+                (
+                    "gemini-3.1-pro",
+                    "https://generativelanguage.googleapis.com/v1beta/openai/",
+                    "gemini",
+                ),
+                BATCH_MODE_LABEL,
+            ),
+            (
+                "Claude through custom provider",
+                ("claude-sonnet-4-6", "https://openrouter.ai/api/v1"),
+                "Translate",
+            ),
         )
-
-    def test_claude_through_custom_provider_defaults_to_normal(self) -> None:
-        self.assertEqual(
-            default_translation_mode("claude-sonnet-4-6", "https://openrouter.ai/api/v1"),
-            "Translate",
-        )
+        for label, arguments, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(default_translation_mode(*arguments), expected)
 
     def test_translation_tab_applies_detected_default(self) -> None:
         with patch("gui.translation_tab.default_translation_mode", return_value="Translate"):

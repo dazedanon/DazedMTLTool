@@ -63,17 +63,17 @@ SAMPLE = {
 
 
 class TestLineNeedsWrap(unittest.TestCase):
-    def test_short_line_skipped(self):
-        self.assertFalse(sw.line_needs_wrap("Short", 40, min_visible=20))
-
-    def test_long_line_needs_wrap(self):
-        text = "A" * 50
-        self.assertTrue(sw.line_needs_wrap(text, 40))
-
-    def test_color_and_font_codes_do_not_count_toward_width(self):
-        text = r"Hello \c[21]\f[20]tavern\c[19] end"
-        self.assertFalse(sw.line_needs_wrap(text, 20))
-        self.assertTrue(sw.line_needs_wrap(text, 10))
+    def test_line_needs_wrap_cases(self):
+        coded_text = r"Hello \c[21]\f[20]tavern\c[19] end"
+        cases = (
+            ("short line", "Short", 40, {"min_visible": 20}, False),
+            ("long line", "A" * 50, 40, {}, True),
+            ("codes excluded within width", coded_text, 20, {}, False),
+            ("visible text exceeds width", coded_text, 10, {}, True),
+        )
+        for label, text, width, kwargs, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(sw.line_needs_wrap(text, width, **kwargs), expected)
 
     def test_wrap_preserves_inline_codes(self):
         text = r"Go to the \c[21]\f[20]tavern\c[19]\f[18] tonight for fun"

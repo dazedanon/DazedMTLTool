@@ -18,36 +18,50 @@ from util.wolfdawn import names as wn  # noqa: E402
 
 
 class TestNameTranslatable(unittest.TestCase):
-    def test_safe_is_translatable(self):
-        self.assertTrue(wn.is_name_translatable({"safety": "safe"}))
-
-    def test_refs_verify_and_missing_are_not_translatable(self):
-        self.assertFalse(wn.is_name_translatable({"safety": "refs"}))
-        self.assertFalse(wn.is_name_translatable({"safety": "verify"}))
-        self.assertFalse(wn.is_name_translatable({}))
-        self.assertFalse(wn.is_name_translatable({"safety": ""}))
+    def test_name_translatable_cases(self):
+        cases = (
+            ("safe", {"safety": "safe"}, True),
+            ("references", {"safety": "refs"}, False),
+            ("verify", {"safety": "verify"}, False),
+            ("missing", {}, False),
+            ("blank", {"safety": ""}, False),
+        )
+        for label, entry, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(wn.is_name_translatable(entry), expected)
 
 
 class TestVocabHarvestCandidate(unittest.TestCase):
-    def test_short_weapon_name_harvests(self):
-        entry = {"source": "ダガー", "note": "武器", "safety": "safe"}
-        self.assertTrue(wn.is_vocab_harvest_candidate(entry))
-
-    def test_multiline_profile_skipped(self):
-        entry = {
-            "source": "セルリアと申します。\nよろしくお願いいたします。",
-            "note": "├■プロフィール",
-            "safety": "safe",
-        }
-        self.assertFalse(wn.is_vocab_harvest_candidate(entry))
-
-    def test_profile_note_skipped_even_when_single_line(self):
-        entry = {"source": "ローザだ。", "note": "├■プロフィール", "safety": "safe"}
-        self.assertFalse(wn.is_vocab_harvest_candidate(entry))
-
-    def test_resistance_label_still_harvests(self):
-        entry = {"source": "物理50％軽減", "note": "┣ 属性耐性", "safety": "safe"}
-        self.assertTrue(wn.is_vocab_harvest_candidate(entry))
+    def test_vocab_harvest_candidate_cases(self):
+        cases = (
+            (
+                "short weapon name",
+                {"source": "ダガー", "note": "武器", "safety": "safe"},
+                True,
+            ),
+            (
+                "multiline profile",
+                {
+                    "source": "セルリアと申します。\nよろしくお願いいたします。",
+                    "note": "├■プロフィール",
+                    "safety": "safe",
+                },
+                False,
+            ),
+            (
+                "single-line profile",
+                {"source": "ローザだ。", "note": "├■プロフィール", "safety": "safe"},
+                False,
+            ),
+            (
+                "resistance label",
+                {"source": "物理50％軽減", "note": "┣ 属性耐性", "safety": "safe"},
+                True,
+            ),
+        )
+        for label, entry, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(wn.is_vocab_harvest_candidate(entry), expected)
 
 
 class TestCountNameSafety(unittest.TestCase):
@@ -76,15 +90,15 @@ class TestCountNameSafety(unittest.TestCase):
 
 
 class TestNoteHeader(unittest.TestCase):
-    def test_static_fallback_is_bilingual(self):
-        self.assertEqual(wn.note_header("武器"), "Weapon · 武器")
-
-    def test_live_db_label_wins_over_static(self):
-        labels = {"武器": "Blade"}
-        self.assertEqual(wn.note_header("武器", labels), "Blade · 武器")
-
-    def test_unknown_note_stays_japanese_only(self):
-        self.assertEqual(wn.note_header("■MOBセリフ"), "■MOBセリフ")
+    def test_note_header_cases(self):
+        cases = (
+            ("static fallback", "武器", None, "Weapon · 武器"),
+            ("live label", "武器", {"武器": "Blade"}, "Blade · 武器"),
+            ("unknown note", "■MOBセリフ", None, "■MOBセリフ"),
+        )
+        for label, note, labels, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(wn.note_header(note, labels), expected)
 
 
 class TestCollectNameNotes(unittest.TestCase):

@@ -72,17 +72,17 @@ def fake_openai(create):
 
 
 class HeaderHelperTests(unittest.TestCase):
-    def test_header_int_first_present_and_floored(self):
-        headers = {"b": "125.9"}
-        self.assertEqual(_header_int(headers, "a", "b"), 125)
-
-    def test_header_int_missing_blank_and_garbage(self):
-        self.assertIsNone(_header_int({}, "a"))
-        self.assertIsNone(_header_int({"a": "  "}, "a"))
-        self.assertIsNone(_header_int({"a": "abc"}, "a"))
-
-    def test_header_float_keeps_fraction(self):
-        self.assertAlmostEqual(_header_float({"a": "0.42"}, "a"), 0.42)
+    def test_header_parsing_cases(self):
+        cases = (
+            ("first present integer", _header_int, {"b": "125.9"}, ("a", "b"), 125),
+            ("missing integer", _header_int, {}, ("a",), None),
+            ("blank integer", _header_int, {"a": "  "}, ("a",), None),
+            ("garbage integer", _header_int, {"a": "abc"}, ("a",), None),
+            ("fractional float", _header_float, {"a": "0.42"}, ("a",), 0.42),
+        )
+        for label, parser, headers, names, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(parser(headers, *names), expected)
 
 
 class AdaptiveLimiterUpdateTests(unittest.TestCase):

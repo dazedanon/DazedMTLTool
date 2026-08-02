@@ -19,56 +19,79 @@ ALL_OFF = {"literal_line1_lowconf": False}
 
 
 class TestSplitSource(unittest.TestCase):
-    def test_splits_lowconf_when_enabled(self):
-        out = ws.split_source("市民\nおはよう\n元気？", "literal_line1_lowconf", ALL_ON)
-        self.assertEqual(out, ("", "市民", "おはよう\n元気？"))
-
-    def test_splits_highconf_when_enabled(self):
-        out = ws.split_source("セルリア\nふふふ", "literal_line1", ALL_ON)
-        self.assertEqual(out, ("", "セルリア", "ふふふ"))
-
-    def test_disabled_format_returns_none(self):
-        self.assertIsNone(ws.split_source("市民\nおはよう", "literal_line1_lowconf", ALL_OFF))
-
-    def test_highconf_always_on_ignores_config(self):
-        # The reliable nameplate is reshaped regardless of config (no toggle).
-        out = ws.split_source("セルリア\nふふふ", "literal_line1", ALL_OFF)
-        self.assertEqual(out, ("", "セルリア", "ふふふ"))
-
-    def test_non_firstline_src_returns_none(self):
-        for src in ("narration", "ui", "choice", "string_var", ""):
-            self.assertIsNone(ws.split_source("市民\nおはよう", src, ALL_ON))
-
-    def test_no_body_returns_none(self):
-        self.assertIsNone(ws.split_source("市民", "literal_line1", ALL_ON))
-
-    def test_preserves_window_option_prefix(self):
-        out = ws.split_source("@2\n市民\nおはよう", "literal_line1", ALL_ON)
-        self.assertEqual(out, ("@2\n", "市民", "おはよう"))
+    def test_split_source_cases(self):
+        cases = [
+            (
+                "enabled low confidence",
+                "市民\nおはよう\n元気？",
+                "literal_line1_lowconf",
+                ALL_ON,
+                ("", "市民", "おはよう\n元気？"),
+            ),
+            (
+                "enabled high confidence",
+                "セルリア\nふふふ",
+                "literal_line1",
+                ALL_ON,
+                ("", "セルリア", "ふふふ"),
+            ),
+            (
+                "disabled low confidence",
+                "市民\nおはよう",
+                "literal_line1_lowconf",
+                ALL_OFF,
+                None,
+            ),
+            (
+                "high confidence ignores toggle",
+                "セルリア\nふふふ",
+                "literal_line1",
+                ALL_OFF,
+                ("", "セルリア", "ふふふ"),
+            ),
+            ("missing body", "市民", "literal_line1", ALL_ON, None),
+            (
+                "window option prefix",
+                "@2\n市民\nおはよう",
+                "literal_line1",
+                ALL_ON,
+                ("@2\n", "市民", "おはよう"),
+            ),
+        ]
+        cases.extend(
+            (f"unsupported {source_type}", "市民\nおはよう", source_type, ALL_ON, None)
+            for source_type in ("narration", "ui", "choice", "string_var", "")
+        )
+        for label, source, source_type, config, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(
+                    ws.split_source(source, source_type, config),
+                    expected,
+                )
 
 
 class TestPrefixedRoundTrip(unittest.TestCase):
     def test_to_prefixed(self):
         self.assertEqual(ws.to_prefixed("市民", "おはよう"), "[市民]: おはよう")
 
-    def test_parse_prefixed(self):
-        self.assertEqual(ws.parse_prefixed("[Citizen]: Good morning"), ("Citizen", "Good morning"))
-
-    def test_parse_prefixed_multiline_body(self):
-        spk, body = ws.parse_prefixed("[Celria]: Wave.\nSmile.")
-        self.assertEqual(spk, "Celria")
-        self.assertEqual(body, "Wave.\nSmile.")
-
-    def test_parse_prefixed_no_prefix(self):
-        self.assertEqual(ws.parse_prefixed("Just narration"), (None, "Just narration"))
-
-    def test_restore_source(self):
-        self.assertEqual(ws.restore_source("", "Citizen", "Good morning"), "Citizen\nGood morning")
-
-    def test_restore_source_with_window_prefix(self):
-        self.assertEqual(
-            ws.restore_source("@2\n", "Citizen", "Hi"), "@2\nCitizen\nHi"
+    def test_parse_prefixed_cases(self):
+        cases = (
+            ("single line", "[Citizen]: Good morning", ("Citizen", "Good morning")),
+            ("multiline", "[Celria]: Wave.\nSmile.", ("Celria", "Wave.\nSmile.")),
+            ("no prefix", "Just narration", (None, "Just narration")),
         )
+        for label, text, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(ws.parse_prefixed(text), expected)
+
+    def test_restore_source_cases(self):
+        cases = (
+            ("plain", "", "Citizen", "Good morning", "Citizen\nGood morning"),
+            ("window prefix", "@2\n", "Citizen", "Hi", "@2\nCitizen\nHi"),
+        )
+        for label, prefix, speaker, body, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(ws.restore_source(prefix, speaker, body), expected)
 
     def test_full_round_trip_structure_preserved(self):
         source = "市民\nおはよう\n元気？"

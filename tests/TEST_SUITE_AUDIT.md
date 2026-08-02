@@ -4,13 +4,30 @@ Audit date: 2026-08-02
 
 ## Outcome
 
-The audited baseline contained 919 tests. The suite now contains 852 tests:
-755 core tests and 97 extended tests. The full suite is the union of those two
+The audited baseline contained 919 tests. The suite now contains 770 tests:
+673 core tests and 97 extended tests. The full suite is the union of those two
 tiers; there is no third group of “full-only” tests.
 
 On the audit machine, the pre-cleanup extended and full runs took about 100 and
-105 seconds. The audited versions take roughly 9 and 14 seconds. Runtime and
-test-count ceilings are enforced by `scripts/run_test_suite.py`.
+105 seconds. The audited versions take roughly 9 and 14 seconds. The latest
+follow-up run completed core in 4.330 seconds and full in 14.156 seconds.
+Runtime and test-count ceilings are enforced by `scripts/run_test_suite.py`.
+
+## Follow-up consolidation
+
+A second pass converted related pure-function input/output variants into
+labeled `subTest` tables. This removed 82 test-method wrappers while retaining
+their individual case labels, inputs, expected outputs, and failure reporting.
+The pass covered translation cache keys and merging, control-code validation,
+speaker parsing, CSV target detection, WOLF code repair and classification,
+provider-route defaults, SFX matching, and small parser/normalizer matrices.
+
+One cache-key test that made the same call twice was removed as an exact
+duplicate. An Anthropic test that only proved a third-party object lacked a
+`.text` attribute was also removed; the retained case still verifies that the
+application skips that block and extracts the following text. Stateful worker,
+filesystem mutation, persistence, destructive-action, and distinct failure-path
+tests remain separate.
 
 ## Decision rule
 

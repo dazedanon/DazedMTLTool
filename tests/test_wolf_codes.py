@@ -16,96 +16,106 @@ from util.wolfdawn import codes as wolf_codes  # noqa: E402
 
 
 class WolfCodesRepairTests(unittest.TestCase):
-    def test_fixes_spurious_space_before_caret(self):
-        source = "占い師\nはぁ！\\^"
-        text = "Fortune-teller\nHa!\\ ^"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, "Fortune-teller\nHa!\\^")
-
-    def test_rebuild_preserves_multiple_codes(self):
-        source = "A\\c[1]B\\f[2]C"
-        text = "A\\c[ 1]B\\f[ 2]C"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, "A\\c[1]B\\f[2]C")
-
-    def test_rebuild_repairs_whitespace_in_shrunken_font(self):
-        source = r"\f[18]文字"
-        text = r"\f[ 14]Text"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, r"\f[14]Text")
-
-    def test_rebuild_does_not_duplicate_font_after_prefix_control_code(self):
-        source = r"\>\f[5]レベル\cself[30]"
-        text = r"\>\f[5]Level\cself[30]"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, text)
-
-    def test_rebuild_removes_old_duplicate_font_before_prefix_control_code(self):
-        source = r"\>\f[5]レベル\cself[30]"
-        text = r"\f[5]\>\f[5]Level\cself[30]"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, r"\>\f[5]Level\cself[30]")
-
-    def test_rebuild_keeps_distinct_manual_body_font_before_prefix(self):
-        source = r"\>\f[5]レベル\cself[30]"
-        text = r"\f[14]\>\f[5]Level\cself[30]"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, text)
-
-    def test_rebuild_preserves_valid_moved_variable_code(self):
-        source = r"\v[24]Day        "
-        text = "Day \\v[24]\n        "
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, text)
-
-    def test_rebuild_does_not_guess_reordered_variable_codes(self):
-        source = r"\v[1] vs \v[2]"
-        text = r"\v[2] versus \v[1]"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, text)
-        self.assertTrue(wolf_codes.non_font_code_sequences_differ(source, text))
-
-    def test_rebuild_does_not_guess_missing_color_code(self):
-        source = r"\c[1]赤\c[0]"
-        text = r"Red \c[1]"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, text)
-        self.assertTrue(wolf_codes.non_font_code_sequences_differ(source, text))
-
-    def test_rebuild_keeps_nameplate_body_font_with_other_inline_codes(self):
-        source = "市民\n赤い\\c[1]花"
-        text = "Citizen\n\\f[14]Red \\c[1]flower"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, text)
-        self.assertFalse(wolf_codes.non_font_code_sequences_differ(source, text))
-
-    def test_rebuild_keeps_extra_midline_font(self):
-        source = r"\c[1]赤い花"
-        text = r"\c[1]Red \f[14]flower"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, text)
-
-    def test_rebuild_does_not_strip_literal_backslash_n(self):
-        source = r"\c[1]一行"
-        text = r"\c[1]One\nline"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, text)
-        self.assertTrue(wolf_codes.non_font_code_sequences_differ(source, text))
-
-    def test_rebuild_restores_literal_newline_when_source_has_one(self):
-        source = "既に見たことのあるイベントです。\nスキップしますか？"
-        text = r"This is an event you've already seen.\nWould you like to skip it?"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(
-            fixed,
-            "This is an event you've already seen.\nWould you like to skip it?",
+    def test_rebuild_text_preserving_source_codes_cases(self):
+        cases = (
+            (
+                "spurious space before caret",
+                "占い師\nはぁ！\\^",
+                "Fortune-teller\nHa!\\ ^",
+                "Fortune-teller\nHa!\\^",
+                None,
+            ),
+            (
+                "multiple code whitespace",
+                "A\\c[1]B\\f[2]C",
+                "A\\c[ 1]B\\f[ 2]C",
+                "A\\c[1]B\\f[2]C",
+                None,
+            ),
+            ("shrunken font whitespace", r"\f[18]文字", r"\f[ 14]Text", r"\f[14]Text", None),
+            (
+                "font after prefix control",
+                r"\>\f[5]レベル\cself[30]",
+                r"\>\f[5]Level\cself[30]",
+                r"\>\f[5]Level\cself[30]",
+                None,
+            ),
+            (
+                "duplicate font before prefix",
+                r"\>\f[5]レベル\cself[30]",
+                r"\f[5]\>\f[5]Level\cself[30]",
+                r"\>\f[5]Level\cself[30]",
+                None,
+            ),
+            (
+                "distinct manual body font",
+                r"\>\f[5]レベル\cself[30]",
+                r"\f[14]\>\f[5]Level\cself[30]",
+                r"\f[14]\>\f[5]Level\cself[30]",
+                None,
+            ),
+            (
+                "moved variable code",
+                r"\v[24]Day        ",
+                "Day \\v[24]\n        ",
+                "Day \\v[24]\n        ",
+                None,
+            ),
+            (
+                "reordered variable codes",
+                r"\v[1] vs \v[2]",
+                r"\v[2] versus \v[1]",
+                r"\v[2] versus \v[1]",
+                True,
+            ),
+            (
+                "missing color code",
+                r"\c[1]赤\c[0]",
+                r"Red \c[1]",
+                r"Red \c[1]",
+                True,
+            ),
+            (
+                "nameplate body font with inline code",
+                "市民\n赤い\\c[1]花",
+                "Citizen\n\\f[14]Red \\c[1]flower",
+                "Citizen\n\\f[14]Red \\c[1]flower",
+                False,
+            ),
+            (
+                "extra midline font",
+                r"\c[1]赤い花",
+                r"\c[1]Red \f[14]flower",
+                r"\c[1]Red \f[14]flower",
+                None,
+            ),
+            (
+                "literal backslash n",
+                r"\c[1]一行",
+                r"\c[1]One\nline",
+                r"\c[1]One\nline",
+                True,
+            ),
+            (
+                "source newline",
+                "既に見たことのあるイベントです。\nスキップしますか？",
+                r"This is an event you've already seen.\nWould you like to skip it?",
+                "This is an event you've already seen.\nWould you like to skip it?",
+                None,
+            ),
+            ("ambiguous literal newline", "一行だけ", r"One\nline", r"One\nline", None),
         )
-
-    def test_rebuild_does_not_guess_ambiguous_literal_newlines(self):
-        source = "一行だけ"
-        text = r"One\nline"
-        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertEqual(fixed, text)
+        for label, source, text, expected, expected_drift in cases:
+            with self.subTest(label):
+                self.assertEqual(
+                    wolf_codes.rebuild_text_preserving_source_codes(source, text),
+                    expected,
+                )
+                if expected_drift is not None:
+                    self.assertEqual(
+                        wolf_codes.non_font_code_sequences_differ(source, text),
+                        expected_drift,
+                    )
 
     def test_protect_and_restore_roundtrip(self):
         src = "Line with \\^ and \\cself[8]"

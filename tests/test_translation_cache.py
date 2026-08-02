@@ -34,73 +34,72 @@ class CacheKeyTests(CacheTestBase):
             T.get_cache_key(payload, "English"),
         )
 
-    def test_language_changes_the_key(self):
-        payload = '{"Line1": "テスト"}'
-        self.assertNotEqual(
-            T.get_cache_key(payload, "English"),
-            T.get_cache_key(payload, "Spanish"),
-        )
-
-    def test_identical_japanese_collides_across_files(self):
-        # Two files producing the same Japanese-only payload share a key. This is
-        # exactly why the cached value must be Japanese-only (no file-specific
-        # neighbours), so the read path can re-expand it per file.
-        payload = '{"Line1": "おはよう"}'
-        self.assertEqual(
-            T.get_cache_key(payload, "English"),
-            T.get_cache_key(payload, "English"),
-        )
-
-    def test_matched_glossary_context_changes_the_key(self):
-        payload = '{"Line1": "カイン"}'
-        self.assertNotEqual(
-            T.get_cache_key(payload, "English", "カイン (Kain)"),
-            T.get_cache_key(payload, "English", "カイン (Cain)"),
-        )
-
-    def test_conversation_history_changes_the_key(self):
-        payload = '{"Line1": "そうです"}'
-        self.assertNotEqual(
-            T.get_cache_key(
-                payload, "English", request_context=["He agreed."]
+    def test_cache_key_dimensions(self):
+        dialogue_payload = '{"Line1": "そうです"}'
+        source_lines = ["果歩 \"前の行\""]
+        cases = (
+            (
+                "language",
+                ('{"Line1": "テスト"}', "English"),
+                {},
+                ('{"Line1": "テスト"}', "Spanish"),
+                {},
+                False,
             ),
-            T.get_cache_key(
-                payload, "English", request_context=["She disagreed."]
+            (
+                "matched glossary",
+                ('{"Line1": "カイン"}', "English", "カイン (Kain)"),
+                {},
+                ('{"Line1": "カイン"}', "English", "カイン (Cain)"),
+                {},
+                False,
+            ),
+            (
+                "conversation history",
+                (dialogue_payload, "English"),
+                {"request_context": ["He agreed."]},
+                (dialogue_payload, "English"),
+                {"request_context": ["She disagreed."]},
+                False,
+            ),
+            (
+                "source versus instruction fields",
+                (dialogue_payload, "English"),
+                {"request_context": T._typed_request_context(source_lines, [])},
+                (dialogue_payload, "English"),
+                {"request_context": T._typed_request_context([], source_lines)},
+                False,
+            ),
+            (
+                "instruction text",
+                (dialogue_payload, "English"),
+                {
+                    "request_context": T._typed_request_context(
+                        source_lines, ["Keep it brief."]
+                    )
+                },
+                (dialogue_payload, "English"),
+                {
+                    "request_context": T._typed_request_context(
+                        source_lines, ["Use a formal register."]
+                    )
+                },
+                False,
+            ),
+            (
+                "empty matched context",
+                ('{"Line1": "名前のない文章"}', "English"),
+                {},
+                ('{"Line1": "名前のない文章"}', "English", ""),
+                {},
+                True,
             ),
         )
-
-    def test_source_and_instruction_fields_change_the_key(self):
-        payload = '{"Line1": "そうです"}'
-        lines = ["果歩 \"前の行\""]
-        self.assertNotEqual(
-            T.get_cache_key(
-                payload,
-                "English",
-                request_context=T._typed_request_context(lines, []),
-            ),
-            T.get_cache_key(
-                payload,
-                "English",
-                request_context=T._typed_request_context([], lines),
-            ),
-        )
-
-    def test_instruction_change_does_not_collide_with_same_source(self):
-        payload = '{"Line1": "そうです"}'
-        source = ["果歩 \"前の行\""]
-        first = T._typed_request_context(source, ["Keep it brief."])
-        second = T._typed_request_context(source, ["Use a formal register."])
-        self.assertNotEqual(
-            T.get_cache_key(payload, "English", request_context=first),
-            T.get_cache_key(payload, "English", request_context=second),
-        )
-
-    def test_empty_matched_context_keeps_legacy_key(self):
-        payload = '{"Line1": "名前のない文章"}'
-        self.assertEqual(
-            T.get_cache_key(payload, "English"),
-            T.get_cache_key(payload, "English", ""),
-        )
+        for label, left_args, left_kwargs, right_args, right_kwargs, equal in cases:
+            with self.subTest(label):
+                left = T.get_cache_key(*left_args, **left_kwargs)
+                right = T.get_cache_key(*right_args, **right_kwargs)
+                self.assertEqual(left == right, equal)
 
     def test_unrelated_full_glossary_changes_do_not_change_matched_key(self):
         payload = '{"Line1": "カイン"}'
@@ -148,16 +147,15 @@ class CacheKeyTests(CacheTestBase):
 
 
 class CacheRoundTripTests(CacheTestBase):
-    def test_list_value_preserved_exactly(self):
-        payload = '{"Line1": "あ", "Line2": "い"}'
-        value = ["A", "B"]
-        T.cache_translation(payload, value, "English")
-        self.assertEqual(T.peek_cached_translation(payload, "English"), value)
-
-    def test_string_value_preserved(self):
-        payload = '{"Line1": "名前"}'
-        T.cache_translation(payload, "Name", "English")
-        self.assertEqual(T.peek_cached_translation(payload, "English"), "Name")
+    def test_cached_value_shapes_are_preserved(self):
+        cases = (
+            ("list", '{"Line1": "あ", "Line2": "い"}', ["A", "B"]),
+            ("string", '{"Line1": "名前"}', "Name"),
+        )
+        for label, payload, value in cases:
+            with self.subTest(label):
+                T.cache_translation(payload, value, "English")
+                self.assertEqual(T.peek_cached_translation(payload, "English"), value)
 
     def test_miss_returns_none_from_peek(self):
         self.assertIsNone(T.peek_cached_translation("nope", "English"))
@@ -274,21 +272,25 @@ class PendingMarkerTests(CacheTestBase):
 
 
 class MergeTests(CacheTestBase):
-    def test_pending_never_overwrites_real_translation(self):
-        real = {"k": ["done"]}
-        overlay = {"k": T._pending_cache_entry()}
-        merged = T._merge_translation_caches(real, overlay)
-        self.assertEqual(merged["k"], ["done"])
-
-    def test_real_translation_overwrites_pending(self):
-        base = {"k": T._pending_cache_entry()}
-        overlay = {"k": ["done"]}
-        merged = T._merge_translation_caches(base, overlay)
-        self.assertEqual(merged["k"], ["done"])
-
-    def test_new_keys_are_added(self):
-        merged = T._merge_translation_caches({"a": [1]}, {"b": [2]})
-        self.assertEqual(merged, {"a": [1], "b": [2]})
+    def test_merge_translation_cache_cases(self):
+        cases = (
+            (
+                "pending never overwrites real",
+                {"k": ["done"]},
+                {"k": T._pending_cache_entry()},
+                {"k": ["done"]},
+            ),
+            (
+                "real overwrites pending",
+                {"k": T._pending_cache_entry()},
+                {"k": ["done"]},
+                {"k": ["done"]},
+            ),
+            ("new keys", {"a": [1]}, {"b": [2]}, {"a": [1], "b": [2]}),
+        )
+        for label, base, overlay, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(T._merge_translation_caches(base, overlay), expected)
 
     def test_stale_pending_can_be_replaced_by_pending(self):
         stale = T._pending_cache_entry()
@@ -302,10 +304,55 @@ class ExpandCleanToBatchTests(unittest.TestCase):
     """The core of the cache fix: cached values are Japanese-only and must be
     re-expanded with the *current* batch's skipped originals."""
 
-    def test_no_skips_returns_clean_values_in_order(self):
-        tItem = ["あ", "い", "う"]
-        out = T.expand_clean_to_batch(["A", "B", "C"], tItem, {}, {})
-        self.assertEqual(out, ["A", "B", "C"])
+    def test_expand_clean_to_batch_cases(self):
+        cases = (
+            (
+                "no skips",
+                ["A", "B", "C"],
+                ["あ", "い", "う"],
+                {},
+                {},
+                ["A", "B", "C"],
+            ),
+            (
+                "corrupted original",
+                ["A", "C"],
+                ["あ", "\ufffd bad", "う"],
+                {1: "\ufffd bad"},
+                {},
+                ["A", "\ufffd bad", "C"],
+            ),
+            (
+                "mixed skipped originals",
+                ["A", "E"],
+                ["あ", "\ufffd", "Name", "え"],
+                {1: "\ufffd"},
+                {2: "Name"},
+                ["A", "\ufffd", "Name", "E"],
+            ),
+            (
+                "multiple non-Japanese originals",
+                ["A", "C"],
+                ["あ", "x", "う", "y"],
+                {},
+                {1: "x", 3: "y"},
+                ["A", "x", "C", "y"],
+            ),
+            (
+                "short clean values",
+                ["A"],
+                ["あ", "い", "う"],
+                {},
+                {},
+                ["A", "い", "う"],
+            ),
+        )
+        for label, clean, batch, corrupted, untranslated, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(
+                    T.expand_clean_to_batch(clean, batch, corrupted, untranslated),
+                    expected,
+                )
 
     def test_no_japanese_originals_reinserted_per_file(self):
         # Same Japanese-only cache value ["A", "C"], but each file supplies its
@@ -318,30 +365,6 @@ class ExpandCleanToBatchTests(unittest.TestCase):
         tItem2 = ["あ", "World", "う"]
         out2 = T.expand_clean_to_batch(clean, tItem2, {}, {1: "World"})
         self.assertEqual(out2, ["A", "World", "C"])
-
-    def test_corrupted_originals_reinserted(self):
-        tItem = ["あ", "\ufffd bad", "う"]
-        out = T.expand_clean_to_batch(["A", "C"], tItem, {1: "\ufffd bad"}, {})
-        self.assertEqual(out, ["A", "\ufffd bad", "C"])
-
-    def test_mixed_corrupted_and_no_japanese(self):
-        tItem = ["あ", "\ufffd", "Name", "え"]
-        out = T.expand_clean_to_batch(
-            ["A", "E"], tItem, {1: "\ufffd"}, {2: "Name"}
-        )
-        self.assertEqual(out, ["A", "\ufffd", "Name", "E"])
-
-    def test_result_length_always_matches_batch(self):
-        tItem = ["あ", "x", "う", "y"]
-        out = T.expand_clean_to_batch(["A", "C"], tItem, {}, {1: "x", 3: "y"})
-        self.assertEqual(len(out), len(tItem))
-
-    def test_short_clean_values_falls_back_to_source(self):
-        # Defensive: a stale/short cache value must not raise; it falls back to
-        # the source line for any positions it can't fill.
-        tItem = ["あ", "い", "う"]
-        out = T.expand_clean_to_batch(["A"], tItem, {}, {})
-        self.assertEqual(out, ["A", "い", "う"])
 
 
 class SaveLoadTests(CacheTestBase):

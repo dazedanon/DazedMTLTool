@@ -44,14 +44,15 @@ class SfxReferenceTests(unittest.TestCase):
         payload = json.dumps({"Line1": "ドキドキ", "meta": 30}, ensure_ascii=False)
         self.assertEqual(source_strings(payload), ["ドキドキ"])
 
-    def test_matches_katakana_and_hiragana_aliases(self):
-        katakana = build_sfx_reference_text('{"Line1":"胸がドキドキする"}')
-        hiragana = build_sfx_reference_text('{"Line1":"どきどき……"}')
-        self.assertIn("ドキドキ", katakana)
-        self.assertIn("どきどき", hiragana)
-
-    def test_hiragana_variant_does_not_match_inside_longer_hiragana_run(self):
-        self.assertEqual(build_sfx_reference_text('{"Line1":"どきどきしている"}'), "")
+    def test_matches_supported_kana_variants(self):
+        cases = (
+            ("katakana", '{"Line1":"胸がドキドキする"}', "ドキドキ"),
+            ("hiragana", '{"Line1":"どきどき……"}', "どきどき"),
+            ("half-width katakana", '{"Line1":"胸がﾄﾞｷﾄﾞｷする"}', "ドキドキ"),
+        )
+        for label, payload, expected in cases:
+            with self.subTest(label):
+                self.assertIn(expected, build_sfx_reference_text(payload))
 
     def test_ordinary_hiragana_verb_does_not_create_false_sfx_match(self):
         self.assertEqual(build_sfx_reference_text('{"Line1":"勉強する"}'), "")
@@ -59,12 +60,15 @@ class SfxReferenceTests(unittest.TestCase):
         self.assertIn("ドキドキ", context)
         self.assertNotIn("\n- する /", context)
 
-    def test_nfkc_matches_half_width_katakana(self):
-        context = build_sfx_reference_text('{"Line1":"胸がﾄﾞｷﾄﾞｷする"}')
-        self.assertIn("ドキドキ", context)
-
-    def test_single_kana_entries_are_suppressed(self):
-        self.assertEqual(build_sfx_reference_text('{"Line1":"あ！"}'), "")
+    def test_non_matches_and_disabled_reference_return_no_context(self):
+        cases = (
+            ("longer hiragana run", '{"Line1":"どきどきしている"}', {}),
+            ("single kana", '{"Line1":"あ！"}', {}),
+            ("disabled", '{"Line1":"ドキドキ"}', {"enabled": False}),
+        )
+        for label, payload, kwargs in cases:
+            with self.subTest(label):
+                self.assertEqual(build_sfx_reference_text(payload, **kwargs), "")
 
     def test_context_is_non_authoritative_and_preserves_ambiguity(self):
         context = build_sfx_reference_text('{"Line1":"ガーン……そんな"}')
@@ -72,12 +76,6 @@ class SfxReferenceTests(unittest.TestCase):
         self.assertIn("not approved fixed translations", context)
         self.assertNotIn("Romaji:", context)
         self.assertGreaterEqual(context.count("  - equivalents:"), 2)
-
-    def test_disabled_reference_returns_no_context(self):
-        self.assertEqual(
-            build_sfx_reference_text('{"Line1":"ドキドキ"}', enabled=False),
-            "",
-        )
 
     def test_longest_match_wins_and_cap_is_deterministic(self):
         document = {

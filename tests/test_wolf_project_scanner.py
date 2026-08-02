@@ -26,17 +26,15 @@ from util.project_scanner import (  # noqa: E402
 
 
 class WolfProjectScannerTests(unittest.TestCase):
-    def test_wolf_maps_dir_prefers_mapdata_subfolder(self):
-        with tempfile.TemporaryDirectory() as raw:
-            data = Path(raw) / "Data"
-            (data / "MapData").mkdir(parents=True)
-            self.assertEqual(wolf_maps_dir(data), data / "MapData")
-
-    def test_wolf_maps_dir_falls_back_to_data_root(self):
-        with tempfile.TemporaryDirectory() as raw:
-            data = Path(raw) / "Data"
-            data.mkdir()
-            self.assertEqual(wolf_maps_dir(data), data)
+    def test_wolf_maps_dir_cases(self):
+        for label, has_mapdata in (("MapData subfolder", True), ("Data root", False)):
+            with self.subTest(label), tempfile.TemporaryDirectory() as raw:
+                data = Path(raw) / "Data"
+                data.mkdir()
+                if has_mapdata:
+                    (data / "MapData").mkdir()
+                expected = data / "MapData" if has_mapdata else data
+                self.assertEqual(wolf_maps_dir(data), expected)
 
     def test_wolf_has_maps(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -76,20 +74,21 @@ class WolfProjectScannerTests(unittest.TestCase):
             (data / "MapData.wolf").write_bytes(b"")
             self.assertFalse(wolf_maps_packed(base, data))
 
-    def test_wolf_unpack_out_dir_root_data_wolf(self):
-        with tempfile.TemporaryDirectory() as raw:
-            base = Path(raw)
-            (base / "Data.wolf").write_bytes(b"")
-            self.assertEqual(wolf_unpack_out_dir(base, base / "Data.wolf"), base)
-
-    def test_wolf_unpack_out_dir_nested_text_archives(self):
-        with tempfile.TemporaryDirectory() as raw:
-            base = Path(raw)
-            data = base / "Data"
-            data.mkdir()
-            arc = data / "MapData.wolf"
-            arc.write_bytes(b"")
-            self.assertEqual(wolf_unpack_out_dir(base, arc), data)
+    def test_wolf_unpack_out_dir_cases(self):
+        cases = (
+            ("root Data.wolf", Path("Data.wolf"), Path(".")),
+            ("nested text archive", Path("Data/MapData.wolf"), Path("Data")),
+        )
+        for label, archive_relative, expected_relative in cases:
+            with self.subTest(label), tempfile.TemporaryDirectory() as raw:
+                base = Path(raw)
+                archive = base / archive_relative
+                archive.parent.mkdir(parents=True, exist_ok=True)
+                archive.write_bytes(b"")
+                self.assertEqual(
+                    wolf_unpack_out_dir(base, archive),
+                    base / expected_relative,
+                )
 
     def test_wolf_repair_nested_data_dir(self):
         with tempfile.TemporaryDirectory() as raw:
