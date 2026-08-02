@@ -416,13 +416,19 @@ def searchCodes(events, pbar, jobList, filename):
                         choiceList.append(jaChoiceList[j])
 
                 # Translate
-                if 'jaString' in locals():
-                    choiceString = f"Previous Line: {jaString}\n\nReply with the {LANGUAGE} translation of the dialogue choice"
+                choiceInstruction = (
+                    f"Reply with the {LANGUAGE} translation of the dialogue choice"
+                )
+                if 'jaString' in locals() and jaString:
+                    choiceContext = {
+                        "instructions": [choiceInstruction],
+                        "source_items": [jaString],
+                    }
                 else:
-                    choiceString = f"Reply with the {LANGUAGE} translation of the dialogue choice"
+                    choiceContext = choiceInstruction
                 response = translateAI(
                     choiceList,
-                    choiceString,
+                    choiceContext,
                     True,
                 )
                 translatedChoiceList = response[0]

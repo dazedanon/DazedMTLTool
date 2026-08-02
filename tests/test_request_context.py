@@ -354,6 +354,62 @@ class RequestContextSerializationTests(unittest.TestCase):
             (["一行目", "二行目"], ["Translate these as dialogue choices."]),
         ])
 
+        # The legacy WOLF code-102 path must construct the same typed document
+        # instead of embedding its Japanese previous line inside an instruction.
+        import modules.wolf as wolf
+
+        class _Progress:
+            total = 0
+
+            def refresh(self):
+                return None
+
+            def update(self, _amount):
+                return None
+
+        choice_contexts = []
+
+        def engine_translate(engine_text, engine_context, *_args):
+            if engine_text == ["はい", "いいえ"]:
+                choice_contexts.append(engine_context)
+            translated = (
+                list(engine_text)
+                if isinstance(engine_text, list)
+                else engine_text
+            )
+            return [translated, [0, 0]]
+
+        events = [
+            {"code": 101, "stringArgs": ["前の台詞"]},
+            {"code": 102, "stringArgs": ["はい", "いいえ"]},
+        ]
+        with (
+            mock.patch.object(wolf, "translateAI", side_effect=engine_translate),
+            mock.patch.multiple(
+                wolf,
+                CODE101=True,
+                CODE102=True,
+                CODE122=False,
+                CODE150=False,
+                CODE210=False,
+                CODE250=False,
+                CODE300=False,
+                FIXTEXTWRAP=False,
+            ),
+        ):
+            wolf.searchCodes(events, _Progress(), None, "Map001.json")
+
+        self.assertTrue(choice_contexts)
+        self.assertTrue(all(
+            context == {
+                "instructions": [
+                    f"Reply with the {wolf.LANGUAGE} translation of the dialogue choice"
+                ],
+                "source_items": ["前の台詞"],
+            }
+            for context in choice_contexts
+        ))
+
 
 if __name__ == "__main__":
     unittest.main()

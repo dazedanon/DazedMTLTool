@@ -331,6 +331,19 @@ class CharacterCompoundMatchingTests(unittest.TestCase):
 
         self.assertEqual(matched, "")
 
+        pairs_with_short_alias = parseVocabWithCategories(
+            "# Game Characters\n"
+            "天草 果歩 (Kaho Amakusa)\n"
+            "山田 果歩 (Kaho Yamada)\n"
+            "果歩 (Kaho)\n"
+        )
+        english_prefixed = buildMatchedVocabText(
+            pairs_with_short_alias, "[Kaho]: どうしたの？"
+        )
+        self.assertIn("果歩 (Kaho)", english_prefixed)
+        self.assertNotIn("天草 果歩 (Kaho Amakusa)", english_prefixed)
+        self.assertNotIn("山田 果歩 (Kaho Yamada)", english_prefixed)
+
     def test_curated_full_name_suppresses_generated_short_speaker_alias(self):
         pairs = parseVocabWithCategories(
             "# Game Characters\n"
@@ -342,6 +355,12 @@ class CharacterCompoundMatchingTests(unittest.TestCase):
 
         self.assertIn("天草 果歩 (Kaho Amakusa)", matched)
         self.assertNotIn("\n果歩 (Kaho)\n", matched)
+
+        english_prefixed = buildMatchedVocabText(
+            pairs, "[Kaho]: どうしたの？"
+        )
+        self.assertIn("天草 果歩 (Kaho Amakusa)", english_prefixed)
+        self.assertNotIn("\n果歩 (Kaho)\n", english_prefixed)
 
     def test_character_entry_matches_inside_katakana_compound(self):
         pairs = parseVocabWithCategories(VOCAB)

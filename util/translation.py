@@ -2912,6 +2912,7 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
     # Keep only the highest-authority spelling for each character source.
     character_authority = {}
     character_component_sources = {}
+    character_source_aliases = {}
     for candidate_term, candidate_line, candidate_category in vocabPairs:
         if not isinstance(candidate_term, tuple) or len(candidate_term) != 2:
             continue
@@ -2923,9 +2924,12 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
         if not priority:
             continue
         source = candidate_term[0]
+        english_alias = candidate_term[1]
         previous = character_authority.get(source)
         if previous is None or priority > previous[0]:
             character_authority[source] = (priority, candidate_line)
+        if english_alias:
+            character_source_aliases.setdefault(source, set()).add(english_alias)
         if candidate_primary == "game characters":
             components = [
                 item for item in re.split(r"[\s\u3000]+", source.strip())
@@ -2951,12 +2955,18 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
                 r"\s*[·・|/]\s*", category_name, maxsplit=1
             )[0]
             component_targets = character_component_sources.get(japanese_term)
+            speaker_alias_match = _speaker_alias_in_text(
+                japanese_term, textToSearch
+            ) or any(
+                _speaker_alias_in_text(alias, textToSearch)
+                for alias in character_source_aliases.get(japanese_term, ())
+            )
             if (
                 category_primary in {"game characters", "speakers"}
                 and component_targets
                 and len(component_targets) == 1
                 and japanese_term not in component_targets
-                and _speaker_alias_in_text(japanese_term, textToSearch)
+                and speaker_alias_match
             ):
                 # A short generated speaker entry must not compete with the
                 # unique curated full-name character entry for a speaker tag.
@@ -2972,7 +2982,13 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
                 ]
                 japanese_match = any(
                     character_component_sources.get(component) == {japanese_term}
-                    and _speaker_alias_in_text(component, textToSearch)
+                    and (
+                        _speaker_alias_in_text(component, textToSearch)
+                        or any(
+                            _speaker_alias_in_text(alias, textToSearch)
+                            for alias in character_source_aliases.get(component, ())
+                        )
+                    )
                     for component in components
                 )
             # Character names often appear inside compound event/map labels,
