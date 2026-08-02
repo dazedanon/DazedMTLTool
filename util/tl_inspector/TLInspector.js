@@ -28,7 +28,8 @@
  *   - Plugin / menu UI text (Bitmap.drawText / drawTextEx) -> where the VALUE
  *     itself lives whenever it can be resolved: a TextManager vocab assignment
  *     in a plugin .js, a System.json term, a database name/description, a
- *     notetag <tag:value>, or a plugins.js parameter. Strings built with
+ *     notetag <tag:value> (including one field of a packed tag such as
+ *     <コマンド:スキル/5,2,DisplayName>), or a plugins.js parameter. Strings built with
  *     String.prototype.format ("%1 remaining") are traced back to their
  *     template. The draw call site is kept as secondary info.
  *
@@ -636,6 +637,7 @@
                 if (src.file) {
                     rec.file = src.file; rec.uiLine = src.line || null; rec.uiCol = src.col || null;
                     rec.tail = src.tail || null;
+                    rec.noteOff = (src.noteOff != null) ? src.noteOff : null;
                     rec.siteFile = site.file; rec.siteLine = site.line; rec.siteLabel = site.label;
                 }
             }
@@ -670,6 +672,51 @@
         if (typeof value !== 'string') { return; }
         if (value.replace(/\s/g, '').length < 2) { return; } // same floor as capture
         (map[value] || (map[value] = [])).push(cand);
+    }
+
+    // Sub-field separators used by table-style notetags. A tag like
+    // `<コマンド:スキル/5,2,高出力ビーム>` packs a type, a sort order and the DISPLAY
+    // NAME into one value; only the field is ever drawn, never the whole value.
+    var NOTE_SEG_RE = /[,\/|\t\n]/;
+
+    // Index every notetag in a raw `note` string: the whole tag value (`meta`) plus each
+    // delimited sub-field (`metaseg`). Returns the set of values added, so the caller can
+    // skip re-adding the same thing from o.meta. Offsets are relative to the note string;
+    // locateMetaValue turns them into an exact file line:col.
+    function indexNoteTags(map, note, file, short, id) {
+        var seen = Object.create(null);
+        var re = /<([^<>:]+)(:?)([^>]*)>/g, m;      // DataManager.extractMetadata's own pattern
+        while ((m = re.exec(note))) {
+            if (m[2] !== ':' || !m[3]) { continue; }
+            var key = m[1], val = m[3];
+            var valOff = m.index + 1 + key.length + 1;    // '<' + key + ':'
+            var label = short + '[' + id + '] note <' + key + ':…>';
+            addNoteCand(map, seen, val, valOff, 'meta', file, id, label);
+            if (!NOTE_SEG_RE.test(val)) { continue; }
+            var parts = val.split(NOTE_SEG_RE), at = 0;
+            for (var pi = 0; pi < parts.length; pi++) {
+                if (parts[pi] !== val) {
+                    addNoteCand(map, seen, parts[pi], valOff + at, 'metaseg', file, id,
+                                label + ' field');
+                }
+                at += parts[pi].length + 1;               // + the 1-char separator
+            }
+        }
+        return seen;
+    }
+
+    function addNoteCand(map, seen, raw, off, t, file, id, label) {
+        var v = raw.trim();
+        if (!v || v.replace(/\s/g, '').length < 2) { return; }
+        if (/^[-+]?\d+(\.\d+)?$/.test(v)) { return; }     // ids / sort orders / icon indexes
+        var at = off + raw.indexOf(v);
+        var cand = { t: t, file: file, path: [id, 'note'], noteOff: at, label: label };
+        seen[v] = true;
+        uiIndexAdd(map, v, cand);
+        // Several plugins strip inner whitespace from the field before drawing it
+        // (`data[2].replace(/\s/g, '')`), so the drawn form can differ from the file's.
+        var tight = v.replace(/\s/g, '');
+        if (tight !== v && tight.length >= 2) { seen[tight] = true; uiIndexAdd(map, tight, cand); }
     }
 
     function buildUiValueIndex() {
@@ -736,11 +783,18 @@
                         uiIndexAdd(map, o[f], { t: 'json', file: file, path: [id, f],
                                                 label: short + '[' + id + '].' + f });
                     });
+                    // Scan the RAW note, not just o.meta: extractMetadata keeps only the
+                    // LAST occurrence of a repeated tag, while plugins that re-scan the
+                    // note (command tables, skill lists) use every one of them.
+                    var seen = (typeof o.note === 'string' && o.note)
+                        ? indexNoteTags(map, o.note, file, short, id) : null;
                     if (o.meta) {
                         Object.keys(o.meta).forEach(function (mk) {
-                            if (typeof o.meta[mk] === 'string') {
-                                uiIndexAdd(map, o.meta[mk], { t: 'meta', file: file, path: [id, 'note'],
-                                                              label: short + '[' + id + '] note <' + mk + ':…>' });
+                            var mv = o.meta[mk];
+                            // Meta set programmatically by a plugin (not present in the note text).
+                            if (typeof mv === 'string' && !(seen && seen[mv.trim()])) {
+                                uiIndexAdd(map, mv, { t: 'meta', file: file, path: [id, 'note'],
+                                                      label: short + '[' + id + '] note <' + mk + ':…>' });
                             }
                         });
                     }
@@ -880,18 +934,39 @@
 
     // Line/col of a notetag VALUE inside an object's "note" string. The JSON path
     // points at the whole note; narrow to the meta value's escaped text within it.
-    function locateMetaValue(file, pathArr, value) {
+    // Character offset in a JSON-escaped string body that corresponds to raw offset
+    // `rawOff` in the decoded string (one escape sequence == one decoded char).
+    function escOffsetForRaw(body, rawOff) {
+        var i = 0, r = 0;
+        while (i < body.length && r < rawOff) {
+            if (body[i] === '\\') { i += (body[i + 1] === 'u') ? 6 : 2; } else { i++; }
+            r++;
+        }
+        return i;
+    }
+
+    function locateMetaValue(file, pathArr, value, noteOff) {
         if (!file || !pathArr || !nodeOk) { return null; }
         var c = readFileCached(file);
         if (!c) { return null; }
-        var key = file + '::meta:' + pathArr.join('/') + '::' + value + '::' + c.mtime;
+        var key = file + '::meta:' + pathArr.join('/') + '::' + value +
+                  '::' + (noteOff == null ? '' : noteOff) + '::' + c.mtime;
         if (lineCache.hasOwnProperty(key)) { return lineCache[key]; }
         var res = null;
         var off = locateOffset(c.text, pathArr);
         if (off >= 0 && c.text[off] === '"') {
             var end = scanString(c.text, off);
             var esc = JSON.stringify(String(value)).slice(1, -1);
-            var p = esc ? c.text.indexOf(esc, off) : -1;
+            var p = -1;
+            if (esc) {
+                // Exact hit when the index recorded where inside the note the value sits —
+                // this is what separates repeated tags (`<コマンド:…>` x3) from each other.
+                if (noteOff != null && noteOff >= 0) {
+                    var cand = off + 1 + escOffsetForRaw(c.text.slice(off + 1, end - 1), noteOff);
+                    if (c.text.substr(cand, esc.length) === esc) { p = cand; }
+                }
+                if (p < 0) { p = c.text.indexOf(esc, off); }
+            }
             res = offsetToLineCol(c, (p >= 0 && p < end) ? p : off);
         } else if (off >= 0) {
             res = offsetToLineCol(c, off);
@@ -974,7 +1049,7 @@
             }
         }
         if (!cands || !cands.length) { return null; }
-        var ORDER = { tm: 0, json: 1, meta: 2, param: 3, jslit: 4 };
+        var ORDER = { tm: 0, json: 1, meta: 2, param: 3, metaseg: 4, jslit: 5 };
         var best = cands[0];
         for (var k = 1; k < cands.length; k++) {
             if (ORDER[cands[k].t] < ORDER[best.t]) { best = cands[k]; }
@@ -1012,7 +1087,8 @@
             return { kind: 'jslit', file: best.file, line: ll.line, col: ll.col,
                      label: baseName(best.file) + ' string literal' + suffix, expText: val };
         }
-        return { kind: best.t, file: best.file, tail: best.path, label: best.label + suffix, expText: val };
+        return { kind: best.t, file: best.file, tail: best.path, noteOff: best.noteOff,
+                 label: best.label + suffix, expText: val };
     }
 
     //=========================================================================
@@ -1613,6 +1689,28 @@
         return false;
     }
 
+    // True when [start,endEx) sits inside a `<tag:…>` notetag in a JSON note string. Such a
+    // hit is a complete notetag field, not text "buried in a longer string" — the classifier
+    // below would otherwise demote every command/table notetag value.
+    function inNoteTag(t, start, endEx) {
+        var SPAN = 400, i = start - 1, lim = Math.max(0, start - SPAN), ch;
+        while (i >= lim) {                       // nearest '<' before us, no '>' in between
+            ch = t[i];
+            if (ch === '<') { break; }
+            if (ch === '>' || ch === '"' || ch === '\n') { return false; }  // string/tag boundary
+            i--;
+        }
+        if (i < lim) { return false; }
+        var j = endEx, lim2 = Math.min(t.length, endEx + SPAN);
+        while (j < lim2) {                       // …and a closing '>' after us
+            ch = t[j];
+            if (ch === '>') { return true; }
+            if (ch === '<' || ch === '"' || ch === '\n') { return false; }
+            j++;
+        }
+        return false;
+    }
+
     function searchFiles(text) {
         var results = [], seen = {};
         if (!nodeOk || !text) { return results; }
@@ -1641,7 +1739,8 @@
                         // JS) is a high-confidence match vs. text buried in a longer one.
                         var qb = c.text[pos - 1], qa = c.text[pos + v.length];
                         var quoted = (qb === '"' && qa === '"') ||
-                                     (isJs && qb === qa && (qb === "'" || qb === '`'));
+                                     (isJs && qb === qa && (qb === "'" || qb === '`')) ||
+                                     (!isJs && inNoteTag(c.text, pos, pos + v.length));
                         if (!seen[k]) { seen[k] = 1; results.push({ file: file, line: lc.line, col: lc.col, quoted: quoted }); }
                     }
                     pos = c.text.indexOf(v, pos + v.length);
@@ -2646,8 +2745,9 @@
             var expText = (r.expText != null) ? r.expText : r.text; // format(): locate the template, not the output
             var loc = null;
             if (r.file && r.tail) {
-                loc = (r.srcKind === 'meta') ? locateMetaValue(r.file, r.tail, expText)
-                                             : locateLine(r.file, r.tail, expText);
+                loc = (r.srcKind === 'meta' || r.srcKind === 'metaseg')
+                    ? locateMetaValue(r.file, r.tail, expText, r.noteOff)
+                    : locateLine(r.file, r.tail, expText);
             }
             var line = loc ? loc.line : (r.uiLine || null);
             var col = loc ? loc.col : (r.uiCol || null);
@@ -3034,6 +3134,7 @@
         resolveUiSource: resolveUiSource,   // drawn string -> value-source descriptor
         locateMetaValue: locateMetaValue,
         searchFilesSmart: searchFilesSmart,
+        buildUiValueIndex: buildUiValueIndex,
         cfg: CFG
     };
 
