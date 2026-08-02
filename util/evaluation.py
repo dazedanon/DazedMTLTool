@@ -1803,10 +1803,8 @@ def latest_run(project_root: str | Path) -> Path | None:
     return Path(runs[0]["run_dir"]) if runs else None
 
 
-def run_history_entry(run_dir: str | Path) -> dict:
-    """Build display metadata for a managed evaluation run."""
-    root = Path(run_dir)
-    state, manifest = load_run(root)
+def _run_history_entry(root: Path, state: dict, manifest: dict) -> dict:
+    """Build display metadata from an already validated managed run."""
     candidates = state.get("candidates") or []
     summary = state.get("corpus_summary") or manifest.get("corpus_summary") or {}
     human = state.get("human_review") or {}
@@ -1844,6 +1842,13 @@ def run_history_entry(run_dir: str | Path) -> dict:
     }
 
 
+def run_history_entry(run_dir: str | Path) -> dict:
+    """Build display metadata for a managed evaluation run."""
+    root = Path(run_dir)
+    state, manifest = load_run(root)
+    return _run_history_entry(root, state, manifest)
+
+
 def list_runs(project_root: str | Path) -> list[dict]:
     """Return resumable working runs and completed archives."""
     maintain_evaluation_storage(project_root)
@@ -1864,7 +1869,7 @@ def list_runs(project_root: str | Path) -> list[dict]:
                 continue
             if state.get("status") not in statuses:
                 continue
-            runs.append(run_history_entry(run_dir))
+            runs.append(_run_history_entry(run_dir, state, manifest))
     return sorted(
         runs,
         key=lambda item: (item["created_at"], item["run_id"]),

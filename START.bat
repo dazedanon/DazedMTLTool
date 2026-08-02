@@ -160,8 +160,8 @@ echo.
 echo Checking dependencies...
 echo Checking if requirements are satisfied...
 
-:: Try importing key packages to see if they're installed
-python -c "import PyQt5; import openai; import dotenv; import PIL; import anthropic; print('All dependencies satisfied')" >nul 2>&1
+:: Check package availability without importing heavyweight provider SDKs.
+python -m util.dependencies >nul 2>&1
 if errorlevel 1 (
     echo Upgrading pip...
     python -m pip install --upgrade pip >nul 2>&1

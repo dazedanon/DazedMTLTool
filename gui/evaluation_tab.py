@@ -79,6 +79,22 @@ class _EvaluationWorker(QThread):
             self.done.emit(False, str(exc), None)
 
 
+class _EvaluationReadWorker(QThread):
+    """Run startup/history reads without blocking the Qt event loop."""
+
+    loaded = pyqtSignal(object, str)
+
+    def __init__(self, task, parent=None):
+        super().__init__(parent)
+        self._task = task
+
+    def run(self):
+        try:
+            self.loaded.emit(self._task(), "")
+        except Exception as exc:
+            self.loaded.emit(None, str(exc))
+
+
 class EvaluationTab(QWidget):
     """Prepare, submit, and review a user-defined model comparison."""
 
@@ -175,6 +191,9 @@ class EvaluationTab(QWidget):
         self._custom_content_selection: dict | None = None
         self._active_content_preset = "balanced"
         self._initial_load_scheduled = False
+        self._history_load_worker: _EvaluationReadWorker | None = None
+        self._inventory_load_worker: _EvaluationReadWorker | None = None
+        self._inventory_load_generation = 0
         self._init_ui()
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(60_000)
@@ -604,7 +623,7 @@ class EvaluationTab(QWidget):
         self._refresh_keys()
         if not self._initial_load_scheduled:
             self._initial_load_scheduled = True
-            QTimer.singleShot(0, self._load_latest)
+            QTimer.singleShot(0, self._start_initial_load)
 
     def _append_log(self, message: str):
         if message:
@@ -627,10 +646,20 @@ class EvaluationTab(QWidget):
         self.import_evaluation_btn.setEnabled(not busy)
 
     def _refresh_history(self, select_run: str | Path | None = None):
+        self._populate_history(
+            evaluation.list_runs(self.project_root), select_run=select_run
+        )
+
+    def _populate_history(
+        self,
+        runs: list[dict],
+        *,
+        select_run: str | Path | None = None,
+    ):
         preferred = Path(select_run).resolve() if select_run else (
             self.current_run_dir.resolve() if self.current_run_dir else None
         )
-        runs = evaluation.list_runs(self.project_root)
+        runs = list(runs)
         listed_paths = {
             Path(run["run_dir"]).resolve() for run in runs
         }
@@ -682,7 +711,13 @@ class EvaluationTab(QWidget):
         self.history_combo.blockSignals(False)
         self._update_history_actions()
 
-    def _open_run(self, run_dir: str | Path, *, refresh_history: bool = True):
+    def _open_run(
+        self,
+        run_dir: str | Path,
+        *,
+        refresh_history: bool = True,
+        defer_inventory: bool = False,
+    ):
         if self._worker is not None and self._worker.isRunning():
             QMessageBox.information(
                 self, "Evaluation busy", "Wait for the current evaluation operation to finish."
@@ -707,7 +742,10 @@ class EvaluationTab(QWidget):
         )
         if display_source.is_dir():
             self.source_edit.setText(str(display_source))
-            self._update_source_resolution()
+            if defer_inventory:
+                self._start_initial_inventory(str(display_source))
+            else:
+                self._update_source_resolution()
         self._restore_benchmark_setup(state, manifest)
         self.log.clear()
         self._append_log(f"Opened evaluation: {state.get('run_id', path.name)}")
@@ -778,6 +816,9 @@ class EvaluationTab(QWidget):
             self._update_source_resolution()
 
     def _update_source_resolution(self):
+        # A user-driven source change takes precedence over an in-flight
+        # first-open scan. Its eventual result must not overwrite this choice.
+        self._inventory_load_generation += 1
         selected = self.source_edit.text().strip()
         if not selected:
             self._refresh_content_inventory(None)
@@ -1650,13 +1691,146 @@ class EvaluationTab(QWidget):
             "info",
         )
 
-    def _load_latest(self):
-        self._refresh_history()
+    def _start_initial_load(self):
+        if (
+            self._history_load_worker is not None
+            and self._history_load_worker.isRunning()
+        ):
+            return
+        set_status_text(
+            self.source_resolution_label,
+            "Loading saved evaluations…",
+            "info",
+        )
+        worker = _EvaluationReadWorker(
+            lambda: evaluation.list_runs(self.project_root), parent=self
+        )
+        self._history_load_worker = worker
+        worker.loaded.connect(self._on_initial_history_loaded)
+        worker.finished.connect(
+            lambda: self._clear_read_worker(
+                "_history_load_worker", worker
+            )
+        )
+        worker.start()
+
+    def _clear_read_worker(self, attribute: str, worker) -> None:
+        if getattr(self, attribute, None) is worker:
+            setattr(self, attribute, None)
+        worker.deleteLater()
+
+    def _on_initial_history_loaded(self, runs, error: str):
+        if error:
+            self._append_log(f"Could not load saved evaluations: {error}")
+            set_status_text(
+                self.source_resolution_label,
+                f"Could not load saved evaluations: {error}",
+                "warning",
+            )
+            self._start_initial_inventory(self.source_edit.text().strip())
+            return
+        self._populate_history(runs or [])
         selected = self._selected_history_run()
         if selected is not None:
-            self._open_run(selected, refresh_history=False)
+            self._open_run(
+                selected,
+                refresh_history=False,
+                defer_inventory=True,
+            )
         else:
-            self._update_source_resolution()
+            self._start_initial_inventory(self.source_edit.text().strip())
+
+    def _start_initial_inventory(self, selected: str):
+        self._inventory_load_generation += 1
+        generation = self._inventory_load_generation
+        if not selected:
+            self._refresh_content_inventory(None)
+            set_status_text(
+                self.source_resolution_label,
+                "Select a game folder. Evaluation will find its data/ or "
+                "www/data/ files.",
+                "neutral",
+            )
+            return
+
+        set_status_text(
+            self.source_resolution_label,
+            "Scanning the selected game's available content…",
+            "info",
+        )
+
+        def load_inventory():
+            try:
+                data_dir = evaluation.resolve_rpgmaker_data_dir(selected)
+            except (FileNotFoundError, ValueError):
+                return {"status": "not_found", "selected": selected}
+            inventory = evaluation.content_inventory(data_dir)
+            inventory["source_dir"] = str(data_dir.resolve())
+            return {
+                "status": "ready",
+                "selected": selected,
+                "data_dir": data_dir,
+                "inventory": inventory,
+            }
+
+        worker = _EvaluationReadWorker(load_inventory, parent=self)
+        self._inventory_load_worker = worker
+        worker.loaded.connect(
+            lambda payload, error, current=generation: (
+                self._on_initial_inventory_loaded(current, payload, error)
+            )
+        )
+        worker.finished.connect(
+            lambda: self._clear_read_worker(
+                "_inventory_load_worker", worker
+            )
+        )
+        worker.start()
+
+    def _on_initial_inventory_loaded(self, generation, payload, error: str):
+        if generation != self._inventory_load_generation:
+            return
+        if error:
+            self._content_inventory = {}
+            self._populate_content_tree({})
+            set_status_text(
+                self.source_resolution_label,
+                f"Could not scan selectable content: {error}",
+                "warning",
+            )
+            return
+        if not payload or payload.get("status") != "ready":
+            self._content_inventory = {}
+            self._populate_content_tree({})
+            set_status_text(
+                self.source_resolution_label,
+                "No MV/MZ data found yet. Choose the game folder, or its data/ or "
+                "www/data/ folder.",
+                "warning",
+            )
+            return
+
+        selected = payload["selected"]
+        data_dir = payload["data_dir"]
+        inventory = payload["inventory"]
+        self._content_inventory = inventory
+        self._populate_content_tree(inventory)
+        game_root = self._evaluation_game_root(selected)
+        if game_root is None:
+            set_status_text(
+                self.source_resolution_label,
+                f"Game data found: {data_dir}\nTranslation context could not be "
+                "resolved. Select the game folder itself so Evaluation can use "
+                "the same glossary and game skills as normal translation.",
+                "warning",
+            )
+            return
+        set_status_text(
+            self.source_resolution_label,
+            f"Game data found: {data_dir}\nTranslation context: {game_root} "
+            f"(glossary: {game_root / 'glossary.txt'})",
+            "success",
+        )
 
     def prepare_benchmark(self):
         translation_worker = getattr(

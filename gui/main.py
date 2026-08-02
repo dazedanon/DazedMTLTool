@@ -49,6 +49,17 @@ def load_application_icon() -> QIcon:
     return QIcon()
 
 
+def configured_font_scale() -> float:
+    """Return the persisted UI scale, clamped to the Configuration range."""
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+        return max(0.5, min(3.0, float(os.getenv("font_scale", "1.0"))))
+    except (TypeError, ValueError):
+        return 1.0
+
+
 def check_tool_update() -> str | None:
     """Return latest commit SHA when a tool update is available, else None."""
     try:
@@ -706,8 +717,6 @@ class UpdateDialog(QDialog):
 from gui.config_tab import ConfigTab
 from gui.guide_tab import GuideTab
 from gui.translation_tab import TranslationTab
-from gui.workflow_tab import WorkflowTab
-from gui.wolf_workflow_tab import WolfWorkflowTab
 from gui.image_manager import ImageManager
 from gui.version_update_tab import VersionUpdateTab
 from gui.skills_tab import SkillsTab
@@ -733,6 +742,7 @@ class DazedMTLGUI(QMainWindow):
         self._pending_tool_sha: str | None = None
         self._update_check_thread = None
         self._shutdown_started = False
+        self._applied_font_scale: float | None = None
         self._update_icon = "🔄"
         self.btn_update = None
         self.init_ui()
@@ -847,40 +857,48 @@ class DazedMTLGUI(QMainWindow):
     def setup_font_scaling(self):
         """Set up font scaling based on configuration."""
         try:
-            from dotenv import load_dotenv
-            import os
-            
-            # Load environment variables
-            load_dotenv()
-            
-            # Get font scale setting
-            font_scale = float(os.getenv("font_scale", "1.0"))
-            
-            # Apply font scaling
-            self.apply_font_scaling(font_scale)
+            app = QApplication.instance()
+            initial_scale = (
+                app.property("_dazed_initial_font_scale") if app else None
+            )
+            font_scale = (
+                float(initial_scale)
+                if initial_scale is not None
+                else configured_font_scale()
+            )
+            self.apply_font_scaling(
+                font_scale,
+                application_preconfigured=initial_scale is not None,
+            )
             
         except Exception as e:
             print(f"Warning: Could not apply font scaling: {e}")
             
-    def apply_font_scaling(self, scale_factor):
+    def apply_font_scaling(
+        self, scale_factor, *, application_preconfigured: bool = False
+    ):
         """Apply font scaling to the entire application."""
         try:
+            scale_factor = max(0.5, min(3.0, float(scale_factor)))
             app = QApplication.instance()
             if not app:
                 return
 
-            # Scale the application default font (affects widgets without inline font-size)
-            font = app.font()
-            font.setPointSize(max(6, int(9 * scale_factor)))
-            app.setFont(font)
+            if not application_preconfigured:
+                # Runtime scale changes still need to update existing widgets.
+                # Startup applies these application-wide values before widgets
+                # are constructed, avoiding a full repolish of the UI tree.
+                font = app.font()
+                font.setPointSize(max(6, int(9 * scale_factor)))
+                app.setFont(font)
 
-            # Scale the canonical application QSS from its immutable source so
-            # app-level semantic font roles (page titles, metadata, controls)
-            # follow the same setting as per-widget legacy styles.
-            from gui.theme import application_stylesheet, scaled_stylesheet
-            app.setStyleSheet(
-                scaled_stylesheet(application_stylesheet(), scale_factor)
-            )
+                from gui.theme import application_stylesheet, scaled_stylesheet
+
+                app.setStyleSheet(
+                    scaled_stylesheet(application_stylesheet(), scale_factor)
+                )
+            else:
+                font = app.font()
 
             # Keep line edits / combos tall enough for the scaled font.
             from PyQt5.QtGui import QFontMetrics
@@ -888,14 +906,15 @@ class DazedMTLGUI(QMainWindow):
             from gui.ui_components import normalize_default_layout_tokens
 
             control_h = max(32, QFontMetrics(font).height() + 14)
-            for widget in app.allWidgets():
+            widgets = app.allWidgets()
+            for widget in widgets:
                 if isinstance(widget, (QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox)):
                     widget.setMinimumHeight(control_h)
 
             # Scale inline font-size values in every widget's individual stylesheet.
             # We store the *original* stylesheet on each widget (using a Qt property)
             # so that re-scaling always starts from the unmodified values.
-            for widget in app.allWidgets():
+            for widget in widgets:
                 original = widget.property("_orig_stylesheet")
                 if original is None:
                     ss = widget.styleSheet()
@@ -909,9 +928,10 @@ class DazedMTLGUI(QMainWindow):
                     lambda m: f'font-size: {max(6, round(float(m.group(1)) * scale_factor))}px',
                     original
                 )
-                widget.setStyleSheet(scaled)
+                if scaled != widget.styleSheet():
+                    widget.setStyleSheet(scaled)
 
-            normalize_default_layout_tokens(app.allWidgets())
+            normalize_default_layout_tokens(widgets)
 
             # Font changes can make an otherwise wide workflow rail clip even
             # when the window geometry itself did not change. Re-evaluate the
@@ -951,6 +971,7 @@ class DazedMTLGUI(QMainWindow):
                 self.setWindowTitle(f"{APP_NAME} - Visual Translation Interface (Font: {scale_factor:.1f}x)")
             else:
                 self.setWindowTitle(f"{APP_NAME} - Visual Translation Interface")
+            self._applied_font_scale = scale_factor
 
         except Exception as e:
             print(f"Warning: Could not apply font scaling: {e}")
@@ -1115,6 +1136,8 @@ class DazedMTLGUI(QMainWindow):
     
     def switch_page(self, index):
         """Switch to the specified page and update button states."""
+        if index == self.PAGE_WORKFLOW:
+            self._ensure_workflow_container()
         if index == self.PAGE_IMAGES and hasattr(self, "image_manager_tab"):
             self.image_manager_tab.refresh_game_root_from_settings()
         self.content_stack.setCurrentIndex(index)
@@ -1131,9 +1154,14 @@ class DazedMTLGUI(QMainWindow):
         self.guide_tab = GuideTab(self)
         self.content_stack.addWidget(self.guide_tab)
 
-        # Workflow / Automation (index 1) - engine selector swaps between the
-        # RPGMaker and Wolf guided panels while keeping a single sidebar button.
-        self.content_stack.addWidget(self._create_workflow_container())
+        # Workflow / Automation (index 1). Both workflow engines are sizeable;
+        # construct them only when the user first opens this page.
+        self.workflow_tab = None
+        self.wolf_workflow_tab = None
+        self.workflow_stack = None
+        self.workflow_engine_combo = None
+        self._workflow_placeholder = QWidget()
+        self.content_stack.addWidget(self._workflow_placeholder)
 
         # Engine-aware Image Manager (index 2)
         self.image_manager_tab = ImageManager(parent=self)
@@ -1166,6 +1194,9 @@ class DazedMTLGUI(QMainWindow):
 
     def _create_workflow_container(self) -> QWidget:
         """Wrap the RPGMaker and Wolf guided workflows behind an engine selector."""
+        from gui.workflow_tab import WorkflowTab
+        from gui.wolf_workflow_tab import WolfWorkflowTab
+
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1202,6 +1233,55 @@ class DazedMTLGUI(QMainWindow):
             self.workflow_stack.setCurrentIndex
         )
         return container
+
+    def _ensure_workflow_container(self) -> None:
+        """Replace the workflow placeholder with the real page exactly once."""
+        if self.workflow_tab is not None:
+            return
+        placeholder = self.content_stack.widget(self.PAGE_WORKFLOW)
+        container = self._create_workflow_container()
+        self.content_stack.removeWidget(placeholder)
+        self.content_stack.insertWidget(self.PAGE_WORKFLOW, container)
+        placeholder.deleteLater()
+
+        # Application-level font and QSS were set before startup construction.
+        # Apply the remaining per-widget layout and legacy style adjustments to
+        # this newly created subtree.
+        scale = self._applied_font_scale or configured_font_scale()
+        widgets = [container, *container.findChildren(QWidget)]
+        from PyQt5.QtGui import QFontMetrics
+        from PyQt5.QtWidgets import QDoubleSpinBox, QLineEdit, QSpinBox
+        from gui.ui_components import normalize_default_layout_tokens
+
+        control_h = max(
+            32,
+            QFontMetrics(QApplication.instance().font()).height() + 14,
+        )
+        for widget in widgets:
+            if isinstance(
+                widget,
+                (QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox),
+            ):
+                widget.setMinimumHeight(control_h)
+        normalize_default_layout_tokens(widgets)
+
+        if scale != 1.0:
+            for widget in widgets:
+                original = widget.property("_orig_stylesheet")
+                if original is None:
+                    original = widget.styleSheet()
+                    if not original or "font-size" not in original:
+                        continue
+                    widget.setProperty("_orig_stylesheet", original)
+                scaled = re.sub(
+                    r"font-size:\s*(\d+(?:\.\d+)?)px",
+                    lambda match: (
+                        f"font-size: {max(6, round(float(match.group(1)) * scale))}px"
+                    ),
+                    original,
+                )
+                if scaled != widget.styleSheet():
+                    widget.setStyleSheet(scaled)
 
     def start_background_update_check(self):
         """Check for DazedTL updates after the GUI is visible."""
@@ -1256,7 +1336,8 @@ class DazedMTLGUI(QMainWindow):
         try:
             config = self.config_tab.get_config()
             font_scale = config.get("font_scale", 1.0)
-            self.apply_font_scaling(font_scale)
+            if self._applied_font_scale != float(font_scale):
+                self.apply_font_scaling(font_scale)
             for tab in (self.translation_tab, self.workflow_tab, self.wolf_workflow_tab):
                 refresh_mode = getattr(tab, "refresh_default_translation_mode", None)
                 if callable(refresh_mode):
@@ -1511,7 +1592,13 @@ def main():
     
     # Apply the canonical dark palette and QSS after QApplication exists.
     from gui.theme import apply_application_theme
-    apply_application_theme(app)
+
+    initial_font_scale = configured_font_scale()
+    font = app.font()
+    font.setPointSize(max(6, int(9 * initial_font_scale)))
+    app.setFont(font)
+    apply_application_theme(app, font_scale=initial_font_scale)
+    app.setProperty("_dazed_initial_font_scale", initial_font_scale)
 
     try:
         # Create and show the main window

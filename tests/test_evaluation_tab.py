@@ -58,6 +58,9 @@ class EvaluationTabTests(unittest.TestCase):
         for patcher in self.patchers:
             patcher.start()
         self.tab = EvaluationTab(self.host)
+        # Most cases exercise controls directly. Keep their setup deterministic;
+        # the dedicated lifecycle case below covers the deferred first-open read.
+        self.tab._initial_load_scheduled = True
         self.host.show()
         self.tab.show()
         self.app.processEvents()
@@ -289,6 +292,9 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertEqual(self.tab._last_review_path, output)
 
     def test_hidden_page_initializes_and_selects_history_only_once(self):
+        (self.project_root / "files" / "Actors.json").write_text(
+            "[]", encoding="utf-8"
+        )
         older = self.project_root / "evaluation-older"
         newer = self.project_root / "evaluation-newer"
         runs = [
@@ -321,12 +327,52 @@ class EvaluationTabTests(unittest.TestCase):
         stack.addWidget(placeholder)
         evaluation_page = EvaluationTab(self.host)
         stack.addWidget(evaluation_page)
+        history_started = threading.Event()
+        release_history = threading.Event()
+        inventory_started = threading.Event()
+        release_inventory = threading.Event()
+
+        def load_history(_project_root):
+            history_started.set()
+            release_history.wait(1)
+            return runs
+
+        def scan_inventory(_data_dir):
+            inventory_started.set()
+            release_inventory.wait(1)
+            return {
+                "eligible_segments": 0,
+                "eligible_scenes": 0,
+                "eligible_files": 0,
+                "source_counts": {},
+                "map_files": {},
+                "code_heavy_source_counts": {},
+                "map_file_code_heavy_counts": {},
+                "code_heavy_segments": 0,
+                "corpus_sha256": "empty",
+            }
+
+        def open_selected(_run_dir, **_kwargs):
+            evaluation_page._start_initial_inventory(
+                str(self.project_root / "files")
+            )
 
         with (
             mock.patch(
-                "gui.evaluation_tab.evaluation.list_runs", return_value=runs
+                "gui.evaluation_tab.evaluation.list_runs",
+                side_effect=load_history,
             ) as list_runs,
-            mock.patch.object(evaluation_page, "_open_run") as open_run,
+            mock.patch.object(
+                evaluation_page, "_open_run", side_effect=open_selected
+            ) as open_run,
+            mock.patch(
+                "gui.evaluation_tab.evaluation.resolve_rpgmaker_data_dir",
+                return_value=self.project_root / "files",
+            ),
+            mock.patch(
+                "gui.evaluation_tab.evaluation.content_inventory",
+                side_effect=scan_inventory,
+            ),
         ):
             stack.show()
             self.app.processEvents()
@@ -334,9 +380,21 @@ class EvaluationTabTests(unittest.TestCase):
 
             stack.setCurrentWidget(evaluation_page)
             self.app.processEvents()
+            self.assertTrue(history_started.wait(0.5))
+            open_run.assert_not_called()
+
+            release_history.set()
+            evaluation_page._history_load_worker.wait(1_000)
+            for _ in range(3):
+                self.app.processEvents()
 
             list_runs.assert_called_once_with(self.project_root)
-            open_run.assert_called_once_with(newer, refresh_history=False)
+            open_run.assert_called_once_with(
+                newer,
+                refresh_history=False,
+                defer_inventory=True,
+            )
+            self.assertTrue(inventory_started.wait(0.5))
             self.assertEqual(evaluation_page.history_combo.count(), 2)
             self.assertIn(
                 "model-a, model-b", evaluation_page.history_combo.itemText(0)
@@ -351,6 +409,15 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertTrue(evaluation_page.history_combo.isEnabled())
             self.assertTrue(evaluation_page.export_evaluation_btn.isEnabled())
 
+            # The corpus scan is still blocked, but the GUI event loop and
+            # history controls remain responsive.
+            self.app.processEvents()
+            self.assertTrue(evaluation_page._inventory_load_worker.isRunning())
+            release_inventory.set()
+            evaluation_page._inventory_load_worker.wait(1_000)
+            for _ in range(3):
+                self.app.processEvents()
+
             older_index = evaluation_page.history_combo.findData(str(older))
             evaluation_page.history_combo.setCurrentIndex(older_index)
             evaluation_page.history_combo.activated.emit(older_index)
@@ -361,6 +428,8 @@ class EvaluationTabTests(unittest.TestCase):
             self.app.processEvents()
             list_runs.assert_called_once_with(self.project_root)
 
+        release_history.set()
+        release_inventory.set()
         evaluation_page.close()
         stack.close()
         self.app.processEvents()

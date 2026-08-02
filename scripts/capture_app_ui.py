@@ -575,6 +575,7 @@ def capture(
                 ),
             ):
                 window = DazedMTLGUI()
+                window._ensure_workflow_container()
                 window.setObjectName("appCaptureWindow")
                 window.setWindowTitle("DazedTL · Sanitized UI Fixture")
                 _settle_fixture_workers(window, app)

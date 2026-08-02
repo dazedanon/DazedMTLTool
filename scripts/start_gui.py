@@ -15,18 +15,9 @@ if sys.platform.startswith("linux"):
 
 def check_dependencies():
     """Check if required dependencies are installed."""
-    missing_deps = []
+    from util.dependencies import missing_dependencies
 
-    try:
-        import PyQt5  # noqa: F401
-    except ImportError:
-        missing_deps.append("PyQt5")
-
-    try:
-        from dotenv import load_dotenv  # noqa: F401
-    except ImportError:
-        missing_deps.append("python-dotenv")
-
+    missing_deps = missing_dependencies()
     if missing_deps:
         print("Missing dependencies:")
         for dep in missing_deps:

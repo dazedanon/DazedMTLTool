@@ -185,7 +185,7 @@ activate_venv
 
 echo "Checking dependencies..."
 echo "Checking if requirements are satisfied..."
-if ! python -c "import PyQt5; import openai; import dotenv; import PIL; import anthropic; print('All dependencies satisfied')" >/dev/null 2>&1; then
+if ! python -m util.dependencies >/dev/null 2>&1; then
     echo "Upgrading pip..."
     python -m pip install --upgrade pip >/dev/null 2>&1
     echo "Installing/updating requirements..."
