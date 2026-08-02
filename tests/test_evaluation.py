@@ -683,12 +683,10 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertNotIn("extra_body", gemini_batch_body)
         self.assertEqual(gemini_batch_body["reasoning_effort"], "minimal")
         self.assertEqual(params["anthropic"]["thinking"], {"type": "disabled"})
-        batch_cache = next(
-            block["cache_control"]
+        self.assertFalse(any(
+            "cache_control" in block
             for block in params["anthropic"]["system"]
-            if "cache_control" in block
-        )
-        self.assertEqual(batch_cache["ttl"], "1h")
+        ))
         self.assertEqual(
             params["anthropic"]["max_tokens"],
             evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST,
@@ -712,61 +710,7 @@ class EvaluationManifestTests(unittest.TestCase):
         )
         self.assertEqual(live_cache["ttl"], "5m")
 
-    def test_claude_prewarm_verifies_each_schema_shape(self):
-        candidate = {
-            **dict(evaluation.DEFAULT_CANDIDATES[2]),
-            "id": "candidate-claude",
-            "execution": "batch",
-        }
-        first = self.manifest["logical_requests"][0]
-        second = {**first, "schema_line_count": max(
-            1, int(first["schema_line_count"]) - 1
-        )}
-        if second["schema_line_count"] == first["schema_line_count"]:
-            second["schema_line_count"] += 1
-        batch_requests = [
-            {"custom_id": "one", "params": evaluation._provider_params(
-                candidate, first
-            )},
-            {"custom_id": "two", "params": evaluation._provider_params(
-                candidate, second
-            )},
-        ]
-        responses = [
-            {"prompt_tokens": 100, "cache_creation_input_tokens": 100},
-            {"prompt_tokens": 100, "cache_read_input_tokens": 100},
-            {"prompt_tokens": 100, "cache_creation_input_tokens": 100},
-            {"prompt_tokens": 100, "cache_creation_input_tokens": 100},
-        ]
-        calls = []
-
-        def execute(_provider, params, **_kwargs):
-            calls.append(params)
-            return responses.pop(0)
-
-        with mock.patch.object(
-            evaluation.batch_api,
-            "execute_live_request",
-            side_effect=execute,
-        ):
-            verified, usage, stopped = evaluation._prewarm_anthropic_batch(
-                candidate, batch_requests, object(), lambda _message: None
-            )
-
-        self.assertFalse(stopped)
-        self.assertEqual(len(verified), 1)
-        self.assertEqual(usage["cache_read_input_tokens"], 100)
-        self.assertEqual(usage["cache_creation_input_tokens"], 300)
-        self.assertEqual(len(calls), 4)
-        self.assertTrue(all(call["max_tokens"] == 1 for call in calls))
-        self.assertTrue(all("output_config" in call for call in calls))
-        self.assertTrue(all(len(call["system"]) == 1 for call in calls))
-        self.assertTrue(all(
-            call["system"][0]["cache_control"]["ttl"] == "1h"
-            for call in calls
-        ))
-
-    def test_claude_batch_falls_back_to_uncached_when_prewarm_misses(self):
+    def test_claude_batch_submits_uncached_without_live_prewarm(self):
         request = self.manifest["logical_requests"][0]
         manifest = {
             **self.manifest,
@@ -795,17 +739,8 @@ class EvaluationManifestTests(unittest.TestCase):
                 evaluation, "_clients", return_value=(object(), None)
             ),
             mock.patch.object(
-                evaluation,
-                "_prewarm_anthropic_batch",
-                return_value=(
-                    set(),
-                    {
-                        "cache_creation_input_tokens": 100,
-                        "cache_read_input_tokens": 0,
-                    },
-                    False,
-                ),
-            ),
+                evaluation.batch_api, "execute_live_request"
+            ) as execute_live,
             mock.patch.object(
                 evaluation.batch_api, "submit_batch", side_effect=submit
             ),
@@ -813,7 +748,7 @@ class EvaluationManifestTests(unittest.TestCase):
         ):
             evaluation._submit_candidate(
                 Path(temporary),
-                {"run_id": "prewarm-fallback"},
+                {"run_id": "uncached-claude-batch"},
                 manifest,
                 candidate,
                 evaluation._request_lookup(manifest),
@@ -824,12 +759,9 @@ class EvaluationManifestTests(unittest.TestCase):
             )
 
         self.assertEqual(candidate["batch_id"], "batch-claude")
-        self.assertEqual(
-            candidate["cache_prewarm"]["fallback_shapes"], 1
-        )
-        self.assertEqual(
-            candidate["prewarm_usage"]["cache_creation_input_tokens"], 100
-        )
+        execute_live.assert_not_called()
+        self.assertNotIn("cache_prewarm", candidate)
+        self.assertNotIn("prewarm_usage", candidate)
         self.assertTrue(submitted_params)
         self.assertFalse(any(
             "cache_control" in block
@@ -921,24 +853,20 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertLess(estimate["cost_usd"], 8.0)
             self.assertLess(estimate["maximum_cost_usd"], 10.0)
 
-    def test_claude_batch_ceiling_covers_all_requests_rewriting_cache(self):
+    def test_claude_batch_estimate_excludes_cache_write_and_prewarm(self):
         candidate = dict(evaluation.DEFAULT_CANDIDATES[2])
         estimate = evaluation.estimate_candidate(self.manifest, candidate)
         rates = estimate["rates"]
-        batch_write_ceiling = (
-            estimate["input_tokens"] * 2.0 * rates["input"]
+        expected_ceiling = (
+            estimate["input_tokens"] * 1.25 * rates["input"]
             + len(self.manifest["executions"])
             * evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST
             * rates["output"]
         ) / 1_000_000
 
-        self.assertGreaterEqual(
-            estimate["maximum_cost_usd"], batch_write_ceiling
-        )
-        self.assertEqual(
-            estimate["prewarm_output_tokens"],
-            estimate["prewarm_shape_count"] * 2,
-        )
+        self.assertAlmostEqual(estimate["maximum_cost_usd"], expected_ceiling)
+        self.assertNotIn("prewarm_tokens", estimate)
+        self.assertNotIn("prewarm_cost_usd", estimate)
 
     def test_live_estimate_uses_undiscounted_rates(self):
         batch_candidate = dict(evaluation.DEFAULT_CANDIDATES[0])
@@ -1794,7 +1722,7 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertEqual(candidate["status"], "failed")
             self.assertIn("No valid translated segments", candidate["failure_reason"])
 
-    def test_completed_claude_cost_includes_prewarm_and_reports_baseline(self):
+    def test_completion_includes_legacy_prewarm_and_reports_baseline(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
             (run_dir / "results").mkdir()

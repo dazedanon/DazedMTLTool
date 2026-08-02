@@ -1307,7 +1307,6 @@ def estimate_candidate(manifest: dict, candidate: dict) -> dict:
     requests = _request_lookup(manifest)
     input_tokens = 0
     output_tokens = 0
-    input_by_schema: dict[int, int] = {}
     for execution in manifest["executions"]:
         request = requests[execution["logical_request_id"]]
         dynamic_context = request["glossary"] + request.get("sfx_reference", "")
@@ -1318,10 +1317,6 @@ def estimate_candidate(manifest: dict, candidate: dict) -> dict:
         )
         input_tokens += counted_input
         output_tokens += counted_output
-        schema_size = int(request.get("schema_line_count", 0) or 0)
-        input_by_schema[schema_size] = max(
-            input_by_schema.get(schema_size, 0), counted_input
-        )
 
     tokenizer_factor = 1.30 if candidate.get("provider") == "anthropic" else 1.10
     thinking_factor = 1.10 if candidate.get("provider") == "gemini" else 1.0
@@ -1340,70 +1335,25 @@ def estimate_candidate(manifest: dict, candidate: dict) -> dict:
         if candidate.get("execution", "batch") == "live"
         else 1
     )
-    is_anthropic_batch = (
-        candidate.get("provider") == "anthropic"
-        and candidate.get("execution", "batch") == "batch"
-    )
-    # A verified one-hour cache can still expire before a provider batch starts
-    # processing. In that worst case every request may pay the 2x cache-write
-    # rate, so the enforced ceiling must not assume the prewarm remains valid.
-    input_ceiling_multiplier = 2.0 if is_anthropic_batch else 1.25
     single_attempt_ceiling = (
-        estimated_input * input_ceiling_multiplier * rates["input"]
+        estimated_input * 1.25 * rates["input"]
         + len(manifest["executions"])
         * MAX_OUTPUT_TOKENS_PER_REQUEST
         * rates["output"]
     ) / 1_000_000
-    prewarm_tokens = 0
-    prewarm_output_tokens = 0
-    prewarm_likely_cost = 0.0
-    prewarm_maximum_cost = 0.0
-    if is_anthropic_batch:
-        prewarm_tokens = sum(
-            round(value * tokenizer_factor)
-            for value in input_by_schema.values()
-        )
-        # Structured-output warmups require a one-token generation allowance.
-        # Each shape is probed twice at standard price. Batch rates are half
-        # standard rates: likely input = (2.0 write + 0.1 read) * 2;
-        # maximum input = two 2.0 writes * 2.
-        prewarm_output_tokens = len(input_by_schema) * 2
-        prewarm_output_cost = (
-            prewarm_output_tokens * rates["output"] * 2.0 / 1_000_000
-        )
-        prewarm_likely_cost = (
-            prewarm_tokens * rates["input"] * 4.2 / 1_000_000
-        ) + prewarm_output_cost
-        prewarm_maximum_cost = (
-            prewarm_tokens * rates["input"] * 8.0 / 1_000_000
-        ) + prewarm_output_cost
-    maximum_cost = (
-        single_attempt_ceiling * automatic_attempts + prewarm_maximum_cost
-    )
-    likely_upper_cost = (
-        min(raw_cost * 1.25, single_attempt_ceiling)
-        + prewarm_likely_cost
-    )
-    prewarm_method = (
-        f"includes verified prewarming for {len(input_by_schema)} schema shapes; "
-        if prewarm_tokens else ""
-    )
+    maximum_cost = single_attempt_ceiling * automatic_attempts
+    likely_upper_cost = min(raw_cost * 1.25, single_attempt_ceiling)
     return {
         "input_tokens": estimated_input,
         "output_tokens": estimated_output,
         "cost_usd": likely_upper_cost,
         "maximum_cost_usd": maximum_cost,
-        "prewarm_tokens": prewarm_tokens,
-        "prewarm_output_tokens": prewarm_output_tokens,
-        "prewarm_cost_usd": prewarm_likely_cost,
-        "prewarm_shape_count": len(input_by_schema) if prewarm_tokens else 0,
         "automatic_attempts": automatic_attempts,
         "output_token_cap_per_request": MAX_OUTPUT_TOKENS_PER_REQUEST,
         "rates": rates,
         "method": (
             f"provider-neutral {candidate.get('execution', 'batch')} likely "
             "upper bound with tokenizer/thinking and 25% contingency; "
-            f"{prewarm_method}"
             f"theoretical ceiling includes {automatic_attempts} automatic "
             f"attempt{'s' if automatic_attempts != 1 else ''}"
         ),
@@ -2272,15 +2222,17 @@ def _provider_params(candidate: dict, request: dict) -> dict:
     provider = candidate["provider"]
     dynamic_context = request["glossary"] + request.get("sfx_reference", "")
     if provider == "anthropic":
+        is_batch = candidate.get("execution", "batch") == "batch"
         params = buildClaudeRequest(
             request["system"], request["user"], request["history"], "json",
             candidate["model"], request["schema_line_count"],
             vocab_text=dynamic_context,
             context_kind=request.get("context_kind", CONTEXT_SOURCE),
             request_instructions=request.get("instructions"),
-            cache_ttl=(
-                "1h" if candidate.get("execution", "batch") == "batch" else "5m"
-            ),
+            # Anthropic Batch fans requests out independently. A live prewarm
+            # did not transfer reliably in production and caused almost every
+            # batch request to pay the 2x one-hour cache-write rate.
+            cache_ttl=None if is_batch else "5m",
         )
         # Translation does not need expensive adaptive reasoning. More
         # importantly, this matches GPT reasoning=none and Gemini=minimal.
@@ -2351,131 +2303,6 @@ def _combined_usage(*values: dict | None) -> dict[str, int]:
         field: sum(_normalized_usage(value)[field] for value in values)
         for field in _USAGE_FIELDS
     }
-
-
-def _result_usage(result: dict) -> dict[str, int]:
-    cached = int(result.get("cache_read_input_tokens", 0) or 0)
-    cache_write = int(result.get("cache_creation_input_tokens", 0) or 0)
-    return {
-        "input_tokens": max(
-            0,
-            int(result.get("prompt_tokens", 0) or 0) - cached - cache_write,
-        ),
-        "output_tokens": int(result.get("completion_tokens", 0) or 0),
-        "cache_read_input_tokens": cached,
-        "cache_creation_input_tokens": cache_write,
-        "thinking_tokens": int(result.get("thinking_tokens", 0) or 0),
-    }
-
-
-def _anthropic_cache_shape(params: dict) -> str | None:
-    cached_system = []
-    found_breakpoint = False
-    for block in params.get("system") or []:
-        if not isinstance(block, dict):
-            continue
-        cached_system.append(copy.deepcopy(block))
-        if block.get("cache_control"):
-            found_breakpoint = True
-            break
-    if not found_breakpoint:
-        return None
-    return _sha256({
-        "model": params.get("model"),
-        "thinking": params.get("thinking"),
-        "output_config": params.get("output_config"),
-        "system": cached_system,
-    })
-
-
-def _disable_anthropic_cache(params: dict) -> None:
-    for block in params.get("system") or []:
-        if isinstance(block, dict):
-            block.pop("cache_control", None)
-
-
-def _anthropic_prewarm_params(params: dict) -> dict:
-    warm = copy.deepcopy(params)
-    cached_system = []
-    for block in warm.get("system") or []:
-        cached_system.append(block)
-        if isinstance(block, dict) and block.get("cache_control"):
-            break
-    warm["system"] = cached_system
-    warm["messages"] = [{"role": "user", "content": "Warm the cache."}]
-    # Anthropic rejects max_tokens=0 together with structured outputs. Keep the
-    # exact output_config (it participates in the prompt cache key) and use the
-    # one-token warmup fallback for these requests.
-    output_format = (warm.get("output_config") or {}).get("format")
-    warm["max_tokens"] = 1 if output_format else 0
-    return warm
-
-
-def _prewarm_anthropic_batch(
-    candidate: dict,
-    batch_requests: list[dict],
-    client: Any,
-    log: Callable[[str], None],
-    should_stop: Callable[[], bool] | None = None,
-) -> tuple[set[str], dict[str, int], bool]:
-    """Prewarm and verify each distinct Claude cache shape.
-
-    A failed probe is deliberately non-fatal: its matching batch requests will
-    have caching removed before submission, preventing another cache-write
-    storm while preserving the paid evaluation work.
-    """
-    representatives: dict[str, dict] = {}
-    for item in batch_requests:
-        params = item.get("params") or {}
-        shape = _anthropic_cache_shape(params)
-        if shape is not None:
-            representatives.setdefault(shape, params)
-
-    verified: set[str] = set()
-    usage = _normalized_usage(None)
-    stopped = False
-    total = len(representatives)
-    for index, (shape, params) in enumerate(representatives.items(), start=1):
-        if should_stop is not None and should_stop():
-            stopped = True
-            break
-        warm_params = _anthropic_prewarm_params(params)
-        label = (
-            len(
-                ((params.get("output_config") or {}).get("format") or {})
-                .get("schema", {}).get("required", [])
-            )
-            or index
-        )
-        try:
-            first = batch_api.execute_live_request(
-                "anthropic", warm_params, client=client
-            )
-            usage = _combined_usage(usage, _result_usage(first))
-            if should_stop is not None and should_stop():
-                stopped = True
-                break
-            probe = batch_api.execute_live_request(
-                "anthropic", warm_params, client=client
-            )
-            usage = _combined_usage(usage, _result_usage(probe))
-            if int(probe.get("cache_read_input_tokens", 0) or 0) > 0:
-                verified.add(shape)
-                log(
-                    f"{candidate['label']}: verified cache for {label}-line "
-                    f"schema ({index}/{total})"
-                )
-            else:
-                log(
-                    f"{candidate['label']}: cache probe missed for {label}-line "
-                    "schema; that group will run uncached"
-                )
-        except Exception as exc:
-            log(
-                f"{candidate['label']}: cache prewarm failed for {label}-line "
-                f"schema; that group will run uncached: {exc}"
-            )
-    return verified, usage, stopped
 
 
 def _complete_candidate(
@@ -2874,39 +2701,6 @@ def _submit_candidate(
             "params": _provider_params(candidate, request),
         })
     client, google_client = _clients(candidate, secret)
-    if candidate["provider"] == "anthropic":
-        verified_shapes, prewarm_usage, stopped = _prewarm_anthropic_batch(
-            candidate,
-            batch_requests,
-            client,
-            log,
-            should_stop,
-        )
-        candidate["prewarm_usage"] = _combined_usage(
-            candidate.get("prewarm_usage"), prewarm_usage
-        )
-        all_shapes = {
-            shape
-            for item in batch_requests
-            if (shape := _anthropic_cache_shape(item.get("params") or {}))
-            is not None
-        }
-        candidate["cache_prewarm"] = {
-            "verified_shapes": len(verified_shapes),
-            "total_shapes": len(all_shapes),
-            "fallback_shapes": len(all_shapes - verified_shapes),
-            "updated_at": _utc_now(),
-        }
-        persist_candidate(candidate)
-        if stopped:
-            log(f"{candidate['label']}: stopped before batch submission")
-            return
-        for item in batch_requests:
-            params = item.get("params") or {}
-            shape = _anthropic_cache_shape(params)
-            if shape is not None and shape not in verified_shapes:
-                _disable_anthropic_cache(params)
-
     log(f"Submitting {len(batch_requests)} requests to {candidate['label']}…")
     submitted = batch_api.submit_batch(
         candidate["provider"], batch_requests,

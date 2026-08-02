@@ -143,7 +143,7 @@ class EvaluationTab(QWidget):
     }
     COLUMN_TOOLTIPS = {
         "Actual": (
-            "Total provider cost, including verified cache-prewarm requests."
+            "Total provider cost calculated from the returned token usage."
         ),
         "No-cache": (
             "Calculated cost for the same provider tokens without prompt "

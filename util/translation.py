@@ -3184,12 +3184,12 @@ def buildClaudeRequest(system, user, history, formatType, model, numLines=None,
     """Build the native Anthropic request kwargs.
 
     Shared by live calls (translateText) and batch collection (translateAI) so
-    both use the same logical prompt. Only the first, static system block is
-    cached. Dynamic system guidance and user messages follow the explicit
-    breakpoint and cannot bust that prefix.
+    both use the same logical prompt. When ``cache_ttl`` is not ``None``, only
+    the first, static system block is cached. Dynamic system guidance and user
+    messages follow the explicit breakpoint and cannot bust that prefix.
     """
     ant_system = _provider_system_blocks(system, vocab_text)
-    if not DISABLE_CACHE:
+    if not DISABLE_CACHE and cache_ttl is not None:
         ttl = "1h" if str(cache_ttl).lower() == "1h" else "5m"
         ant_system[0]["cache_control"] = {"type": "ephemeral", "ttl": ttl}
 
