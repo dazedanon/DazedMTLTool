@@ -12,6 +12,7 @@ import urllib.request
 import zipfile
 import shutil
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 if sys.platform.startswith("linux"):
@@ -62,32 +63,73 @@ def configured_font_scale() -> float:
 
 def check_tool_update() -> str | None:
     """Return latest commit SHA when a tool update is available, else None."""
-    try:
-        latest_sha = UpdateThread.fetch_latest_sha()
-        current_sha = UpdateThread.read_installed_sha()
-        if latest_sha != current_sha:
-            return latest_sha
-    except Exception:
-        pass
+    latest_sha = UpdateThread.fetch_latest_sha()
+    current_sha = UpdateThread.read_installed_sha()
+    if latest_sha != current_sha:
+        return latest_sha
     return None
 
 
 class BackgroundUpdateCheckThread(QThread):
     """Checks for DazedTL updates without blocking the UI."""
 
-    finished = pyqtSignal(object)  # str | None — pending tool SHA when available
+    checked = pyqtSignal(object, str)  # candidate-or-None, error
 
     def run(self):
-        self.finished.emit(check_tool_update())
+        try:
+            self.checked.emit(check_tool_update(), "")
+        except Exception as exc:
+            self.checked.emit(None, str(exc))
+
+
+@dataclass(frozen=True)
+class UpdateSource:
+    """One public mirror capable of resolving and downloading a tool build."""
+
+    name: str
+    branch_url: str
+    archive_url: str
+    sha_path: tuple[str, ...]
+
+
+class UpdateCandidate(str):
+    """A commit SHA paired with the mirror that resolved it."""
+
+    source: UpdateSource
+
+    def __new__(cls, sha: str, source: UpdateSource):
+        value = str.__new__(cls, sha)
+        value.source = source
+        return value
 
 
 class UpdateThread(QThread):
-    """Downloads and applies a tool update from git.dazedtl.dev (Gitea)."""
+    """Downloads and applies a tool update from the first healthy mirror."""
 
-    REPO_HOST = "https://git.dazedtl.dev"
+    REPO_HOST = "https://git.dazed.dev"
     REPO_OWNER = "dazed"
     REPO_SLUG = "dazed-mtl-tool"
     REPO_BRANCH = "main"
+    UPDATE_SOURCES = (
+        UpdateSource(
+            "git.dazed.dev",
+            "https://git.dazed.dev/api/v1/repos/dazed/dazed-mtl-tool/branches/{branch}",
+            "https://git.dazed.dev/dazed/dazed-mtl-tool/archive/{sha}.zip",
+            ("commit", "id"),
+        ),
+        UpdateSource(
+            "GitHub",
+            "https://api.github.com/repos/dazedanon/DazedMTLTool/branches/{branch}",
+            "https://github.com/dazedanon/DazedMTLTool/archive/{sha}.zip",
+            ("commit", "sha"),
+        ),
+        UpdateSource(
+            "GitGud",
+            "https://gitgud.io/api/v4/projects/DazedAnon%2FDazedMTLTool/repository/branches/{branch}",
+            "https://gitgud.io/DazedAnon/DazedMTLTool/-/archive/{sha}/DazedMTLTool-{sha}.zip",
+            ("commit", "id"),
+        ),
+    )
     # Gitea names the archive top folder after the repo display name (currently
     # "dazedtl"). Resolve dynamically so a rename cannot silently no-op again.
     ARCHIVE_ROOT = "dazedtl"
@@ -127,8 +169,9 @@ class UpdateThread(QThread):
 
     STAGES = ("Downloading", "Extracting", "Applying")
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, candidate: UpdateCandidate | None = None):
         super().__init__(parent)
+        self._candidate = candidate
 
     @classmethod
     def should_install(cls, rel: Path) -> bool:
@@ -187,7 +230,7 @@ class UpdateThread(QThread):
 
     def run(self):
         try:
-            latest_sha = self._fetch_latest_sha()
+            latest_sha = self._candidate or self._fetch_latest_sha()
             current_sha = self._read_stored_sha()
 
             if latest_sha == current_sha:
@@ -200,26 +243,48 @@ class UpdateThread(QThread):
             self.finished.emit(False, str(exc))
 
     @classmethod
-    def branch_api_url(cls) -> str:
-        return (
-            f"{cls.REPO_HOST}/api/v1/repos/"
-            f"{cls.REPO_OWNER}/{cls.REPO_SLUG}/branches/{cls.REPO_BRANCH}"
+    def branch_api_url(cls, source: UpdateSource | None = None) -> str:
+        source = source or cls.UPDATE_SOURCES[0]
+        return source.branch_url.format(branch=cls.REPO_BRANCH)
+
+    @classmethod
+    def archive_zip_url(
+        cls,
+        source: UpdateSource | None = None,
+        sha: str | None = None,
+    ) -> str:
+        source = source or cls.UPDATE_SOURCES[0]
+        return source.archive_url.format(
+            branch=cls.REPO_BRANCH,
+            sha=sha or cls.REPO_BRANCH,
         )
 
     @classmethod
-    def archive_zip_url(cls) -> str:
-        return (
-            f"{cls.REPO_HOST}/{cls.REPO_OWNER}/{cls.REPO_SLUG}/"
-            f"archive/{cls.REPO_BRANCH}.zip"
-        )
-
-    @classmethod
-    def fetch_latest_sha(cls) -> str:
+    def _fetch_source_sha(cls, source: UpdateSource) -> str:
         req = urllib.request.Request(
-            cls.branch_api_url(), headers={"User-Agent": APP_NAME}
+            cls.branch_api_url(source), headers={"User-Agent": APP_NAME}
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read())["commit"]["id"]
+            payload = json.loads(resp.read())
+        value = payload
+        for key in source.sha_path:
+            value = value[key]
+        sha = str(value).strip()
+        if re.fullmatch(r"[0-9a-fA-F]{40,64}", sha) is None:
+            raise ValueError(f"{source.name} returned an invalid commit SHA")
+        return sha.lower()
+
+    @classmethod
+    def fetch_latest_sha(cls) -> UpdateCandidate:
+        errors = []
+        for source in cls.UPDATE_SOURCES:
+            try:
+                return UpdateCandidate(cls._fetch_source_sha(source), source)
+            except Exception as exc:
+                errors.append(f"{source.name}: {exc}")
+        raise RuntimeError(
+            "Could not reach any update source. " + " | ".join(errors)
+        )
 
     @staticmethod
     def _read_archive_sha(path: Path) -> str:
@@ -261,28 +326,49 @@ class UpdateThread(QThread):
     def _read_stored_sha(self):
         return self.read_installed_sha()
 
-    def _download_archive(self, zip_path: Path):
-        req = urllib.request.Request(
-            self.archive_zip_url(), headers={"User-Agent": APP_NAME}
-        )
-        with urllib.request.urlopen(req, timeout=120) as resp, open(zip_path, "wb") as fh:
-            total = int(resp.headers.get("Content-Length", 0) or 0)
-            downloaded = 0
-            while True:
-                chunk = resp.read(256 * 1024)
-                if not chunk:
-                    break
-                fh.write(chunk)
-                downloaded += len(chunk)
-                if total > 0:
-                    pct = min(70, int(downloaded * 70 / total))
-                    detail = (
-                        f"{self._fmt_bytes(downloaded)} of {self._fmt_bytes(total)}"
+    def _download_archive(self, zip_path: Path, candidate: UpdateCandidate):
+        start_index = self.UPDATE_SOURCES.index(candidate.source)
+        errors = []
+        for index, source in enumerate(self.UPDATE_SOURCES[start_index:]):
+            try:
+                if index and self._fetch_source_sha(source) != str(candidate):
+                    raise RuntimeError(
+                        "mirror has not synchronized the selected commit"
                     )
-                else:
-                    pct = -1
-                    detail = f"{self._fmt_bytes(downloaded)} downloaded"
-                self.progress.emit("Downloading", pct, detail)
+                req = urllib.request.Request(
+                    self.archive_zip_url(source, str(candidate)),
+                    headers={"User-Agent": APP_NAME},
+                )
+                with urllib.request.urlopen(req, timeout=120) as resp, open(
+                    zip_path, "wb"
+                ) as fh:
+                    total = int(resp.headers.get("Content-Length", 0) or 0)
+                    downloaded = 0
+                    while True:
+                        chunk = resp.read(256 * 1024)
+                        if not chunk:
+                            break
+                        fh.write(chunk)
+                        downloaded += len(chunk)
+                        if total > 0:
+                            pct = min(70, int(downloaded * 70 / total))
+                            detail = (
+                                f"{source.name}: {self._fmt_bytes(downloaded)} "
+                                f"of {self._fmt_bytes(total)}"
+                            )
+                        else:
+                            pct = -1
+                            detail = (
+                                f"{source.name}: "
+                                f"{self._fmt_bytes(downloaded)} downloaded"
+                            )
+                        self.progress.emit("Downloading", pct, detail)
+                return
+            except Exception as exc:
+                errors.append(f"{source.name}: {exc}")
+        raise RuntimeError(
+            "Could not download the selected update. " + " | ".join(errors)
+        )
 
     def _download_and_apply(self, latest_sha):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -292,9 +378,9 @@ class UpdateThread(QThread):
             self.progress.emit(
                 "Downloading",
                 -1,
-                f"Fetching archive from {self.REPO_HOST}",
+                f"Fetching archive from {latest_sha.source.name}",
             )
-            self._download_archive(zip_path)
+            self._download_archive(zip_path, latest_sha)
 
             self.progress.emit("Extracting", 75, "Unpacking update archive…")
             with zipfile.ZipFile(zip_path, "r") as zf:
@@ -452,6 +538,7 @@ class UpdateDialog(QDialog):
 
         self._thread = None
         self._pending_tool_sha = pending_tool_sha
+        self._check_error = ""
         self._current_stage = ""
         self._step_labels: dict[str, QLabel] = {}
 
@@ -551,7 +638,7 @@ class UpdateDialog(QDialog):
         self.cancel_btn.clicked.connect(self.reject)
         self.action_btn = QPushButton("Install update")
         configure_action_button(self.action_btn, variant="primary")
-        self.action_btn.clicked.connect(self._do_update)
+        self.action_btn.clicked.connect(self._on_action)
         self.action_btn.hide()
         button_row.addWidget(self.cancel_btn)
         button_row.addWidget(self.action_btn)
@@ -591,11 +678,13 @@ class UpdateDialog(QDialog):
         self.progress_bar.setFormat("%p%")
 
     def _show_checking(self):
+        self._check_error = ""
         self.headline_label.setText("Checking for updates…")
         self.detail_label.setText(
-            f"Connecting to {UpdateThread.REPO_HOST} ({UpdateThread.REPO_BRANCH})"
+            f"Checking update mirrors ({UpdateThread.REPO_BRANCH})"
         )
         self.new_version_label.setText("Checking…")
+        self.action_btn.setText("Install update")
         self.action_btn.hide()
         self.cancel_btn.setText("Cancel")
         self.steps_widget.hide()
@@ -608,7 +697,7 @@ class UpdateDialog(QDialog):
             return
 
         self._thread = BackgroundUpdateCheckThread(parent=self)
-        self._thread.finished.connect(self._on_check_finished)
+        self._thread.checked.connect(self._on_check_finished)
         self._thread.start()
 
     def _show_pending_updates(self):
@@ -638,9 +727,33 @@ class UpdateDialog(QDialog):
         self.action_btn.show()
         self.cancel_btn.setText("Not now")
 
-    def _on_check_finished(self, tool_sha: str | None):
+    def _show_check_failed(self, error: str):
+        self._check_error = error
+        self._pending_tool_sha = None
+        self.steps_widget.hide()
+        self.progress_bar.hide()
+        self.new_version_label.setText("Unavailable")
+        self.headline_label.setText("Could not check for updates")
+        self.detail_label.setText(error)
+        self.subtitle_label.setText(
+            "No update source could be reached; your installed version was not verified."
+        )
+        self.action_btn.setText("Retry")
+        self.action_btn.show()
+        self.cancel_btn.setText("Close")
+
+    def _on_check_finished(self, tool_sha: str | None, error: str):
+        if error:
+            self._show_check_failed(error)
+            return
         self._pending_tool_sha = tool_sha
         self._show_pending_updates()
+
+    def _on_action(self):
+        if self._check_error:
+            self.start()
+            return
+        self._do_update()
 
     def _on_progress(self, stage: str, percent: int, detail: str):
         self._current_stage = stage
@@ -699,9 +812,14 @@ class UpdateDialog(QDialog):
             self.new_version_label.setText(self._short_sha(self._pending_tool_sha))
             self.headline_label.setText("Downloading")
             self.detail_label.setText(
-                f"Fetching archive from {UpdateThread.REPO_HOST}"
+                f"Fetching verified build {self._short_sha(self._pending_tool_sha)}"
             )
-            self._thread = UpdateThread(parent=self)
+            candidate = (
+                self._pending_tool_sha
+                if isinstance(self._pending_tool_sha, UpdateCandidate)
+                else None
+            )
+            self._thread = UpdateThread(parent=self, candidate=candidate)
             self._thread.progress.connect(self._on_progress)
             self._thread.finished.connect(self._on_finished)
             self._thread.start()
@@ -740,6 +858,7 @@ class DazedMTLGUI(QMainWindow):
         super().__init__()
         self.settings = QSettings(ORG_NAME, APP_NAME)
         self._pending_tool_sha: str | None = None
+        self._update_check_error = ""
         self._update_check_thread = None
         self._shutdown_started = False
         self._applied_font_scale: float | None = None
@@ -1288,12 +1407,15 @@ class DazedMTLGUI(QMainWindow):
         if self._update_check_thread and self._update_check_thread.isRunning():
             return
         self._update_check_thread = BackgroundUpdateCheckThread(self)
-        self._update_check_thread.finished.connect(self._on_background_update_check)
+        self._update_check_thread.checked.connect(self._on_background_update_check)
         self._update_check_thread.start()
 
-    def _on_background_update_check(self, tool_sha: str | None):
+    def _on_background_update_check(self, tool_sha: str | None, error: str):
+        self._update_check_error = error
         self._pending_tool_sha = tool_sha
-        if tool_sha:
+        if error:
+            self.set_update_check_failed_indicator()
+        elif tool_sha:
             self.set_update_indicator()
         else:
             self.clear_update_indicator()
@@ -1311,6 +1433,7 @@ class DazedMTLGUI(QMainWindow):
     def clear_update_indicator(self):
         """Restore the default update button appearance."""
         self._pending_tool_sha = None
+        self._update_check_error = ""
         if not self.btn_update:
             return
         self.btn_update.setToolTip("Check for Updates")
@@ -1319,13 +1442,29 @@ class DazedMTLGUI(QMainWindow):
             self.btn_update, self._update_icon, horizontal=False, update_available=False,
         )
 
+    def set_update_check_failed_indicator(self):
+        """Explain that update availability could not be verified."""
+        if not self.btn_update:
+            return
+        self.btn_update.setToolTip("Update check failed — click to retry")
+        from gui.platform_glyph import configure_nav_toolbutton
+        configure_nav_toolbutton(
+            self.btn_update,
+            self._update_icon,
+            horizontal=False,
+            update_available=False,
+        )
+
     def show_update_dialog(self):
         """Open the update dialog and check for a newer version."""
         dlg = UpdateDialog(self, pending_tool_sha=self._pending_tool_sha)
         dlg.start()
         dlg.exec_()
         self._pending_tool_sha = dlg._pending_tool_sha
-        if self._pending_tool_sha:
+        self._update_check_error = dlg._check_error
+        if self._update_check_error:
+            self.set_update_check_failed_indicator()
+        elif self._pending_tool_sha:
             self.set_update_indicator()
         else:
             self.clear_update_indicator()

@@ -376,13 +376,123 @@ class CheckToolUpdateTests(unittest.TestCase):
                 ):
                     self.assertEqual(check_tool_update(), latest_sha)
 
-    def test_returns_none_on_fetch_failure(self):
+    def test_fetch_failure_is_not_reported_as_up_to_date(self):
         from gui.main import UpdateThread, check_tool_update
 
         with patch.object(
             UpdateThread, "fetch_latest_sha", side_effect=OSError("offline")
         ):
-            self.assertIsNone(check_tool_update())
+            with self.assertRaisesRegex(OSError, "offline"):
+                check_tool_update()
+
+    def test_update_sources_fall_back_in_priority_order(self):
+        from gui.main import UpdateCandidate, UpdateThread
+
+        latest_sha = "b" * 40
+        sources = UpdateThread.UPDATE_SOURCES
+        scenarios = (
+            ([OSError("primary unavailable"), latest_sha], sources[1]),
+            (
+                [
+                    OSError("primary unavailable"),
+                    OSError("GitHub unavailable"),
+                    latest_sha,
+                ],
+                sources[2],
+            ),
+        )
+        for side_effect, expected_source in scenarios:
+            with self.subTest(source=expected_source.name):
+                with patch.object(
+                    UpdateThread,
+                    "_fetch_source_sha",
+                    side_effect=side_effect,
+                ) as fetch:
+                    candidate = UpdateThread.fetch_latest_sha()
+
+                self.assertIsInstance(candidate, UpdateCandidate)
+                self.assertEqual(candidate, latest_sha)
+                self.assertIs(candidate.source, expected_source)
+                attempted = [item.args[0] for item in fetch.call_args_list]
+                expected_count = sources.index(expected_source) + 1
+                self.assertEqual(attempted, list(sources[:expected_count]))
+
+        with patch.object(
+            UpdateThread,
+            "_fetch_source_sha",
+            side_effect=[OSError("offline")] * len(sources),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "git.dazed.dev.*GitHub.*GitGud",
+            ):
+                UpdateThread.fetch_latest_sha()
+
+    def test_archive_fallback_requires_the_same_commit(self):
+        from gui.main import UpdateCandidate, UpdateThread
+
+        class Response:
+            headers = {}
+
+            def __init__(self):
+                self._chunks = [b"verified archive", b""]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self, _size=-1):
+                return self._chunks.pop(0)
+
+        latest_sha = "c" * 40
+        sources = UpdateThread.UPDATE_SOURCES
+        candidate = UpdateCandidate(latest_sha, sources[0])
+        worker = UpdateThread()
+        with tempfile.TemporaryDirectory() as raw:
+            destination = Path(raw) / "update.zip"
+            with (
+                patch(
+                    "gui.main.urllib.request.urlopen",
+                    side_effect=[OSError("primary archive unavailable"), Response()],
+                ) as urlopen,
+                patch.object(
+                    worker,
+                    "_fetch_source_sha",
+                    return_value=latest_sha,
+                ) as fetch_sha,
+            ):
+                worker._download_archive(destination, candidate)
+
+            self.assertEqual(destination.read_bytes(), b"verified archive")
+            fetch_sha.assert_called_once_with(sources[1])
+            attempted_urls = [call.args[0].full_url for call in urlopen.call_args_list]
+            self.assertEqual(
+                attempted_urls,
+                [
+                    UpdateThread.archive_zip_url(sources[0], latest_sha),
+                    UpdateThread.archive_zip_url(sources[1], latest_sha),
+                ],
+            )
+
+            with (
+                patch(
+                    "gui.main.urllib.request.urlopen",
+                    side_effect=OSError("primary archive unavailable"),
+                ) as urlopen,
+                patch.object(
+                    worker,
+                    "_fetch_source_sha",
+                    return_value="d" * 40,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "has not synchronized",
+                ):
+                    worker._download_archive(destination, candidate)
+            urlopen.assert_called_once()
 
 
 class AceBundledOnlyTests(unittest.TestCase):
