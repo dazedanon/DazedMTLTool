@@ -1169,6 +1169,10 @@ class EvaluationTab(QWidget):
                     str(candidate.get("execution") or "batch"),
                     key_name=str(candidate.get("key_name") or ""),
                 )
+                if state.get("credential_binding_required"):
+                    # Import archives are data, not authority to select one of
+                    # this machine's secrets. Require a deliberate local choice.
+                    self._candidate_widgets[-1]["key"].setCurrentIndex(-1)
 
         requested = int(manifest.get("requested_segments", 0) or 0)
         sample_size = int(
@@ -1519,9 +1523,43 @@ class EvaluationTab(QWidget):
     def _credentials(self, state: dict) -> dict[str, str]:
         credentials = {}
         for candidate in state.get("candidates", []):
-            secret = api_key_vault.get_secret(candidate.get("key_name", "")) or ""
+            if candidate.get("status") in {"completed", "failed"}:
+                continue
+            key_name = str(candidate.get("key_name") or "")
+            if state.get("imported_from_run_id"):
+                saved_endpoint = str(
+                    api_key_vault.get_endpoint(key_name) or ""
+                ).strip().rstrip("/")
+                candidate_endpoint = str(
+                    candidate.get("endpoint") or ""
+                ).strip().rstrip("/")
+                if not saved_endpoint or saved_endpoint != candidate_endpoint:
+                    raise ValueError(
+                        f"The selected key for {candidate.get('label') or candidate.get('id')} "
+                        "is not saved for that exact API URL."
+                    )
+            secret = api_key_vault.get_secret(key_name) or ""
             credentials[candidate["id"]] = secret
         return credentials
+
+    def _bind_imported_credentials(self, state: dict) -> dict:
+        if not state.get("credential_binding_required"):
+            return state
+        bindings = {}
+        for index, candidate in enumerate(state.get("candidates") or []):
+            if candidate.get("status") in {"completed", "failed"}:
+                continue
+            key_name = ""
+            if index < len(self._candidate_widgets):
+                key_name = self._candidate_widgets[index]["key"].currentText().strip()
+            bindings[candidate["id"]] = {
+                "key_name": key_name,
+                "endpoint": api_key_vault.get_endpoint(key_name) or "",
+                "keyless": api_key_vault.is_keyless(key_name),
+            }
+        return evaluation.bind_imported_credentials(
+            self.current_run_dir, bindings
+        )
 
     def _set_busy(self, busy: bool):
         for button in (
@@ -1768,7 +1806,12 @@ class EvaluationTab(QWidget):
         )
         if answer != QMessageBox.Yes:
             return
-        credentials = self._credentials(state)
+        try:
+            state = self._bind_imported_credentials(state)
+            credentials = self._credentials(state)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Evaluation credentials", str(exc))
+            return
         set_status_text(self.status_label, "Starting evaluation requests…", "info")
 
         def task(log):
@@ -1838,14 +1881,21 @@ class EvaluationTab(QWidget):
                 self,
                 "Reconnect imported evaluation?",
                 "This will contact the API URLs stored in the imported archive "
-                "using saved keys with matching names. Continue?",
+                "using the local keys you explicitly select for those exact "
+                "URLs. Continue?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
             if answer != QMessageBox.Yes:
                 return
-            state = evaluation.resume_imported_run(self.current_run_dir)
-        credentials = self._credentials(state)
+        try:
+            state = self._bind_imported_credentials(state)
+            credentials = self._credentials(state)
+            if state["status"] == "imported_paused":
+                state = evaluation.resume_imported_run(self.current_run_dir)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Evaluation credentials", str(exc))
+            return
 
         def task(log):
             return evaluation.refresh_run(self.current_run_dir, credentials, log)

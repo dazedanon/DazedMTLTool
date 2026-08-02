@@ -25,6 +25,7 @@ class BatchHistoryTestBase(unittest.TestCase):
             "STATE": T.BATCH_STATE_FILE,
             "RESULTS": T.BATCH_RESULTS_FILE,
             "LOCK": T.BATCH_LOCK_FILE,
+            "SUBMIT_LOCK": T.BATCH_SUBMIT_LOCK_FILE,
             "HISTORY": BH.BATCH_HISTORY_FILE,
             "results_mem": T._batch_results,
             "pending": dict(T._batch_queue_pending),
@@ -33,6 +34,7 @@ class BatchHistoryTestBase(unittest.TestCase):
         T.BATCH_STATE_FILE = tmp / "batch_state.json"
         T.BATCH_RESULTS_FILE = tmp / "batch_results.json"
         T.BATCH_LOCK_FILE = tmp / "batch_files.lock"
+        T.BATCH_SUBMIT_LOCK_FILE = tmp / "batch_submit.lock"
         BH.BATCH_HISTORY_FILE = tmp / "batch_history.json"
         # batch_history imports queue/state/results paths at call time via T.* —
         # but it also imported BATCH_* as names. Rebind module-level aliases.
@@ -47,6 +49,7 @@ class BatchHistoryTestBase(unittest.TestCase):
         T.BATCH_STATE_FILE = self._orig["STATE"]
         T.BATCH_RESULTS_FILE = self._orig["RESULTS"]
         T.BATCH_LOCK_FILE = self._orig["LOCK"]
+        T.BATCH_SUBMIT_LOCK_FILE = self._orig["SUBMIT_LOCK"]
         BH.BATCH_HISTORY_FILE = self._orig["HISTORY"]
         BH.BATCH_QUEUE_FILE = T.BATCH_QUEUE_FILE
         BH.BATCH_STATE_FILE = T.BATCH_STATE_FILE
@@ -472,6 +475,11 @@ class HistorySurvivalTests(BatchHistoryTestBase):
 
 
 class ProviderSubmissionTests(BatchHistoryTestBase):
+    def test_submission_lock_rejects_a_second_paid_submitter(self):
+        with T._batch_submit_lock():
+            with self.assertRaisesRegex(RuntimeError, "already being submitted"):
+                T.submitTranslationBatches()
+
     def test_openai_submission_persists_provider_and_recovery_map(self):
         T.queue_batch_request(
             '{"Line1":"猫"}',

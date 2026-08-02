@@ -214,6 +214,17 @@ class PendingMarkerTests(CacheTestBase):
         T.cache_translation(payload, ["Result"], "English")
         self.assertEqual(T.get_cached_translation(payload, "English"), ["Result"])
 
+    def test_failed_translation_scope_releases_its_pending_marker(self):
+        payload = '{"Line1": "失敗"}'
+        key = T.get_cache_key(payload, "English")
+
+        with T._cache_reservation_scope():
+            self.assertIsNone(T.get_cached_translation(payload, "English"))
+            self.assertTrue(T._is_pending_cache_entry(T._read_cache_from_disk()[key]))
+
+        self.assertNotIn(key, T._read_cache_from_disk())
+        self.assertNotIn(key, T._cache)
+
 
 class MergeTests(CacheTestBase):
     def test_pending_never_overwrites_real_translation(self):

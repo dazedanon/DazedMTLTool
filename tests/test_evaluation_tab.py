@@ -483,6 +483,31 @@ class EvaluationTabTests(unittest.TestCase):
         )
         self.assertTrue(self.tab.content_tree.isEnabled())
 
+    def test_imported_run_does_not_preselect_a_local_api_key(self):
+        state = {
+            "credential_binding_required": True,
+            "budget_usd_per_model": 10,
+            "candidates": [{
+                "id": "candidate-1",
+                "endpoint": "https://api.openai.com/v1",
+                "key_name": "",
+                "model": "imported-model",
+                "execution": "batch",
+                "status": "prepared",
+            }],
+        }
+        manifest = {
+            "requested_segments": 360,
+            "sample_size": 10,
+            "requested_stability_samples": 12,
+            "repetitions": 3,
+        }
+
+        self.tab._restore_benchmark_setup(state, manifest)
+
+        self.assertEqual(self.tab._candidate_widgets[0]["key"].currentIndex(), -1)
+        self.assertEqual(self.tab._candidate_widgets[0]["key"].currentText(), "")
+
     def test_custom_url_uses_openai_compatible_protocol(self):
         row = self.tab._candidate_widgets[0]
         row["endpoint"].setText("http://127.0.0.1:8000/v1")

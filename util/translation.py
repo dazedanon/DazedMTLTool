@@ -724,6 +724,53 @@ def _pending_cache_entry():
         "time": time.time(),
     }
 
+
+def _track_cache_reservation(key):
+    """Associate a newly claimed cache key with the active translation call."""
+    scopes = getattr(_thread_local, "cache_reservation_scopes", None)
+    if scopes:
+        scopes[-1].add(key)
+
+
+def _release_cache_reservation_key(key):
+    """Remove *our* pending marker without disturbing another worker's value."""
+    global _cache
+    try:
+        with CACHE_LOCK:
+            with _translation_cache_file_lock():
+                cache = _read_cache_from_disk()
+                changed = False
+                if _is_own_pending_cache_entry(cache.get(key)):
+                    cache.pop(key, None)
+                    changed = True
+                if isinstance(_cache, dict) and _is_own_pending_cache_entry(
+                    _cache.get(key)
+                ):
+                    _cache.pop(key, None)
+                if changed:
+                    _write_cache_to_disk(cache)
+    except Exception:
+        # Reservation cleanup is best effort. A stale marker remains bounded by
+        # CACHE_PENDING_TTL and must never replace the translation exception.
+        pass
+
+
+@contextmanager
+def _cache_reservation_scope():
+    """Release unresolved cache reservations when one translate call exits."""
+    scopes = getattr(_thread_local, "cache_reservation_scopes", None)
+    if scopes is None:
+        scopes = []
+        _thread_local.cache_reservation_scopes = scopes
+    reservations = set()
+    scopes.append(reservations)
+    try:
+        yield
+    finally:
+        scopes.pop()
+        for key in reservations:
+            _release_cache_reservation_key(key)
+
 def _merge_translation_caches(base, overlay):
     """Merge cache dictionaries while never replacing a translation with pending."""
     merged = dict(base or {})
@@ -867,6 +914,7 @@ def get_cached_translation(
                     or _is_own_pending_cache_entry(entry)
                 ):
                     cache[key] = _pending_cache_entry()
+                    _track_cache_reservation(key)
                     _cache = cache
                     _write_cache_to_disk(cache)
                     return None
@@ -994,6 +1042,7 @@ BATCH_QUEUE_FILE   = Path("log/batch_requests.json")
 BATCH_STATE_FILE   = Path("log/batch_state.json")
 BATCH_RESULTS_FILE = Path("log/batch_results.json")
 BATCH_LOCK_FILE    = Path("log/batch_files.lock")
+BATCH_SUBMIT_LOCK_FILE = Path("log/batch_submit.lock")
 BATCH_LOCK = threading.RLock()
 # Legacy public constants retained for extensions/tests. Submission uses the
 # stricter provider-specific limits from util.batch_providers.
@@ -1045,6 +1094,40 @@ def _batch_file_lock():
             try:
                 yield
             finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def _batch_submit_lock():
+    """Prevent concurrent paid submissions for the translation batch queue."""
+    BATCH_SUBMIT_LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(BATCH_SUBMIT_LOCK_FILE, "a+b") as lock_file:
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise RuntimeError(
+                "This translation batch is already being submitted by another "
+                "DazedTL process. Wait for it to finish before trying again."
+            ) from None
+        try:
+            yield
+        finally:
+            lock_file.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
@@ -1563,6 +1646,12 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
     fetchTranslationBatches can route results back. Also appends durable
     history entries (custom_ids survive later fetch/clear). Returns the batch ids.
     """
+    with _batch_submit_lock():
+        return _submit_translation_batches_unlocked(file_set, cost_estimate)
+
+
+def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
+    """Submit while the caller holds the cross-process submission lock."""
     flush_batch_queue()
     with _batch_file_lock():
         queue = _read_batch_file(BATCH_QUEUE_FILE, strict=True)
@@ -3481,6 +3570,7 @@ def last_translation_had_mismatch() -> bool:
 
 
 @retry(exceptions=Exception, tries=5, delay=5)
+@_cache_reservation_scope()
 def translateAI(text, history, config, filename=None, pbar=None, lock=None, mismatchList=None):
     """
     Main translation entry point used by all modules.

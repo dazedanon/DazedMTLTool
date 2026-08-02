@@ -49,8 +49,10 @@ from util.translation import (
 )
 
 
-EVALUATION_VERSION = 4
+EVALUATION_VERSION = 5
 EVALUATION_ARCHIVE_VERSION = 1
+MANIFEST_HASH_VERSION = 2
+ARTIFACT_BINDING_VERSION = 5
 DEFAULT_SAMPLE_SIZE = 10
 DEFAULT_BATCH_SIZE = DEFAULT_SAMPLE_SIZE  # Backward-compatible public alias.
 DEFAULT_SEGMENTS = 360
@@ -252,7 +254,20 @@ def _validate_manifest_integrity(state: dict, manifest: dict) -> None:
     """Reject changed modern manifests while accepting pre-hash legacy runs."""
     state_hash = state.get("manifest_sha256")
     manifest_hash = manifest.get("manifest_sha256")
+    versions = []
+    for value in (state.get("version"), manifest.get("version")):
+        try:
+            if value is not None:
+                versions.append(int(value))
+        except (TypeError, ValueError):
+            raise ValueError("Evaluation manifest integrity check failed: invalid version")
+    requires_hashes = any(version >= MANIFEST_HASH_VERSION for version in versions)
     if state_hash is None and manifest_hash is None:
+        if requires_hashes:
+            raise ValueError(
+                "Evaluation manifest integrity check failed: a modern run is "
+                "missing its saved manifest hash"
+            )
         return
     saved_hashes = [
         value for value in (state_hash, manifest_hash) if value is not None
@@ -275,6 +290,94 @@ def _validate_manifest_integrity(state: dict, manifest: dict) -> None:
             "Evaluation manifest integrity check failed: manifest contents "
             "have changed"
         )
+
+
+def _requires_artifact_binding(state: dict, manifest: dict) -> bool:
+    for value in (state.get("version"), manifest.get("version")):
+        try:
+            if value is not None and int(value) >= ARTIFACT_BINDING_VERSION:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _candidate_artifact_identity(candidate: dict, manifest: dict) -> dict[str, str]:
+    return {
+        "candidate_id": str(candidate.get("id") or ""),
+        "model": str(candidate.get("model") or ""),
+        "provider": str(candidate.get("provider") or ""),
+        "execution": str(candidate.get("execution") or "batch"),
+        "endpoint": str(candidate.get("endpoint") or ""),
+        "manifest_sha256": str(
+            manifest.get("manifest_sha256") or _manifest_digest(manifest)
+        ),
+    }
+
+
+def _validate_result_artifact(
+    candidate: dict, result: dict, state: dict, manifest: dict,
+) -> None:
+    """Verify a result belongs to this candidate and frozen request manifest."""
+    if not isinstance(result, dict):
+        raise ValueError("Evaluation result artifact is invalid")
+    expected = _candidate_artifact_identity(candidate, manifest)
+    required = _requires_artifact_binding(state, manifest)
+    for field, expected_value in expected.items():
+        actual = result.get(field)
+        if actual is None and not required:
+            continue
+        if str(actual or "") != expected_value:
+            raise ValueError(
+                f"Evaluation result for {candidate.get('label') or candidate.get('id')} "
+                f"has the wrong {field.replace('_', ' ')}"
+            )
+
+    executions = result.get("executions")
+    if not isinstance(executions, dict):
+        raise ValueError("Evaluation result artifact has invalid executions")
+    expected_executions = {
+        str(item["id"]): item for item in manifest.get("executions") or []
+    }
+    requests = _request_lookup(manifest)
+    for execution_id, artifact in executions.items():
+        expected_execution = expected_executions.get(str(execution_id))
+        if expected_execution is None or not isinstance(artifact, dict):
+            raise ValueError(
+                f"Evaluation result contains an unknown execution {execution_id!r}"
+            )
+        request_id = str(expected_execution["logical_request_id"])
+        request = requests.get(request_id)
+        expected_fields = {
+            "logical_request_id": request_id,
+            "repetition": expected_execution["repetition"],
+            "logical_hash": (request or {}).get("logical_hash"),
+        }
+        for field, expected_value in expected_fields.items():
+            actual = artifact.get(field)
+            if actual is None and not required:
+                continue
+            if actual != expected_value:
+                raise ValueError(
+                    f"Evaluation result execution {execution_id!r} has the wrong "
+                    f"{field.replace('_', ' ')}"
+                )
+        if request is not None:
+            lines = artifact.get("lines")
+            if not isinstance(lines, list):
+                raise ValueError(
+                    f"Evaluation result execution {execution_id!r} has invalid lines"
+                )
+            actual_segments = [
+                str(line.get("segment_id") or "")
+                for line in lines if isinstance(line, dict)
+            ]
+            if len(actual_segments) != len(lines) or actual_segments != [
+                str(segment_id) for segment_id in request.get("segment_ids") or []
+            ]:
+                raise ValueError(
+                    f"Evaluation result execution {execution_id!r} has the wrong segments"
+                )
 
 
 def _is_retryable_replace_error(exc: OSError) -> bool:
@@ -1875,6 +1978,7 @@ def import_run_archive(
         candidates = state.get("candidates") or []
         if not isinstance(candidates, list):
             raise ValueError("Evaluation archive candidate list is invalid")
+        result_names: set[str] = set()
         for candidate in candidates:
             if not isinstance(candidate, dict):
                 raise ValueError("Evaluation archive candidate is invalid")
@@ -1890,6 +1994,29 @@ def import_run_archive(
                 or result_path.as_posix() not in archive_names
             ):
                 raise ValueError("Evaluation archive contains an unsafe result path")
+            if result_path.as_posix() in result_names:
+                raise ValueError(
+                    "Evaluation archive assigns one result file to multiple candidates"
+                )
+            result_names.add(result_path.as_posix())
+            try:
+                result = json.loads(archive.read(result_path.as_posix()))
+            except (KeyError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                raise ValueError("Evaluation archive result file is invalid") from exc
+            _validate_result_artifact(candidate, result, state, manifest)
+
+        requires_credentials = False
+        for candidate in candidates:
+            # Credential names are local authority, not portable evaluation
+            # data. Never let an archive select a secret from this machine.
+            candidate["key_name"] = ""
+            candidate["keyless"] = False
+            if candidate.get("status") not in {"completed", "failed"}:
+                requires_credentials = True
+        if requires_credentials:
+            state["credential_binding_required"] = True
+        else:
+            state.pop("credential_binding_required", None)
 
         original_id = str(state.get("run_id") or metadata.get("run_id") or "imported")
         safe_id = re.sub(r"[^A-Za-z0-9._-]+", "-", original_id).strip(".-")
@@ -1927,10 +2054,51 @@ def import_run_archive(
     return target
 
 
+def bind_imported_credentials(
+    run_dir: str | Path, bindings: dict[str, dict],
+) -> dict:
+    """Persist deliberate local key selections for an imported active run."""
+    root = Path(run_dir)
+    state, _manifest = load_run(root)
+    if not state.get("credential_binding_required"):
+        return state
+    for candidate in state.get("candidates") or []:
+        if candidate.get("status") in {"completed", "failed"}:
+            continue
+        binding = bindings.get(str(candidate.get("id") or ""))
+        if not isinstance(binding, dict):
+            raise ValueError(
+                f"Select a local API key for {candidate.get('label') or candidate.get('id')}"
+            )
+        key_name = str(binding.get("key_name") or "").strip()
+        saved_endpoint = str(binding.get("endpoint") or "").strip().rstrip("/")
+        candidate_endpoint = str(candidate.get("endpoint") or "").strip().rstrip("/")
+        if not key_name:
+            raise ValueError(
+                f"Select a local API key for {candidate.get('label') or candidate.get('id')}"
+            )
+        if not saved_endpoint or saved_endpoint != candidate_endpoint:
+            raise ValueError(
+                f"The selected key for {candidate.get('label') or candidate.get('id')} "
+                "must be saved for that exact API URL"
+            )
+        candidate["key_name"] = key_name
+        candidate["keyless"] = bool(binding.get("keyless", False))
+    state.pop("credential_binding_required", None)
+    state["credentials_bound_at"] = _utc_now()
+    state["updated_at"] = state["credentials_bound_at"]
+    _atomic_write_json(root / "state.json", state)
+    return state
+
+
 def resume_imported_run(run_dir: str | Path) -> dict:
     """Explicitly unpause an imported provider job before network polling."""
     root = Path(run_dir)
     state, _manifest = load_run(root)
+    if state.get("credential_binding_required"):
+        raise ValueError(
+            "Select and bind local API keys before reconnecting this imported run"
+        )
     if state.get("status") != "imported_paused":
         return state
     original = str(state.get("imported_original_status") or "submitted")
@@ -2053,10 +2221,7 @@ def _complete_candidate(
     summary["stability"] = _stability_score(manifest, processed)
     result_path = root / "results" / f"{candidate_id}.json"
     _atomic_write_json(result_path, {
-        "candidate_id": candidate["id"],
-        "model": candidate["model"],
-        "provider": candidate["provider"],
-        "execution": candidate.get("execution", "batch"),
+        **_candidate_artifact_identity(candidate, manifest),
         "summary": summary,
         "executions": processed,
     })
@@ -2150,10 +2315,17 @@ def _execute_live_candidate(
     usage = dict(empty_usage)
     if checkpoint_path.is_file():
         checkpoint = _read_json(checkpoint_path)
-        if checkpoint.get("candidate_id") != candidate["id"]:
-            raise ValueError(
-                f"Live evaluation checkpoint does not belong to {candidate['label']}"
-            )
+        expected_identity = _candidate_artifact_identity(candidate, manifest)
+        require_identity = _requires_artifact_binding(state, manifest)
+        for field, expected_value in expected_identity.items():
+            actual = checkpoint.get(field)
+            if actual is None and not require_identity:
+                continue
+            if str(actual or "") != expected_value:
+                raise ValueError(
+                    f"Live evaluation checkpoint does not belong to "
+                    f"{candidate['label']}: wrong {field.replace('_', ' ')}"
+                )
         saved_results = checkpoint.get("raw_results")
         saved_errors = checkpoint.get("errors")
         saved_usage = checkpoint.get("usage")
@@ -2276,7 +2448,7 @@ def _execute_live_candidate(
         candidate["live_completed_requests"] = len(completed_ids)
         state["updated_at"] = _utc_now()
         _atomic_write_json(checkpoint_path, {
-            "candidate_id": candidate["id"],
+            **_candidate_artifact_identity(candidate, manifest),
             "updated_at": state["updated_at"],
             "raw_results": raw_results,
             "errors": errors,
@@ -2353,6 +2525,10 @@ def _submit_run_unlocked(run_dir: str | Path, credentials: dict[str, str],
     # changes, or a newer release strengthens retry accounting). Recalculate
     # and enforce the budget at the paid boundary, not only during preparation.
     state, manifest = refresh_run_estimates(root)
+    if state.get("credential_binding_required"):
+        raise ValueError(
+            "Select and bind local API keys before submitting this imported run"
+        )
     if state["status"] not in {"prepared", "partially_submitted"}:
         raise ValueError(f"Run cannot be submitted from state {state['status']!r}")
     requests = _request_lookup(manifest)
@@ -2621,6 +2797,10 @@ def refresh_run(run_dir: str | Path, credentials: dict[str, str],
     root = Path(run_dir)
     state, manifest = load_run(root)
     log = log or (lambda _message: None)
+    if state.get("credential_binding_required"):
+        raise ValueError(
+            "Select and bind local API keys before refreshing this imported run"
+        )
     if state["status"] == "prepared":
         return state
 
@@ -2686,13 +2866,32 @@ def refresh_run(run_dir: str | Path, credentials: dict[str, str],
     return state
 
 
-def _candidate_results(run_dir: Path, state: dict) -> dict[str, dict]:
+def _candidate_results(
+    run_dir: Path, state: dict, manifest: dict,
+) -> dict[str, dict]:
     results = {}
+    paths: set[str] = set()
     for candidate in state["candidates"]:
-        relative = candidate.get("result_file")
+        relative = str(candidate.get("result_file") or "")
         if not relative:
             continue
-        results[candidate["id"]] = _read_json(run_dir / relative)
+        result_path = Path(relative)
+        if (
+            len(result_path.parts) != 2
+            or result_path.parts[0] != "results"
+            or ".." in result_path.parts
+            or result_path.suffix.lower() != ".json"
+        ):
+            raise ValueError("Evaluation candidate has an unsafe result path")
+        normalized = result_path.as_posix()
+        if normalized in paths:
+            raise ValueError(
+                "Evaluation candidates cannot share the same result file"
+            )
+        paths.add(normalized)
+        result = _read_json(run_dir / result_path)
+        _validate_result_artifact(candidate, result, state, manifest)
+        results[candidate["id"]] = result
     return results
 
 
@@ -2700,7 +2899,7 @@ def _blind_review_data(root: Path, state: dict, manifest: dict) -> tuple[
     dict[str, dict], dict[str, dict[str, str]], list[dict], dict,
 ]:
     """Collect valid primary outputs and calculate export coverage."""
-    results = _candidate_results(root, state)
+    results = _candidate_results(root, state, manifest)
     candidates = state.get("candidates") or []
     candidate_ids = [candidate["id"] for candidate in candidates]
     if set(results) != set(candidate_ids):

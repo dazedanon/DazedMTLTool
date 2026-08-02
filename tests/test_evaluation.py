@@ -1137,6 +1137,51 @@ class EvaluationManifestTests(unittest.TestCase):
             )
             self.assertFalse(checkpoint.exists())
 
+    def test_live_checkpoint_is_bound_to_the_frozen_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            candidate = {
+                "id": "candidate-1",
+                "provider": "openai",
+                "endpoint": "https://api.openai.com/v1",
+                "model": "gpt-test",
+                "label": "gpt-test",
+                "execution": "live",
+                "status": "running_live",
+            }
+            state = {
+                "version": evaluation.EVALUATION_VERSION,
+                "run_id": "bound-checkpoint",
+                "status": "partially_submitted",
+                "manifest_sha256": self.manifest["manifest_sha256"],
+                "candidates": [candidate],
+            }
+            checkpoint = run_dir / "results" / "candidate-1.live.partial.json"
+            evaluation._atomic_write_json(checkpoint, {
+                **evaluation._candidate_artifact_identity(candidate, self.manifest),
+                "manifest_sha256": "0" * 64,
+                "raw_results": {},
+                "errors": [],
+                "usage": {},
+            })
+
+            with (
+                mock.patch.object(evaluation, "_clients", return_value=(object(), None)),
+                mock.patch.object(evaluation.batch_api, "execute_live_request") as execute,
+            ):
+                with self.assertRaisesRegex(ValueError, "wrong manifest sha256"):
+                    evaluation._execute_live_candidate(
+                        run_dir,
+                        state,
+                        self.manifest,
+                        candidate,
+                        evaluation._request_lookup(self.manifest),
+                        "local-key",
+                        lambda _message: None,
+                    )
+
+            execute.assert_not_called()
+
     def test_live_evaluation_retries_transient_request_errors(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
@@ -1521,6 +1566,23 @@ class EvaluationManifestTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "integrity check failed"):
                 evaluation.load_run(run_dir)
 
+    def test_load_run_rejects_hashless_current_version_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            evaluation._atomic_write_json(run_dir / "manifest.json", {
+                "version": evaluation.EVALUATION_VERSION,
+                "segments": [],
+            })
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "version": evaluation.EVALUATION_VERSION,
+                "run_id": "hashless-modern-run",
+                "status": "prepared",
+                "candidates": [],
+            })
+
+            with self.assertRaisesRegex(ValueError, "missing its saved manifest hash"):
+                evaluation.load_run(run_dir)
+
     def test_load_run_keeps_pollable_state_when_another_candidate_failed(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
@@ -1610,7 +1672,7 @@ class EvaluationHistoryTests(unittest.TestCase):
             "executions": {},
         })
         evaluation._atomic_write_json(run_dir / "state.json", {
-            "version": evaluation.EVALUATION_VERSION,
+            "version": 1,
             "run_id": run_id,
             "created_at": "2026-08-01T12:00:00+00:00",
             "updated_at": "2026-08-01T12:30:00+00:00",
@@ -1620,6 +1682,8 @@ class EvaluationHistoryTests(unittest.TestCase):
             "candidates": [{
                 "id": "candidate-1",
                 "model": "local-model",
+                "provider": "openai",
+                "endpoint": "https://api.openai.com/v1",
                 "execution": "live",
                 "key_name": "Local key name",
                 "result_file": str(result_file),
@@ -1898,10 +1962,79 @@ class EvaluationHistoryTests(unittest.TestCase):
 
             imported = evaluation.import_run_archive(project, archive)
             paused, _manifest = evaluation.load_run(imported)
+            with self.assertRaisesRegex(ValueError, "bind local API keys"):
+                evaluation.resume_imported_run(imported)
+            evaluation.bind_imported_credentials(imported, {
+                "candidate-1": {
+                    "key_name": "Local OpenAI",
+                    "endpoint": "https://api.openai.com/v1",
+                },
+            })
             resumed = evaluation.resume_imported_run(imported)
 
             self.assertEqual(paused["status"], "imported_paused")
             self.assertEqual(resumed["status"], "submitted")
+
+    def test_imported_prepared_run_requires_exact_local_credential_binding(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project"
+            archive_path = root / "prepared.dazedeval"
+            manifest = {
+                "version": evaluation.EVALUATION_VERSION,
+                "segments": [],
+                "logical_requests": [],
+                "executions": [],
+            }
+            manifest["manifest_sha256"] = evaluation._manifest_digest(manifest)
+            state = {
+                "version": evaluation.EVALUATION_VERSION,
+                "run_id": "prepared-import",
+                "status": "prepared",
+                "manifest_sha256": manifest["manifest_sha256"],
+                "candidates": [{
+                    "id": "candidate-1",
+                    "label": "Imported model",
+                    "model": "gpt-test",
+                    "provider": "openai",
+                    "endpoint": "https://attacker.example/v1",
+                    "key_name": "OpenAI",
+                    "keyless": False,
+                    "execution": "batch",
+                    "status": "prepared",
+                }],
+            }
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("evaluation_export.json", json.dumps({
+                    "archive_version": evaluation.EVALUATION_ARCHIVE_VERSION,
+                }))
+                archive.writestr("manifest.json", json.dumps(manifest))
+                archive.writestr("state.json", json.dumps(state))
+
+            imported = evaluation.import_run_archive(project, archive_path)
+            imported_state, _manifest = evaluation.load_run(imported)
+            self.assertTrue(imported_state["credential_binding_required"])
+            self.assertEqual(imported_state["candidates"][0]["key_name"], "")
+
+            with self.assertRaisesRegex(ValueError, "exact API URL"):
+                evaluation.bind_imported_credentials(imported, {
+                    "candidate-1": {
+                        "key_name": "OpenAI",
+                        "endpoint": "https://api.openai.com/v1",
+                    },
+                })
+
+            bound = evaluation.bind_imported_credentials(imported, {
+                "candidate-1": {
+                    "key_name": "Explicit attacker endpoint key",
+                    "endpoint": "https://attacker.example/v1/",
+                },
+            })
+            self.assertNotIn("credential_binding_required", bound)
+            self.assertEqual(
+                bound["candidates"][0]["key_name"],
+                "Explicit attacker endpoint key",
+            )
 
 
 class SfxEvaluationContextTests(unittest.TestCase):
@@ -2007,6 +2140,25 @@ class BlindReviewTests(unittest.TestCase):
                 points = evaluation._ranking_points(tiers)
                 self.assertEqual(points, expected)
                 self.assertEqual(sum(points.values()), 3)
+
+    def test_export_rejects_result_file_shared_by_two_candidates(self):
+        state_path = self.run_dir / "state.json"
+        state = evaluation._read_json(state_path)
+        state["candidates"][1]["result_file"] = state["candidates"][0]["result_file"]
+        evaluation._atomic_write_json(state_path, state)
+
+        with self.assertRaisesRegex(ValueError, "share the same result file"):
+            evaluation.export_blind_review(self.run_dir)
+
+    def test_export_rejects_result_owned_by_another_candidate(self):
+        state = evaluation._read_json(self.run_dir / "state.json")
+        result_path = self.run_dir / state["candidates"][0]["result_file"]
+        result = evaluation._read_json(result_path)
+        result["candidate_id"] = state["candidates"][1]["id"]
+        evaluation._atomic_write_json(result_path, result)
+
+        with self.assertRaisesRegex(ValueError, "wrong candidate id"):
+            evaluation.export_blind_review(self.run_dir)
 
     def test_export_randomizes_labels_and_import_resolves_hidden_ranking(self):
         review_path = evaluation.export_blind_review(
@@ -2270,23 +2422,36 @@ class BlindReviewTests(unittest.TestCase):
             "stratum": "dialogue",
             "source": "犬だ。",
         })
+        manifest["logical_requests"].append({
+            "id": "logical-0002",
+            "segment_ids": ["segment-2"],
+        })
+        manifest["executions"].append({
+            "id": "rep-1:logical-0002",
+            "logical_request_id": "logical-0002",
+            "repetition": 1,
+        })
         evaluation._atomic_write_json(manifest_path, manifest)
         state = json.loads((self.run_dir / "state.json").read_text(encoding="utf-8"))
         for index, candidate in enumerate(state["candidates"]):
             result_path = self.run_dir / candidate["result_file"]
             result = json.loads(result_path.read_text(encoding="utf-8"))
-            result["executions"]["rep-1:logical-0001"]["lines"].append({
-                "segment_id": "segment-2",
-                "translation": f"translation-dog-{index}",
-                "valid": index != 0,
-            })
+            result["executions"]["rep-1:logical-0002"] = {
+                "logical_request_id": "logical-0002",
+                "repetition": 1,
+                "lines": [{
+                    "segment_id": "segment-2",
+                    "translation": f"translation-dog-{index}",
+                    "valid": index != 0,
+                }],
+            }
             evaluation._atomic_write_json(result_path, result)
 
         coverage = evaluation.blind_review_coverage(self.run_dir)
         self.assertEqual(coverage["total_segments"], 2)
         self.assertEqual(coverage["eligible_segments"], 1)
         self.assertEqual(coverage["excluded_segments"], 1)
-        self.assertEqual(coverage["total_samples"], 1)
+        self.assertEqual(coverage["total_samples"], 2)
         self.assertEqual(coverage["eligible_samples"], 1)
 
     def test_export_rejects_all_error_candidate_without_overwriting_csv(self):
