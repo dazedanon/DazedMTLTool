@@ -9,7 +9,8 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QPoint, QPointF, Qt
+from PyQt5.QtGui import QWheelEvent
 from PyQt5.QtWidgets import QApplication, QMessageBox, QStackedWidget, QWidget
 
 from gui.config_tab import ModelFetchThread
@@ -330,7 +331,9 @@ class EvaluationTabTests(unittest.TestCase):
         history_started = threading.Event()
         release_history = threading.Event()
         inventory_started = threading.Event()
+        second_inventory_started = threading.Event()
         release_inventory = threading.Event()
+        inventory_calls = []
 
         def load_history(_project_root):
             history_started.set()
@@ -338,7 +341,10 @@ class EvaluationTabTests(unittest.TestCase):
             return runs
 
         def scan_inventory(_data_dir):
+            inventory_calls.append(_data_dir)
             inventory_started.set()
+            if len(inventory_calls) == 2:
+                second_inventory_started.set()
             release_inventory.wait(1)
             return {
                 "eligible_segments": 0,
@@ -409,19 +415,80 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertTrue(evaluation_page.history_combo.isEnabled())
             self.assertTrue(evaluation_page.export_evaluation_btn.isEnabled())
 
+            # Scrolling the page over any Evaluation dropdown must not mutate
+            # its value or activate expensive selection callbacks.
+            combo_indexes = {}
+            combos = (
+                evaluation_page.history_combo,
+                evaluation_page.content_preset_combo,
+                evaluation_page.test_size_combo,
+                evaluation_page._candidate_widgets[0]["key"],
+                evaluation_page._candidate_widgets[0]["model"],
+                evaluation_page._candidate_widgets[0]["execution"],
+            )
+            for combo in combos:
+                if combo.count() > 1:
+                    combo.setCurrentIndex(min(1, combo.count() - 1))
+                combo_indexes[combo] = combo.currentIndex()
+            open_count = open_run.call_count
+            for combo in combos:
+                position = QPoint(2, 2)
+                wheel = QWheelEvent(
+                    QPointF(position),
+                    QPointF(combo.mapToGlobal(position)),
+                    QPoint(),
+                    QPoint(0, -120),
+                    Qt.NoButton,
+                    Qt.NoModifier,
+                    Qt.NoScrollPhase,
+                    False,
+                )
+                self.app.sendEvent(combo, wheel)
+                self.assertEqual(combo.currentIndex(), combo_indexes[combo])
+            self.assertEqual(open_run.call_count, open_count)
+
             # The corpus scan is still blocked, but the GUI event loop and
             # history controls remain responsive.
             self.app.processEvents()
             self.assertTrue(evaluation_page._inventory_load_worker.isRunning())
+            active_inventory_worker = evaluation_page._inventory_load_worker
+            evaluation_page._start_initial_inventory(
+                str(self.project_root / "newer-selection")
+            )
+            self.assertIs(
+                evaluation_page._inventory_load_worker,
+                active_inventory_worker,
+            )
+            self.assertEqual(len(inventory_calls), 1)
             release_inventory.set()
-            evaluation_page._inventory_load_worker.wait(1_000)
+            active_inventory_worker.wait(1_000)
             for _ in range(3):
                 self.app.processEvents()
+            self.assertTrue(second_inventory_started.wait(0.5))
+            pending_worker = evaluation_page._inventory_load_worker
+            if pending_worker is not None:
+                pending_worker.wait(1_000)
+            for _ in range(3):
+                self.app.processEvents()
+            self.assertEqual(len(inventory_calls), 2)
 
             older_index = evaluation_page.history_combo.findData(str(older))
             evaluation_page.history_combo.setCurrentIndex(older_index)
             evaluation_page.history_combo.activated.emit(older_index)
-            open_run.assert_called_with(older)
+            open_run.assert_called_with(older, defer_inventory=True)
+
+            with (
+                mock.patch.object(
+                    evaluation_page,
+                    "_open_run",
+                    side_effect=RuntimeError("stale run"),
+                ),
+                mock.patch(
+                    "gui.evaluation_tab.QMessageBox.warning"
+                ) as warning,
+            ):
+                evaluation_page._open_selected_history()
+            warning.assert_called_once()
 
             stack.setCurrentWidget(placeholder)
             stack.setCurrentWidget(evaluation_page)

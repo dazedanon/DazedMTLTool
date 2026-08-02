@@ -95,6 +95,24 @@ class _EvaluationReadWorker(QThread):
             self.loaded.emit(None, str(exc))
 
 
+class _IgnoreClosedComboWheel:
+    """Let a containing scroll area own wheel gestures over closed combos."""
+
+    def wheelEvent(self, event):
+        if self.view().isVisible():
+            super().wheelEvent(event)
+            return
+        event.ignore()
+
+
+class _EvaluationComboBox(_IgnoreClosedComboWheel, QComboBox):
+    pass
+
+
+class _EvaluationModelComboBox(_IgnoreClosedComboWheel, ConfigComboBox):
+    pass
+
+
 class EvaluationTab(QWidget):
     """Prepare, submit, and review a user-defined model comparison."""
 
@@ -193,6 +211,7 @@ class EvaluationTab(QWidget):
         self._initial_load_scheduled = False
         self._history_load_worker: _EvaluationReadWorker | None = None
         self._inventory_load_worker: _EvaluationReadWorker | None = None
+        self._pending_inventory_selection: str | None = None
         self._inventory_load_generation = 0
         self._init_ui()
         self._poll_timer = QTimer(self)
@@ -259,7 +278,7 @@ class EvaluationTab(QWidget):
             "Compare batch or live models on the same Japanese game text. No normal translation cache is reused.",
         ))
 
-        self.history_combo = QComboBox()
+        self.history_combo = _EvaluationComboBox()
         self.history_combo.setSizeAdjustPolicy(
             QComboBox.AdjustToMinimumContentsLengthWithIcon
         )
@@ -355,7 +374,7 @@ class EvaluationTab(QWidget):
             "Choose which RPG Maker source types may be sampled. Every model in "
             "the evaluation receives the same selected lines."
         )
-        self.content_preset_combo = QComboBox()
+        self.content_preset_combo = _EvaluationComboBox()
         for label, preset in self.CONTENT_PRESETS:
             self.content_preset_combo.addItem(label, preset)
         self.content_preset_combo.setToolTip(
@@ -399,7 +418,7 @@ class EvaluationTab(QWidget):
         options.setHorizontalSpacing(12)
         options.setVerticalSpacing(8)
 
-        self.test_size_combo = QComboBox()
+        self.test_size_combo = _EvaluationComboBox()
         for label, lines, sample_size, repeated_samples, repetitions in self.TEST_TEMPLATES:
             self.test_size_combo.addItem(
                 label, (lines, sample_size, repeated_samples, repetitions)
@@ -765,7 +784,15 @@ class EvaluationTab(QWidget):
     def _open_selected_history(self):
         selected = self._selected_history_run()
         if selected is not None:
-            self._open_run(selected)
+            try:
+                self._open_run(selected, defer_inventory=True)
+            except Exception as exc:
+                # Qt invokes this method from a native input callback. Never
+                # let a malformed/stale saved run escape that boundary because
+                # some PyQt/Python combinations abort on an unhandled slot
+                # exception.
+                self._append_log(f"Could not open saved evaluation: {exc}")
+                QMessageBox.warning(self, "Open evaluation", str(exc))
 
     def _export_evaluation_archive(self):
         selected = self._selected_history_run()
@@ -819,6 +846,7 @@ class EvaluationTab(QWidget):
         # A user-driven source change takes precedence over an in-flight
         # first-open scan. Its eventual result must not overwrite this choice.
         self._inventory_load_generation += 1
+        self._pending_inventory_selection = None
         selected = self.source_edit.text().strip()
         if not selected:
             self._refresh_content_inventory(None)
@@ -1116,11 +1144,11 @@ class EvaluationTab(QWidget):
         endpoint_field.setMinimumWidth(320)
         endpoint_field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        key_combo = QComboBox()
+        key_combo = _EvaluationComboBox()
         key_combo.setMinimumWidth(220)
         key_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        model_combo = ConfigComboBox()
+        model_combo = _EvaluationModelComboBox()
         # Model discovery is optional for chat-only local servers. Keep the
         # suggestions, but allow an operator to enter a server-specific ID.
         model_combo.setEditable(True)
@@ -1131,7 +1159,7 @@ class EvaluationTab(QWidget):
         model_combo.setMinimumWidth(260)
         model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        execution_combo = QComboBox()
+        execution_combo = _EvaluationComboBox()
         execution_combo.addItem("Batch", "batch")
         execution_combo.addItem("Live", "live")
         execution_index = execution_combo.findData(execution)
@@ -1744,6 +1772,7 @@ class EvaluationTab(QWidget):
         self._inventory_load_generation += 1
         generation = self._inventory_load_generation
         if not selected:
+            self._pending_inventory_selection = None
             self._refresh_content_inventory(None)
             set_status_text(
                 self.source_resolution_label,
@@ -1752,7 +1781,22 @@ class EvaluationTab(QWidget):
                 "neutral",
             )
             return
+        if (
+            self._inventory_load_worker is not None
+            and self._inventory_load_worker.isRunning()
+        ):
+            # Rapid history changes should not launch an unbounded set of
+            # full-corpus scans. Keep only the newest requested source.
+            self._pending_inventory_selection = selected
+            set_status_text(
+                self.source_resolution_label,
+                "Finishing the current content scan before loading the newly "
+                "selected evaluation…",
+                "info",
+            )
+            return
 
+        self._pending_inventory_selection = None
         set_status_text(
             self.source_resolution_label,
             "Scanning the selected game's available content…",
@@ -1781,11 +1825,20 @@ class EvaluationTab(QWidget):
             )
         )
         worker.finished.connect(
-            lambda: self._clear_read_worker(
-                "_inventory_load_worker", worker
-            )
+            lambda: self._inventory_worker_finished(worker)
         )
         worker.start()
+
+    def _inventory_worker_finished(self, worker) -> None:
+        if self._inventory_load_worker is not worker:
+            worker.deleteLater()
+            return
+        self._inventory_load_worker = None
+        worker.deleteLater()
+        pending = self._pending_inventory_selection
+        self._pending_inventory_selection = None
+        if pending is not None:
+            self._start_initial_inventory(pending)
 
     def _on_initial_inventory_loaded(self, generation, payload, error: str):
         if generation != self._inventory_load_generation:
