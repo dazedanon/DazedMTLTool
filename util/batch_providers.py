@@ -350,6 +350,11 @@ def _openai_result(
         or usage.get("cachedContentTokenCount")
         or 0
     )
+    cache_write = int(
+        prompt_details.get("cache_write_tokens")
+        or prompt_details.get("cacheWriteTokens")
+        or 0
+    )
     thinking = 0
     if provider == PROVIDER_GEMINI:
         thinking = int(usage.get("thoughtsTokenCount") or 0)
@@ -362,7 +367,7 @@ def _openai_result(
         "prompt_tokens": prompt,
         "completion_tokens": completion,
         "cache_read_input_tokens": cached,
-        "cache_creation_input_tokens": 0,
+        "cache_creation_input_tokens": cache_write,
         "thinking_tokens": thinking,
     }
     return result, None
@@ -417,10 +422,16 @@ def download_results(provider: str, batch_id: str, custom_ids: dict,
             continue
         results[key] = result
         totals["input_tokens"] += max(
-            0, result["prompt_tokens"] - result["cache_read_input_tokens"]
+            0,
+            result["prompt_tokens"]
+            - result["cache_read_input_tokens"]
+            - result["cache_creation_input_tokens"],
         )
         totals["output_tokens"] += result["completion_tokens"]
         totals["cache_read_input_tokens"] += result["cache_read_input_tokens"]
+        totals["cache_creation_input_tokens"] += result[
+            "cache_creation_input_tokens"
+        ]
         totals["thinking_tokens"] += result.get("thinking_tokens", 0)
     for line in _download_file_text(
         provider, error_id, client=client, google_client=google_client

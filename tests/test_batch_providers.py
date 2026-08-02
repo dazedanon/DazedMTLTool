@@ -129,7 +129,10 @@ class OpenAIBatchAdapterTests(unittest.TestCase):
             "usage": {
                 "prompt_tokens": 50,
                 "completion_tokens": 10,
-                "prompt_tokens_details": {"cached_tokens": 20},
+                "prompt_tokens_details": {
+                    "cached_tokens": 20,
+                    "cache_write_tokens": 15,
+                },
             },
         }
         create = mock.Mock(return_value=response)
@@ -144,6 +147,7 @@ class OpenAIBatchAdapterTests(unittest.TestCase):
         self.assertEqual(result["text"], '{"Line1":"Cat"}')
         self.assertEqual(result["prompt_tokens"], 50)
         self.assertEqual(result["cache_read_input_tokens"], 20)
+        self.assertEqual(result["cache_creation_input_tokens"], 15)
 
     def test_live_request_retries_only_schema_rejection(self):
         class SchemaRejected(Exception):
@@ -222,7 +226,10 @@ class OpenAIBatchAdapterTests(unittest.TestCase):
                     "usage": {
                         "prompt_tokens": 100,
                         "completion_tokens": 20,
-                        "prompt_tokens_details": {"cached_tokens": 40},
+                        "prompt_tokens_details": {
+                            "cached_tokens": 40,
+                            "cache_write_tokens": 30,
+                        },
                     },
                 },
             },
@@ -242,7 +249,8 @@ class OpenAIBatchAdapterTests(unittest.TestCase):
         self.assertFalse(errors)
         self.assertEqual(results["cache-key"]["text"], '{"Line1":"Cat"}')
         self.assertEqual(usage["cache_read_input_tokens"], 40)
-        self.assertEqual(usage["input_tokens"], 60)
+        self.assertEqual(usage["cache_creation_input_tokens"], 30)
+        self.assertEqual(usage["input_tokens"], 30)
 
     def test_cancel_uses_provider_batch_endpoint(self):
         batches = _Batches(SimpleNamespace())

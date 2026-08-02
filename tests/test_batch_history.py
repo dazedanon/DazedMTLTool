@@ -979,6 +979,23 @@ class CancelTests(BatchHistoryTestBase):
 
 
 class UsageTests(BatchHistoryTestBase):
+    def test_openai_cache_writes_use_gpt_5_6_multiplier(self):
+        usage = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 1_000_000,
+            "thinking_tokens": 0,
+        }
+        with mock.patch.object(
+            BH,
+            "getPricingConfig",
+            return_value={"inputAPICost": 5.0, "outputAPICost": 30.0},
+        ):
+            cost = BH._price_usage(usage, "gpt-5.6-sol", "openai")
+
+        self.assertEqual(cost, 3.125)
+
     def test_usage_sums_cache_and_thinking(self):
         BH.upsert_history_entry(
             "msgbatch_u",
@@ -1157,6 +1174,7 @@ class BatchEstimateTests(BatchHistoryTestBase):
 
         self.assertEqual(estimate["cache_kind"], "automatic")
         self.assertTrue(estimate["uses_prompt_cache"])
+        self.assertGreaterEqual(estimate["cache_write_tokens"], 1024)
         self.assertGreaterEqual(estimate["cache_read_tokens"], 1024)
         self.assertLess(
             estimate["batch_cached_cost"],

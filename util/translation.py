@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
 from util.paths import read_active_glossary
+from util.provider_costs import cache_write_multiplier, has_billed_cache_writes
 from util import request_debug
 from util.sfx_reference import build_sfx_reference_text
 
@@ -1597,9 +1598,10 @@ def estimateBatchCost(model=None):
     prefix is written once (2x input rate at the 1h TTL) and read by every other
     request that shares it (0.10x); everything is then halved by the batch
     discount. Cache hits inside a batch are best-effort, so the no-cache batch
-    figure is the worst-case bound. OpenAI automatic cache reuse is estimated
-    from repeated 1,024+ token prefixes. Gemini estimates exclude unpredictable
-    thinking output and do not assume an implicit cache hit.
+    figure is the worst-case bound. OpenAI automatic cache reads and separately
+    billed GPT-5.6+ cache writes are estimated from 1,024+ token prefixes.
+    Gemini estimates exclude unpredictable thinking output and do not assume
+    an implicit cache hit.
     """
     flush_batch_queue()
     with _batch_file_lock():
@@ -1681,14 +1683,30 @@ def estimateBatchCost(model=None):
         # OpenAI prompt caching is automatic. Cached inputs for the supported
         # GPT models are currently 10% of standard input price; Batch then
         # applies its own 50% discount.
-        cache_write_tok = 0
         cache_read_tok = min(
             raw_input_tok,
             _estimate_openai_cache_reads(prompt_token_sequences),
         )
-        uncached_input_tok = raw_input_tok - cache_read_tok
+        if has_billed_cache_writes(est_provider, est_model):
+            cacheable_tokens = sum(
+                len(tokens) for tokens in prompt_token_sequences
+                if len(tokens) >= 1024
+            )
+            cache_write_tok = max(
+                0,
+                min(
+                    raw_input_tok - cache_read_tok,
+                    cacheable_tokens - cache_read_tok,
+                ),
+            )
+        else:
+            cache_write_tok = 0
+        uncached_input_tok = raw_input_tok - cache_read_tok - cache_write_tok
         batch_cached = (
             uncached_input_tok * in_rate
+            + cache_write_tok
+            * in_rate
+            * cache_write_multiplier(est_provider, est_model)
             + cache_read_tok * in_rate * 0.10
             + output_tokens * out_rate
         ) * 0.50
@@ -1716,8 +1734,9 @@ def estimateBatchCost(model=None):
         )
     elif cache_kind == "automatic":
         print(
-            f"[BATCH] estimated OpenAI automatic cache reads: "
-            f"{cache_read_tok:,} tokens (best-effort prefix routing)",
+            f"[BATCH] estimated OpenAI automatic cache: "
+            f"{cache_write_tok:,} write / {cache_read_tok:,} read tokens "
+            f"(best-effort prefix routing)",
             flush=True,
         )
     print(
@@ -4612,6 +4631,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
         _delta_bcw  = getattr(_thread_local, 'file_batch_write',   0) - _prev_bcw
         _delta_breg = getattr(_thread_local, 'file_batch_regular', 0) - _prev_breg
         _delta_bout = getattr(_thread_local, 'file_batch_output',  0) - _prev_bout
+        _batch_write_multiplier = cache_write_multiplier(
+            batch_provider or "anthropic", config.model
+        )
         _call_cost = (
             _delta_cr  * _br * 0.10 +
             _delta_cw  * _br * 2.00 +
@@ -4619,7 +4641,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             _delta_out * _or +
             # Batch API tokens: same rates, then the 50% batch discount.
             (_delta_bcr  * _br * 0.10 +
-             _delta_bcw  * _br * 2.00 +
+             _delta_bcw  * _br * _batch_write_multiplier +
              _delta_breg * _br +
              _delta_bout * _or) * 0.50
         )

@@ -36,6 +36,7 @@ from util.batch_providers import (
     get_client as get_provider_client,
     retrieve_batch as provider_retrieve_batch,
 )
+from util.provider_costs import cache_write_multiplier
 
 BATCH_HISTORY_FILE = Path("log/batch_history.json")
 
@@ -497,7 +498,13 @@ def _price_usage(usage: dict, model: str, provider: str = "anthropic") -> float:
     out = usage.get("output_tokens", 0) or 0
     thinking = usage.get("thinking_tokens", 0) or 0
     # Thinking tokens are billed as output on Anthropic.
-    raw = cr * br * 0.10 + cw * br * 2.00 + inp * br + (out + thinking) * orr
+    write_multiplier = cache_write_multiplier(provider, model)
+    raw = (
+        cr * br * 0.10
+        + cw * br * write_multiplier
+        + inp * br
+        + (out + thinking) * orr
+    )
     return raw * 0.50
 
 

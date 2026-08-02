@@ -196,7 +196,7 @@ CODE122_VAR_MAX = 2000
 
 # Plugins / Scripts
 CODE355655 = True
-CODE357 = False
+CODE357 = True
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -276,7 +276,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = {"$gameMessage.show(this,", "CBR-エロステータス"}
+ENABLED_PATTERNS_355655: set = {"$gameMessage.show(this,", "BattleManager._logWindow.push('addText'"}
 
 
 def _pat355655_captured_text(match):

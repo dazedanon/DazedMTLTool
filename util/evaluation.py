@@ -30,6 +30,7 @@ from typing import Any, Callable, Iterable
 
 from util import batch_providers as batch_api
 from util.paths import read_active_glossary, read_game_glossary
+from util.provider_costs import cache_write_multiplier
 from util.project_scanner import find_data_folder
 from util.sfx_reference import sfx_reference_identity
 from util.skills import load_system_prompt
@@ -473,7 +474,7 @@ def pricing_for(model: str, *, on_date: date | None = None) -> dict[str, float]:
     model_l = str(model or "").lower()
     today = on_date or date.today()
     if "gpt-5.6-terra" in model_l:
-        return {"input": 1.25, "cached_input": 0.125, "output": 7.50}
+        return {"input": 1.00, "cached_input": 0.10, "output": 6.00}
     if "gemini-3.6-flash" in model_l:
         return {"input": 0.75, "cached_input": 0.075, "output": 3.75}
     if "claude-sonnet-5" in model_l:
@@ -2232,6 +2233,13 @@ def _provider_params(candidate: dict, request: dict) -> dict:
         # importantly, this matches GPT reasoning=none and Gemini=minimal.
         params["thinking"] = {"type": "disabled"}
         params["max_tokens"] = MAX_OUTPUT_TOKENS_PER_REQUEST
+        if candidate.get("execution", "batch") == "batch":
+            # Message-batch requests run concurrently, while Anthropic cache
+            # entries only become reusable after the first response starts.
+            # Avoid paying the 2x one-hour write rate on nearly every request.
+            for block in params.get("system") or []:
+                if isinstance(block, dict):
+                    block.pop("cache_control", None)
         return params
 
     params = buildOpenAIRequest(
@@ -2810,7 +2818,11 @@ def _price_usage(candidate: dict, usage: dict) -> float:
     return (
         regular * rates["input"]
         + cached * rates["cached_input"]
-        + cache_write * rates["input"] * 2.0
+        + cache_write
+        * rates["input"]
+        * cache_write_multiplier(
+            candidate.get("provider", ""), candidate.get("model", "")
+        )
         + (output + thinking) * rates["output"]
     ) / 1_000_000
 

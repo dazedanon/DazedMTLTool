@@ -650,6 +650,10 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertNotIn("extra_body", gemini_batch_body)
         self.assertEqual(gemini_batch_body["reasoning_effort"], "minimal")
         self.assertEqual(params["anthropic"]["thinking"], {"type": "disabled"})
+        self.assertFalse(any(
+            "cache_control" in block
+            for block in params["anthropic"]["system"]
+        ))
         self.assertEqual(
             params["anthropic"]["max_tokens"],
             evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST,
@@ -659,10 +663,20 @@ class EvaluationManifestTests(unittest.TestCase):
             ["required"],
             [f"Line{i}" for i in range(1, request["schema_line_count"] + 1)],
         )
+        live_anthropic = evaluation._provider_params(
+            {**candidates[2], "execution": "live"}, request
+        )
+        self.assertTrue(any(
+            "cache_control" in block
+            for block in live_anthropic["system"]
+        ))
 
     def test_locked_batch_pricing_handles_sonnet_intro_expiry(self):
         self.assertEqual(
-            evaluation.pricing_for("gpt-5.6-terra")["output"], 7.50
+            evaluation.pricing_for("gpt-5.6-terra")["output"], 6.00
+        )
+        self.assertEqual(
+            evaluation.pricing_for("gpt-5.6-terra")["input"], 1.00
         )
         self.assertEqual(
             evaluation.pricing_for("gemini-3.6-flash")["input"], 0.75
@@ -679,6 +693,34 @@ class EvaluationManifestTests(unittest.TestCase):
             )["input"],
             1.50,
         )
+
+    def test_usage_pricing_applies_provider_cache_write_rates(self):
+        usage = {
+            "input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 1_000_000,
+            "output_tokens": 0,
+            "thinking_tokens": 0,
+        }
+        openai_cost = evaluation._price_usage(
+            {
+                "provider": "openai",
+                "model": "gpt-5.6-terra",
+                "execution": "batch",
+            },
+            usage,
+        )
+        anthropic_cost = evaluation._price_usage(
+            {
+                "provider": "anthropic",
+                "model": "claude-sonnet-5",
+                "execution": "batch",
+            },
+            usage,
+        )
+
+        self.assertEqual(openai_cost, 1.25)
+        self.assertEqual(anthropic_cost, 2.00)
 
     def test_default_estimates_stay_below_safe_budget(self):
         for candidate in evaluation.DEFAULT_CANDIDATES:
