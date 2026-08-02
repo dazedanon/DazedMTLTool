@@ -9,6 +9,8 @@ Before adding or expanding tests:
 - Full `QWidget`, workflow, or application construction belongs in the extended suite. Add its test ID prefix to `EXTENDED_TEST_PREFIXES` only when necessary and explain why in the handoff.
 - Keep tests hermetic: no network, ignored workspace data, `.env`, user configuration, existing logs, or pre-existing `files/` and `translated/` content.
 - Prefer small generated or committed fixtures inside a disposable directory.
+- Treat test-count headroom as capacity for distinct regressions, not permission
+  to split related input/output cases that should remain parameterized.
 - Do not increase `SUITE_TARGETS_SECONDS`, `SUITE_BUDGETS_SECONDS`, or `PER_TEST_BUDGETS_SECONDS` without explicit user approval.
 - When changing tests, report the protected regression, overlapping coverage considered, suite tier, commands run, and before/after timing when the change materially affects runtime.
 

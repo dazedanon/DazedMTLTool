@@ -76,9 +76,11 @@ asset existence, update eligibility, help-index references, and git tracking.
 
 | Tier | Test ceiling | Runtime target | Runtime ceiling | Per-test ceiling |
 | --- | ---: | ---: | ---: | ---: |
-| Core | 755 | 8 s | 15 s | 2 s |
+| Core | 903 | 8 s | 15 s | 2 s |
 | Extended | 97 | 12 s | 30 s | 3 s |
-| Full | 852 | 20 s | 45 s | 3 s |
+| Full | 1000 | 20 s | 45 s | 3 s |
 
-Raising a ceiling requires explicit user approval. New tests are core by default;
-full widget/workflow tests must be deliberately classified as extended.
+The 1,000-test full ceiling is capacity, not a target. New tests must still
+protect distinct behavior and related cases must be combined or parameterized.
+New tests are core by default; full widget/workflow tests must be deliberately
+classified as extended. Raising a ceiling requires explicit user approval.

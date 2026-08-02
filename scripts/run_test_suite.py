@@ -47,8 +47,10 @@ EXTENDED_TEST_PREFIXES = (
 
 
 # Targets describe healthy local performance. Ceilings leave room for slower CI
-# hosts without preserving the old runtime debt. Raising a time or count ceiling
-# requires explicit user approval.
+# hosts without preserving the old runtime debt. Count ceilings are capacity
+# guardrails, not quotas: available headroom does not relax the requirement to
+# combine or parameterize overlapping cases. Raising a ceiling requires explicit
+# user approval.
 SUITE_TARGETS_SECONDS = {
     "core": 8.0,
     "extended": 12.0,
@@ -65,9 +67,9 @@ PER_TEST_BUDGETS_SECONDS = {
     "full": 3.0,
 }
 SUITE_TEST_COUNT_BUDGETS = {
-    "core": 755,
+    "core": 903,
     "extended": 97,
-    "full": 852,
+    "full": 1000,
 }
 
 
