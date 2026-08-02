@@ -1,5 +1,12 @@
 # Game Version Update Plan
 
+## Status
+
+The shared inventory, RPG Maker MV/MZ semantic merge, staged and transactional
+apply paths, recovery history, Git-original fallback, and sidebar UI are
+implemented. This document remains the design record and roadmap for the
+unimplemented packed-engine normalization work, including Ace and WOLF.
+
 ## Goal
 
 Add a dedicated **Version Update** page to the main sidebar that updates an

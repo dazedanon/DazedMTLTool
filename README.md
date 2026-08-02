@@ -8,6 +8,9 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 - **Sakura & Kao_SSS** — TL Inspector (`util/tl_inspector/`) — in-game translation source inspector and live-edit plugin for RPG Maker MV/MZ playtesting.
 - **Len** — [Forge](https://gitgud.io/zero64801/forge-mvmz) MV/MZ playtest plugin (`util/forge/`), Mistral API support (provider integration and adaptive rate limiting), and batch translation mode.
 
+Bundled asset sources, checksums, and license-record status are tracked in
+[`docs/third-party-assets.md`](docs/third-party-assets.md).
+
 ## Table of Contents
 
 - [Supported Engines](#supported-engines)
@@ -321,8 +324,8 @@ Cost tracking is exact: per-file and total costs printed after the consume pass 
 billed token counts (cache reads at 0.1x, cache writes at 2x, output at the output rate) with
 the 50% batch discount applied.
 
-`python selftest_batch.py` round-trips the whole flow offline (no API key needed) if you want
-to verify the pipeline after making changes.
+Hermetic batch collection, resume, fetch, and consume coverage runs offline as
+part of `./tests/run_tests.sh core`; no API key is required.
 
 ---
 
@@ -449,6 +452,16 @@ is frozen in the manifest before any provider-specific request is generated.
 | `log/` | Translation logs and cache |
 | `modules/` | Engine-specific translation scripts |
 | `gui/` | GUI source code |
+
+Maintainers can review regenerable workspace artifacts without deleting them:
+
+```bash
+python scripts/clean_workspace.py --all --keep-captures 5
+```
+
+After reviewing every listed path, repeat with `--apply` to remove it. The
+cleaner never targets `files/`, `translated/`, translation caches, evaluation
+archives, virtual environments, Git branches, or stashes.
 
 ---
 
@@ -646,3 +659,7 @@ Install [GitLens](https://marketplace.visualstudio.com/items?itemName=eamodio.gi
 - **`START.bat` closes immediately** — Make sure Python 3.12–3.14 is installed and added to your PATH. Open a terminal and run `python -V` to check.
 - **API errors** — Double-check your API key and organization in `.env`. Make sure you have credits/quota with your provider.
 - **Missing dependencies** — Delete the `.venv` folder and run `START.bat` again. It will recreate the environment and reinstall everything.
+- **Provider request diagnostics** — Set `debugRequestLogs=true` in `.env` only
+  while diagnosing provider behavior. These rotated logs contain complete prompt
+  payloads; disable the setting and remove them with
+  `python scripts/clean_workspace.py --debug-logs --apply` afterward.

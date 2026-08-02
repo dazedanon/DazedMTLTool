@@ -1,0 +1,38 @@
+{
+    "gameTitle": "テストゲーム",
+    "terms": {
+        "basic": [
+            "",
+            "戦う",
+            "逃げる"
+        ],
+        "commands": [],
+        "params": [],
+        "messages": {
+            "alwaysDash": "常時ダッシュ"
+        }
+    },
+    "armorTypes": [
+        "",
+        "一般防具",
+        "魔法防具",
+        "軽装防具",
+        "重装防具",
+        "小型盾",
+        "大型盾"
+    ],
+    "skillTypes": [
+        ""
+    ],
+    "weaponTypes": [
+        ""
+    ],
+    "elements": [
+        ""
+    ],
+    "equipTypes": [
+        ""
+    ],
+    "variables": [],
+    "switches": []
+}

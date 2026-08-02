@@ -4,10 +4,57 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import util.translation as T
+
+
+class DebugRequestLoggingTests(unittest.TestCase):
+    """Exact prompt payloads stay private by default and bounded when enabled."""
+
+    def test_request_payload_logging_is_opt_in(self):
+        with tempfile.TemporaryDirectory() as raw:
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(raw)
+                with (
+                    mock.patch.dict(os.environ, {}, clear=True),
+                    mock.patch.object(T, "DEBUG", False),
+                ):
+                    T._write_request_debug_log(
+                        "openai", {"messages": [{"content": "private text"}]}, None
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertFalse((Path(raw) / "log" / "request_debug.log").exists())
+
+    def test_enabled_debug_logs_rotate_to_bounded_backups(self):
+        with tempfile.TemporaryDirectory() as raw:
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(raw)
+                with (
+                    mock.patch.dict(os.environ, {"debugRequestLogs": "true"}, clear=True),
+                    mock.patch.object(T, "DEBUG_LOG_MAX_BYTES", 128),
+                    mock.patch.object(T, "DEBUG_LOG_BACKUP_COUNT", 2),
+                ):
+                    for index in range(5):
+                        T._write_request_debug_log(
+                            "openai", {"request": index, "text": "x" * 80}, None
+                        )
+            finally:
+                os.chdir(original_cwd)
+
+            path = Path(raw) / "log" / "request_debug.log"
+            self.assertTrue(path.is_file())
+            self.assertTrue(path.with_name("request_debug.log.1").is_file())
+            self.assertTrue(path.with_name("request_debug.log.2").is_file())
+            self.assertFalse(path.with_name("request_debug.log.3").exists())
 
 
 class RequestContextSerializationTests(unittest.TestCase):

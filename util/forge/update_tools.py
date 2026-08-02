@@ -4,8 +4,8 @@ Upstream: https://gitgud.io/zero64801/forge-mvmz
 CI builds a unified forge.js plugin (master branch artifacts) for MZ.
 
 RPG Maker MV ships with NW.js / Chrome ~65, which cannot run the rewritten
-Svelte Forge bundle. MV therefore keeps the pre-rewrite legacy plugin
-(``Forge_MV.js`` / ``upstream/Forge_MV.js`` / ``legacy/Forge_MV.js``).
+Svelte Forge bundle. MV therefore keeps the pre-rewrite legacy plugin in
+``Forge_MV.js`` and its offline ``upstream/Forge_MV.js`` copy.
 
 Offline copies: util/forge/upstream/
 Active plugins: util/forge/Forge_MZ.js (modern), util/forge/Forge_MV.js (legacy)

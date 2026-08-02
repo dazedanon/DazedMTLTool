@@ -1,0 +1,65 @@
+{
+  "description": "Expected _original values after one mocked translation pass over Map_original_fixture.json. Each case maps to a supported source-preservation code path.",
+  "cases": [
+    {
+      "id": "401_speaker_color",
+      "code": 401,
+      "summary": "Standalone \\C[n]Name\\C[n] speaker line (full string in _original)",
+      "expected_original": "\\C[2]テスト子\\C[0]"
+    },
+    {
+      "id": "401_dialogue_after_speaker",
+      "code": 401,
+      "summary": "Single dialogue line following a speaker-color line",
+      "expected_original": "「スピーカー後のセリフ」"
+    },
+    {
+      "id": "401_dialogue_merged",
+      "code": 401,
+      "summary": "Two consecutive 401 lines merged into one translation batch",
+      "expected_original": "複数行の\nダイアログです。"
+    },
+    {
+      "id": "405_scroll",
+      "code": 405,
+      "summary": "405 Show Text (Scrolling) — same _original path as 401",
+      "expected_original": "スクロール文テスト"
+    },
+    {
+      "id": "102_choices",
+      "code": 102,
+      "summary": "102 Show Choices — parallel _original array (incl. if(...) prefix on one choice)",
+      "expected_original": ["はい", "if($gameSwitches.value(1))いいえ", "たぶん"]
+    },
+    {
+      "id": "408_choice_help",
+      "code": 408,
+      "summary": "408 choice-help comment line after 108 選択肢ヘルプ marker",
+      "expected_original": "これは選択肢のヘルプです。"
+    },
+    {
+      "id": "101_namebox_color",
+      "code": 101,
+      "summary": "101 name box with \\C[n] wrapper in parameters[4]",
+      "expected_original": "\\C[2]アリス\\C[0]"
+    },
+    {
+      "id": "401_after_namebox",
+      "code": 401,
+      "summary": "Dialogue line after 101 name box",
+      "expected_original": "「名前付きメッセージ」"
+    },
+    {
+      "id": "122_variable",
+      "code": 122,
+      "summary": "122 Set Variables — inner quoted value only",
+      "expected_original": "変数の中身"
+    },
+    {
+      "id": "122_variable_semicolon",
+      "code": 122,
+      "summary": "122 with trailing semicolon outside backticks",
+      "expected_original": "セミコロン"
+    }
+  ]
+}

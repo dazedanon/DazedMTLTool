@@ -1,0 +1,55 @@
+{
+    "actors": {
+        "entry_index": 1,
+        "expected_original": {
+            "name": "テスト子",
+            "nickname": "テスト",
+            "profile": "一人の少女。\n冒険が好き。"
+        }
+    },
+    "items": {
+        "entry_index": 1,
+        "expected_original": {
+            "name": "回復薬",
+            "description": "HPを回復する。\n小さな傷に効く。"
+        }
+    },
+    "skills": {
+        "entry_index": 1,
+        "expected_original": {
+            "name": "ファイア",
+            "description": "炎の魔法。",
+            "message1": "のファイア！"
+        }
+    },
+    "states": {
+        "entry_index": 1,
+        "expected_original": {
+            "name": "毒",
+            "description": "毒状態。\n毎ターンダメージ。",
+            "message1": "は毒にかかった！"
+        }
+    },
+    "system": {
+        "expected_original": {
+            "gameTitle": "テストゲーム",
+            "terms": {
+                "basic": {
+                    "1": "戦う",
+                    "2": "逃げる"
+                },
+                "messages": {
+                    "alwaysDash": "常時ダッシュ"
+                }
+            },
+            "armorTypes": {
+                "1": "一般防具",
+                "2": "魔法防具",
+                "3": "軽装防具",
+                "4": "重装防具",
+                "5": "小型盾",
+                "6": "大型盾"
+            }
+        }
+    }
+}

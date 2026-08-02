@@ -302,15 +302,15 @@ no network, and no mutation actions.
 Run the executable gates from the repository root:
 
 ```bash
-./venv/bin/python -m unittest tests.test_gui_ux_contract
-./venv/bin/python scripts/capture_app_ui.py \
+./.venv/bin/python -m unittest tests.test_gui_ux_contract
+./.venv/bin/python scripts/capture_app_ui.py \
   --sizes 2048x1226,1440x900,1280x720 \
   --font-scales 1,1.5,2 --states default,active,disabled,error --overlay
-./venv/bin/python scripts/capture_workflow_ui.py \
+./.venv/bin/python scripts/capture_workflow_ui.py \
   --sizes 2048x1226,1440x900,1280x720 \
   --font-scales 1,1.5,2 --states ready,error,disabled --overlay
-./venv/bin/python scripts/run_workflow_action_harness.py
-./venv/bin/python -m unittest discover -s tests -p 'test_*.py'
+./.venv/bin/python scripts/run_workflow_action_harness.py
+./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
 ```
 
 Generated evidence is written below `.tmp-ui/` and is intentionally not part

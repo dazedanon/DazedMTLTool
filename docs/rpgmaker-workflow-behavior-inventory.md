@@ -122,7 +122,7 @@ boundaries, or destinations.
 Run the behavior-preservation harness independently with:
 
 ```bash
-venv/bin/python scripts/run_workflow_action_harness.py
+.venv/bin/python scripts/run_workflow_action_harness.py
 ```
 
 The harness has two layers:

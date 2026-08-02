@@ -1,5 +1,12 @@
 # Engine-Agnostic Image Manager Plan
 
+## Status
+
+The first-release shared manager, RPG Maker MV/MZ profile, Generic / Loose
+Images profile, workspace safety checks, workflow handoff, and regression
+coverage are implemented. This document remains the design record for later
+profiles and publishing backends.
+
 ## Goal
 
 Turn the RPG Maker MV/MZ Image Manager into an engine-agnostic Images page while

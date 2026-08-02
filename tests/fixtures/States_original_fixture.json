@@ -1,0 +1,13 @@
+[
+    null,
+    {
+        "id": 1,
+        "name": "毒",
+        "description": "毒状態。\n毎ターンダメージ。",
+        "message1": "は毒にかかった！",
+        "message2": "",
+        "message3": "",
+        "message4": "",
+        "note": ""
+    }
+]

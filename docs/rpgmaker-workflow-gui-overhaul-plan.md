@@ -1,4 +1,4 @@
-# RPG Maker Workflow GUI Overhaul Plan
+# RPG Maker Workflow GUI Overhaul — Historical Implementation Record
 
 ## Status
 
@@ -7,6 +7,10 @@ this project changes its presentation, interaction hierarchy, and
 visual-development tooling while preserving the existing translation pipeline.
 The current build is the visual-review candidate; future visual changes should
 use the iteration protocol and capture harness defined below.
+
+This document preserves the original decisions and delivery sequence. It is not
+the current task tracker. The durable UI contract lives in `gui-ux-contract.md`,
+and current suite counts and timings live in `tests/TEST_SUITE_AUDIT.md`.
 
 ### Completion record
 
@@ -27,8 +31,8 @@ use the iteration protocol and capture harness defined below.
 - The final structural stress audit rendered every step at 1280x720, 1440x900,
   and 2048x1226 with 100%, 150%, and 200% fonts in ready, warning, and error
   states. Its 243 step inspections contain zero geometry violations.
-- The repository test suite passes: 535 tests, including the new theme,
-  navigation, disclosure-state, activity-persistence, and image-diff tests.
+- The repository suite passed at completion, including the new theme,
+  navigation, disclosure-state, activity-persistence, and image-diff coverage.
 - The action harness clicks 49 production control routes across all nine steps
   and runs 16 real-handler contracts against disposable MV, MZ, and Ace
   fixtures with workers, dialogs, subprocesses, and installers substituted.
@@ -446,7 +450,7 @@ repeated visual or behavioral contract.
 Add `scripts/capture_workflow_ui.py` with a command similar to:
 
 ```bash
-venv/bin/python scripts/capture_workflow_ui.py \
+.venv/bin/python scripts/capture_workflow_ui.py \
   --output .tmp-ui/rpgmaker-workflow \
   --sizes 1440x900,1280x720 \
   --font-scales 1.0,1.5

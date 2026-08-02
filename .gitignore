@@ -1,44 +1,56 @@
-
+# Private configuration
 .env
-*.tmp
-*.json
-*.js
-*.yaml
-*.yml
-*.txt
-*.log
-logs/
-log/
-*.rpy
-*.csv
-*.ks
-*.cid
-*.png
-*.script
-__pycache__
+.env.*
+!.env.example
 
-!assets/*.png
-!assets/engine_icons/**
-!.pre-commit-config.yaml
-!.github/workflows/tests.yml
-!tests/TEST_SUITE_AUDIT.md
-!.git_archival.txt
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Generated visual-review evidence
+.tmp-ui/
+
+# Runtime workspaces. Keep only their directory placeholders in Git.
+files/**
+!files/.gitkeep
+translated/**
+!translated/.gitkeep
+log/**
+!log/.gitkeep
+logs/
+
+# User-owned runtime data. Shipped defaults below must remain trackable because
+# tool updates are installed from Git branch archives.
+data/api_keys.json
+data/last_update_sha.txt
+data/vocab.txt
+data/wolf_safe_notes.json
+data/wolf_speakers.json
+
 !data/skills/**
 !data/help/**
 !data/glossary_base.txt
 !data/translation_contexts.json
 !data/sfx_reference/**
-!requirements.txt
-!util/tl_inspector/TLInspector.js
-!util/forge/Forge_MZ.js
-!util/forge/Forge_MV.js
-!util/forge/upstream/Forge_MZ.js
-!util/forge/upstream/Forge_MV.js
+
+# Materialized copies and update state for bundled third-party tools.
 util/forge/.forge_version.json
+util/forge/legacy/
 util/ace/*.exe
 util/ace/.tools_version.json
 util/wolfdawn/.wolf_version.json
-!util/ace/offline/*.exe
 
-# WolfDawn: keep the committed prebuilt binaries (offline) under version control.
+# Offline bundles are source assets and must remain trackable.
+!util/ace/offline/*.exe
 !util/wolfdawn/bin/**
+
+# Common editor/OS and interrupted-write artifacts
+*.tmp
+*.part
+.DS_Store
+Thumbs.db
