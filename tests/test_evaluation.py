@@ -70,6 +70,15 @@ class EvaluationAtomicWriteTests(unittest.TestCase):
                     with evaluation._evaluation_submit_lock(run_dir):
                         pass
 
+    def test_refresh_uses_the_same_run_mutation_lock(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary) / "run-one"
+            with evaluation._evaluation_submit_lock(run_dir):
+                with self.assertRaisesRegex(RuntimeError, "already being submitted"):
+                    evaluation.refresh_run(run_dir, {})
+
+            self.assertFalse((run_dir / ".submit.lock").exists())
+
 
 class EvaluationSourceFolderTests(unittest.TestCase):
     def test_event_capture_uses_selected_glossary_without_leaking_runtime_state(self):
@@ -1875,6 +1884,65 @@ class EvaluationHistoryTests(unittest.TestCase):
             self.assertEqual(saved["storage"], "completed")
             self.assertEqual(evaluation.locate_run(project, "finished-run"), archived)
 
+    def test_failed_completed_archive_remains_visible_and_retries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            work = project / "log" / "evaluation_work" / "finished-run"
+            evaluation._atomic_write_json(work / "manifest.json", {
+                "source_dir": str(project / "game"),
+                "corpus_summary": {"selected_segments": 0},
+            })
+            state = {
+                "run_id": "finished-run",
+                "created_at": "2026-08-01T12:00:00+00:00",
+                "updated_at": "2026-08-01T12:30:00+00:00",
+                "status": "completed",
+                "managed_storage": True,
+                "storage": "working",
+                "candidates": [],
+            }
+            evaluation._atomic_write_json(work / "state.json", state)
+
+            with mock.patch.object(
+                Path, "rename", side_effect=PermissionError("directory locked")
+            ):
+                retained = evaluation._archive_completed_run(work, state)
+                runs = evaluation.list_runs(project)
+
+            saved, _manifest = evaluation.load_run(retained)
+            self.assertEqual(retained, work)
+            self.assertTrue(saved["archive_pending"])
+            self.assertEqual(saved["storage"], "working")
+            self.assertEqual([run["run_id"] for run in runs], ["finished-run"])
+
+            maintenance = evaluation.maintain_evaluation_storage(project)
+            archived = project / "log" / "evaluations" / "finished-run"
+            saved, _manifest = evaluation.load_run(archived)
+            self.assertFalse(work.exists())
+            self.assertTrue(archived.is_dir())
+            self.assertEqual(maintenance["moved"], [(work, archived)])
+            self.assertNotIn("archive_pending", saved)
+            self.assertNotIn("archive_error", saved)
+
+    def test_storage_maintenance_does_not_archive_a_locked_run(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            work = project / "log" / "evaluation_work" / "finished-run"
+            evaluation._atomic_write_json(work / "manifest.json", {})
+            evaluation._atomic_write_json(work / "state.json", {
+                "run_id": "finished-run",
+                "status": "completed",
+                "managed_storage": True,
+                "storage": "working",
+                "candidates": [],
+            })
+
+            with evaluation._evaluation_submit_lock(work):
+                maintenance = evaluation.maintain_evaluation_storage(project)
+
+            self.assertTrue(work.is_dir())
+            self.assertEqual(maintenance["moved"], [])
+
     def test_evaluation_archive_round_trip_never_overwrites_existing_run(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary) / "project"
@@ -2235,6 +2303,30 @@ class BlindReviewTests(unittest.TestCase):
             ",B>A=C>D,",
             (self.run_dir / "blind_review.csv").read_text(encoding="utf-8-sig"),
         )
+
+    def test_import_rejects_blank_review_without_overwriting_existing_review(self):
+        review_path = evaluation.export_blind_review(
+            self.run_dir, self.run_dir / "external" / "review.csv"
+        )
+        canonical = self.run_dir / "blind_review.csv"
+        canonical.write_text("existing reviewed content\n", encoding="utf-8")
+        state_path = self.run_dir / "state.json"
+        state = evaluation._read_json(state_path)
+        existing_review = {
+            "reviewed": 1,
+            "points": {"candidate-1": 3},
+        }
+        state["human_review"] = existing_review
+        evaluation._atomic_write_json(state_path, state)
+
+        with self.assertRaisesRegex(ValueError, "no completed rankings"):
+            evaluation.import_blind_review(self.run_dir, review_path)
+
+        self.assertEqual(
+            canonical.read_text(encoding="utf-8"), "existing reviewed content\n"
+        )
+        saved = evaluation._read_json(state_path)
+        self.assertEqual(saved["human_review"], existing_review)
 
     def test_import_rejects_modified_source_or_candidate_cells(self):
         for field, replacement, message in (

@@ -3569,8 +3569,8 @@ def last_translation_had_mismatch() -> bool:
     return bool(getattr(_thread_local, "last_translation_had_mismatch", False))
 
 
-@retry(exceptions=Exception, tries=5, delay=5)
 @_cache_reservation_scope()
+@retry(exceptions=Exception, tries=5, delay=5)
 def translateAI(text, history, config, filename=None, pbar=None, lock=None, mismatchList=None):
     """
     Main translation entry point used by all modules.

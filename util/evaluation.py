@@ -79,6 +79,11 @@ ATOMIC_REPLACE_MAX_DELAY_SECONDS = 0.5
 JAPANESE_RE = re.compile(r"[一-龠々〆〤ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]")
 LANGUAGE_REGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 
+
+class _EvaluationRunBusyError(RuntimeError):
+    """Raised when another process owns an evaluation run mutation lock."""
+
+
 DEFAULT_CANDIDATES = (
     {"provider": "openai", "endpoint": "https://api.openai.com/v1", "model": "gpt-5.6-terra", "label": "GPT-5.6 Terra", "execution": "batch"},
     {"provider": "gemini", "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/", "model": "gemini-3.6-flash", "label": "Gemini 3.6 Flash", "execution": "batch"},
@@ -1539,13 +1544,31 @@ def maintain_evaluation_storage(project_root: str | Path) -> dict:
         run_dir.rename(target)
         moved.append((run_dir, target))
     for run_dir in list(work_root.iterdir()):
-        if (
-            run_dir.is_dir()
-            and not run_dir.is_symlink()
-            and not any(run_dir.iterdir())
-        ):
+        if not run_dir.is_dir() or run_dir.is_symlink():
+            continue
+        if not any(run_dir.iterdir()):
             run_dir.rmdir()
             discarded.append(run_dir)
+            continue
+        try:
+            state, _manifest = load_run(run_dir)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            continue
+        if state.get("status") == "completed":
+            try:
+                with _evaluation_submit_lock(run_dir):
+                    # The state may have changed while maintenance waited for
+                    # the lock, so only archive a still-completed run.
+                    state, _manifest = load_run(run_dir)
+                    if state.get("status") != "completed":
+                        continue
+                    archived = _archive_completed_run(run_dir, state)
+            except _EvaluationRunBusyError:
+                # Submit or refresh owns the run. Its completion path will
+                # archive it, or a later maintenance pass will retry.
+                continue
+            if archived != run_dir:
+                moved.append((run_dir, archived))
     legacy_pointer = archive_root / "latest.json"
     if legacy_pointer.is_file() and not legacy_pointer.is_symlink():
         legacy_pointer.unlink()
@@ -1574,15 +1597,30 @@ def _archive_completed_run(root: Path, state: dict) -> Path:
     if root.parent.name != EVALUATION_WORK_DIR or root.parent.parent.name != "log":
         return root
     project_root = root.parent.parent.parent
-    archive_root, work_root = _evaluation_storage_roots(project_root)
+    archive_root, _work_root = _evaluation_storage_roots(project_root)
     archive_root.mkdir(parents=True, exist_ok=True)
     target = _unique_run_path(archive_root, root.name)
+    try:
+        root.rename(target)
+    except OSError as exc:
+        if not root.is_dir():
+            raise
+        # Completion is the durable result; moving it into history is only
+        # housekeeping. Keep a visible, retryable working copy if a scanner or
+        # another process temporarily prevents the directory rename.
+        state["storage"] = "working"
+        state["archive_pending"] = True
+        state["archive_error"] = str(exc)[:500]
+        state["updated_at"] = _utc_now()
+        _atomic_write_json(root / "state.json", state)
+        return root
     state["run_id"] = target.name
     state["storage"] = "completed"
     state["archived_at"] = _utc_now()
     state["updated_at"] = state["archived_at"]
-    _atomic_write_json(root / "state.json", state)
-    root.rename(target)
+    state.pop("archive_pending", None)
+    state.pop("archive_error", None)
+    _atomic_write_json(target / "state.json", state)
     prune_completed_evaluations(project_root)
     return target
 
@@ -1792,7 +1830,7 @@ def list_runs(project_root: str | Path) -> list[dict]:
         archive_root: {"completed"},
         work_root: {
             "prepared", "submitted", "partially_submitted", "imported_paused",
-            "failed",
+            "failed", "completed",
         },
     }
     for runs_root, statuses in visible_statuses.items():
@@ -2476,8 +2514,10 @@ def _execute_live_candidate(
 
 @contextmanager
 def _evaluation_submit_lock(run_dir: Path):
-    """Prevent two processes from submitting paid work for the same run."""
-    lock_path = run_dir / ".submit.lock"
+    """Serialize state-changing submit and refresh work for one run."""
+    # Keep the lock beside the run directory so a completed run can be renamed
+    # while the handle is open (notably on Windows).
+    lock_path = run_dir.parent / f".{run_dir.name}.submit.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with open(lock_path, "a+b") as lock_file:
         lock_file.seek(0, os.SEEK_END)
@@ -2493,9 +2533,10 @@ def _evaluation_submit_lock(run_dir: Path):
                 import fcntl
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
-            raise RuntimeError(
-                "This evaluation run is already being submitted by another "
-                "DazedTL process. Close the other process or wait for it to finish."
+            raise _EvaluationRunBusyError(
+                "This evaluation run is already being submitted or refreshed by "
+                "another DazedTL process. Close the other process or wait for it "
+                "to finish."
             ) from None
         try:
             yield
@@ -2794,6 +2835,13 @@ def _stability_score(manifest: dict, processed: dict) -> dict:
 
 def refresh_run(run_dir: str | Path, credentials: dict[str, str],
                 log: Callable[[str], None] | None = None) -> dict:
+    root = Path(run_dir)
+    with _evaluation_submit_lock(root):
+        return _refresh_run_unlocked(root, credentials, log)
+
+
+def _refresh_run_unlocked(run_dir: str | Path, credentials: dict[str, str],
+                          log: Callable[[str], None] | None = None) -> dict:
     root = Path(run_dir)
     state, manifest = load_run(root)
     log = log or (lambda _message: None)
@@ -3473,6 +3521,8 @@ def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
             seen_samples.add(review_id)
             reviewed += 1
             reviewed_lines += line_count
+    if reviewed == 0:
+        raise ValueError("Reviewed CSV contains no completed rankings")
     points = {
         candidate_id: int(score) if score.is_integer() else score
         for candidate_id, score in points.items()

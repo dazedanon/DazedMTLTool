@@ -225,6 +225,27 @@ class PendingMarkerTests(CacheTestBase):
         self.assertNotIn(key, T._read_cache_from_disk())
         self.assertNotIn(key, T._cache)
 
+    def test_reservation_scope_stays_active_across_retries(self):
+        payload = '{"Line1": "再試行"}'
+        key = T.get_cache_key(payload, "English")
+        attempts = 0
+
+        @T._cache_reservation_scope()
+        @T.retry(exceptions=RuntimeError, tries=2, delay=0, logger=None)
+        def translate_with_retry():
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                self.assertIsNone(T.get_cached_translation(payload, "English"))
+                raise RuntimeError("transient provider failure")
+            entry = T._read_cache_from_disk().get(key)
+            self.assertTrue(T._is_own_pending_cache_entry(entry))
+            return "translated"
+
+        self.assertEqual(translate_with_retry(), "translated")
+        self.assertEqual(attempts, 2)
+        self.assertNotIn(key, T._read_cache_from_disk())
+
 
 class MergeTests(CacheTestBase):
     def test_pending_never_overwrites_real_translation(self):
