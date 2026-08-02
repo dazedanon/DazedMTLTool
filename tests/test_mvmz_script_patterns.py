@@ -122,7 +122,7 @@ class TestMVMZScriptPatterns(unittest.TestCase):
             "テキスト-Kiss",
         )
 
-    def test_battle_manager_can_escape_pattern_definition(self):
+    def test_battle_manager_can_escape_extracts_only_message_text(self):
         regex, multiline = mvmz.PATTERNS_355655["if (BattleManager.canEscape())"]
 
         self.assertEqual(
@@ -130,9 +130,6 @@ class TestMVMZScriptPatterns(unittest.TestCase):
             r'\$gameMessage\.add\(\s*"((?:\\.|[^"\\])*)"\s*\)',
         )
         self.assertTrue(multiline)
-
-    def test_battle_manager_can_escape_extracts_only_message_text(self):
-        regex, _ = mvmz.PATTERNS_355655["if (BattleManager.canEscape())"]
         script = r'$gameMessage.add("この戦闘では逃げることはできない！")'
 
         match = re.search(regex, script)
@@ -203,6 +200,67 @@ class TestMVMZScriptPatterns(unittest.TestCase):
         self.assertEqual(translated_page["list"][1], page["list"][1])
         self.assertEqual(translated_page["list"][3], page["list"][3])
         self.assertEqual(translated_page["list"][4], page["list"][4])
+
+    def test_game_message_show_continuations_translate_and_preserve_newlines(self):
+        source_messages = [
+            "わ、笑わないでよ！…　これじゃ　お嬢様にも笑われるっ…",
+            "驚いて失神するなんて…\\nこれじゃぁ、私の失態を見たかった　お嬢様の思うツボじゃないの！…\\nあぁ、悔しいっ…",
+        ]
+        translated_messages = [
+            "D-don't laugh at me!",
+            "I can't believe I fainted...\nIt's exactly what Milady wanted!",
+        ]
+        page = {
+            "list": [
+                {
+                    "code": 355,
+                    "indent": indent,
+                    "parameters": ["$gameMessage.show(this,"],
+                }
+                if offset == 0
+                else {
+                    "code": 655,
+                    "indent": indent,
+                    "parameters": [f"'{message}')"],
+                }
+                for indent, message in enumerate(source_messages, start=1)
+                for offset in range(2)
+            ]
+        }
+
+        def translate(text, history, batch=False):
+            self.assertEqual(
+                text,
+                [source_messages[0], source_messages[1].replace(r"\n", "\n")],
+            )
+            return [copy.deepcopy(translated_messages), [0, 0]]
+
+        original_translate = mvmz.translateAI
+        original_code355655 = mvmz.CODE355655
+        original_enabled = mvmz.ENABLED_PATTERNS_355655
+        mvmz.translateAI = translate
+        mvmz.CODE355655 = True
+        mvmz.ENABLED_PATTERNS_355655 = {"$gameMessage.show(this,"}
+        try:
+            translated_page = copy.deepcopy(page)
+            mvmz.searchCodes(translated_page, None, [], "TestMap.json")
+        finally:
+            mvmz.translateAI = original_translate
+            mvmz.CODE355655 = original_code355655
+            mvmz.ENABLED_PATTERNS_355655 = original_enabled
+
+        self.assertEqual(
+            [entry["indent"] for entry in translated_page["list"]],
+            [1, 1, 2, 2],
+        )
+        self.assertEqual(
+            translated_page["list"][1]["parameters"][0],
+            r"'D-don\'t laugh at me!')",
+        )
+        self.assertEqual(
+            translated_page["list"][3]["parameters"][0],
+            r"'I can\'t believe I fainted...\nIt\'s exactly what Milady wanted!')",
+        )
 
 
 if __name__ == "__main__":

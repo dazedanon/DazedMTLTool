@@ -251,6 +251,7 @@ PATTERNS_355655 = {
     "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)', False),
     "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)', False),
     "$gameVariables._data": (r"\$gameVariables\._data(?:\[[^\]]+\])+\s*=\s*['\"]((?:\\.|[^'\"\\])*)['\"]", False),
+    "$gameMessage.show(this,": (r"'((?:\\.|[^'\\])*)'\s*\)", True),
     "$gameMessage.add": (r"\$gameMessage\.add\(.+?\)(.+?)", True),
     "if (BattleManager.canEscape())": (
         r'\$gameMessage\.add\(\s*"((?:\\.|[^"\\])*)"\s*\)',
@@ -275,7 +276,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = {"CBR-エロステータス"}
+ENABLED_PATTERNS_355655: set = {"$gameMessage.show(this,", "CBR-エロステータス"}
 
 
 def _pat355655_captured_text(match):
@@ -287,6 +288,24 @@ def _pat355655_replace_captured(source: str, match, replacement: str) -> str:
     """Replace only the visible capture, even when it also occurs in plugin syntax."""
     start, end = match.span(match.lastindex)
     return source[:start] + replacement + source[end:]
+
+
+def _escape_single_quoted_script_text(text: str) -> str:
+    """Keep translated text valid inside a single-quoted JavaScript string."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", r"\n")
+    escaped = []
+    preceding_backslashes = 0
+    for char in text:
+        if char == "'" and preceding_backslashes % 2 == 0:
+            escaped.append("\\")
+        escaped.append(char)
+        preceding_backslashes = preceding_backslashes + 1 if char == "\\" else 0
+    return "".join(escaped)
+
+
+def _decode_game_message_show_text(text: str) -> str:
+    """Expose JavaScript newline escapes to the translator as real line breaks."""
+    return text.replace(r"\n", "\n")
 
 
 def _reload_vocab():
@@ -3454,6 +3473,8 @@ def searchCodes(page, pbar, jobList, filename):
                                 if setData:
                                     # Store each line separately for batch translation
                                     for text in textLines:
+                                        if key == "$gameMessage.show(this,":
+                                            text = _decode_game_message_show_text(text)
                                         list355655.append(text)
                                 else:
                                     # Apply each translated line back to its corresponding 655 code
@@ -3465,6 +3486,10 @@ def searchCodes(page, pbar, jobList, filename):
                                             # Replace quotes with apostrophes to avoid breaking plugin
                                             translatedText = translatedText.replace('\\"', "'")
                                             translatedText = translatedText.replace('"', "'")
+                                            if key == "$gameMessage.show(this,":
+                                                translatedText = _escape_single_quoted_script_text(
+                                                    translatedText
+                                                )
                                             
                                             origParam = codeList[lineIdx]["parameters"][0]
                                             origMatch = re.search(regex, origParam)
