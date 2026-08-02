@@ -391,7 +391,10 @@ for missing lines, Japanese residue, and broken
 placeholders/control codes. Hover **Valid ⓘ** or **Consistency ⓘ** for the exact
 meaning of each score. Each row of the final CSV contains one source JSON array
 and one aligned translation array per randomized candidate. Model identities are
-shuffled independently per sample. Reviewers rank each complete block for Meaning
+shuffled independently per sample. When exporting, a model selector lets the
+reviewer compare any two or more candidates with usable results, so a failed model
+can be omitted without losing the blind review for the models that completed.
+Reviewers rank each complete block for Meaning
 Accuracy, Glossary & Prompt compliance, Natural & Contextual English, and Best
 Overall. Every ranking uses `>` and `=` for equivalent tiers (`A>B>C`, `A=B>C`,
 or `A=B=C`). Rankings receive fixed-sum

@@ -11,6 +11,8 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
     QGridLayout,
@@ -451,6 +453,10 @@ class EvaluationTab(QWidget):
         self.copy_review_skill_btn.setToolTip(
             "Copy instructions for an AI helper to review the blinded CSV. "
             "AI judgments can be biased and should be treated as a second opinion."
+        )
+        self.export_btn.setToolTip(
+            "Choose which models to compare, then export their translations "
+            "with randomized labels. Models with no usable output are unavailable."
         )
         self.prepare_btn.clicked.connect(self.prepare_benchmark)
         self.submit_btn.clicked.connect(self.submit_batches)
@@ -1927,11 +1933,97 @@ class EvaluationTab(QWidget):
 
         self._run_task(task, done)
 
+    def _choose_review_candidates(self) -> list[str] | None:
+        """Show the candidate selector used for a new blinded export."""
+        if not self.current_run_dir:
+            return None
+        choices = evaluation.blind_review_candidates(self.current_run_dir)
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Choose blind review models")
+        dialog.setMinimumWidth(560)
+        layout = QVBoxLayout(dialog)
+        explanation = QLabel(
+            "Select at least two models. Only the selected translations will "
+            "appear in the blinded CSV; failed models with no usable output "
+            "cannot be selected."
+        )
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        tree = QTreeWidget()
+        tree.setHeaderLabels(("Model", "Result", "Valid lines"))
+        tree.setRootIsDecorated(False)
+        tree.setAlternatingRowColors(True)
+        default_ids = {
+            choice["id"] for choice in choices
+            if choice.get("selected_by_default")
+        }
+        available_ids = {
+            choice["id"] for choice in choices if choice.get("available")
+        }
+        if len(default_ids) < 2:
+            default_ids = available_ids
+        for choice in choices:
+            available = bool(choice.get("available"))
+            status = str(choice.get("status") or "unknown").replace("_", " ").title()
+            if not available:
+                status = "Unavailable"
+            item = QTreeWidgetItem([
+                str(choice.get("label") or choice["id"]),
+                status,
+                f"{int(choice.get('valid_primary', 0) or 0):,}",
+            ])
+            item.setData(0, Qt.UserRole, choice["id"])
+            if available:
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(
+                    0, Qt.Checked if choice["id"] in default_ids else Qt.Unchecked
+                )
+            else:
+                item.setDisabled(True)
+                reason = str(choice.get("reason") or "No usable result")
+                item.setToolTip(0, reason)
+                item.setToolTip(1, reason)
+            tree.addTopLevelItem(item)
+        tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        tree.header().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        layout.addWidget(tree)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+
+        def accept_selection():
+            selected_count = sum(
+                tree.topLevelItem(index).checkState(0) == Qt.Checked
+                for index in range(tree.topLevelItemCount())
+            )
+            if selected_count < 2:
+                QMessageBox.warning(
+                    dialog, "Blind review models",
+                    "Select at least two models with usable translations.",
+                )
+                return
+            dialog.accept()
+
+        buttons.accepted.connect(accept_selection)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec_() != QDialog.Accepted:
+            return None
+        return [
+            str(tree.topLevelItem(index).data(0, Qt.UserRole))
+            for index in range(tree.topLevelItemCount())
+            if tree.topLevelItem(index).checkState(0) == Qt.Checked
+        ]
+
     def export_review(self):
         if not self.current_run_dir:
             return
         try:
-            coverage = evaluation.blind_review_coverage(self.current_run_dir)
+            candidate_ids = self._choose_review_candidates()
+            if candidate_ids is None:
+                return
+            coverage = evaluation.blind_review_coverage(
+                self.current_run_dir, candidate_ids
+            )
         except Exception as exc:
             QMessageBox.warning(self, "Blind review", str(exc))
             return
@@ -1941,11 +2033,13 @@ class EvaluationTab(QWidget):
         eligible_samples = coverage["eligible_samples"]
         total_samples = coverage["total_samples"]
         excluded_samples = coverage["excluded_samples"]
+        candidate_count = len(coverage["candidate_ids"])
         coverage_message = (
-            f"Blind review coverage: {eligible_samples:,}/{total_samples:,} "
+            f"Blind review coverage for {candidate_count:,} selected models: "
+            f"{eligible_samples:,}/{total_samples:,} "
             f"whole samples containing {eligible:,}/{total:,} lines will be "
             f"exported. {excluded_samples:,} samples are omitted because at "
-            "least one model has an invalid or missing line in them."
+            "least one selected model has an invalid or missing line in them."
         )
         self._append_log(coverage_message)
         set_status_text(self.status_label, coverage_message, "info")
@@ -1956,27 +2050,34 @@ class EvaluationTab(QWidget):
         if not selected:
             return
         try:
-            path = evaluation.export_blind_review(self.current_run_dir, selected)
+            path = evaluation.export_blind_review(
+                self.current_run_dir, selected, candidate_ids
+            )
             self._last_review_path = Path(path)
             self._append_log(f"Blinded review exported: {path}")
             set_status_text(
                 self.status_label,
-                f"Blind review exported with {eligible_samples:,}/{total_samples:,} "
+                f"Blind review exported for {candidate_count:,} models with "
+                f"{eligible_samples:,}/{total_samples:,} "
                 f"complete samples ({eligible:,}/{total:,} lines). "
                 f"{excluded_samples:,} samples were omitted because at least "
-                "one model had an invalid or missing line. "
+                "one selected model had an invalid or missing line. "
                 "Fill in the ranking column, then import the reviewed CSV.",
                 "success",
             )
             self._update_actions()
             QMessageBox.information(
                 self, "Blind review",
-                f"Exported {eligible_samples:,} of {total_samples:,} samples "
+                f"Exported {candidate_count:,} selected models across "
+                f"{eligible_samples:,} of {total_samples:,} samples "
                 f"containing {eligible:,} lines; {excluded_samples:,} samples "
-                f"and {excluded:,} lines were excluded because at least one model "
+                f"and {excluded:,} lines were excluded because at least one selected model "
                 "lacked a valid translation. "
-                "Rank every candidate in the ranking column, for example A>B>C. "
-                "Use = for tied tiers, such as A=B>C or A>B=C. Labels are "
+                f"Rank every candidate in the ranking column, for example "
+                f"{'>'.join(evaluation._blind_label(index) for index in range(candidate_count))}. "
+                f"Use = for ties, such as "
+                f"{'='.join(evaluation._blind_label(index) for index in range(candidate_count))}. "
+                "Labels are "
                 "randomized independently for every sample.",
             )
         except Exception as exc:
@@ -2069,6 +2170,10 @@ class EvaluationTab(QWidget):
         self.table.setRowCount(len(state.get("candidates", [])))
         human_review = state.get("human_review") or {}
         human_points = human_review.get("points")
+        reviewed_candidate_ids = set(
+            human_review.get("reviewed_candidate_ids")
+            or (human_points or {}).keys()
+        )
         quality_points = human_review.get("quality_points") or {}
         legacy_wins = human_review.get("wins") or {}
         for row, candidate in enumerate(state.get("candidates", [])):
@@ -2088,14 +2193,20 @@ class EvaluationTab(QWidget):
             else:
                 raw_status = candidate.get("api_status") or local_status
                 display_status = str(raw_status or "").replace("_", " ").title()
-            if isinstance(human_points, dict):
+            if (
+                isinstance(human_points, dict)
+                and candidate["id"] in reviewed_candidate_ids
+            ):
                 review_score = human_points.get(candidate["id"], "—")
             elif candidate["id"] in legacy_wins:
                 review_score = f"{legacy_wins[candidate['id']]} wins"
             else:
                 review_score = "—"
             quality_scores = [
-                (quality_points.get(metric) or {}).get(candidate["id"], "—")
+                (
+                    (quality_points.get(metric) or {}).get(candidate["id"], "—")
+                    if candidate["id"] in reviewed_candidate_ids else "—"
+                )
                 for metric in evaluation.REVIEW_QUALITY_METRICS
             ]
             values = (

@@ -283,6 +283,49 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertIn("blind_key.json", prompt)
             self.assertIn("biased", warning.call_args.args[2])
 
+    def test_export_review_uses_selected_candidate_subset(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            output = run_dir / "selected-review.csv"
+            selected_ids = ["candidate-1", "candidate-3"]
+            coverage = {
+                "total_segments": 10,
+                "eligible_segments": 8,
+                "excluded_segments": 2,
+                "total_samples": 5,
+                "eligible_samples": 4,
+                "excluded_samples": 1,
+                "candidate_ids": selected_ids,
+            }
+            self.tab.current_run_dir = run_dir
+            with (
+                mock.patch.object(
+                    self.tab, "_choose_review_candidates",
+                    return_value=selected_ids,
+                ),
+                mock.patch(
+                    "gui.evaluation_tab.evaluation.blind_review_coverage",
+                    return_value=coverage,
+                ) as review_coverage,
+                mock.patch(
+                    "gui.evaluation_tab.QFileDialog.getSaveFileName",
+                    return_value=(str(output), "CSV files (*.csv)"),
+                ),
+                mock.patch(
+                    "gui.evaluation_tab.evaluation.export_blind_review",
+                    return_value=output,
+                ) as export_review,
+                mock.patch("gui.evaluation_tab.QMessageBox.information"),
+                mock.patch.object(self.tab, "_update_actions"),
+            ):
+                self.tab.export_review()
+
+            review_coverage.assert_called_once_with(run_dir, selected_ids)
+            export_review.assert_called_once_with(
+                run_dir, str(output), selected_ids
+            )
+            self.assertEqual(self.tab._last_review_path, output)
+
     def test_history_lists_and_selects_previous_evaluations(self):
         older = Path("/tmp/evaluation-older")
         newer = Path("/tmp/evaluation-newer")

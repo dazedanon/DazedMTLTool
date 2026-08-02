@@ -2868,10 +2868,14 @@ def refresh_run(run_dir: str | Path, credentials: dict[str, str],
 
 def _candidate_results(
     run_dir: Path, state: dict, manifest: dict,
+    candidate_ids: list[str] | None = None,
 ) -> dict[str, dict]:
+    selected = set(candidate_ids) if candidate_ids is not None else None
     results = {}
     paths: set[str] = set()
     for candidate in state["candidates"]:
+        if selected is not None and candidate["id"] not in selected:
+            continue
         relative = str(candidate.get("result_file") or "")
         if not relative:
             continue
@@ -2895,13 +2899,85 @@ def _candidate_results(
     return results
 
 
-def _blind_review_data(root: Path, state: dict, manifest: dict) -> tuple[
+def _review_candidate_ids(state: dict, candidate_ids: list[str] | None) -> list[str]:
+    """Validate and normalize a requested blind-review candidate subset."""
+    known = [str(candidate["id"]) for candidate in state.get("candidates") or []]
+    if candidate_ids is None:
+        selected = known
+    else:
+        requested = [str(candidate_id) for candidate_id in candidate_ids]
+        if len(requested) != len(set(requested)):
+            raise ValueError("Blind review model selection contains duplicates")
+        unknown = sorted(set(requested) - set(known))
+        if unknown:
+            raise ValueError(
+                "Blind review model selection contains unknown candidates: "
+                + ", ".join(unknown)
+            )
+        selected = [candidate_id for candidate_id in known if candidate_id in requested]
+    if len(selected) < 2:
+        raise ValueError("Select at least two models for a blind review")
+    return selected
+
+
+def blind_review_candidates(run_dir: str | Path) -> list[dict]:
+    """Return candidate availability for the blind-review model selector."""
+    root = Path(run_dir)
+    state, manifest = load_run(root)
+    if state.get("status") not in {"completed", "failed"}:
+        raise ValueError("All comparison models must finish before blind export")
+    choices = []
+    for candidate in state.get("candidates") or []:
+        candidate_id = str(candidate["id"])
+        valid_primary = 0
+        reason = ""
+        try:
+            result = _candidate_results(
+                root, state, manifest, [candidate_id]
+            ).get(candidate_id)
+            if result is None:
+                raise ValueError("result file is missing")
+            for execution in (result.get("executions") or {}).values():
+                if execution.get("repetition") != 1:
+                    continue
+                valid_primary += sum(
+                    1 for line in execution.get("lines") or []
+                    if line.get("valid", True) and line.get("segment_id")
+                )
+            if not valid_primary:
+                reason = "No valid primary translations"
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            reason = str(exc)
+        available = valid_primary > 0
+        choices.append({
+            "id": candidate_id,
+            "label": str(
+                candidate.get("label") or candidate.get("model") or candidate_id
+            ),
+            "status": str(candidate.get("status") or "unknown"),
+            "valid_primary": valid_primary,
+            "available": available,
+            "selected_by_default": (
+                available and candidate.get("status") == "completed"
+            ),
+            "reason": reason,
+        })
+    return choices
+
+
+def _blind_review_data(
+    root: Path, state: dict, manifest: dict,
+    candidate_ids: list[str] | None = None,
+) -> tuple[
     dict[str, dict], dict[str, dict[str, str]], list[dict], dict,
 ]:
     """Collect valid primary outputs and calculate export coverage."""
-    results = _candidate_results(root, state, manifest)
-    candidates = state.get("candidates") or []
-    candidate_ids = [candidate["id"] for candidate in candidates]
+    candidate_ids = _review_candidate_ids(state, candidate_ids)
+    candidates = [
+        candidate for candidate in state.get("candidates") or []
+        if candidate["id"] in candidate_ids
+    ]
+    results = _candidate_results(root, state, manifest, candidate_ids)
     if set(results) != set(candidate_ids):
         missing = [
             candidate.get("label") or candidate.get("model") or candidate["id"]
@@ -2935,7 +3011,7 @@ def _blind_review_data(root: Path, state: dict, manifest: dict) -> tuple[
         expected = int(summary.get("expected_requests", 0) or 0)
         received = int(summary.get("received_requests", 0) or 0)
         errors = summary.get("provider_errors") or []
-        if candidate.get("status") == "failed" or (expected > 0 and received == 0):
+        if expected > 0 and received == 0:
             label = candidate.get("label") or candidate.get("model") or candidate_id
             detail = f"{label}: 0/{expected} requests received"
             if errors:
@@ -3001,6 +3077,7 @@ def _blind_review_data(root: Path, state: dict, manifest: dict) -> tuple[
         "eligible_samples": len(review_samples),
         "excluded_samples": len(logical_requests) - len(review_samples),
         "valid_primary_by_candidate": valid_primary,
+        "candidate_ids": candidate_ids,
     }
     if not eligible:
         raise ValueError(
@@ -3015,14 +3092,16 @@ def _blind_review_data(root: Path, state: dict, manifest: dict) -> tuple[
     return results, primary, review_samples, coverage
 
 
-def blind_review_coverage(run_dir: str | Path) -> dict:
+def blind_review_coverage(
+    run_dir: str | Path, candidate_ids: list[str] | None = None,
+) -> dict:
     """Return the samples and lines a blind export would contain."""
     root = Path(run_dir)
     state, manifest = load_run(root)
     if state.get("status") not in {"completed", "failed"}:
         raise ValueError("All comparison models must finish before blind export")
     _results, _primary, _eligible, coverage = _blind_review_data(
-        root, state, manifest
+        root, state, manifest, candidate_ids
     )
     return coverage
 
@@ -3091,14 +3170,17 @@ def export_blind_review_context(
     return system_path.resolve(), glossary_path.resolve(), sfx_path.resolve()
 
 
-def export_blind_review(run_dir: str | Path, output_path: str | Path | None = None) -> Path:
+def export_blind_review(
+    run_dir: str | Path, output_path: str | Path | None = None,
+    candidate_ids: list[str] | None = None,
+) -> Path:
     root = Path(run_dir)
     state, manifest = load_run(root)
     if state.get("status") not in {"completed", "failed"}:
         raise ValueError("All comparison models must finish before blind export")
-    candidate_ids = [candidate["id"] for candidate in state["candidates"]]
+    candidate_ids = _review_candidate_ids(state, candidate_ids)
     _results, primary, review_samples, _coverage = _blind_review_data(
-        root, state, manifest
+        root, state, manifest, candidate_ids
     )
 
     output = Path(output_path) if output_path else root / "blind_review.csv"
@@ -3195,8 +3277,17 @@ def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
     root = Path(run_dir)
     state, manifest = load_run(root)
     key = _read_json(root / "blind_key.json")
+    keyed_candidates = {
+        str(candidate_id)
+        for labels in key.values() if isinstance(labels, dict)
+        for candidate_id in labels.values()
+    }
+    candidate_ids = [
+        str(candidate["id"]) for candidate in state.get("candidates") or []
+        if str(candidate["id"]) in keyed_candidates
+    ]
     _results, primary, review_samples, _coverage = _blind_review_data(
-        root, state, manifest
+        root, state, manifest, candidate_ids
     )
     expected_samples = {
         str(sample["id"]): sample for sample in review_samples
@@ -3407,6 +3498,7 @@ def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
         "points": points,
         "quality_points": quality_points,
         "quality_first_place": quality_first_place,
+        "reviewed_candidate_ids": candidate_ids,
         "scoring": "fixed-sum-borda-average-per-line-v2",
         "imported_at": _utc_now(),
     }

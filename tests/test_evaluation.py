@@ -2454,6 +2454,47 @@ class BlindReviewTests(unittest.TestCase):
         self.assertEqual(coverage["total_samples"], 2)
         self.assertEqual(coverage["eligible_samples"], 1)
 
+    def test_failed_candidate_can_be_omitted_from_export_and_import(self):
+        state_path = self.run_dir / "state.json"
+        state = evaluation._read_json(state_path)
+        failed = state["candidates"][-1]
+        failed["status"] = "failed"
+        failed["result_file"] = ""
+        state["status"] = "failed"
+        evaluation._atomic_write_json(state_path, state)
+
+        choices = evaluation.blind_review_candidates(self.run_dir)
+        self.assertFalse(choices[-1]["available"])
+        self.assertEqual(choices[-1]["status"], "failed")
+        selected_ids = [candidate["id"] for candidate in state["candidates"][:3]]
+
+        coverage = evaluation.blind_review_coverage(
+            self.run_dir, selected_ids
+        )
+        self.assertEqual(coverage["candidate_ids"], selected_ids)
+        self.assertEqual(coverage["eligible_samples"], 1)
+
+        review_path = evaluation.export_blind_review(
+            self.run_dir, candidate_ids=selected_ids
+        )
+        with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertIn("C", rows[0])
+        self.assertNotIn("D", rows[0])
+        self._fill_rankings(rows[0], "A>B>C")
+        with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+
+        review = evaluation.import_blind_review(self.run_dir, review_path)
+        self.assertEqual(review["reviewed_candidate_ids"], selected_ids)
+        self.assertEqual(review["points"][failed["id"]], 0)
+        self.assertEqual(
+            sum(review["points"][candidate_id] for candidate_id in selected_ids),
+            3,
+        )
+
     def test_export_rejects_all_error_candidate_without_overwriting_csv(self):
         state_path = self.run_dir / "state.json"
         state = json.loads(state_path.read_text(encoding="utf-8"))
