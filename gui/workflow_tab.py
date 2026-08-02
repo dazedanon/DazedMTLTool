@@ -26,10 +26,9 @@ from util.paths import APP_NAME, ORG_NAME, ensure_game_glossary
 from util.skills import load_clipboard_skill, load_project_setup
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
 
-import jsbeautifier
 from dotenv import dotenv_values
 
-from PyQt5.QtCore import Qt, QSettings, QSize, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QSettings, QSize, QTimer
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication,
@@ -76,6 +75,17 @@ from gui.translation_tab import (
     default_translation_mode,
 )
 from gui.ui_components import CheckableFileList, equalize_button_widths
+from gui.workflow_workers import (
+    ExportWorker as _ExportWorker,
+    FileCopyWorker as _FileCopyWorker,
+    ImportWorker as _ImportWorker,
+    JsFormatWorker as _JsFormatWorker,
+    JsonFormatWorker as _JsonFormatWorker,
+    ReleaseZipWorker as _ReleaseZipWorker,
+    RpgMakerRewrapWorker as _RpgMakerRewrapWorker,
+    ScanWorker as _ScanWorker,
+    SubprocessWorker as _SubprocessWorker,
+)
 
 WORKFLOW_TL_NORMAL_LABEL = "Normal Translate"
 
@@ -174,199 +184,6 @@ PHASE2_CONFIG = {
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Background workers
-# ─────────────────────────────────────────────────────────────────────────────
-
-class _ScanWorker(QThread):
-    """Run project_scanner.list_data_files in a thread."""
-    done = pyqtSignal(object)  # list[dict]
-    error = pyqtSignal(str)
-
-    def __init__(self, data_path: str, engine: str):
-        super().__init__()
-        self.data_path = data_path
-        self.engine = engine
-
-    def run(self):
-        try:
-            from util.project_scanner import list_data_files
-            result = list_data_files(self.data_path, self.engine)
-            self.done.emit(result)
-        except Exception as exc:
-            self.error.emit(str(exc))
-
-
-class _ImportWorker(QThread):
-    """Copy selected files into files/ directory."""
-    done = pyqtSignal(int, list)   # count_copied, errors
-    log  = pyqtSignal(str)
-
-    def __init__(self, file_items: list[dict], dest_dir: str):
-        super().__init__()
-        self.file_items = file_items
-        self.dest_dir = dest_dir
-
-    def run(self):
-        try:
-            import shutil
-            from util.project_scanner import import_to_files
-
-            # Clear existing files/ contents before importing so stale files
-            # from a previous game don't linger. translated/ is intentionally
-            # left untouched.
-            dest = Path(self.dest_dir)
-            if dest.exists():
-                removed = 0
-                for fp in dest.iterdir():
-                    if fp.name == ".gitkeep":
-                        continue
-                    if fp.is_file():
-                        try:
-                            fp.unlink()
-                            removed += 1
-                        except Exception as e:
-                            self.log.emit(f"  ⚠ Could not remove {fp.name}: {e}")
-                    elif fp.is_dir():
-                        try:
-                            shutil.rmtree(fp)
-                            removed += 1
-                        except Exception as e:
-                            self.log.emit(f"  ⚠ Could not remove {fp.name}: {e}")
-                if removed:
-                    self.log.emit(f"Cleared {removed} existing file(s) from {dest.name}/")
-
-            self.log.emit(f"Importing {len(self.file_items)} file(s) into files/ …")
-            count, errors = import_to_files(self.file_items, self.dest_dir)
-            self.done.emit(count, errors)
-        except Exception as exc:
-            self.done.emit(0, [str(exc)])
-
-
-class _ExportWorker(QThread):
-    done = pyqtSignal(int, list)
-    log  = pyqtSignal(str)
-
-    def __init__(self, game_data_path: str, filter_names: list[str] | None = None):
-        super().__init__()
-        self.game_data_path = game_data_path
-        self.filter_names = filter_names  # if set, only export these filenames
-
-    def run(self):
-        try:
-            from util.project_scanner import export_to_game
-            if self.filter_names:
-                self.log.emit(
-                    f"Exporting {len(self.filter_names)} active file(s) → {self.game_data_path} …"
-                )
-            else:
-                self.log.emit(f"Exporting translated/ → {self.game_data_path} …")
-            count, errors = export_to_game(
-                "translated", self.game_data_path, filenames=self.filter_names
-            )
-            self.done.emit(count, errors)
-        except Exception as exc:
-            self.done.emit(0, [str(exc)])
-
-
-class _RpgMakerRewrapWorker(QThread):
-    """Scan or rewrite exported RPG Maker game JSON without invoking AI."""
-
-    done = pyqtSignal(object, bool)  # RewrapReport, apply
-    failed = pyqtSignal(str)
-
-    def __init__(self, directory: str, options, file_names: list[str], *, apply: bool):
-        super().__init__()
-        self.directory = directory
-        self.options = options
-        self.file_names = list(file_names)
-        self.apply = bool(apply)
-
-    def run(self):
-        try:
-            from util.rpgmaker_rewrap import rewrap_directory
-
-            report = rewrap_directory(
-                self.directory,
-                self.options,
-                file_names=self.file_names,
-                apply=self.apply,
-            )
-            self.done.emit(report, self.apply)
-        except Exception as exc:  # noqa: BLE001 - surface worker errors in the UI
-            self.failed.emit(str(exc))
-
-
-class _SubprocessWorker(QThread):
-    """Run an arbitrary shell command in a given working directory, streaming output."""
-    done = pyqtSignal(bool, str)   # success, final message
-    log  = pyqtSignal(str)
-
-    def __init__(self, cmd: list, cwd: str, label: str = ""):
-        super().__init__()
-        self.cmd   = cmd
-        self.cwd   = cwd
-        self.label = label or cmd[0]
-
-    def run(self):
-        import subprocess
-        import shutil as _shutil
-        try:
-            exe = _shutil.which(self.cmd[0])
-            if exe is None:
-                self.done.emit(
-                    False,
-                    f"'{self.cmd[0]}' not found on PATH. "
-                    "Make sure it is installed and accessible from the terminal.",
-                )
-                return
-            self.log.emit(f"$ {' '.join(str(c) for c in self.cmd)}  —  cwd: {self.cwd}")
-            proc = subprocess.Popen(
-                self.cmd,
-                cwd=self.cwd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            for line in proc.stdout:
-                stripped = line.rstrip("\n")
-                if stripped:
-                    self.log.emit(stripped)
-            proc.wait()
-            if proc.returncode == 0:
-                self.done.emit(True, f"{self.label}: finished successfully.")
-            else:
-                self.done.emit(False, f"{self.label}: exited with code {proc.returncode}.")
-        except Exception as exc:
-            self.done.emit(False, f"{self.label}: {exc}")
-
-
-class _JsonFormatWorker(QThread):
-    """Format all JSON files in a directory using the bundled dazedformat utility."""
-    done = pyqtSignal(bool, str)
-    log  = pyqtSignal(str)
-
-    def __init__(self, data_path: str):
-        super().__init__()
-        self.data_path = data_path
-
-    def run(self):
-        try:
-            from util.dazedformat import format_json_files
-            self.log.emit(f"Formatting JSON files in {self.data_path} …")
-            count, errors = format_json_files(self.data_path, log=self.log.emit)
-            for e in errors:
-                self.log.emit(f"  ⚠  {e}")
-            if errors:
-                self.done.emit(False, f"dazedformat: {count} formatted, {len(errors)} error(s).")
-            else:
-                self.done.emit(True, f"dazedformat: {count} file(s) formatted successfully.")
-        except Exception as exc:
-            self.done.emit(False, f"dazedformat error: {exc}")
-
-
 # Never copy these into a game root when applying gameupdate/ (local updater state
 # or stray translator assets that must not overwrite a live install).
 _GAMEUPDATE_COPY_SKIP_NAMES = frozenset({
@@ -383,101 +200,6 @@ _WOLF_ONLY_GAMEUPDATE_NAMES = frozenset({
 _RPG_GAMEUPDATE_COPY_SKIP_NAMES = (
     _GAMEUPDATE_COPY_SKIP_NAMES | _WOLF_ONLY_GAMEUPDATE_NAMES
 )
-
-
-class _FileCopyWorker(QThread):
-    """Recursively copy a source folder into a destination folder."""
-    done = pyqtSignal(int, list)   # count_copied, errors
-    log  = pyqtSignal(str)
-
-    def __init__(self, src: str, dst: str, skip_names: frozenset[str] | None = None):
-        super().__init__()
-        self.src = src
-        self.dst = dst
-        self.skip_names = skip_names or frozenset()
-
-    def run(self):
-        import shutil
-        src = Path(self.src)
-        dst = Path(self.dst)
-        if not src.is_dir():
-            self.done.emit(0, [f"Source folder not found: {src}"])
-            return
-        dst.mkdir(parents=True, exist_ok=True)
-        copied = 0
-        errors: list[str] = []
-        self.log.emit(f"Copying {src} → {dst} …")
-        for fp in src.rglob("*"):
-            if not fp.is_file():
-                continue
-            if fp.name in self.skip_names:
-                self.log.emit(f"  skipped {fp.relative_to(src)}")
-                continue
-            rel = fp.relative_to(src)
-            target = dst / rel
-            try:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(fp, target)
-                copied += 1
-                self.log.emit(f"  copied {rel}")
-            except Exception as exc:
-                errors.append(f"{rel}: {exc}")
-        self.done.emit(copied, errors)
-
-
-class _ReleaseZipWorker(QThread):
-    """Build a sanitized public-release ZIP without blocking the GUI."""
-
-    done = pyqtSignal(object)
-    error = pyqtSignal(str)
-    progress = pyqtSignal(int, int, str)
-
-    def __init__(self, game_root: str, output_path: str):
-        super().__init__()
-        self.game_root = game_root
-        self.output_path = output_path
-
-    def run(self):
-        try:
-            from util.release_package import create_release_zip
-
-            result = create_release_zip(
-                self.game_root,
-                self.output_path,
-                progress=lambda current, total, label: self.progress.emit(
-                    current, total, label
-                ),
-            )
-            self.done.emit(result)
-        except Exception as exc:
-            self.error.emit(str(exc))
-
-
-class _JsFormatWorker(QThread):
-    """Format a JavaScript file using jsbeautifier (pure Python, no Node required)."""
-    done = pyqtSignal(bool, str)
-    log  = pyqtSignal(str)
-
-    def __init__(self, js_path: str):
-        super().__init__()
-        self.js_path = js_path
-
-    def run(self):
-        try:
-            p = Path(self.js_path)
-            self.log.emit(f"Formatting {p.name} …")
-            original = p.read_text(encoding="utf-8")
-            opts = jsbeautifier.default_options()
-            opts.indent_size = 2
-            opts.indent_char = " "
-            opts.max_preserve_newlines = 2
-            opts.preserve_newlines = True
-            opts.end_with_newline = True
-            formatted = jsbeautifier.beautify(original, opts)
-            p.write_text(formatted, encoding="utf-8")
-            self.done.emit(True, f"plugins.js formatted successfully ({len(formatted):,} chars).")
-        except Exception as exc:
-            self.done.emit(False, f"Format error: {exc}")
 
 
 # Per-step help copy shown by the header ? button (keeps step UIs compact).

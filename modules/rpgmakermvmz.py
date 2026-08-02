@@ -1377,45 +1377,6 @@ def _normalize_sg_desc(text: str) -> str:
             result_lines.append(" ".join(body_buf))
         normalized_blocks.append("\n".join(result_lines))
     return "\n\n".join(normalized_blocks)
-
-
-    # Regex String
-    jaString = event.get("note") or ""
-    if not isinstance(jaString, str):
-        jaString = str(jaString) if jaString is not None else ""
-    match = re.findall(regex, jaString, re.DOTALL)
-    if match:
-        tokens = [0, 0]
-        i = 0
-        while i < len(match):
-            initialJAString = match[i]
-            modifiedJAString = initialJAString
-            # Remove any textwrap
-            if wordwrap:
-                modifiedJAString = modifiedJAString.replace("\n", " ")
-
-            # Translate
-            response = translateAI(
-                modifiedJAString,
-                ctx("database.generic"),
-                False,
-            )
-            translatedText = response[0]
-            tokens[0] += response[1][0]
-            tokens[1] += response[1][1]
-
-            # Textwrap
-            if wordwrap:
-                translatedText = dazedwrap.wrapText(translatedText, width=NOTEWIDTH)
-                translatedText = translatedText.replace('"', "")
-
-            jaString = jaString.replace(initialJAString, translatedText)
-            event["note"] = jaString
-            i += 1
-        return tokens
-    return [0, 0]
-
-
 # For notes that can't have spaces.
 def translateNoteOmitSpace(event, regex):
     # Regex that only matches text inside LB.

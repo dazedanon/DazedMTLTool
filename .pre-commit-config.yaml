@@ -6,3 +6,8 @@
     'entry': 'python -m util.defaults'
     'language': 'python'
     'files': '^modules/rpgmakermvmz.py$'
+  - 'id': 'ruff-check'
+    'name': 'Ruff correctness checks'
+    'entry': 'ruff check'
+    'language': 'system'
+    'types': ['python']

@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
 from util.paths import read_active_glossary
+from util import request_debug
 from util.sfx_reference import build_sfx_reference_text
 
 # Request logging includes complete prompt payloads and is therefore opt-in.
@@ -31,7 +32,6 @@ from util.sfx_reference import build_sfx_reference_text
 DEBUG = False
 DEBUG_LOG_MAX_BYTES = 5 * 1024 * 1024
 DEBUG_LOG_BACKUP_COUNT = 2
-_debug_request_log_lock = threading.Lock()
 
 # Set to True to disable Claude prompt caching for baseline cost comparison.
 DISABLE_CACHE = False
@@ -46,80 +46,33 @@ _global_accurate_cost_lock = threading.Lock()
 
 def _usage_to_debug_dict(usage):
     """Extract token counts from provider usage objects for request debugging."""
-    if not usage:
-        return {}
-
-    usage_dict = {}
-    for field in (
-        "prompt_tokens",
-        "completion_tokens",
-        "input_tokens",
-        "output_tokens",
-        "cache_read_input_tokens",
-        "cache_creation_input_tokens",
-    ):
-        value = getattr(usage, field, None)
-        if value is not None:
-            usage_dict[field] = value
-
-    extra = getattr(usage, "model_extra", None)
-    if isinstance(extra, dict):
-        for field in ("cache_read_input_tokens", "cache_creation_input_tokens"):
-            value = extra.get(field)
-            if value is not None and field not in usage_dict:
-                usage_dict[field] = value
-
-    return usage_dict
+    return request_debug.usage_to_dict(usage)
 
 
 def _debug_logging_enabled() -> bool:
-    value = os.getenv("debugRequestLogs")
-    if value is None:
-        return bool(DEBUG)
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+    return request_debug.enabled(legacy_enabled=DEBUG)
 
 
 def _append_rotating_debug_log(path: Path, text: str) -> None:
     """Append debug text while retaining only a small bounded history."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    encoded_size = len(text.encode("utf-8"))
-    current_size = path.stat().st_size if path.is_file() else 0
-    if current_size and current_size + encoded_size > DEBUG_LOG_MAX_BYTES:
-        oldest = path.with_name(f"{path.name}.{DEBUG_LOG_BACKUP_COUNT}")
-        oldest.unlink(missing_ok=True)
-        for index in range(DEBUG_LOG_BACKUP_COUNT - 1, 0, -1):
-            source = path.with_name(f"{path.name}.{index}")
-            if source.is_file():
-                source.replace(path.with_name(f"{path.name}.{index + 1}"))
-        path.replace(path.with_name(f"{path.name}.1"))
-    with open(path, "a", encoding="utf-8") as debug_file:
-        debug_file.write(text)
-        debug_file.flush()
+    request_debug.append_rotating(
+        path,
+        text,
+        max_bytes=DEBUG_LOG_MAX_BYTES,
+        backups=DEBUG_LOG_BACKUP_COUNT,
+    )
 
 
 def _write_request_debug_log(provider, request_payload, usage):
     """Write the exact SDK payload text and returned token usage when enabled."""
-    if not _debug_logging_enabled():
-        return
-
-    try:
-        usage_dict = _usage_to_debug_dict(usage)
-        payload_text = json.dumps(request_payload, indent=2, ensure_ascii=False, default=str)
-        usage_text = json.dumps(usage_dict, indent=2, ensure_ascii=False, default=str)
-        entry = (
-            "\n=== API Request ===\n"
-            f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"Provider: {provider}\n"
-            "Usage:\n"
-            f"{usage_text}\n"
-            "Payload:\n"
-            f"{payload_text}\n"
-        )
-
-        with _debug_request_log_lock:
-            _append_rotating_debug_log(Path("log/request_debug.log"), entry)
-    except Exception:
-        pass
+    request_debug.write_request(
+        provider,
+        request_payload,
+        usage,
+        legacy_enabled=DEBUG,
+        max_bytes=DEBUG_LOG_MAX_BYTES,
+        backups=DEBUG_LOG_BACKUP_COUNT,
+    )
 
 def _normalize_openai_base_url(url: str) -> str:
     """Ensure OpenAI SDK global base_url has a trailing slash."""
@@ -4368,8 +4321,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                         cw = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
                         cache_status = "HIT" if cr > 0 else ("WRITE" if cw > 0 else "MISS")
                         entry += f"Cache: {cache_status} (read={cr}, write={cw})\n"
-                    with _debug_request_log_lock:
-                        _append_rotating_debug_log(Path("log/debug.log"), entry)
+                    _append_rotating_debug_log(Path("log/debug.log"), entry)
                 except Exception:
                     pass
 

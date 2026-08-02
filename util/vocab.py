@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+from pathlib import Path
 
 from util.paths import (
     GLOSSARY_BASE_SEPARATOR,

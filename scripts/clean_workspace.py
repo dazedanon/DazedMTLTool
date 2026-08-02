@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -103,6 +104,63 @@ def debug_log_targets(root: Path) -> list[CleanupTarget]:
     return targets
 
 
+def runtime_targets(
+    root: Path,
+    *,
+    keep_history: int,
+    stale_tmp_seconds: float,
+    now: float | None = None,
+) -> list[CleanupTarget]:
+    """Return superseded run histories and abandoned atomic-write files."""
+    if keep_history < 0:
+        raise ValueError("keep_history must be non-negative")
+    if stale_tmp_seconds < 0:
+        raise ValueError("stale_tmp_seconds must be non-negative")
+
+    targets: list[CleanupTarget] = []
+    log_root = root / "log"
+    if not log_root.exists():
+        return targets
+    if log_root.is_symlink():
+        raise CleanupSafetyError(f"refusing symlink log root: {log_root}")
+
+    history_root = log_root / "history"
+    if history_root.is_symlink():
+        raise CleanupSafetyError(f"refusing symlink history root: {history_root}")
+    if history_root.is_dir():
+        histories = sorted(
+            (
+                path
+                for path in history_root.glob("translationHistory_*.txt")
+                if path.is_file() and not path.is_symlink()
+            ),
+            key=lambda path: (path.stat().st_mtime_ns, path.name),
+            reverse=True,
+        )
+        for path in histories[keep_history:]:
+            candidate = _target(path, "run-history", root)
+            if candidate:
+                targets.append(candidate)
+
+    cutoff = (time.time() if now is None else now) - stale_tmp_seconds
+    for current, directories, files in os.walk(log_root, followlinks=False):
+        current_path = Path(current)
+        for name in directories:
+            candidate = current_path / name
+            if candidate.is_symlink():
+                raise CleanupSafetyError(f"refusing symlink below log root: {candidate}")
+        for name in files:
+            path = current_path / name
+            if path.is_symlink():
+                raise CleanupSafetyError(f"refusing symlink below log root: {path}")
+            if not name.endswith(".tmp") or path.stat().st_mtime > cutoff:
+                continue
+            candidate = _target(path, "stale-tmp", root)
+            if candidate:
+                targets.append(candidate)
+    return targets
+
+
 def stale_tool_targets(root: Path) -> list[CleanupTarget]:
     targets = []
     cli = root / "util" / "ace" / "RPGMakerDecrypter-cli.exe"
@@ -144,16 +202,19 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--captures", action="store_true", help="remove old .tmp-ui capture runs")
     parser.add_argument("--debug-logs", action="store_true", help="remove request/token debug logs")
+    parser.add_argument("--runtime", action="store_true", help="prune superseded run logs and stale .tmp files")
     parser.add_argument("--stale-tools", action="store_true", help="remove verified redundant tool copies")
     parser.add_argument("--all", action="store_true", help="select every cleanup category")
     parser.add_argument("--keep-captures", type=int, default=5, help="newest capture runs to retain (default: 5)")
+    parser.add_argument("--keep-history", type=int, default=10, help="newest translation run logs to retain (default: 10)")
+    parser.add_argument("--stale-tmp-hours", type=float, default=24, help="minimum age of interrupted .tmp files (default: 24)")
     parser.add_argument("--apply", action="store_true", help="perform deletion; otherwise only report")
     return parser.parse_args()
 
 
 def main() -> int:
     args = _parse_args()
-    selected = args.all or args.captures or args.debug_logs or args.stale_tools
+    selected = args.all or args.captures or args.debug_logs or args.runtime or args.stale_tools
     if not selected:
         print("Nothing selected. Use --all or choose a cleanup category.")
         return 2
@@ -164,6 +225,14 @@ def main() -> int:
         targets.extend(capture_targets(root, args.keep_captures))
     if args.all or args.debug_logs:
         targets.extend(debug_log_targets(root))
+    if args.all or args.runtime:
+        targets.extend(
+            runtime_targets(
+                root,
+                keep_history=args.keep_history,
+                stale_tmp_seconds=args.stale_tmp_hours * 60 * 60,
+            )
+        )
     if args.all or args.stale_tools:
         targets.extend(stale_tool_targets(root))
 

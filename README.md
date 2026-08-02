@@ -21,14 +21,9 @@ Bundled asset sources, checksums, and license-record status are tracked in
 - [Glossary & Prompt](#glossary--prompt)
 - [Tips](#tips)
 - [Mistral API (free tier)](#mistral-api-free-tier)
-- [Batch Translation (Claude, GPT, and Gemini)](#batch-translation-claude-gpt-and-gemini)
-- [Translation Model Evaluation](#translation-model-evaluation)
+- [Advanced Features](#advanced-features)
 - [Folder Structure](#folder-structure)
-- [Finding Untranslated Text (Snipping Tool OCR)](#finding-untranslated-text-snipping-tool-ocr)
-- [RPG Maker Translation Workflow](#rpg-maker-translation-workflow)
-- [Wolf RPG (WolfDawn) Translation Workflow](#wolf-rpg-wolfdawn-translation-workflow)
-- [Using Copilot & VSCode](#using-copilot--vscode)
-- [Version Control with Git](#version-control-with-git)
+- [Guides and Help](#guides-and-help)
 - [Troubleshooting](#troubleshooting)
 
 ## Supported Engines
@@ -273,173 +268,21 @@ When the API URL points at `api.mistral.ai`, requests are paced automatically. M
 
 ---
 
-## Batch Translation (Claude, GPT, and Gemini)
+## Advanced Features
 
-Batch mode — see [Credits](#credits).
+- **Provider batch translation** supports native Claude, OpenAI GPT, and Gemini
+  routes. It collects requests, confirms an estimate before submission, resumes
+  provider work safely, validates every result, and never falls back to
+  unconfirmed live-price requests. Batch History is the canonical status view.
+- **Model Evaluation** compares two or more models on the same deterministic
+  RPG Maker MV/MZ sample through Batch or Live requests. It supports frozen run
+  manifests, budget ceilings, blind block ranking, portable `.dazedeval`
+  archives, and resumable submitted jobs.
+- **Version Update** performs a conservative full-folder update and semantic
+  RPG Maker JSON merge while retaining bounded recovery history.
 
-When using a supported native Claude, GPT, or Gemini route, the CLI offers a third mode
-that translates through the provider's asynchronous Batch API—typically at **50% of the live price**.
-Batches usually finish within an hour (24h worst case), so use it for large jobs where you don't
-need results immediately.
-
-Provider references: [Anthropic Message Batches](https://platform.claude.com/docs/en/build-with-claude/batch-processing),
-[OpenAI Batch API](https://developers.openai.com/api/docs/guides/batch), and
-[Gemini Batch API (OpenAI compatibility)](https://ai.google.dev/gemini-api/docs/openai#batch).
-
-```
-python start.py
- -> 3. Batch Translate (Provider Batch API, typically 50% off)
-```
-
-How it works (all engine modules are supported automatically):
-
-1. **Pass 1 (collect)** — files are processed normally, but instead of calling the API each
-   request is queued to `log/batch_requests.json`. Requests are byte-identical to live ones:
-   the static `data/skills/system.md` block is cached with a 1h TTL, matched Glossary entries,
-   matched local SFX suggestions, and preceding Japanese source context ride along per request, while
-   structured output enforces the exact line count.
-   Speaker/variable names still translate live during this pass (they get embedded into the
-   dialogue payloads, so both passes must resolve them identically) — they're a tiny share
-   of the volume.
-2. **Cost estimate** — before anything is submitted you get a cost breakdown
-   (batch + cache / batch worst-case / live price) and a y/n confirmation.
-3. **Submit / poll / fetch** — the batch is submitted, polled until it ends
-   (`batchPollInterval` env var controls the interval, default 60s), and the results are
-   saved to `log/batch_results.json`. Ctrl-C while polling is safe — the batch keeps
-   processing server-side.
-4. **Pass 2 (consume)** — files are processed again; every payload is filled from the batch
-   results through the normal validation pipeline (line counts, placeholders, content
-   checks). A missing, stale-context, or invalid result stops safely and preserves the
-   original text; it never turns into an unconfirmed full-price live request. Start normal
-   Translate explicitly if you want to retry those files at live pricing.
-
-Context note: live and provider-batch modes both carry the previous chunk's original
-Japanese source lines. The model always sees the unmodified surrounding scene rather than
-another model response. Per-call instructions remain attached to every chunk independently
-of that rolling source context. The Glossary (`glossary.txt`) keeps names and terms
-consistent, and matched SFX suggestions provide context-dependent meanings without forcing
-fixed wording.
-
-Cost tracking is exact: per-file and total costs printed after the consume pass use the real
-billed token counts (cache reads at 0.1x, cache writes at 2x, output at the output rate) with
-the 50% batch discount applied.
-
-Hermetic batch collection, resume, fetch, and consume coverage runs offline as
-part of `./tests/run_tests.sh core`; no API key is required.
-
----
-
-## Translation Model Evaluation
-
-The **Evaluation** page compares any two or more models through native Batch APIs
-or immediate live requests without translating an entire game.
-Benchmark setup reopens with the most recently saved run's models, keys, modes,
-source, size, and budget. Before the first run exists, it starts with one model
-using the currently configured model and active saved API key; add at least one
-more model before preparing the comparison.
-Every row can use its own API URL, saved key, and model dropdown. Official
-OpenAI, Claude, Gemini, DeepSeek, Mistral, and Nvidia URLs are available from
-the adjacent **Presets** menu; other URLs use an OpenAI-compatible API. Model discovery runs
-automatically when the URL, preset, or saved key changes; **Scan** remains as a
-manual retry, and its results populate the model dropdown. Each row can run as
-**Batch** or **Live**. Batch requires compatible model-list, Files, and Batch
-routes, while Live supports chat-completions-only and keyless local servers. The
-selected RPG Maker MV/MZ game folder is scanned for eligible event text,
-database text, and control-code-heavy lines. **Content selection** offers a
-general-purpose Balanced mix, dialogue/events only, database only, or a Custom
-tree containing Map files, Common Events, Troops, Actors, Classes, Skills,
-Items, Weapons, Armors, Enemies, States, and map names. Custom mode can select
-individual `MapNNN.json` files and include or exclude control-code-heavy event
-lines; eligible Japanese-line counts are shown beside every available source.
-The resulting sample rotates across files and takes one contiguous same-scene
-chunk, up to **Lines per sample**, on each file's turn. This preserves useful
-dialogue context without letting one large map dominate or spreading the test
-into tiny allocations across every map. Its deterministic ordering is seeded by
-a fingerprint of the selected game's corpus, so the same game and settings
-reproduce the same selection while a different game receives a different stable
-ordering. Each model gets the same source, system
-prompt, matched glossary, explicitly labeled preceding Japanese source context,
-output schema, and hidden consistency-check schedule. Source context is never
-presented as prior translated output. Prompt and glossary context are built by the
-normal translation engine from the selected game's `glossary.txt`,
-`skills/game.md`, `skills/quirks.md`, and optional custom game skills.
-
-Select the folder containing the game itself. Evaluation automatically uses
-`data/` for RPG Maker MZ or `www/data/` for RPG Maker MV and shows the resolved
-JSON location before preparing the test. Selecting a direct JSON data folder,
-including the tool's existing `files/` folder, also works. Evaluation currently
-uses the workflow's configured game root for translation context when `files/`
-is selected. If no matching game root can be resolved, preparation is blocked
-instead of silently falling back to the shipped base glossary. Evaluation
-currently supports MV/MZ JSON projects; XP, VX, and VX Ace binary data are not
-supported.
-
-Preparing a benchmark is offline. **Test template** keeps understandable Quick,
-Standard, and Thorough presets and adds Custom controls for total test lines,
-same-scene lines per sample, repeated sample count, and total runs per repeated
-sample. A sample is translated as one ordered block and is also the unit shown
-and scored in blind review; its lines are not scored independently. Repeats are
-used for whole-block consistency, while non-repeated samples run once. Preparation
-reports how many eligible lines, samples, and files were found and selected.
-If a content filter contains fewer lines than the chosen template, preparation
-shows the exact shortfall and requires confirmation before switching to the
-reduced Custom size; selections below 60 eligible lines are rejected. The run
-manifest freezes the resolved content filter, corpus fingerprint, sampling
-seed, and exact selected segment IDs so a saved evaluation remains auditable.
-Before paid jobs are sent, the page shows a likely upper bound and a theoretical
-ceiling for every model and asks for confirmation. The default hard limit is $10
-per model: the likely upper bound must remain below an 80% safety threshold, and
-the theoretical ceiling must fit the full budget. Every request has the same
-4,096-token response ceiling; live theoretical ceilings also include all three
-automatic attempts. Results are checked
-for missing lines, Japanese residue, and broken
-placeholders/control codes. Hover **Valid ⓘ** or **Consistency ⓘ** for the exact
-meaning of each score. Each row of the final CSV contains one source JSON array
-and one aligned translation array per randomized candidate. Model identities are
-shuffled independently per sample. When exporting, a model selector lets the
-reviewer compare any two or more candidates with usable results, so a failed model
-can be omitted without losing the blind review for the models that completed.
-Reviewers rank each complete block for Meaning
-Accuracy, Glossary & Prompt compliance, Natural & Contextual English, and Best
-Overall. Every ranking uses `>` and `=` for equivalent tiers (`A>B>C`, `A=B>C`,
-or `A=B=C`). Rankings receive fixed-sum
-Borda points: three strict ranks score 2/1/0, while tied candidates average the
-points for the positions they occupy. The single whole-sample ranking is applied
-to every line in that sample when totals are calculated, preserving per-line
-weight without asking the reviewer for separate line judgments. After exporting
-it, **Copy review
-skill** copies path-specific instructions for an AI second opinion; the tool
-warns that AI judging may be biased and is not a replacement for human review.
-Exporting the CSV creates the hidden scoring key; complete its ranking column
-before importing it back into the same run. Legacy `winner`/`TIE` review CSVs
-remain importable, but re-exporting is required to capture complete rankings.
-Prepared and provider-active work is kept under `log/evaluation_work/`; a new
-preparation replaces older work that was never submitted. Only evaluations
-whose model results completed successfully are moved into `log/evaluations/`.
-The saved-evaluation picker also shows submitted work so provider jobs can be
-reconnected after restarting the app. Prepared runs stay temporary; terminal failed runs
-remain visible so their diagnostics and partial results can be inspected or exported.
-Completed history is capped at the newest 50 runs, with the oldest completed
-run removed when the limit is exceeded. Saved API-key secrets are never copied
-into either location.
-
-Evaluation Batch jobs are also registered in Batch History. They are marked
-as Evaluation jobs and can be monitored or canceled there, but cannot be
-resumed or consumed as normal game translation batches. Live rows finish in
-the Evaluation page and do not create Batch History entries.
-
-Every run remains available from the saved-evaluation picker in **Evaluation
-results**; preparing a new benchmark does not replace earlier results. A selected run can be exported
-as a portable `.dazedeval` archive and imported on another installation. The
-archive contains its frozen manifest, result files, validation summaries, and
-blind-review state, but never saved API-key secrets. Imports always create a
-new history entry rather than overwriting an existing run. An imported run
-that still has provider jobs in progress remains paused until the user chooses
-**Refresh results** and confirms reconnecting its saved API URLs.
-
-Batch requests do not share memory with one another. All required context is
-therefore embedded in every individual request. In the evaluator, that context
-is frozen in the manifest before any provider-specific request is generated.
+The GUI's contextual help is the canonical user guide for these workflows.
+Provider API behavior is also covered by the offline core test suite.
 
 ---
 
@@ -453,17 +296,30 @@ is frozen in the manifest before any provider-specific request is generated.
 | `modules/` | Engine-specific translation scripts |
 | `gui/` | GUI source code |
 
+Maintainer documentation starts with [development and repository
+maintenance](docs/development.md). The latest branch, stash, and large-object
+review is recorded in [the repository audit](docs/repository-audit.md).
+
 Maintainers can review regenerable workspace artifacts without deleting them:
 
 ```bash
-python scripts/clean_workspace.py --all --keep-captures 5
+python scripts/clean_workspace.py --all --keep-captures 5 --keep-history 10
 ```
 
 After reviewing every listed path, repeat with `--apply` to remove it. The
-cleaner never targets `files/`, `translated/`, translation caches, evaluation
-archives, virtual environments, Git branches, or stashes.
+The runtime category also lists translation histories beyond the newest ten and
+interrupted `.tmp` files older than 24 hours. The cleaner never targets
+`files/`, `translated/`, translation caches, evaluation archives, virtual
+environments, Git branches, or stashes.
 
 ---
+
+## Guides and Help
+
+The in-app **Help** page is the canonical beginner guide. Its source pages live
+under [`data/help/`](data/help/): start with the full translation example, then
+use the RPG Maker or WOLF workflow page for the selected engine. The longer
+reference sections below cover OCR, editor-assisted fixes, and Git safety.
 
 ## Finding Untranslated Text (Snipping Tool OCR)
 
