@@ -33,7 +33,7 @@ EXTENDED_TEST_PREFIXES = (
     "test_gui_ux_contract.",
     "test_log_viewer.",
     "test_qt_icons.TestQtIcons.test_apply_button_icon",
-    "test_rpgmaker_image_manager.",
+    "test_image_manager_ui.",
     "test_translation_engine_dropdown.TranslationEngineDropdownTests.test_all_engines",
     "test_translation_engine_dropdown.TranslationEngineDropdownTests.test_translation_tab",
     "test_translation_tab_ui.TranslationTabUITests.",

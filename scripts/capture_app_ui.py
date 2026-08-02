@@ -570,7 +570,7 @@ def capture(
                 patch("util.batch_history.list_local_batches", return_value=[]),
                 patch("gui.main.QSettings", return_value=fixture_settings),
                 patch(
-                    "gui.rpgmaker_image_manager.QSettings",
+                    "gui.image_manager.QSettings",
                     return_value=fixture_settings,
                 ),
             ):

@@ -16,12 +16,12 @@ from PyQt5.QtWidgets import (
     QMessageBox,
 )
 
-from gui.rpgmaker_image_manager import RPGMakerImageManager
+from gui.image_manager import ImageManager
 from gui.workflow_tab import _inspect_image_workflow
 from util.image_manager import PROFILE_AUTO, PROFILE_GENERIC, PROFILE_RPGMAKER_MVMZ
 
 
-class RPGMakerImageManagerSelectionTests(unittest.TestCase):
+class ImageManagerSelectionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
@@ -44,7 +44,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
             )
         self.settings_path = root / "settings.ini"
         settings = QSettings(str(self.settings_path), QSettings.IniFormat)
-        self.manager = RPGMakerImageManager(self.game_root, settings=settings)
+        self.manager = ImageManager(self.game_root, settings=settings)
         self.manager.resize(1100, 760)
         self.manager.show()
         self.manager._scan_worker.wait(5000)
@@ -113,7 +113,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         manifest.write_text("not used", encoding="utf-8")
 
         settings = QSettings(str(self.settings_path), QSettings.IniFormat)
-        reopened = RPGMakerImageManager(self.game_root, settings=settings)
+        reopened = ImageManager(self.game_root, settings=settings)
         reopened.resize(1100, 760)
         reopened.show()
         reopened._scan_worker.wait(5000)
@@ -306,7 +306,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.manager.image_list.setCurrentItem(None)
 
         with patch(
-            "gui.rpgmaker_image_manager.QDesktopServices.openUrl",
+            "gui.image_manager.QDesktopServices.openUrl",
             return_value=True,
         ) as open_url:
             self.manager._open_editable_folder()
@@ -321,7 +321,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         expected = self.game_root / ".dazedtl" / "images" / "img"
 
         with patch(
-            "gui.rpgmaker_image_manager.QDesktopServices.openUrl",
+            "gui.image_manager.QDesktopServices.openUrl",
             return_value=True,
         ) as open_url:
             self.manager._open_editable_folder()
@@ -360,7 +360,7 @@ class GenericImageManagerUITests(unittest.TestCase):
             image_root.mkdir(parents=True)
             Image.new("RGBA", (20, 12), "green").save(image_root / "menu.png")
             settings = QSettings(str(root / "settings.ini"), QSettings.IniFormat)
-            manager = RPGMakerImageManager(game_root, settings=settings)
+            manager = ImageManager(game_root, settings=settings)
             manager.resize(1000, 700)
             manager.show()
             manager._scan_worker.wait(5000)

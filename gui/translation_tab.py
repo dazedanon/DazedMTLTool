@@ -161,7 +161,6 @@ TRANSLATION_MODULE_SPECS = (
     ("Text", (".txt", ".srt"), "modules.text", "handleText"),
     ("RenPy", (".rpy",), "modules.renpy", "handleRenpy"),
     ("Unity", (".unity",), "modules.unity", "handleUnity"),
-    ("Images", (".png", ".jpg", ".jpeg"), "modules.images", "handleImages"),
     ("RPG Maker Plugin", (".js",), "modules.rpgmakerplugin", "handlePlugin"),
     ("Aquedi4 Prepared JSON", (".json",), "modules.aquedi4", "handleAquedi4"),
     ("SRPG Studio", (".json",), "modules.srpg", "handleSRPG"),

@@ -290,14 +290,22 @@ Provider API behavior is also covered by the offline core test suite.
 
 | Folder | Purpose |
 |---|---|
+| `assets/` | Application and engine icons |
+| `data/` | Shipped help, skills, glossary, and reference data |
+| `docs/` | Maintainer documentation and roadmap |
 | `files/` | Place game files here before translating |
+| `gameupdate/` | Standalone player patch/update component |
+| `gui/` | Application UI and workflow source code |
+| `log/` | Translation logs, caches, and run state |
+| `modules/` | Engine-specific translation adapters |
+| `scripts/` | Launch, maintenance, capture, and test utilities |
+| `tests/` | Core and extended regression suites |
 | `translated/` | Translated output appears here |
-| `log/` | Translation logs and cache |
-| `modules/` | Engine-specific translation scripts |
-| `gui/` | GUI source code |
+| `util/` | Shared services and engine tooling |
 
 Maintainer documentation starts with [development and repository
-maintenance](docs/development.md). The latest branch, stash, and large-object
+maintenance](docs/development.md). Current product work is tracked in the
+[roadmap](docs/roadmap.md), and the latest branch, stash, and large-object
 review is recorded in [the repository audit](docs/repository-audit.md).
 
 Maintainers can review regenerable workspace artifacts without deleting them:

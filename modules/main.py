@@ -52,7 +52,6 @@ from modules.regex import handleRegex
 from modules.text import handleText
 from modules.renpy import handleRenpy
 from modules.unity import handleUnity
-from modules.images import handleImages
 from modules.rpgmakerplugin import handlePlugin
 from modules.srpg import handleSRPG
 from modules.aquedi4 import handleAquedi4
@@ -80,7 +79,6 @@ MODULES = [
     ["Renpy", ["rpy"], handleRenpy],
     ["Unity", ["txt"], handleUnity],
     ["SRPG Studio", ["json"], handleSRPG],
-    ["Images", [""], handleImages],
     ["Aquedi4 Prepared JSON", [".json"], handleAquedi4],
 ]
 
@@ -250,65 +248,36 @@ files to translate are in the /files folder and that you picked the right game e
             futures = []
             files_root = "files"
 
-            # Special-case: Images engine expects a folder, not a file; schedule per directory containing assets
-            if MODULES[version][0] == "Images":
-                for root, dirs, filenames in os.walk(files_root):
-                    # Skip hidden/system directories
-                    dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
+            # Gather all candidate files recursively
+            for root, dirs, filenames in os.walk(files_root):
+                # Skip hidden/system directories if any
+                dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
 
-                    # Skip the root 'files' itself to avoid processing everything twice
-                    # We'll still allow scheduling for root if it contains assets
-
-                    # Only schedule directories that contain potential assets
-                    has_assets = any(fn.lower().endswith((".png", ".txt")) for fn in filenames)
-                    if not has_assets:
+                for fname in filenames:
+                    if fname in {".gitkeep", "glossary.txt", "vocab.txt"}:
                         continue
 
-                    # Compute relative directory path and ensure translated mirror exists
-                    rel_dir = os.path.relpath(root, files_root).replace(os.sep, "/")
-                    if rel_dir == ".":
-                        # Represent root as empty string so handler creates files under translated/ directly
-                        rel_dir = ""
-                    try:
-                        target_dir = os.path.join("translated", rel_dir.replace("/", os.sep)) if rel_dir else "translated"
-                        os.makedirs(target_dir, exist_ok=True)
-                    except Exception:
-                        pass
+                    abs_path = os.path.join(root, fname)
+                    # Build relative path from 'files' root using POSIX-style separators so handlers can do 'files/' + rel
+                    rel_path = os.path.relpath(abs_path, files_root)
+                    rel_path_posix = rel_path.replace(os.sep, "/")
 
-                    futures.append(
-                        executor.submit(MODULES[version][2], rel_dir, estimate)
-                    )
-            else:
-                # Gather all candidate files recursively
-                for root, dirs, filenames in os.walk(files_root):
-                    # Skip hidden/system directories if any
-                    dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
+                    # Check extension match for the selected module version
+                    for m in MODULES[version][1]:
+                        if rel_path_posix.endswith(m):
+                            # Ensure the corresponding directory exists under 'translated'
+                            rel_dir = os.path.dirname(rel_path_posix)
+                            if rel_dir:
+                                try:
+                                    os.makedirs(os.path.join("translated", rel_dir.replace("/", os.sep)), exist_ok=True)
+                                except Exception:
+                                    # Best-effort; handler may attempt write and fail if permissions are insufficient
+                                    pass
 
-                    for fname in filenames:
-                        if fname in {".gitkeep", "glossary.txt", "vocab.txt"}:
-                            continue
-
-                        abs_path = os.path.join(root, fname)
-                        # Build relative path from 'files' root using POSIX-style separators so handlers can do 'files/' + rel
-                        rel_path = os.path.relpath(abs_path, files_root)
-                        rel_path_posix = rel_path.replace(os.sep, "/")
-
-                        # Check extension match for the selected module version
-                        for m in MODULES[version][1]:
-                            if rel_path_posix.endswith(m):
-                                # Ensure the corresponding directory exists under 'translated'
-                                rel_dir = os.path.dirname(rel_path_posix)
-                                if rel_dir:
-                                    try:
-                                        os.makedirs(os.path.join("translated", rel_dir.replace("/", os.sep)), exist_ok=True)
-                                    except Exception:
-                                        # Best-effort; handler may attempt write and fail if permissions are insufficient
-                                        pass
-
-                                futures.append(
-                                    executor.submit(MODULES[version][2], rel_path_posix, estimate)
-                                )
-                                break  # Avoid double-adding if multiple ext entries match
+                            futures.append(
+                                executor.submit(MODULES[version][2], rel_path_posix, estimate)
+                            )
+                            break  # Avoid double-adding if multiple ext entries match
 
             for future in as_completed(futures):
                 try:
@@ -327,27 +296,19 @@ files to translate are in the /files folder and that you picked the right game e
         """Return the deterministic file/directory scope used by this CLI run."""
         files_root = "files"
         scope = []
-        if MODULES[version][0] == "Images":
-            for root, dirs, filenames in os.walk(files_root):
-                dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
-                if not any(fn.lower().endswith((".png", ".txt")) for fn in filenames):
+        extensions = tuple(MODULES[version][1])
+        for root, dirs, filenames in os.walk(files_root):
+            dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
+            for filename in filenames:
+                if filename in {"glossary.txt", "vocab.txt"}:
                     continue
-                relative = os.path.relpath(root, files_root).replace(os.sep, "/")
-                scope.append("" if relative == "." else relative)
-        else:
-            extensions = tuple(MODULES[version][1])
-            for root, dirs, filenames in os.walk(files_root):
-                dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
-                for filename in filenames:
-                    if filename in {"glossary.txt", "vocab.txt"}:
-                        continue
-                    if filename == ".gitkeep":
-                        continue
-                    relative = os.path.relpath(
-                        os.path.join(root, filename), files_root
-                    ).replace(os.sep, "/")
-                    if relative.endswith(extensions):
-                        scope.append(relative)
+                if filename == ".gitkeep":
+                    continue
+                relative = os.path.relpath(
+                    os.path.join(root, filename), files_root
+                ).replace(os.sep, "/")
+                if relative.endswith(extensions):
+                    scope.append(relative)
         return sorted(scope)
 
     if batch_mode:

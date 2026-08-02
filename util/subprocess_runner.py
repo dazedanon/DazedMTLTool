@@ -116,9 +116,6 @@ def run_handler(project_root, module_name, filename, estimate_only):
         elif "Unity" in module_name:
             from modules.unity import handleUnity
             handler = handleUnity
-        elif "Images" in module_name:
-            from modules.images import handleImages
-            handler = handleImages
         elif "Plugin" in module_name:
             from modules.rpgmakerplugin import handlePlugin
             handler = handlePlugin

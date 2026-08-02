@@ -16,7 +16,6 @@ before producing another public release.
 | `util/forge/upstream/Forge_MV.js` | [commit `0ac4cfe`](https://gitgud.io/zero64801/forge-mvmz/-/commit/0ac4cfe97c902756f26540de2592279918a5b453) | `117ea4a9e0b032f6831f42bcfdb0aaddea0904f4f483b2c7dfbdcf00547eb581` | MIT; `util/forge/upstream/LICENSE.txt` |
 | `util/forge/upstream/Forge_MZ.js` | [commit `0ac4cfe`](https://gitgud.io/zero64801/forge-mvmz/-/commit/0ac4cfe97c902756f26540de2592279918a5b453) | `f5d6b764dccf63149559579cfa037fb1843fe70e5adca31d4e4b82b430b5cd73` | MIT; `util/forge/upstream/LICENSE.txt` |
 | `util/tl_inspector/TLInspector.js` | Sakura & Kao_SSS; no public source located | `284d68269c68ae0005c9a4274f6ec80436be7d3514ba2eeebc10b60dff8b9e0d` | **Release blocker: no source or license grant**; `util/tl_inspector/PROVENANCE.md` |
-| `fonts/TsunagiGothic.ttf` | [Tsunagi Gothic 1.001 by mokuzai](https://mokuzai.booth.pm/items/3885939) | `847de1a1c7baf5c7edbda3b26fd18e5dbdfbe470d3eaa77f354e16b3c6d3e895` | OFL-1.1; `fonts/TsunagiGothic.LICENSE.md` |
 
 When refreshing an asset, update its checksum and revision information in the
 same change. Keep license texts next to the affected bundle so source archives
