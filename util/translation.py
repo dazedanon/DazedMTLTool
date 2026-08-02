@@ -3150,6 +3150,34 @@ def _request_context_blocks(history, context_kind, request_instructions=None):
     return blocks
 
 
+def _provider_system_blocks(system, vocab_text=""):
+    """Return the provider-neutral ordered system-prompt content blocks.
+
+    The first block is the stable translation method shared by every request.
+    Dynamic glossary and SFX guidance follows it as a second system block so
+    both Claude and OpenAI give that guidance the same role and ordering while
+    still allowing a cache breakpoint at the end of the static prefix.
+    """
+    blocks = [{"type": "text", "text": f"```\n{system}\n```"}]
+    dynamic_system = str(vocab_text or "").strip()
+    if dynamic_system:
+        blocks.append({"type": "text", "text": dynamic_system})
+    return blocks
+
+
+def _provider_user_messages(user, history, context_kind,
+                            request_instructions=None):
+    """Return the identical conversational suffix used by every provider."""
+    messages = [
+        {"role": "user", "content": block}
+        for block in _request_context_blocks(
+            history, context_kind, request_instructions
+        )
+    ]
+    messages.append({"role": "user", "content": f"```\n{user}\n```"})
+    return messages
+
+
 def buildClaudeRequest(system, user, history, formatType, model, numLines=None,
                        vocab_text="", context_kind=CONTEXT_SOURCE,
                        request_instructions=None):
@@ -3157,30 +3185,16 @@ def buildClaudeRequest(system, user, history, formatType, model, numLines=None,
 
     Shared by live calls (translateText) and batch collection (translateAI) so
     both produce byte-identical requests and share the same prompt cache. Only
-    the static prompt is cached — 1h TTL so async batch requests processed
-    minutes apart still hit it; vocab and history ride in messages so they
-    never bust the prefix cache (the entire system parameter is the cache key).
+    the first, static system block is cached. Dynamic system guidance and user
+    messages follow the explicit breakpoint and cannot bust that prefix.
     """
-    if DISABLE_CACHE:
-        # No cache_control — sends as a plain content block for a real uncached run.
-        combined_system = system + vocab_text
-        ant_system = [{"type": "text", "text": f"```\n{combined_system}\n```"}]
-    else:
-        ant_system = [{"type": "text", "text": f"```\n{system}\n```", "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
+    ant_system = _provider_system_blocks(system, vocab_text)
+    if not DISABLE_CACHE:
+        ant_system[0]["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
 
-    native_msgs = []
-    for block in _request_context_blocks(
-        history, context_kind, request_instructions
-    ):
-        native_msgs.append({"role": "user", "content": block})
-        native_msgs.append({"role": "assistant", "content": "Understood."})
-
-    # Vocab goes into messages as a user turn so it doesn't bust the prefix cache.
-    if vocab_text and vocab_text.strip():
-        native_msgs.append({"role": "user", "content": vocab_text.strip()})
-        native_msgs.append({"role": "assistant", "content": "Understood."})
-
-    native_msgs.append({"role": "user", "content": f"```\n{user}\n```"})
+    native_msgs = _provider_user_messages(
+        user, history, context_kind, request_instructions
+    )
 
     ant_kwargs = dict(
         model=model,
@@ -3218,17 +3232,33 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
     model_l = str(model or "").lower()
     is_deepseek = "deepseek" in model_l
     is_mistral = provider == "mistral" or isMistralAPI()
-    messages = [{"role": "system", "content": f"```\n{system + vocab_text}\n```"}]
-    for context_block in _request_context_blocks(
-        history, context_kind, request_instructions
-    ):
-        messages.append({
-            "role": "user",
-            "content": context_block,
-        })
-    messages.append({"role": "user", "content": f"```\n{user}\n```"})
+    system_blocks = _provider_system_blocks(system, vocab_text)
+    supports_explicit_cache = (
+        provider == "openai" and "gpt-5.6" in model_l
+    )
+    if supports_explicit_cache:
+        # Match Claude's explicit static-prefix boundary. Dynamic glossary/SFX
+        # content remains system guidance but does not enter the cache key.
+        system_blocks[0]["prompt_cache_breakpoint"] = {"mode": "explicit"}
+        system_content = system_blocks
+    else:
+        # Keep broad OpenAI-compatible endpoint support: several providers only
+        # accept string system content even though the logical blocks are shared.
+        system_content = "\n\n".join(block["text"] for block in system_blocks)
+
+    messages = [{"role": "system", "content": system_content}]
+    messages.extend(_provider_user_messages(
+        user, history, context_kind, request_instructions
+    ))
 
     params = {"model": model, "messages": messages}
+    if supports_explicit_cache:
+        # The API supports prompt_cache_options before some OpenAI SDK releases
+        # expose it as a typed keyword. extra_body is the SDK's forward-compatible
+        # path; the batch adapter materializes it as a normal top-level API field.
+        params["extra_body"] = {
+            "prompt_cache_options": {"mode": "explicit"}
+        }
     if formatType == "json" and numLines is not None:
         params["response_format"] = (
             {"type": "json_object"}

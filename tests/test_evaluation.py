@@ -633,6 +633,25 @@ class EvaluationManifestTests(unittest.TestCase):
             params["openai"]["max_completion_tokens"],
             evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST,
         )
+        self.assertEqual(
+            params["openai"]["extra_body"]["prompt_cache_options"],
+            {"mode": "explicit"},
+        )
+        self.assertFalse(any(
+            "prompt_cache_breakpoint" in block
+            for message in params["openai"]["messages"]
+            if isinstance(message.get("content"), list)
+            for block in message["content"]
+        ))
+        live_openai = evaluation._provider_params(
+            {**candidates[0], "execution": "live"}, request
+        )
+        self.assertTrue(any(
+            "prompt_cache_breakpoint" in block
+            for message in live_openai["messages"]
+            if isinstance(message.get("content"), list)
+            for block in message["content"]
+        ))
         self.assertNotIn("temperature", params["gemini"])
         self.assertNotIn("extra_body", params["gemini"])
         self.assertEqual(

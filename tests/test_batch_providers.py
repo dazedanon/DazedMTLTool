@@ -66,7 +66,20 @@ class BatchProviderDetectionTests(unittest.TestCase):
             )
         self.assertEqual(params["reasoning_effort"], "none")
         self.assertEqual(params["response_format"]["type"], "json_schema")
-        self.assertIn("猫 (Cat)", params["messages"][0]["content"])
+        system_content = params["messages"][0]["content"]
+        self.assertTrue(any(
+            "猫 (Cat)" in str(block.get("text"))
+            for block in system_content
+            if isinstance(block, dict)
+        ))
+        self.assertEqual(
+            params["extra_body"]["prompt_cache_options"], {"mode": "explicit"}
+        )
+        batch_body = BP._openai_batch_body("openai", params)
+        self.assertNotIn("extra_body", batch_body)
+        self.assertEqual(
+            batch_body["prompt_cache_options"], {"mode": "explicit"}
+        )
         self.assertTrue(any(
             "Preceding Japanese Source Context" in str(m.get("content"))
             and "prior" in str(m.get("content"))

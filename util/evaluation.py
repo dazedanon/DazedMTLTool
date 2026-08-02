@@ -2249,6 +2249,18 @@ def _provider_params(candidate: dict, request: dict) -> dict:
         context_kind=request.get("context_kind", CONTEXT_SOURCE),
         request_instructions=request.get("instructions"),
     )
+    if provider == "openai" and candidate.get("execution", "batch") == "batch":
+        # GPT-5.6 defaults to an implicit prompt-cache breakpoint. Evaluation
+        # batches disable provider caching uniformly so their actual costs are
+        # comparable to Claude's no-cache evaluation policy. Explicit mode with
+        # no marked content block performs a genuinely uncached request.
+        for message in params.get("messages") or []:
+            content = message.get("content") if isinstance(message, dict) else None
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if isinstance(block, dict):
+                    block.pop("prompt_cache_breakpoint", None)
     if provider == "gemini":
         # Gemini's OpenAI-compatible Batch API accepts reasoning_effort
         # directly. Do not emit a top-level ``google`` extension: the batch

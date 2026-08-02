@@ -58,6 +58,16 @@ class DebugRequestLoggingTests(unittest.TestCase):
 
 
 class RequestContextSerializationTests(unittest.TestCase):
+    @staticmethod
+    def _content_text(content):
+        if isinstance(content, str):
+            return content
+        return "\n\n".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict)
+        )
+
     def test_openai_source_context_is_not_assistant_history(self):
         params = T.buildOpenAIRequest(
             "Translate Japanese to English.",
@@ -181,6 +191,36 @@ class RequestContextSerializationTests(unittest.TestCase):
             "Preceding Japanese Source Context" in item
             for item in claude_contents
         ))
+
+    def test_claude_and_openai_share_the_same_logical_translation_prompt(self):
+        kwargs = {
+            "system": "Translate Japanese to English.",
+            "user": '{"Line1":"次の行"}',
+            "history": ['果歩 "前の行"'],
+            "formatType": "json",
+            "numLines": 1,
+            "vocab_text": "Relevant Vocabulary:\n果歩 (Kaho)",
+            "context_kind": T.CONTEXT_SOURCE,
+            "request_instructions": "Keep every line gender-neutral.",
+        }
+        claude = T.buildClaudeRequest(
+            model="claude-sonnet-4-6", **kwargs
+        )
+        openai = T.buildOpenAIRequest(
+            model="gpt-5.6-terra", penalty=0.0,
+            api_provider="openai", **kwargs
+        )
+
+        self.assertEqual(
+            self._content_text(claude["system"]),
+            self._content_text(openai["messages"][0]["content"]),
+        )
+        self.assertEqual(claude["messages"], openai["messages"][1:])
+        self.assertFalse(any(
+            message["role"] == "assistant"
+            for message in claude["messages"] + openai["messages"][1:]
+        ))
+        self.assertIn("Relevant Vocabulary", self._content_text(claude["system"]))
 
     def test_batch_split_marks_preceding_source_as_source_context(self):
         config = T.TranslationConfig(
