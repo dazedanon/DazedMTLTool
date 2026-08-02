@@ -2463,6 +2463,7 @@ class BlindReviewTests(unittest.TestCase):
             glossary_prompt="B>A>C>D",
             natural_contextual="C>B>A>D",
         )
+        rows[0]["notes"] = "B best preserves the speaker's intent."
         with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
             writer.writeheader()
@@ -2492,6 +2493,52 @@ class BlindReviewTests(unittest.TestCase):
         self.assertIn(
             ",B>A=C>D,",
             (self.run_dir / "blind_review.csv").read_text(encoding="utf-8-sig"),
+        )
+        comparison = evaluation.load_comparison_data(self.run_dir)
+        sample = comparison["samples"][0]
+        self.assertTrue(comparison["has_imported_review"])
+        self.assertEqual(sample["sources"], ["猫だ。"])
+        self.assertEqual(
+            sample["review"]["overall"][0],
+            [hidden[self.review_id]["B"]],
+        )
+        self.assertEqual(
+            sample["review"]["metrics"]["meaning_accuracy"][0],
+            [hidden[self.review_id]["A"]],
+        )
+        self.assertEqual(
+            sample["review"]["notes"],
+            "B best preserves the speaker's intent.",
+        )
+
+    def test_comparison_retains_invalid_and_missing_primary_outputs(self):
+        state = evaluation._read_json(self.run_dir / "state.json")
+        invalid_path = self.run_dir / state["candidates"][0]["result_file"]
+        invalid = evaluation._read_json(invalid_path)
+        line = invalid["executions"]["rep-1:logical-0001"]["lines"][0]
+        line.update({
+            "translation": "invalid-but-visible",
+            "valid": False,
+            "issues": ["Placeholder mismatch"],
+        })
+        evaluation._atomic_write_json(invalid_path, invalid)
+        missing_path = self.run_dir / state["candidates"][1]["result_file"]
+        missing = evaluation._read_json(missing_path)
+        del missing["executions"]["rep-1:logical-0001"]
+        evaluation._atomic_write_json(missing_path, missing)
+
+        sample = evaluation.load_comparison_data(self.run_dir)["samples"][0]
+
+        self.assertTrue(sample["has_problems"])
+        self.assertEqual(
+            sample["lines"][0]["outputs"]["candidate-1"]["translation"],
+            "invalid-but-visible",
+        )
+        self.assertFalse(
+            sample["lines"][0]["outputs"]["candidate-1"]["valid"]
+        )
+        self.assertTrue(
+            sample["lines"][0]["outputs"]["candidate-2"]["missing"]
         )
 
     def test_import_rejects_blank_review_without_overwriting_existing_review(self):

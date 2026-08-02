@@ -368,7 +368,7 @@ An active screen is migrated only when it has:
 | Batch History | `PageHeader`, toolbar card, shared table/editor card |
 | Skills & Prompts | `PageHeader`, shared editor card, tabs, actions and status |
 | Configuration | `PageHeader`, labeled secondary navigation, aligned setting cards in every engine category |
-| Evaluation | `PageHeader`, dynamic provider/key/model rows, simple test-size and budget controls, explicit paid-submit confirmation, expanding results table, and bounded activity log |
+| Evaluation | `PageHeader`, dynamic provider/key/model rows, simple test-size and budget controls, explicit paid-submit confirmation, peer score-summary and output-comparison views, a sample browser with aligned source/model output inspection, and bounded activity log |
 | Tool Update dialog | semantic title, card, status steps, and action variants |
 
 The application capture harness covers these top-level destinations, every

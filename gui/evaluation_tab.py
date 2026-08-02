@@ -3,14 +3,19 @@
 
 from __future__ import annotations
 
+import html
 import os
+import re
 import threading
 from pathlib import Path
 
 from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
+from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QAction,
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -21,9 +26,14 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QSplitter,
+    QTabWidget,
     QFrame,
     QScrollArea,
     QTableWidget,
@@ -41,10 +51,12 @@ from gui.ui_components import (
     PageHeader,
     SectionCard,
     configure_action_button,
+    configure_icon_button,
     make_page_layout,
     set_status_text,
 )
 from gui.config_tab import API_URL_PRESETS, ConfigComboBox, ConfigMenu, ModelFetchThread
+from gui.theme import COLORS
 from util import api_keys as api_key_vault
 from util import evaluation
 from util.skills import load_clipboard_skill
@@ -190,6 +202,14 @@ class EvaluationTab(QWidget):
         ("Database only", "database"),
         ("Custom source selection", "custom"),
     )
+    COMPARISON_MODEL_COLORS = (
+        COLORS.series_blue,
+        COLORS.series_green,
+        COLORS.series_gold,
+        COLORS.series_purple,
+        COLORS.series_cyan,
+        COLORS.series_orange,
+    )
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -211,6 +231,12 @@ class EvaluationTab(QWidget):
         self._initial_load_scheduled = False
         self._history_load_worker: _EvaluationReadWorker | None = None
         self._inventory_load_worker: _EvaluationReadWorker | None = None
+        self._comparison_load_worker: _EvaluationReadWorker | None = None
+        self._comparison_data: dict | None = None
+        self._comparison_run_dir: Path | None = None
+        self._comparison_generation = 0
+        self._comparison_filtered_samples: list[dict] = []
+        self._comparison_visible_candidates: list[str] = []
         self._pending_inventory_selection: str | None = None
         self._inventory_load_generation = 0
         self._init_ui()
@@ -554,6 +580,12 @@ class EvaluationTab(QWidget):
         history_bar.addWidget(self.import_evaluation_btn, 0, 3)
         history_bar.setColumnStretch(1, 1)
         results.add_layout(history_bar)
+        self.results_tabs = QTabWidget()
+        self.results_tabs.setMinimumHeight(540)
+        summary_page = QWidget()
+        summary_layout = QVBoxLayout(summary_page)
+        summary_layout.setContentsMargins(0, 8, 0, 0)
+        summary_layout.setSpacing(8)
         self.table = QTableWidget(0, len(self.COLUMNS))
         self.table.setHorizontalHeaderLabels(self.COLUMNS)
         for name, label in self.COLUMN_LABELS.items():
@@ -575,7 +607,199 @@ class EvaluationTab(QWidget):
         for index in range(len(self.COLUMNS)):
             header.setSectionResizeMode(index, QHeaderView.Fixed)
         self.table.viewport().installEventFilter(self)
-        results.add_widget(self.table, 2)
+        summary_layout.addWidget(self.table, 1)
+        self.results_tabs.addTab(summary_page, "Score summary")
+
+        comparison_page = QWidget()
+        comparison_layout = QVBoxLayout(comparison_page)
+        comparison_layout.setContentsMargins(10, 10, 10, 10)
+        comparison_layout.setSpacing(10)
+        comparison_toolbar = QGridLayout()
+        comparison_toolbar.setHorizontalSpacing(10)
+        comparison_toolbar.setVerticalSpacing(8)
+        self.comparison_search = QLineEdit()
+        self.comparison_search.setPlaceholderText(
+            "Search source, translations, scenes, or review notes…"
+        )
+        self.comparison_search.setClearButtonEnabled(True)
+        self.comparison_filter = _EvaluationComboBox()
+        for label, value in (
+            ("All samples", "all"),
+            ("Reviewed", "reviewed"),
+            ("Ties", "ties"),
+            ("Has notes", "notes"),
+            ("Missing or invalid", "problems"),
+        ):
+            self.comparison_filter.addItem(label, value)
+        self.comparison_models_btn = QToolButton()
+        self.comparison_models_btn.setText("Models")
+        self.comparison_models_btn.setPopupMode(QToolButton.InstantPopup)
+        self.comparison_models_menu = QMenu(self.comparison_models_btn)
+        self.comparison_models_btn.setMenu(self.comparison_models_menu)
+        self.comparison_reveal_models = QCheckBox("Show model names")
+        self.comparison_reveal_models.setToolTip(
+            "Before importing a blind review, hiding names helps avoid model-name bias."
+        )
+        self.comparison_previous_btn = QPushButton("←")
+        self.comparison_next_btn = QPushButton("→")
+        configure_icon_button(
+            self.comparison_previous_btn,
+            accessible_name="Previous comparison sample",
+            tooltip="Previous sample",
+        )
+        configure_icon_button(
+            self.comparison_next_btn,
+            accessible_name="Next comparison sample",
+            tooltip="Next sample",
+        )
+        self.comparison_counter = QLabel("—")
+        self.comparison_counter.setAlignment(Qt.AlignCenter)
+        self.comparison_counter.setMinimumWidth(72)
+        self.comparison_status = QLabel(
+            "Choose a completed evaluation to compare model outputs."
+        )
+        self.comparison_status.setWordWrap(True)
+        self.comparison_status.setStyleSheet(f"color: {COLORS.text_muted};")
+        comparison_toolbar.addWidget(self.comparison_search, 0, 0)
+        comparison_toolbar.addWidget(self.comparison_filter, 0, 1)
+        comparison_toolbar.addWidget(self.comparison_models_btn, 0, 2)
+        comparison_toolbar.addWidget(self.comparison_reveal_models, 0, 3)
+        comparison_toolbar.addWidget(self.comparison_status, 1, 0, 1, 2)
+        navigation = QHBoxLayout()
+        navigation.setSpacing(6)
+        navigation.addStretch(1)
+        navigation.addWidget(self.comparison_previous_btn)
+        navigation.addWidget(self.comparison_counter)
+        navigation.addWidget(self.comparison_next_btn)
+        comparison_toolbar.addLayout(navigation, 1, 2, 1, 2)
+        comparison_toolbar.setColumnStretch(0, 1)
+        comparison_layout.addLayout(comparison_toolbar)
+
+        self.comparison_splitter = QSplitter(Qt.Horizontal)
+        self.comparison_splitter.setObjectName("evaluationComparisonSplitter")
+        self.comparison_sample_list = QListWidget()
+        self.comparison_sample_list.setAlternatingRowColors(True)
+        self.comparison_sample_list.setWordWrap(True)
+        self.comparison_sample_list.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff
+        )
+        self.comparison_sample_list.setMinimumWidth(280)
+        self.comparison_sample_list.setMaximumWidth(380)
+        self.comparison_splitter.addWidget(self.comparison_sample_list)
+
+        comparison_detail = QWidget()
+        detail_layout = QVBoxLayout(comparison_detail)
+        detail_layout.setContentsMargins(12, 0, 0, 0)
+        detail_layout.setSpacing(10)
+        self.comparison_sample_heading = QLabel("Select a sample")
+        self.comparison_sample_heading.setStyleSheet(
+            f"color: {COLORS.text_primary}; font-weight: 600; font-size: 14px;"
+        )
+        self.comparison_sample_heading.setTextInteractionFlags(
+            Qt.TextSelectableByMouse
+        )
+        detail_layout.addWidget(self.comparison_sample_heading)
+        self.comparison_sample_meta = QLabel()
+        self.comparison_sample_meta.setStyleSheet(f"color: {COLORS.text_muted};")
+        self.comparison_sample_meta.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        detail_layout.addWidget(self.comparison_sample_meta)
+
+        self.comparison_review_card = QFrame()
+        self.comparison_review_card.setObjectName("evaluationReviewCard")
+        self.comparison_review_card.setStyleSheet(f"""
+            QFrame#evaluationReviewCard {{
+                background-color: {COLORS.surface_1};
+                border: 1px solid {COLORS.border};
+                border-radius: 6px;
+            }}
+            QLabel#evaluationReviewTitle {{
+                color: {COLORS.text_primary};
+                font-weight: 600;
+            }}
+            QLabel#evaluationReviewMetric {{
+                color: {COLORS.text_muted};
+                font-weight: 600;
+            }}
+        """)
+        review_layout = QGridLayout(self.comparison_review_card)
+        review_layout.setContentsMargins(12, 10, 12, 10)
+        review_layout.setHorizontalSpacing(16)
+        review_layout.setVerticalSpacing(5)
+        review_title = QLabel("Blind review verdict")
+        review_title.setObjectName("evaluationReviewTitle")
+        self.comparison_review_status = QLabel()
+        self.comparison_review_status.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        review_layout.addWidget(review_title, 0, 0)
+        review_layout.addWidget(self.comparison_review_status, 0, 1)
+        self.comparison_review_metric_labels = {}
+        self.comparison_review_values = {}
+        metric_rows = (
+            ("overall", "Overall"),
+            ("meaning_accuracy", "Meaning accuracy"),
+            ("glossary_prompt", "Glossary & prompt"),
+            ("natural_contextual", "Natural & contextual"),
+        )
+        for row, (metric, label_text) in enumerate(metric_rows, start=1):
+            label = QLabel(label_text)
+            label.setObjectName("evaluationReviewMetric")
+            value = QLabel("—")
+            value.setTextFormat(Qt.RichText)
+            value.setWordWrap(True)
+            value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            review_layout.addWidget(label, row, 0)
+            review_layout.addWidget(value, row, 1)
+            self.comparison_review_metric_labels[metric] = label
+            self.comparison_review_values[metric] = value
+        self.comparison_review_notes = QLabel()
+        self.comparison_review_notes.setWordWrap(True)
+        self.comparison_review_notes.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.comparison_review_notes.setStyleSheet(
+            f"color: {COLORS.text_secondary}; border-top: 1px solid {COLORS.border}; "
+            "padding-top: 7px;"
+        )
+        review_layout.addWidget(self.comparison_review_notes, 5, 0, 1, 2)
+        review_layout.setColumnStretch(1, 1)
+        detail_layout.addWidget(self.comparison_review_card)
+        self.comparison_table = QTableWidget(0, 0)
+        self.comparison_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.comparison_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.comparison_table.setWordWrap(True)
+        self.comparison_table.setAlternatingRowColors(True)
+        self.comparison_table.verticalHeader().setVisible(True)
+        self.comparison_table.verticalHeader().setDefaultAlignment(Qt.AlignCenter)
+        self.comparison_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.comparison_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.comparison_table.viewport().installEventFilter(self)
+        detail_layout.addWidget(self.comparison_table, 1)
+        self.comparison_splitter.addWidget(comparison_detail)
+        self.comparison_splitter.setStretchFactor(0, 0)
+        self.comparison_splitter.setStretchFactor(1, 1)
+        comparison_layout.addWidget(self.comparison_splitter, 1)
+        self.comparison_splitter.hide()
+        self._comparison_tab_index = self.results_tabs.addTab(
+            comparison_page, "Output comparison"
+        )
+        self.results_tabs.setTabEnabled(self._comparison_tab_index, False)
+        self.results_tabs.currentChanged.connect(self._on_results_tab_changed)
+        self.comparison_search.textChanged.connect(
+            self._refresh_comparison_sample_list
+        )
+        self.comparison_filter.currentIndexChanged.connect(
+            self._refresh_comparison_sample_list
+        )
+        self.comparison_reveal_models.toggled.connect(
+            self._refresh_comparison_presenter
+        )
+        self.comparison_sample_list.currentRowChanged.connect(
+            self._display_comparison_selection
+        )
+        self.comparison_previous_btn.clicked.connect(
+            lambda: self._move_comparison_selection(-1)
+        )
+        self.comparison_next_btn.clicked.connect(
+            lambda: self._move_comparison_selection(1)
+        )
+        results.add_widget(self.results_tabs, 2)
 
         self.log = QTextEdit()
         self.log.setReadOnly(True)
@@ -596,6 +820,12 @@ class EvaluationTab(QWidget):
             and event.type() == QEvent.Resize
         ):
             QTimer.singleShot(0, self._resize_result_columns)
+        if (
+            hasattr(self, "comparison_table")
+            and watched is self.comparison_table.viewport()
+            and event.type() == QEvent.Resize
+        ):
+            QTimer.singleShot(0, self._resize_comparison_columns)
         return super().eventFilter(watched, event)
 
     def _refresh_responsive_geometry(self):
@@ -603,6 +833,24 @@ class EvaluationTab(QWidget):
             self.setup_card.setMinimumHeight(0)
             self.setup_card.setMinimumHeight(self.setup_card.sizeHint().height())
         self._resize_result_columns()
+        self._resize_comparison_controls()
+        self._resize_comparison_columns()
+
+    def _resize_comparison_controls(self):
+        if not hasattr(self, "comparison_filter"):
+            return
+        peer_dropdowns = (
+            self.comparison_filter,
+            self.comparison_models_btn,
+        )
+        peer_height = max(widget.sizeHint().height() for widget in (
+            self.comparison_search, *peer_dropdowns,
+        ))
+        peer_width = max(widget.sizeHint().width() for widget in peer_dropdowns)
+        for widget in (self.comparison_search, *peer_dropdowns):
+            widget.setFixedHeight(peer_height)
+        for widget in peer_dropdowns:
+            widget.setFixedWidth(peer_width)
 
     def _resize_result_columns(self):
         """Keep every result column visible within the table viewport."""
@@ -2438,7 +2686,567 @@ class EvaluationTab(QWidget):
         except Exception as exc:
             QMessageBox.warning(self, "Blind review", str(exc))
 
+    def _on_results_tab_changed(self, index: int):
+        if hasattr(self, "log"):
+            self.log.setVisible(index != self._comparison_tab_index)
+        if index == self._comparison_tab_index:
+            self._start_comparison_load()
+
+    def _invalidate_comparison(self):
+        self._comparison_generation += 1
+        self._comparison_data = None
+        self._comparison_run_dir = None
+        self._comparison_filtered_samples = []
+        self._comparison_visible_candidates = []
+        if not hasattr(self, "comparison_sample_list"):
+            return
+        self.comparison_sample_list.clear()
+        self.comparison_table.clear()
+        self.comparison_table.setRowCount(0)
+        self.comparison_table.setColumnCount(0)
+        self.comparison_splitter.hide()
+        self.comparison_counter.setText("—")
+        self.comparison_sample_heading.setText("Select a sample")
+        self.comparison_sample_meta.clear()
+        self.comparison_review_status.clear()
+        self.comparison_review_notes.clear()
+        for value in self.comparison_review_values.values():
+            value.setText("—")
+        self._set_comparison_review_metrics_visible(False)
+        self.comparison_status.setText(
+            "Choose a completed evaluation to compare model outputs."
+        )
+
+    def _start_comparison_load(self):
+        if (
+            self.results_tabs.currentIndex() != self._comparison_tab_index
+            or not self.current_run_dir
+            or not self.results_tabs.isTabEnabled(self._comparison_tab_index)
+        ):
+            return
+        run_dir = self.current_run_dir.resolve()
+        if self._comparison_data is not None and self._comparison_run_dir == run_dir:
+            return
+        running = self._comparison_load_worker
+        if (
+            running is not None
+            and running.isRunning()
+            and getattr(running, "comparison_run_dir", None) == run_dir
+        ):
+            return
+        self._comparison_generation += 1
+        generation = self._comparison_generation
+        self.comparison_splitter.hide()
+        self.comparison_status.setText("Loading source and model outputs…")
+        worker = _EvaluationReadWorker(
+            lambda path=run_dir: evaluation.load_comparison_data(path), parent=self
+        )
+        worker.comparison_run_dir = run_dir
+        self._comparison_load_worker = worker
+        worker.loaded.connect(
+            lambda payload, error, active=worker, expected=generation, path=run_dir:
+            self._finish_comparison_load(active, expected, path, payload, error)
+        )
+        worker.finished.connect(
+            lambda active=worker: self._comparison_worker_finished(active)
+        )
+        worker.start()
+
+    def _comparison_worker_finished(self, worker: _EvaluationReadWorker):
+        if self._comparison_load_worker is worker:
+            self._comparison_load_worker = None
+        worker.deleteLater()
+
+    def _finish_comparison_load(
+        self,
+        worker: _EvaluationReadWorker,
+        generation: int,
+        run_dir: Path,
+        payload: object,
+        error: str,
+    ):
+        if (
+            generation != self._comparison_generation
+            or self.current_run_dir is None
+            or self.current_run_dir.resolve() != run_dir
+        ):
+            return
+        if error or not isinstance(payload, dict):
+            self.comparison_status.setText(
+                "Could not load output comparison: "
+                + (error or "comparison data is invalid")
+            )
+            self.comparison_splitter.hide()
+            return
+        self._comparison_data = payload
+        self._comparison_run_dir = run_dir
+        candidate_ids = [
+            str(candidate["id"])
+            for candidate in payload.get("candidates") or []
+        ]
+        self._comparison_visible_candidates = candidate_ids
+        self._rebuild_comparison_model_menu()
+        self.comparison_reveal_models.blockSignals(True)
+        self.comparison_reveal_models.setChecked(
+            bool(payload.get("has_imported_review"))
+        )
+        self.comparison_reveal_models.blockSignals(False)
+        samples = payload.get("samples") or []
+        if not samples:
+            self.comparison_status.setText(
+                "This evaluation has no source samples to compare."
+            )
+            self.comparison_splitter.hide()
+            return
+        self.comparison_splitter.show()
+        self._refresh_comparison_sample_list()
+
+    def _rebuild_comparison_model_menu(self):
+        self.comparison_models_menu.clear()
+        candidates = (self._comparison_data or {}).get("candidates") or []
+        visible = set(self._comparison_visible_candidates)
+        for candidate in candidates:
+            candidate_id = str(candidate["id"])
+            action = QAction(str(candidate.get("label") or candidate_id), self)
+            action.setData(candidate_id)
+            action.setCheckable(True)
+            action.setChecked(candidate_id in visible)
+            action.toggled.connect(
+                lambda checked, value=candidate_id:
+                self._toggle_comparison_candidate(value, checked)
+            )
+            self.comparison_models_menu.addAction(action)
+        self.comparison_models_btn.setText(
+            f"Models ({len(self._comparison_visible_candidates)})"
+        )
+        self._resize_comparison_controls()
+
+    def _toggle_comparison_candidate(self, candidate_id: str, checked: bool):
+        visible = list(self._comparison_visible_candidates)
+        if checked and candidate_id not in visible:
+            ordered = [
+                str(candidate["id"])
+                for candidate in (self._comparison_data or {}).get("candidates") or []
+            ]
+            visible = [value for value in ordered if value in {*visible, candidate_id}]
+        elif not checked and candidate_id in visible:
+            if len(visible) == 1:
+                for action in self.comparison_models_menu.actions():
+                    if str(action.data() or "") == candidate_id:
+                        action.blockSignals(True)
+                        action.setChecked(True)
+                        action.blockSignals(False)
+                        break
+                return
+            visible.remove(candidate_id)
+        self._comparison_visible_candidates = visible
+        self.comparison_models_btn.setText(f"Models ({len(visible)})")
+        self._resize_comparison_controls()
+        self._display_comparison_selection(self.comparison_sample_list.currentRow())
+
+    def _comparison_candidate(self, candidate_id: str) -> dict:
+        for candidate in (self._comparison_data or {}).get("candidates") or []:
+            if str(candidate.get("id")) == candidate_id:
+                return candidate
+        return {"id": candidate_id, "label": candidate_id}
+
+    def _comparison_candidate_label(self, candidate_id: str) -> str:
+        candidate = self._comparison_candidate(candidate_id)
+        return str(candidate.get("label") or candidate.get("model") or candidate_id)
+
+    def _comparison_candidate_color(self, candidate_id: str) -> str:
+        ordered = [
+            str(candidate["id"])
+            for candidate in (self._comparison_data or {}).get("candidates") or []
+        ]
+        try:
+            index = ordered.index(candidate_id)
+        except ValueError:
+            index = 0
+        return self.COMPARISON_MODEL_COLORS[
+            index % len(self.COMPARISON_MODEL_COLORS)
+        ]
+
+    def _comparison_display_name(self, candidate_id: str, sample: dict) -> str:
+        if self.comparison_reveal_models.isChecked():
+            return self._comparison_candidate_label(candidate_id)
+        blind_label = (sample.get("blind_labels") or {}).get(candidate_id)
+        if blind_label:
+            return f"Candidate {blind_label}"
+        ordered = [
+            str(candidate["id"])
+            for candidate in (self._comparison_data or {}).get("candidates") or []
+        ]
+        try:
+            index = ordered.index(candidate_id)
+        except ValueError:
+            return "Candidate"
+        return f"Candidate {evaluation._blind_label(index)}"
+
+    @staticmethod
+    def _comparison_blind_label_order(label: str) -> int:
+        value = 0
+        normalized = str(label or "").strip().upper()
+        if not normalized or any(
+            not "A" <= character <= "Z" for character in normalized
+        ):
+            return 2_147_483_647
+        for character in normalized:
+            value = value * 26 + (ord(character) - ord("A") + 1)
+        return value
+
+    def _comparison_ordered_candidate_ids(self, sample: dict) -> list[str]:
+        visible = list(self._comparison_visible_candidates)
+        original_order = {
+            candidate_id: index for index, candidate_id in enumerate(visible)
+        }
+        blind_labels = sample.get("blind_labels") or {}
+
+        def order(candidate_id: str):
+            label = blind_labels.get(candidate_id)
+            if label:
+                return (0, self._comparison_blind_label_order(label))
+            return (1, original_order[candidate_id])
+
+        return sorted(visible, key=order)
+
+    def _comparison_table_header(self, candidate_id: str, sample: dict) -> str:
+        blind_label = str(
+            (sample.get("blind_labels") or {}).get(candidate_id) or ""
+        )
+        if self.comparison_reveal_models.isChecked():
+            model = self._comparison_candidate_label(candidate_id)
+            return f"{blind_label} · {model}" if blind_label else model
+        if blind_label:
+            return f"Candidate {blind_label}"
+        return self._comparison_display_name(candidate_id, sample)
+
+    def _format_comparison_tiers(self, tiers: list, sample: dict) -> str:
+        return " > ".join(
+            " = ".join(
+                self._comparison_display_name(str(candidate_id), sample)
+                for candidate_id in tier
+            )
+            for tier in tiers
+        )
+
+    def _comparison_tiers_html(self, tiers: list, sample: dict) -> str:
+        rendered_tiers = []
+        for tier_index, tier in enumerate(tiers):
+            names = []
+            for candidate_id in tier:
+                candidate_id = str(candidate_id)
+                name = html.escape(
+                    self._comparison_display_name(candidate_id, sample)
+                )
+                weight = "700" if tier_index == 0 else "500"
+                names.append(
+                    f'<span style="color:{self._comparison_candidate_color(candidate_id)};'
+                    f'font-weight:{weight};">{name}</span>'
+                )
+            rendered_tiers.append(
+                f' <span style="color:{COLORS.text_muted};">=</span> '.join(names)
+            )
+        return (
+            f' <span style="color:{COLORS.text_muted};">›</span> '
+        ).join(rendered_tiers)
+
+    def _set_comparison_review_metrics_visible(self, visible: bool):
+        for metric in ("overall", *evaluation.REVIEW_QUALITY_METRICS):
+            self.comparison_review_metric_labels[metric].setVisible(visible)
+            self.comparison_review_values[metric].setVisible(visible)
+
+    @staticmethod
+    def _comparison_scene_label(scene_id: str) -> str:
+        scene = str(scene_id or "").strip()
+        match = re.match(
+            r"^(Map\d+)(?:\.json)?:event-(\d+):page-(\d+):call-(\d+)$",
+            scene,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            map_name, event, page, call = match.groups()
+            return f"{map_name} · Event {event} / Page {page} / Call {call}"
+        return scene or "Unknown scene"
+
+    @staticmethod
+    def _comparison_stratum_label(stratum: str) -> str:
+        return str(stratum or "Uncategorized").replace("_", " ").title()
+
+    def _comparison_sample_matches(self, sample: dict) -> bool:
+        selected_filter = str(self.comparison_filter.currentData() or "all")
+        review = sample.get("review")
+        if selected_filter == "reviewed" and not review:
+            return False
+        if selected_filter == "ties" and not (
+            review and any(len(tier) > 1 for tier in review.get("overall") or [])
+        ):
+            return False
+        if selected_filter == "notes" and not (
+            review and str(review.get("notes") or "").strip()
+        ):
+            return False
+        if selected_filter == "problems" and not sample.get("has_problems"):
+            return False
+        query = self.comparison_search.text().strip().casefold()
+        if not query:
+            return True
+        values = [
+            sample.get("id", ""), sample.get("scene_id", ""),
+            sample.get("stratum", ""), *(sample.get("sources") or []),
+            str((review or {}).get("notes") or ""),
+        ]
+        for line in sample.get("lines") or []:
+            values.extend(
+                output.get("translation", "")
+                for output in (line.get("outputs") or {}).values()
+            )
+        return query in "\n".join(str(value) for value in values).casefold()
+
+    def _refresh_comparison_sample_list(self, *_args):
+        if self._comparison_data is None:
+            return
+        current_item = self.comparison_sample_list.currentItem()
+        current_id = current_item.data(Qt.UserRole) if current_item else None
+        all_samples = self._comparison_data.get("samples") or []
+        sample_numbers = {
+            str(sample.get("id")): index
+            for index, sample in enumerate(all_samples, start=1)
+        }
+        samples = [
+            sample for sample in all_samples
+            if self._comparison_sample_matches(sample)
+        ]
+        self._comparison_filtered_samples = samples
+        self.comparison_sample_list.blockSignals(True)
+        self.comparison_sample_list.clear()
+        selected_row = -1
+        for index, sample in enumerate(samples):
+            review = sample.get("review")
+            if sample.get("has_problems"):
+                status = "Needs attention"
+                status_color = COLORS.danger
+                marker = "⚠"
+            elif review:
+                tied = any(
+                    len(tier) > 1 for tier in review.get("overall") or []
+                )
+                status = "Reviewed · Tie" if tied else "Reviewed"
+                status_color = COLORS.warning if tied else COLORS.success
+                marker = "●"
+            elif sample.get("blind_labels"):
+                status = "Awaiting review"
+                status_color = COLORS.accent_text
+                marker = "○"
+            else:
+                status = "Not reviewed"
+                status_color = COLORS.text_muted
+                marker = "○"
+            sample_number = sample_numbers.get(str(sample.get("id")), index + 1)
+            scene = self._comparison_scene_label(sample.get("scene_id", ""))
+            stratum = self._comparison_stratum_label(sample.get("stratum", ""))
+            line_count = len(sample.get("lines") or [])
+            item = QListWidgetItem(
+                f"{marker}  {sample_number}. {scene}\n"
+                f"    {line_count:,} lines · {stratum} · {status}"
+            )
+            item.setData(Qt.UserRole, sample["id"])
+            item.setForeground(QBrush(QColor(status_color)))
+            tooltip = str(sample.get("scene_id") or scene)
+            if review:
+                tooltip += "\nOverall: " + self._format_comparison_tiers(
+                    review.get("overall") or [], sample
+                )
+            item.setToolTip(tooltip)
+            self.comparison_sample_list.addItem(item)
+            if sample["id"] == current_id:
+                selected_row = index
+        self.comparison_sample_list.blockSignals(False)
+        total = len(all_samples)
+        problem_count = sum(bool(sample.get("has_problems")) for sample in samples)
+        status_text = f"{len(samples):,} of {total:,} samples shown"
+        if problem_count:
+            status_text += f" · {problem_count:,} need attention"
+        self.comparison_status.setText(status_text)
+        if samples:
+            self.comparison_sample_list.setCurrentRow(
+                selected_row if selected_row >= 0 else 0
+            )
+        else:
+            self._display_comparison_selection(-1)
+
+    def _refresh_comparison_presenter(self, *_args):
+        self._refresh_comparison_sample_list()
+
+    def _move_comparison_selection(self, offset: int):
+        count = self.comparison_sample_list.count()
+        if not count:
+            return
+        row = self.comparison_sample_list.currentRow()
+        self.comparison_sample_list.setCurrentRow(
+            min(count - 1, max(0, row + offset))
+        )
+
+    def _display_comparison_selection(self, row: int):
+        samples = self._comparison_filtered_samples
+        if row < 0 or row >= len(samples):
+            self.comparison_sample_heading.setText("No matching sample")
+            self.comparison_sample_meta.clear()
+            self.comparison_review_status.clear()
+            self.comparison_review_notes.setText(
+                "Adjust the search or filter to show samples."
+            )
+            for value in self.comparison_review_values.values():
+                value.setText("—")
+            self._set_comparison_review_metrics_visible(False)
+            self.comparison_table.clear()
+            self.comparison_table.setRowCount(0)
+            self.comparison_table.setColumnCount(0)
+            self.comparison_counter.setText(f"0 / {len(samples):,}")
+            self.comparison_previous_btn.setEnabled(False)
+            self.comparison_next_btn.setEnabled(False)
+            return
+        sample = samples[row]
+        self.comparison_counter.setText(f"{row + 1:,} / {len(samples):,}")
+        self.comparison_previous_btn.setEnabled(row > 0)
+        self.comparison_next_btn.setEnabled(row + 1 < len(samples))
+        self.comparison_sample_heading.setText(
+            self._comparison_scene_label(sample.get("scene_id", ""))
+        )
+        self.comparison_sample_meta.setText(
+            f"{len(sample.get('lines') or []):,} source lines  ·  "
+            f"{self._comparison_stratum_label(sample.get('stratum', ''))}  ·  "
+            f"Sample ID: {sample.get('id') or '—'}"
+        )
+        review = sample.get("review")
+        if review:
+            self._set_comparison_review_metrics_visible(True)
+            overall = review.get("overall") or []
+            tied = bool(overall and len(overall[0]) > 1)
+            self.comparison_review_status.setText(
+                "●  Reviewed · Tie" if tied else "●  Reviewed"
+            )
+            self.comparison_review_status.setStyleSheet(
+                f"color: {COLORS.warning if tied else COLORS.success}; "
+                "font-weight: 600;"
+            )
+            self.comparison_review_values["overall"].setText(
+                self._comparison_tiers_html(overall, sample) or "—"
+            )
+            for metric in evaluation.REVIEW_QUALITY_METRICS:
+                tiers = (review.get("metrics") or {}).get(metric) or []
+                self.comparison_review_values[metric].setText(
+                    self._comparison_tiers_html(tiers, sample) or "—"
+                )
+            notes = str(review.get("notes") or "").strip()
+            self.comparison_review_notes.setText(
+                f"Reviewer note: {notes}" if notes else "No reviewer note for this sample."
+            )
+        elif sample.get("blind_labels"):
+            self._set_comparison_review_metrics_visible(False)
+            self.comparison_review_status.setText("○  Awaiting review")
+            self.comparison_review_status.setStyleSheet(
+                f"color: {COLORS.accent_text}; font-weight: 600;"
+            )
+            for value in self.comparison_review_values.values():
+                value.setText("—")
+            self.comparison_review_notes.setText(
+                "Candidate names stay hidden until a reviewed CSV is imported."
+            )
+        else:
+            self._set_comparison_review_metrics_visible(False)
+            self.comparison_review_status.setText("○  Not reviewed")
+            self.comparison_review_status.setStyleSheet(
+                f"color: {COLORS.text_muted}; font-weight: 600;"
+            )
+            for value in self.comparison_review_values.values():
+                value.setText("—")
+            self.comparison_review_notes.setText(
+                "This sample was not included in the exported blind review."
+            )
+
+        candidate_ids = self._comparison_ordered_candidate_ids(sample)
+        self.comparison_table.clear()
+        self.comparison_table.setColumnCount(1 + len(candidate_ids))
+        source_header = QTableWidgetItem("Japanese source")
+        source_header.setForeground(QBrush(QColor(COLORS.text_primary)))
+        self.comparison_table.setHorizontalHeaderItem(0, source_header)
+        overall_tiers = (review or {}).get("overall") or []
+        first_place = set(overall_tiers[0] if overall_tiers else [])
+        for column, candidate_id in enumerate(candidate_ids, start=1):
+            display_name = self._comparison_table_header(candidate_id, sample)
+            header_text = f"★  {display_name}" if candidate_id in first_place else display_name
+            header_item = QTableWidgetItem(header_text)
+            header_item.setForeground(
+                QBrush(QColor(self._comparison_candidate_color(candidate_id)))
+            )
+            if candidate_id in first_place:
+                header_item.setToolTip("Ranked first overall for this sample")
+            self.comparison_table.setHorizontalHeaderItem(column, header_item)
+        lines = sample.get("lines") or []
+        self.comparison_table.setRowCount(len(lines))
+        self.comparison_table.setVerticalHeaderLabels([
+            str(index) for index in range(1, len(lines) + 1)
+        ])
+        for line_index, line in enumerate(lines):
+            source_item = QTableWidgetItem(str(line.get("source") or ""))
+            source_item.setToolTip(str(line.get("segment_id") or ""))
+            source_item.setForeground(QBrush(QColor(COLORS.text_primary)))
+            source_item.setBackground(QBrush(QColor(COLORS.surface_1)))
+            self.comparison_table.setItem(line_index, 0, source_item)
+            for column, candidate_id in enumerate(candidate_ids, start=1):
+                output = (line.get("outputs") or {}).get(candidate_id) or {}
+                text = str(output.get("translation") or "")
+                if output.get("missing"):
+                    display = "⚠ Missing output"
+                elif not output.get("valid", True):
+                    display = "⚠ Invalid output\n" + text
+                else:
+                    display = text
+                item = QTableWidgetItem(display)
+                details = [
+                    *[str(value) for value in output.get("issues") or []],
+                    *[str(value) for value in output.get("warnings") or []],
+                ]
+                if details:
+                    item.setToolTip("\n".join(details))
+                if output.get("missing") or not output.get("valid", True):
+                    item.setForeground(QBrush(QColor(COLORS.danger)))
+                    item.setBackground(QBrush(QColor(COLORS.danger_surface)))
+                elif output.get("warnings"):
+                    item.setForeground(QBrush(QColor(COLORS.warning)))
+                self.comparison_table.setItem(line_index, column, item)
+        header = self.comparison_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        self.comparison_table.resizeRowsToContents()
+        self._resize_comparison_columns()
+        self._reset_comparison_table_scrollbars()
+        QTimer.singleShot(0, self._reset_comparison_table_scrollbars)
+
+    def _reset_comparison_table_scrollbars(self):
+        if not hasattr(self, "comparison_table"):
+            return
+        self.comparison_table.horizontalScrollBar().setValue(0)
+        self.comparison_table.verticalScrollBar().setValue(0)
+
+    def _resize_comparison_columns(self):
+        if not hasattr(self, "comparison_table"):
+            return
+        column_count = self.comparison_table.columnCount()
+        viewport_width = self.comparison_table.viewport().width()
+        if column_count < 2 or viewport_width <= 0:
+            return
+        usable_width = max(0, viewport_width - 20)
+        source_width = max(220, min(320, int(usable_width * 0.24)))
+        candidate_count = column_count - 1
+        remaining = max(0, usable_width - source_width)
+        candidate_width = max(250, remaining // candidate_count)
+        self.comparison_table.setColumnWidth(0, source_width)
+        for column in range(1, column_count):
+            self.comparison_table.setColumnWidth(column, candidate_width)
+
     def _display_state(self, state: dict):
+        self._invalidate_comparison()
         self.table.setRowCount(len(state.get("candidates", [])))
         human_review = state.get("human_review") or {}
         human_points = human_review.get("points")
@@ -2514,6 +3322,18 @@ class EvaluationTab(QWidget):
             self._poll_timer.start()
         else:
             self._poll_timer.stop()
+        comparison_ready = bool(
+            self.current_run_dir
+            and state.get("status") in {"completed", "failed"}
+        )
+        self.results_tabs.setTabEnabled(
+            self._comparison_tab_index, comparison_ready
+        )
+        if (
+            comparison_ready
+            and self.results_tabs.currentIndex() == self._comparison_tab_index
+        ):
+            QTimer.singleShot(0, self._start_comparison_load)
         self._update_actions(state)
 
     def _update_actions(self, state: dict | None = None):

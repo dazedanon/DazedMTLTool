@@ -884,8 +884,9 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertEqual(self.tab.table.item(0, 3).text(), "Completed")
             self.assertTrue(self.tab.import_btn.isEnabled())
 
-    def test_blind_quality_metrics_display_before_best_overall(self):
-        self.tab._display_state({
+    def test_blind_review_summary_and_output_comparison_display(self):
+        self.tab.current_run_dir = self.project_root
+        state = {
             "status": "completed",
             "human_review": {
                 "points": {"candidate-1": 210},
@@ -895,37 +896,164 @@ class EvaluationTabTests(unittest.TestCase):
                     "natural_contextual": {"candidate-1": 200},
                 },
             },
-            "candidates": [{
-                "id": "candidate-1",
-                "model": "reviewed-model",
-                "provider": "openai",
-                "status": "completed",
-                "estimate": {"cost_usd": 1.0},
-                "summary": {},
+            "candidates": [
+                {
+                    "id": "candidate-1", "model": "model-one",
+                    "provider": "openai", "status": "completed",
+                    "estimate": {"cost_usd": 1.0}, "summary": {},
+                },
+                {
+                    "id": "candidate-2", "model": "model-two",
+                    "provider": "openai", "status": "completed",
+                    "estimate": {"cost_usd": 1.0}, "summary": {},
+                },
+            ],
+        }
+        payload = {
+            "has_imported_review": True,
+            "candidates": [
+                {"id": "candidate-1", "label": "model-one"},
+                {"id": "candidate-2", "label": "model-two"},
+            ],
+            "samples": [{
+                "id": "sample-1", "scene_id": "Map001", "stratum": "dialogue",
+                "sources": ["猫だ。", "行こう。"],
+                "blind_labels": {"candidate-1": "B", "candidate-2": "A"},
+                "has_problems": True,
+                "review": {
+                    "overall": [["candidate-2"], ["candidate-1"]],
+                    "metrics": {
+                        "meaning_accuracy": [["candidate-1", "candidate-2"]],
+                    },
+                    "notes": "Model A keeps the intended tone.",
+                },
+                "lines": [
+                    {
+                        "segment_id": "segment-1", "source": "猫だ。",
+                        "outputs": {
+                            "candidate-1": {
+                                "translation": "It's a cat.", "valid": True,
+                                "missing": False, "issues": [], "warnings": [],
+                            },
+                            "candidate-2": {
+                                "translation": "A cat.", "valid": True,
+                                "missing": False, "issues": [], "warnings": [],
+                            },
+                        },
+                    },
+                    {
+                        "segment_id": "segment-2", "source": "行こう。",
+                        "outputs": {
+                            "candidate-1": {
+                                "translation": "Let's go.", "valid": True,
+                                "missing": False, "issues": [], "warnings": [],
+                            },
+                            "candidate-2": {
+                                "translation": "", "valid": False,
+                                "missing": True, "issues": ["No output"],
+                                "warnings": [],
+                            },
+                        },
+                    },
+                ],
             }],
-        })
+        }
 
-        self.assertEqual(
-            self.tab.table.item(
-                0, self.tab.COLUMNS.index("Meaning Accuracy")
-            ).text(),
-            "230",
+        with mock.patch(
+            "gui.evaluation_tab.evaluation.load_comparison_data",
+            return_value=payload,
+        ) as loader:
+            self.tab._display_state(state)
+            loader.assert_not_called()
+            self.assertEqual(
+                self.tab.table.item(
+                    0, self.tab.COLUMNS.index("Meaning Accuracy")
+                ).text(),
+                "230",
+            )
+            self.assertEqual(
+                self.tab.table.item(
+                    0, self.tab.COLUMNS.index("Glossary & Prompt")
+                ).text(),
+                "220",
+            )
+            self.assertEqual(
+                self.tab.table.item(
+                    0, self.tab.COLUMNS.index("Natural & Contextual")
+                ).text(),
+                "200",
+            )
+            self.assertEqual(
+                self.tab.table.item(
+                    0, self.tab.COLUMNS.index("Best overall")
+                ).text(),
+                "210",
+            )
+            self.tab.results_tabs.setCurrentIndex(self.tab._comparison_tab_index)
+            worker = self.tab._comparison_load_worker
+            self.assertIsNotNone(worker)
+            worker.wait(1_000)
+            self.app.processEvents()
+
+        loader.assert_called_once_with(self.project_root.resolve())
+
+        self.assertEqual(self.tab.comparison_sample_list.count(), 1)
+        self.assertFalse(self.tab.log.isVisible())
+        self.assertEqual(self.tab.comparison_table.rowCount(), 2)
+        self.assertEqual(self.tab.comparison_table.columnCount(), 3)
+        first_header = self.tab.comparison_table.horizontalHeaderItem(1).text()
+        second_header = self.tab.comparison_table.horizontalHeaderItem(2).text()
+        self.assertIn("A · model-two", first_header)
+        self.assertEqual(second_header, "B · model-one")
+        self.assertIn(
+            "Model A keeps the intended tone",
+            self.tab.comparison_review_notes.text(),
         )
         self.assertEqual(
-            self.tab.table.item(
-                0, self.tab.COLUMNS.index("Glossary & Prompt")
-            ).text(),
-            "220",
+            self.tab.comparison_table.item(1, 1).text(), "⚠ Missing output"
+        )
+        self.assertNotEqual(
+            self.tab.comparison_table.horizontalHeaderItem(1).foreground().color(),
+            self.tab.comparison_table.horizontalHeaderItem(2).foreground().color(),
+        )
+        self.assertNotEqual(
+            self.tab.comparison_table.item(1, 1).background().color(),
+            self.tab.comparison_table.item(0, 1).background().color(),
+        )
+
+        self.tab.comparison_reveal_models.setChecked(False)
+        self.assertIn(
+            "Candidate A",
+            self.tab.comparison_table.horizontalHeaderItem(1).text(),
         )
         self.assertEqual(
-            self.tab.table.item(
-                0, self.tab.COLUMNS.index("Natural & Contextual")
-            ).text(),
-            "200",
+            self.tab.comparison_table.horizontalHeaderItem(2).text(), "Candidate B"
         )
-        self.assertEqual(
-            self.tab.table.item(0, self.tab.COLUMNS.index("Best overall")).text(),
-            "210",
+        overall = self.tab.comparison_review_values["overall"].text()
+        self.assertLess(overall.index("Candidate A"), overall.index("Candidate B"))
+        self.tab.comparison_filter.setCurrentIndex(
+            self.tab.comparison_filter.findData("problems")
+        )
+        self.assertEqual(self.tab.comparison_sample_list.count(), 1)
+
+        payload["samples"][0]["lines"] *= 20
+        self.tab._display_comparison_selection(0)
+        self.app.processEvents()
+        vertical_scroll = self.tab.comparison_table.verticalScrollBar()
+        self.assertGreater(vertical_scroll.maximum(), 0)
+        vertical_scroll.setValue(vertical_scroll.maximum())
+        self.tab._display_comparison_selection(0)
+        self.app.processEvents()
+        self.assertEqual(vertical_scroll.value(), 0)
+
+        payload["samples"][0]["review"] = None
+        payload["samples"][0]["blind_labels"] = {}
+        self.tab._refresh_comparison_sample_list()
+        self.assertFalse(
+            self.tab.comparison_review_metric_labels["overall"].isVisible()
+        )
+        self.assertIn(
+            "not included", self.tab.comparison_review_notes.text()
         )
 
     def test_model_excluded_from_blind_review_does_not_show_zero_wins(self):

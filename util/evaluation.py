@@ -3291,6 +3291,198 @@ def blind_review_coverage(
     return coverage
 
 
+def load_comparison_data(run_dir: str | Path) -> dict:
+    """Return aligned source, model output, and imported blind-review details.
+
+    This is a read-only presentation boundary for the Evaluation UI.  It uses
+    the same validated run artifacts as blind export, but retains incomplete
+    samples so missing or invalid model output remains visible to the user.
+    """
+    root = Path(run_dir)
+    state, manifest = load_run(root)
+    candidates = [
+        {
+            "id": str(candidate["id"]),
+            "label": str(
+                candidate.get("label")
+                or candidate.get("model")
+                or candidate["id"]
+            ),
+            "model": str(candidate.get("model") or ""),
+            "status": str(candidate.get("status") or "unknown"),
+        }
+        for candidate in state.get("candidates") or []
+    ]
+    candidate_ids = [candidate["id"] for candidate in candidates]
+    results = _candidate_results(root, state, manifest)
+
+    primary: dict[str, dict[str, dict]] = defaultdict(dict)
+    for candidate_id, result in results.items():
+        for execution in (result.get("executions") or {}).values():
+            if execution.get("repetition") != 1:
+                continue
+            for line in execution.get("lines") or []:
+                if not isinstance(line, dict) or not line.get("segment_id"):
+                    continue
+                segment_id = str(line["segment_id"])
+                primary[segment_id][candidate_id] = {
+                    "translation": str(line.get("translation") or ""),
+                    "valid": bool(line.get("valid", True)),
+                    "issues": [str(value) for value in line.get("issues") or []],
+                    "warnings": [
+                        str(value) for value in line.get("warnings") or []
+                    ],
+                }
+
+    segment_by_id = {
+        str(segment["id"]): segment
+        for segment in manifest.get("segments") or []
+        if isinstance(segment, dict) and segment.get("id")
+    }
+    logical_requests = manifest.get("logical_requests") or [
+        {
+            "id": segment_id,
+            "scene_id": segment.get("scene_id", ""),
+            "stratum": segment.get("stratum", ""),
+            "segment_ids": [segment_id],
+            "sources": [segment.get("source", "")],
+        }
+        for segment_id, segment in segment_by_id.items()
+    ]
+
+    samples: list[dict] = []
+    for request in logical_requests:
+        segment_ids = [str(value) for value in request.get("segment_ids") or []]
+        if not segment_ids:
+            continue
+        sources = [str(value) for value in request.get("sources") or []]
+        if len(sources) != len(segment_ids):
+            sources = [
+                str((segment_by_id.get(segment_id) or {}).get("source") or "")
+                for segment_id in segment_ids
+            ]
+        lines = []
+        has_problems = False
+        for index, segment_id in enumerate(segment_ids):
+            outputs = {}
+            for candidate_id in candidate_ids:
+                output = primary.get(segment_id, {}).get(candidate_id)
+                if output is None:
+                    has_problems = True
+                    outputs[candidate_id] = {
+                        "translation": "",
+                        "valid": False,
+                        "missing": True,
+                        "issues": ["No primary translation was returned"],
+                        "warnings": [],
+                    }
+                else:
+                    copied = dict(output)
+                    copied["missing"] = False
+                    outputs[candidate_id] = copied
+                    has_problems = has_problems or not copied["valid"]
+            lines.append({
+                "segment_id": segment_id,
+                "source": sources[index],
+                "outputs": outputs,
+            })
+        first_segment = segment_by_id.get(segment_ids[0]) or {}
+        samples.append({
+            "id": str(request.get("id") or segment_ids[0]),
+            "scene_id": str(
+                request.get("scene_id") or first_segment.get("scene_id") or ""
+            ),
+            "stratum": str(
+                request.get("stratum") or first_segment.get("stratum") or ""
+            ),
+            "segment_ids": segment_ids,
+            "sources": sources,
+            "lines": lines,
+            "has_problems": has_problems,
+            "blind_labels": {},
+            "review": None,
+        })
+
+    sample_by_id = {sample["id"]: sample for sample in samples}
+    blind_key_path = root / "blind_key.json"
+    blind_key = _read_json(blind_key_path) if blind_key_path.is_file() else {}
+    for sample_id, labels in blind_key.items():
+        sample = sample_by_id.get(str(sample_id))
+        if sample is None or not isinstance(labels, dict):
+            continue
+        sample["blind_labels"] = {
+            str(candidate_id): str(label)
+            for label, candidate_id in labels.items()
+            if str(candidate_id) in candidate_ids
+        }
+
+    human_review = state.get("human_review") or {}
+    review_path = root / "blind_review.csv"
+    if human_review and review_path.is_file() and blind_key:
+        with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
+            reader = csv.DictReader(stream)
+            fieldnames = set(reader.fieldnames or [])
+            quality_fields = {
+                metric: f"{metric}_ranking" for metric in REVIEW_QUALITY_METRICS
+            }
+            for row in reader:
+                sample_id = str(row.get("sample_id") or row.get("segment_id") or "")
+                sample = sample_by_id.get(sample_id)
+                labels_to_candidates = blind_key.get(sample_id) or {}
+                if sample is None or not isinstance(labels_to_candidates, dict):
+                    continue
+                labels_to_candidates = {
+                    str(label): str(candidate_id)
+                    for label, candidate_id in labels_to_candidates.items()
+                }
+                labels = list(labels_to_candidates)
+                ranking_value = str(row.get("ranking") or "").strip()
+                legacy_winner = str(row.get("winner") or "").strip().upper()
+                if not ranking_value and not legacy_winner:
+                    continue
+                if ranking_value:
+                    tiers = _parse_blind_ranking(ranking_value, labels)
+                elif legacy_winner in {"TIE", "="}:
+                    tiers = [labels]
+                elif legacy_winner in labels_to_candidates:
+                    remaining = [
+                        label for label in labels if label != legacy_winner
+                    ]
+                    tiers = [[legacy_winner], remaining] if remaining else [[legacy_winner]]
+                else:
+                    raise ValueError(
+                        f"Invalid winner {legacy_winner!r} for sample {sample_id!r}"
+                    )
+
+                metric_tiers = {}
+                for metric, field in quality_fields.items():
+                    value = str(row.get(field) or "").strip()
+                    if field in fieldnames and value:
+                        metric_tiers[metric] = [
+                            [labels_to_candidates[label] for label in tier]
+                            for tier in _parse_blind_ranking(value, labels)
+                        ]
+                sample["review"] = {
+                    "overall": [
+                        [labels_to_candidates[label] for label in tier]
+                        for tier in tiers
+                    ],
+                    "metrics": metric_tiers,
+                    "notes": str(row.get("notes") or "").strip(),
+                }
+
+    return {
+        "run_id": str(state.get("run_id") or root.name),
+        "status": str(state.get("status") or "unknown"),
+        "has_imported_review": bool(human_review),
+        "reviewed_candidate_ids": [
+            str(value) for value in human_review.get("reviewed_candidate_ids") or []
+        ],
+        "candidates": candidates,
+        "samples": samples,
+    }
+
+
 def _blind_label(index: int) -> str:
     """Return spreadsheet-style labels: A..Z, AA..AZ, BA..."""
     label = ""
