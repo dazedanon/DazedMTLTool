@@ -68,6 +68,11 @@ class BatchRunStateTests(BatchHistoryTestBase):
         T._write_batch_file(T.BATCH_QUEUE_FILE, {"k1": {"payload": "x", "language": "English", "params": {}}})
         self.assertEqual(T.batchRunState(), "queued")
 
+        T.clearBatchFiles(strict=True)
+
+        self.assertIsNone(T.batchRunState())
+        self.assertFalse(T.BATCH_QUEUE_FILE.exists())
+
     def test_corrupt_state_blocks_resume_and_submission(self):
         T._write_batch_file(
             T.BATCH_QUEUE_FILE,

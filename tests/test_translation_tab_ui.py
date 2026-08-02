@@ -10,7 +10,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from gui.translation_tab import (
     TranslationTab,
@@ -20,6 +20,18 @@ from gui.translation_tab import (
 
 
 class TranslationWorkerTests(unittest.TestCase):
+    def test_declining_batch_submission_discards_the_local_queue(self) -> None:
+        worker = TranslationWorker(Path.cwd(), ("JSON", (".json",), None))
+        worker.batch_phase_signal.connect(
+            lambda _phase, _estimate: worker.set_batch_submit_response(False)
+        )
+
+        with mock.patch("util.translation.clearBatchFiles") as clear_batch_files:
+            approved = worker._wait_batch_submit({"requests": 3})
+
+        self.assertFalse(approved)
+        clear_batch_files.assert_called_once_with(strict=True)
+
     def test_partial_file_failure_is_an_aggregate_failure(self) -> None:
         worker = TranslationWorker(Path.cwd(), ("JSON", (".json",), None))
         worker.run_module_in_process = lambda filename, *_args: (
@@ -138,7 +150,37 @@ class TranslationTabUITests(unittest.TestCase):
 
         self.assertEqual(self.tab.mode_combo.currentText(), "Translate")
 
-    def test_batch_no_work_is_not_rendered_as_completed_or_queued(self) -> None:
+    def test_cancel_returns_to_files_and_workflow_resume_is_not_blocked(self) -> None:
+        self.tab._batch_active = True
+        self.tab._on_batch_phase("canceled", {"requests": 3})
+        self.tab._apply_finish_ui(True, "Batch canceled")
+
+        self.assertEqual(self.tab.file_stack.currentIndex(), 0)
+        self.assertFalse(self.tab._batch_active)
+        self.assertEqual(self.tab.file_card.title_label.text(), "Files to translate")
+
+        self.tab.mode_combo.setCurrentText("Batch Translate")
+        self.tab.select_files_by_name(["Actors.json"])
+        with (
+            mock.patch("util.translation.batchRunState", return_value="queued"),
+            mock.patch("util.translation.batchRunMetadata", return_value={}),
+            mock.patch("util.translation.isBatchSupported", return_value=True),
+            mock.patch(
+                "gui.translation_tab.QMessageBox.question",
+                return_value=QMessageBox.No,
+            ) as question,
+            mock.patch("gui.translation_tab.QMessageBox.warning") as warning,
+            mock.patch.object(TranslationWorker, "start") as start,
+        ):
+            self.tab.start_translation(skip_confirm=True)
+
+        warning.assert_not_called()
+        question.assert_called_once()
+        self.assertLess(len(question.call_args.args[2]), 120)
+        self.assertIsNone(self.tab.translation_worker.batch_resume_state)
+        start.assert_called_once_with()
+
+    def test_noncompletion_batch_outcomes_are_not_rendered_as_complete(self) -> None:
         self.tab._batch_active = True
         self.tab._on_batch_phase("no_work", {"files": 1})
         self.tab._apply_finish_ui(True, "Success")
@@ -149,7 +191,6 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(self.tab.batch_overall_bar.format(), "No batch submitted")
         self.assertEqual(self.tab.translate_button.text(), "Nothing to submit")
 
-    def test_failed_batch_is_not_rendered_as_complete(self) -> None:
         self.tab._batch_active = True
         self.tab._on_batch_phase("submit", {"files": 1, "requests": 16})
         self.tab._apply_finish_ui(False, "Gemini rejected the batch")

@@ -385,9 +385,13 @@ class TranslationWorker(QThread):
 
     def _wait_batch_submit(self, estimate):
         self._batch_pending_estimate = estimate
+        self._batch_submit_approved = False
         self._batch_submit_event.clear()
         self.batch_phase_signal.emit("submit", estimate)
         self._batch_submit_event.wait()
+        if not self._batch_submit_approved:
+            from util.translation import clearBatchFiles
+            clearBatchFiles(strict=True)
         return self._batch_submit_approved
 
     def _emit_batch_phase(self, phase, payload=None):
@@ -1086,12 +1090,12 @@ class TranslationWorker(QThread):
                                 est["files"] = len(matching_files)
                             saveQueuedBatchMetadata(matching_files)
                             if not self._wait_batch_submit(est):
-                                self._emit_batch_phase("not_submitted", est)
+                                self._emit_batch_phase("canceled", est)
                                 self.emit_log(
-                                    "[BATCH] Not submitted. Queue kept in log/batch_requests.json "
-                                    "(resume with Batch Translate to submit without re-collecting)."
+                                    "[BATCH] Canceled. The local queue was discarded and "
+                                    "nothing was sent to the provider."
                                 )
-                                self.finished_signal.emit(True, "Batch not submitted")
+                                self.finished_signal.emit(True, "Batch canceled")
                                 return
                             poll_result = self._run_batch_poll_fetch()
                             if poll_result is None:
@@ -1123,11 +1127,12 @@ class TranslationWorker(QThread):
                                 est = dict(est)
                                 est["files"] = len(matching_files)
                             if not self._wait_batch_submit(est):
-                                self._emit_batch_phase("not_submitted", est)
+                                self._emit_batch_phase("canceled", est)
                                 self.emit_log(
-                                    "[BATCH] Not submitted. Queue kept in log/batch_requests.json."
+                                    "[BATCH] Canceled. The local queue was discarded and "
+                                    "nothing was sent to the provider."
                                 )
-                                self.finished_signal.emit(True, "Batch not submitted")
+                                self.finished_signal.emit(True, "Batch canceled")
                                 return
                             poll_result = self._run_batch_poll_fetch()
                             if poll_result is None:
@@ -2385,10 +2390,14 @@ class TranslationTab(QWidget):
 
     def _on_batch_submit_yes(self):
         if hasattr(self, "translation_worker") and self.translation_worker:
+            self.batch_submit_yes_btn.setEnabled(False)
+            self.batch_submit_no_btn.setEnabled(False)
             self.translation_worker.set_batch_submit_response(True)
 
     def _on_batch_submit_no(self):
         if hasattr(self, "translation_worker") and self.translation_worker:
+            self.batch_submit_yes_btn.setEnabled(False)
+            self.batch_submit_no_btn.setEnabled(False)
             self.translation_worker.set_batch_submit_response(False)
 
     def _on_speaker_confirmation(self, payload):
@@ -2567,6 +2576,8 @@ class TranslationTab(QWidget):
             self.batch_phase_title.setText("Batch Translate - Review & Submit")
             self.batch_overall_bar.setValue(35)
             self.batch_pipeline_stack.setCurrentIndex(1)
+            self.batch_submit_yes_btn.setEnabled(True)
+            self.batch_submit_no_btn.setEnabled(True)
             self.batch_submit_summary.setText("\n".join(estimate_lines))
             if hasattr(self, "batch_cost_cached"):
                 uses_prompt_cache = bool(est.get("uses_prompt_cache"))
@@ -2594,20 +2605,20 @@ class TranslationTab(QWidget):
                     f"{_format_estimated_cost(est.get('live_cost'))}{thinking_suffix}"
                 )
             self.batch_submit_yes_btn.setText(f"Submit All ({n_req} requests)")
-        elif phase == "not_submitted":
+        elif phase == "canceled":
             info = payload or {}
             n_req = info.get("requests", "?")
             self._set_batch_steps(1)
-            self.batch_phase_title.setText("Batch Translate - Not submitted")
+            self.batch_phase_title.setText("Batch Translate - Canceled")
             self.batch_overall_bar.setRange(0, 100)
             self.batch_overall_bar.setValue(35)
-            self.batch_overall_bar.setFormat("Queue saved")
+            self.batch_overall_bar.setFormat("Canceled")
             self.batch_pipeline_stack.setCurrentIndex(1)
             self.batch_submit_summary.setText(
-                f"{n_req} request(s) remain queued locally. Nothing was sent to the provider.\n\n"
-                "Start Batch Translate again to review and submit this saved queue."
+                f"Canceled {n_req} queued request(s). Nothing was sent to the provider, "
+                "and the local queue was discarded."
             )
-            self.batch_live_status.setText("Batch queue saved - no provider job was created.")
+            self.batch_live_status.setText("Batch canceled - no provider job was created.")
         elif phase == "no_work":
             info = payload or {}
             n_files = info.get("files", "?")
@@ -3468,6 +3479,7 @@ class TranslationTab(QWidget):
         parse_speakers = (mode == "Parse Speakers")
         batch_mode = (mode == BATCH_MODE_LABEL)
         batch_resume_state = None
+        batch_choice_confirmed = False
 
         if batch_mode:
             load_dotenv()
@@ -3493,30 +3505,6 @@ class TranslationTab(QWidget):
                 return
             if forced_resume_state:
                 batch_resume_state = forced_resume_state
-            elif skip_confirm:
-                # Workflow auto-start must not orphan or overwrite an existing
-                # queue/provider job. Let the operator resume or clear it first.
-                from util.translation import clearBatchFiles, batchRunState as _brs
-                prior = _brs()
-                if prior:
-                    if prior == "corrupt":
-                        QMessageBox.critical(
-                            self,
-                            "Corrupt Batch Recovery",
-                            "One or more batch recovery files are corrupt. The run was "
-                            "left untouched and submission was blocked to prevent duplicate "
-                            "paid work. Inspect the batch files under log/ before clearing them.",
-                        )
-                        return
-                    QMessageBox.warning(
-                        self,
-                        "Existing Batch Run",
-                        f"A previous batch run is still {prior}. Resume or clear it "
-                        "from Batch History before starting this workflow phase.",
-                    )
-                    return
-                clearBatchFiles()
-                batch_resume_state = None
             else:
                 batch_resume_state = batchRunState()
                 if batch_resume_state == "corrupt":
@@ -3531,26 +3519,23 @@ class TranslationTab(QWidget):
                     return
                 if batch_resume_state:
                     if batch_resume_state == "queued":
-                        reply = QMessageBox.question(
-                            self,
-                            "Resume Queued Batch?",
-                            "A previous collect finished but the batch was not submitted.\n"
-                            "The queue is still in log/batch_requests.json.\n\n"
-                            "Resume and submit that queue?\n\n"
-                            "Choosing No discards the queue and re-collects "
-                            "(speaker/name strings bill at live rates again).",
-                            QMessageBox.Yes | QMessageBox.No,
+                        prompt = (
+                            "A saved batch is ready. Resume it?\n\n"
+                            "Choose No to discard it and start over."
                         )
                     else:
-                        reply = QMessageBox.question(
-                            self,
-                            "Resume Batch?",
-                            f"A previous batch run was interrupted ({batch_resume_state}).\n\n"
-                            "Resume it instead of re-collecting?\n\n"
-                            "Re-collecting discards the current run and can bill again "
-                            "(live collect charges + a new batch submission).",
-                            QMessageBox.Yes | QMessageBox.No,
+                        prompt = (
+                            "A batch is already in progress. Resume it?\n\n"
+                            "Choosing No starts over and may duplicate provider charges."
                         )
+                    reply = QMessageBox.question(
+                        self,
+                        "Resume batch?",
+                        prompt,
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.Yes,
+                    )
+                    batch_choice_confirmed = True
                     if reply != QMessageBox.Yes:
                         batch_resume_state = None
 
@@ -3582,7 +3567,7 @@ class TranslationTab(QWidget):
         
         # Confirm start (skipped when called programmatically from the Workflow tab
         # or when Batch history already confirmed Resume).
-        if not skip_confirm and not forced_resume_state:
+        if not skip_confirm and not forced_resume_state and not batch_choice_confirmed:
             if batch_mode and not batch_resume_state:
                 reply = QMessageBox.question(
                     self,
@@ -3961,7 +3946,7 @@ class TranslationTab(QWidget):
                 self.mark_file_queued(filename)
                 return
             if phase in (
-                "collect_done", "submit", "not_submitted", "no_work",
+                "collect_done", "submit", "canceled", "no_work",
                 "polling", "poll_status", "failed",
             ):
                 # A collect-pass progress event can arrive after the phase has
@@ -4125,7 +4110,15 @@ class TranslationTab(QWidget):
             self.file_card.title_label.setText("Translation results")
         if getattr(self, "_batch_active", False):
             phase = getattr(self, "_batch_ui_phase", None)
-            if success and phase not in ("no_work", "not_submitted"):
+            if success and phase == "canceled":
+                self.reset_to_file_view()
+                try:
+                    if hasattr(self, 'translation_log_viewer') and self.translation_log_viewer:
+                        QTimer.singleShot(600, self.translation_log_viewer.stop_tail)
+                except Exception:
+                    pass
+                return
+            if success and phase not in ("no_work", "canceled"):
                 self._on_batch_phase("done", None)
             elif not success and message != "Batch polling stopped":
                 self._on_batch_phase("failed", {"message": message})
@@ -4174,9 +4167,6 @@ class TranslationTab(QWidget):
             if success and batch_phase == "no_work":
                 self.translating_label.setText("No eligible text found")
                 self.translate_button.setText("Nothing to submit")
-            elif success and batch_phase == "not_submitted":
-                self.translating_label.setText("Batch queue saved")
-                self.translate_button.setText("Not submitted")
             elif success:
                 self.translating_label.setText("Completed!")
                 self.translate_button.setText("Run complete")

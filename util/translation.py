@@ -1521,8 +1521,12 @@ def saveQueuedBatchMetadata(file_set=None):
             _write_batch_file(BATCH_STATE_FILE, state)
 
 
-def clearBatchFiles():
-    """Remove active queue/state/results. Never deletes durable batch history."""
+def clearBatchFiles(*, strict=False):
+    """Remove active queue/state/results. Never deletes durable batch history.
+
+    When ``strict`` is true, surface cleanup failures instead of leaving an
+    active run behind while the UI reports that it was discarded.
+    """
     global _batch_results, _batch_queue_pending
     with BATCH_LOCK:
         fetched_ids = []
@@ -1539,7 +1543,18 @@ def clearBatchFiles():
                     if path.exists():
                         path.unlink()
                 except Exception:
-                    pass
+                    if strict:
+                        raise
+            if strict:
+                remaining = [
+                    str(path)
+                    for path in (BATCH_QUEUE_FILE, BATCH_STATE_FILE, BATCH_RESULTS_FILE)
+                    if path.exists()
+                ]
+                if remaining:
+                    raise OSError(
+                        "Could not discard batch recovery files: " + ", ".join(remaining)
+                    )
         _batch_results = None
         _batch_queue_pending = {}
     # Only mark history consumed when clearing after a successful fetch/consume,
