@@ -3180,17 +3180,18 @@ def _provider_user_messages(user, history, context_kind,
 
 def buildClaudeRequest(system, user, history, formatType, model, numLines=None,
                        vocab_text="", context_kind=CONTEXT_SOURCE,
-                       request_instructions=None):
+                       request_instructions=None, cache_ttl="5m"):
     """Build the native Anthropic request kwargs.
 
     Shared by live calls (translateText) and batch collection (translateAI) so
-    both produce byte-identical requests and share the same prompt cache. Only
-    the first, static system block is cached. Dynamic system guidance and user
-    messages follow the explicit breakpoint and cannot bust that prefix.
+    both use the same logical prompt. Only the first, static system block is
+    cached. Dynamic system guidance and user messages follow the explicit
+    breakpoint and cannot bust that prefix.
     """
     ant_system = _provider_system_blocks(system, vocab_text)
     if not DISABLE_CACHE:
-        ant_system[0]["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
+        ttl = "1h" if str(cache_ttl).lower() == "1h" else "5m"
+        ant_system[0]["cache_control"] = {"type": "ephemeral", "ttl": ttl}
 
     native_msgs = _provider_user_messages(
         user, history, context_kind, request_instructions
@@ -3221,7 +3222,7 @@ def buildClaudeRequest(system, user, history, formatType, model, numLines=None,
 def buildOpenAIRequest(system, user, history, penalty, formatType, model,
                        numLines=None, vocab_text="", api_provider=None,
                        context_kind=CONTEXT_SOURCE,
-                       request_instructions=None):
+                       request_instructions=None, use_cache_routing=False):
     """Build OpenAI-compatible kwargs shared by live and batch requests."""
     if not system or not str(system).strip():
         raise ValueError("System content cannot be empty")
@@ -3256,9 +3257,19 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
         # The API supports prompt_cache_options before some OpenAI SDK releases
         # expose it as a typed keyword. extra_body is the SDK's forward-compatible
         # path; the batch adapter materializes it as a normal top-level API field.
-        params["extra_body"] = {
-            "prompt_cache_options": {"mode": "explicit"}
-        }
+        cache_fields = {"prompt_cache_options": {"mode": "explicit"}}
+        if use_cache_routing:
+            cache_identity = "\0".join((
+                model_l,
+                str(numLines or ""),
+                system_blocks[0]["text"],
+            ))
+            cache_fields["prompt_cache_key"] = (
+                "dazedtl-" + hashlib.sha256(
+                    cache_identity.encode("utf-8")
+                ).hexdigest()[:32]
+            )
+        params["extra_body"] = cache_fields
     if formatType == "json" and numLines is not None:
         params["response_format"] = (
             {"type": "json_object"}
@@ -3340,7 +3351,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             # Vocab and history are moved to messages so they don't bust the
             # Anthropic prefix cache (the entire system parameter is part of
             # the cache key, not just blocks up to cache_control).
-            content_blocks = [{"type": "text", "text": f"```\n{system}\n```", "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
+            content_blocks = [{"type": "text", "text": f"```\n{system}\n```", "cache_control": {"type": "ephemeral", "ttl": "5m"}}]
         msg = [{"role": "system", "content": content_blocks}]
     else:
         combined_system = system + vocab_text
@@ -3449,6 +3460,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             vocab_text=vocab_text, api_provider=api_provider,
             context_kind=context_kind,
             request_instructions=request_instructions,
+            use_cache_routing=True,
         )
         responseFormat = params.get("response_format", {"type": "text"})
 
@@ -3746,7 +3758,12 @@ def calculateCost(inputTokens, outputTokens, model):
             pricing  = getPricingConfig(model)
             br  = pricing["inputAPICost"]  / 1_000_000
             orr = pricing["outputAPICost"] / 1_000_000
-            cost = (cr * br * 0.10 + cw * br * 2.00 + reg * br + out * orr
+            live_write_multiplier = cache_write_multiplier(
+                "anthropic", model, "5m"
+            )
+            cost = (cr * br * 0.10
+                    + cw * br * live_write_multiplier
+                    + reg * br + out * orr
                     # Batch API tokens: same rates, then the 50% batch discount.
                     + (bcr * br * 0.10 + bcw * br * 2.00 + breg * br + bout * orr) * 0.50)
             _thread_local.file_cache_read  = 0
@@ -3767,7 +3784,7 @@ def calculateCost(inputTokens, outputTokens, model):
 
     # Non-Claude, estimate mode, or no accurate data: naive calculation.
     # For Claude models, use the accumulated static_system token count (the portion
-    # that is always cache-written at the 1hr TTL rate = 2x input rate).
+    # that is cache-written at the live 5-minute TTL rate = 1.25x input rate).
     # Remaining tokens are billed at the regular input rate.
     pricing = getPricingConfig(model)
     _is_claude_naive = model and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
@@ -3795,7 +3812,11 @@ def calculateCost(inputTokens, outputTokens, model):
             _estimate_written_sizes.update(new_sizes)
             _save_estimate_written_sizes()
             _thread_local.estimate_seen_sizes = set()
-        write_cost   = (write_batches * static_tok / 1_000_000) * pricing["inputAPICost"] * 2.0
+        write_cost = (
+            write_batches * static_tok / 1_000_000
+        ) * pricing["inputAPICost"] * cache_write_multiplier(
+            "anthropic", model, "5m"
+        )
         read_cost    = (read_batches  * static_tok / 1_000_000) * pricing["inputAPICost"] * 0.10
         regular_cost = (regular_tok / 1_000_000) * pricing["inputAPICost"]
         inputCost    = write_cost + read_cost + regular_cost
@@ -4156,6 +4177,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                     config.model, numLines, vocab_text=vocab_text,
                     context_kind=CONTEXT_SOURCE,
                     request_instructions=persistent_instructions,
+                    cache_ttl="1h",
                 )
             else:
                 params = buildOpenAIRequest(
@@ -4664,9 +4686,12 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
         _batch_write_multiplier = cache_write_multiplier(
             batch_provider or "anthropic", config.model
         )
+        _live_write_multiplier = cache_write_multiplier(
+            "anthropic", config.model, "5m"
+        )
         _call_cost = (
             _delta_cr  * _br * 0.10 +
-            _delta_cw  * _br * 2.00 +
+            _delta_cw  * _br * _live_write_multiplier +
             _delta_reg * _br +
             _delta_out * _or +
             # Batch API tokens: same rates, then the 50% batch discount.

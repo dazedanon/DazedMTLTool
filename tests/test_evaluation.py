@@ -637,7 +637,7 @@ class EvaluationManifestTests(unittest.TestCase):
             params["openai"]["extra_body"]["prompt_cache_options"],
             {"mode": "explicit"},
         )
-        self.assertFalse(any(
+        self.assertTrue(any(
             "prompt_cache_breakpoint" in block
             for message in params["openai"]["messages"]
             if isinstance(message.get("content"), list)
@@ -652,6 +652,20 @@ class EvaluationManifestTests(unittest.TestCase):
             if isinstance(message.get("content"), list)
             for block in message["content"]
         ))
+        self.assertIn(
+            "prompt_cache_key", live_openai["extra_body"]
+        )
+        alternate_schema = {
+            **request,
+            "schema_line_count": int(request["schema_line_count"]) + 1,
+        }
+        self.assertNotEqual(
+            live_openai["extra_body"]["prompt_cache_key"],
+            evaluation._provider_params(
+                {**candidates[0], "execution": "live"},
+                alternate_schema,
+            )["extra_body"]["prompt_cache_key"],
+        )
         self.assertNotIn("temperature", params["gemini"])
         self.assertNotIn("extra_body", params["gemini"])
         self.assertEqual(
@@ -669,10 +683,12 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertNotIn("extra_body", gemini_batch_body)
         self.assertEqual(gemini_batch_body["reasoning_effort"], "minimal")
         self.assertEqual(params["anthropic"]["thinking"], {"type": "disabled"})
-        self.assertFalse(any(
-            "cache_control" in block
+        batch_cache = next(
+            block["cache_control"]
             for block in params["anthropic"]["system"]
-        ))
+            if "cache_control" in block
+        )
+        self.assertEqual(batch_cache["ttl"], "1h")
         self.assertEqual(
             params["anthropic"]["max_tokens"],
             evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST,
@@ -688,6 +704,137 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertTrue(any(
             "cache_control" in block
             for block in live_anthropic["system"]
+        ))
+        live_cache = next(
+            block["cache_control"]
+            for block in live_anthropic["system"]
+            if "cache_control" in block
+        )
+        self.assertEqual(live_cache["ttl"], "5m")
+
+    def test_claude_prewarm_verifies_each_schema_shape(self):
+        candidate = {
+            **dict(evaluation.DEFAULT_CANDIDATES[2]),
+            "id": "candidate-claude",
+            "execution": "batch",
+        }
+        first = self.manifest["logical_requests"][0]
+        second = {**first, "schema_line_count": max(
+            1, int(first["schema_line_count"]) - 1
+        )}
+        if second["schema_line_count"] == first["schema_line_count"]:
+            second["schema_line_count"] += 1
+        batch_requests = [
+            {"custom_id": "one", "params": evaluation._provider_params(
+                candidate, first
+            )},
+            {"custom_id": "two", "params": evaluation._provider_params(
+                candidate, second
+            )},
+        ]
+        responses = [
+            {"prompt_tokens": 100, "cache_creation_input_tokens": 100},
+            {"prompt_tokens": 100, "cache_read_input_tokens": 100},
+            {"prompt_tokens": 100, "cache_creation_input_tokens": 100},
+            {"prompt_tokens": 100, "cache_creation_input_tokens": 100},
+        ]
+        calls = []
+
+        def execute(_provider, params, **_kwargs):
+            calls.append(params)
+            return responses.pop(0)
+
+        with mock.patch.object(
+            evaluation.batch_api,
+            "execute_live_request",
+            side_effect=execute,
+        ):
+            verified, usage, stopped = evaluation._prewarm_anthropic_batch(
+                candidate, batch_requests, object(), lambda _message: None
+            )
+
+        self.assertFalse(stopped)
+        self.assertEqual(len(verified), 1)
+        self.assertEqual(usage["cache_read_input_tokens"], 100)
+        self.assertEqual(usage["cache_creation_input_tokens"], 300)
+        self.assertEqual(len(calls), 4)
+        self.assertTrue(all(call["max_tokens"] == 1 for call in calls))
+        self.assertTrue(all("output_config" in call for call in calls))
+        self.assertTrue(all(len(call["system"]) == 1 for call in calls))
+        self.assertTrue(all(
+            call["system"][0]["cache_control"]["ttl"] == "1h"
+            for call in calls
+        ))
+
+    def test_claude_batch_falls_back_to_uncached_when_prewarm_misses(self):
+        request = self.manifest["logical_requests"][0]
+        manifest = {
+            **self.manifest,
+            "logical_requests": [request],
+            "executions": [{
+                "id": "rep-1:logical-0001",
+                "logical_request_id": request["id"],
+                "repetition": 1,
+            }],
+        }
+        candidate = {
+            **dict(evaluation.DEFAULT_CANDIDATES[2]),
+            "id": "candidate-claude",
+            "status": "prepared",
+            "estimate": {"cost_usd": 1.0},
+        }
+        submitted_params = []
+
+        def submit(_provider, requests, **_kwargs):
+            submitted_params.extend(item["params"] for item in requests)
+            return {"id": "batch-claude"}
+
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            mock.patch.object(
+                evaluation, "_clients", return_value=(object(), None)
+            ),
+            mock.patch.object(
+                evaluation,
+                "_prewarm_anthropic_batch",
+                return_value=(
+                    set(),
+                    {
+                        "cache_creation_input_tokens": 100,
+                        "cache_read_input_tokens": 0,
+                    },
+                    False,
+                ),
+            ),
+            mock.patch.object(
+                evaluation.batch_api, "submit_batch", side_effect=submit
+            ),
+            mock.patch("util.batch_history.upsert_history_entry"),
+        ):
+            evaluation._submit_candidate(
+                Path(temporary),
+                {"run_id": "prewarm-fallback"},
+                manifest,
+                candidate,
+                evaluation._request_lookup(manifest),
+                "secret",
+                lambda _message: None,
+                None,
+                lambda _candidate: None,
+            )
+
+        self.assertEqual(candidate["batch_id"], "batch-claude")
+        self.assertEqual(
+            candidate["cache_prewarm"]["fallback_shapes"], 1
+        )
+        self.assertEqual(
+            candidate["prewarm_usage"]["cache_creation_input_tokens"], 100
+        )
+        self.assertTrue(submitted_params)
+        self.assertFalse(any(
+            "cache_control" in block
+            for params in submitted_params
+            for block in params["system"]
         ))
 
     def test_locked_batch_pricing_handles_sonnet_intro_expiry(self):
@@ -737,9 +884,35 @@ class EvaluationManifestTests(unittest.TestCase):
             },
             usage,
         )
+        anthropic_live_cost = evaluation._price_usage(
+            {
+                "provider": "anthropic",
+                "model": "claude-sonnet-5",
+                "execution": "live",
+            },
+            usage,
+        )
 
         self.assertEqual(openai_cost, 1.25)
         self.assertEqual(anthropic_cost, 2.00)
+        self.assertEqual(anthropic_live_cost, 2.50)
+
+    def test_no_cache_baseline_reprices_all_input_at_base_rate(self):
+        candidate = {
+            "provider": "openai",
+            "model": "gpt-5.6-terra",
+            "execution": "batch",
+        }
+        usage = {
+            "input_tokens": 100_000,
+            "cache_read_input_tokens": 600_000,
+            "cache_creation_input_tokens": 300_000,
+            "output_tokens": 100_000,
+        }
+
+        self.assertEqual(
+            evaluation._no_cache_cost(candidate, usage), 1.6
+        )
 
     def test_default_estimates_stay_below_safe_budget(self):
         for candidate in evaluation.DEFAULT_CANDIDATES:
@@ -747,6 +920,25 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertGreater(estimate["cost_usd"], 0)
             self.assertLess(estimate["cost_usd"], 8.0)
             self.assertLess(estimate["maximum_cost_usd"], 10.0)
+
+    def test_claude_batch_ceiling_covers_all_requests_rewriting_cache(self):
+        candidate = dict(evaluation.DEFAULT_CANDIDATES[2])
+        estimate = evaluation.estimate_candidate(self.manifest, candidate)
+        rates = estimate["rates"]
+        batch_write_ceiling = (
+            estimate["input_tokens"] * 2.0 * rates["input"]
+            + len(self.manifest["executions"])
+            * evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST
+            * rates["output"]
+        ) / 1_000_000
+
+        self.assertGreaterEqual(
+            estimate["maximum_cost_usd"], batch_write_ceiling
+        )
+        self.assertEqual(
+            estimate["prewarm_output_tokens"],
+            estimate["prewarm_shape_count"] * 2,
+        )
 
     def test_live_estimate_uses_undiscounted_rates(self):
         batch_candidate = dict(evaluation.DEFAULT_CANDIDATES[0])
@@ -1601,6 +1793,66 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertEqual(summary["valid_segments"], 0)
             self.assertEqual(candidate["status"], "failed")
             self.assertIn("No valid translated segments", candidate["failure_reason"])
+
+    def test_completed_claude_cost_includes_prewarm_and_reports_baseline(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            (run_dir / "results").mkdir()
+            first_execution = self.manifest["executions"][0]
+            request = evaluation._request_lookup(self.manifest)[
+                first_execution["logical_request_id"]
+            ]
+            candidate = {
+                **dict(evaluation.DEFAULT_CANDIDATES[2]),
+                "id": "candidate-claude-cost",
+                "prewarm_usage": {
+                    "input_tokens": 10,
+                    "cache_read_input_tokens": 100,
+                    "cache_creation_input_tokens": 100,
+                },
+            }
+            batch_usage = {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_read_input_tokens": 800,
+                "cache_creation_input_tokens": 100,
+            }
+            raw_results = {
+                first_execution["id"]: {
+                    "text": json.dumps({
+                        f"Line{index}": "English text"
+                        for index in range(
+                            1, int(request["schema_line_count"]) + 1
+                        )
+                    })
+                }
+            }
+
+            summary = evaluation._complete_candidate(
+                run_dir,
+                self.manifest,
+                candidate,
+                raw_results,
+                [],
+                batch_usage,
+            )
+
+        expected_prewarm = evaluation._price_usage(
+            {**candidate, "execution": "live"},
+            candidate["prewarm_usage"],
+            cache_ttl="1h",
+        )
+        self.assertEqual(summary["cache_read_rate"], 0.8)
+        self.assertEqual(summary["usage"]["cache_read_input_tokens"], 900)
+        self.assertAlmostEqual(summary["prewarm_cost_usd"], expected_prewarm)
+        self.assertAlmostEqual(
+            summary["actual_cost_usd"],
+            summary["batch_cost_usd"] + expected_prewarm,
+        )
+        self.assertAlmostEqual(
+            summary["no_cache_cost_usd"],
+            evaluation._no_cache_cost(candidate, batch_usage),
+        )
 
     def test_corrupt_repetition_is_invalid_and_remains_reviewable(self):
         manifest = {

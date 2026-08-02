@@ -1095,7 +1095,7 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertEqual(self.tab.table.item(1, best_overall).text(), "—")
         self.assertEqual(self.tab.table.item(2, best_overall).text(), "0")
 
-    def test_failed_evaluation_displays_failure_and_keeps_recovery_actions(self):
+    def test_result_table_displays_failure_costs_and_recovery_actions(self):
         with tempfile.TemporaryDirectory() as temporary:
             self.tab.current_run_dir = Path(temporary)
             self.tab._display_state({
@@ -1117,6 +1117,44 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertEqual(self.tab.table.item(0, 3).text(), "Failed")
             self.assertTrue(self.tab.export_btn.isEnabled())
             self.assertTrue(self.tab.import_btn.isEnabled())
+
+        self.tab._display_state({
+            "status": "completed",
+            "candidates": [{
+                "id": "candidate-1",
+                "model": "gpt-5.6-sol",
+                "provider": "openai",
+                "endpoint": "https://api.openai.com/v1",
+                "status": "completed",
+                "estimate": {"cost_usd": 2.5},
+                "summary": {
+                    "actual_cost_usd": 1.47,
+                    "no_cache_cost_usd": 2.13,
+                    "cache_read_rate": 0.533,
+                    "total_segments": 10,
+                    "valid_rate": 1.0,
+                },
+            }],
+        })
+
+        self.assertEqual(
+            self.tab.table.item(
+                0, self.tab.COLUMNS.index("Actual")
+            ).text(),
+            "$1.47",
+        )
+        self.assertEqual(
+            self.tab.table.item(
+                0, self.tab.COLUMNS.index("No-cache")
+            ).text(),
+            "$2.13",
+        )
+        self.assertEqual(
+            self.tab.table.item(
+                0, self.tab.COLUMNS.index("Cache read")
+            ).text(),
+            "53.3%",
+        )
 
     def test_import_explains_that_blind_export_is_required(self):
         with tempfile.TemporaryDirectory() as temporary:

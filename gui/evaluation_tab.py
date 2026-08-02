@@ -129,8 +129,9 @@ class EvaluationTab(QWidget):
     """Prepare, submit, and review a user-defined model comparison."""
 
     COLUMNS = (
-        "Model", "API URL", "Mode", "Status", "Likely upper", "Actual", "Valid",
-        "Consistency", "Meaning Accuracy", "Glossary & Prompt",
+        "Model", "API URL", "Mode", "Status", "Likely upper", "Actual",
+        "No-cache", "Cache read", "Valid", "Consistency", "Meaning Accuracy",
+        "Glossary & Prompt",
         "Natural & Contextual", "Best overall",
     )
     COLUMN_LABELS = {
@@ -138,8 +139,19 @@ class EvaluationTab(QWidget):
         "Glossary & Prompt": "Glossary &\nPrompt",
         "Natural & Contextual": "Natural &\nContextual",
         "Best overall": "Best\noverall",
+        "Cache read": "Cache\nread",
     }
     COLUMN_TOOLTIPS = {
+        "Actual": (
+            "Total provider cost, including verified cache-prewarm requests."
+        ),
+        "No-cache": (
+            "Calculated cost for the same provider tokens without prompt "
+            "caching or prewarm requests."
+        ),
+        "Cache read": (
+            "Share of evaluation input tokens served from the provider cache."
+        ),
         "Valid": (
             "Lines that passed automatic output and game-code checks.\n"
             "This does not measure translation quality."
@@ -860,8 +872,8 @@ class EvaluationTab(QWidget):
         if not viewport_width:
             return
         weights = (
-            1.55, 1.65, 0.60, 0.82, 0.68, 0.62, 0.60, 0.90,
-            0.95, 1.02, 1.12, 0.82,
+            1.55, 1.65, 0.60, 0.82, 0.68, 0.62, 0.68, 0.68,
+            0.60, 0.90, 0.95, 1.02, 1.12, 0.82,
         )
         column_count = len(weights)
         compact_minimum = 32
@@ -3301,6 +3313,14 @@ class EvaluationTab(QWidget):
                 (
                     f"${summary.get('actual_cost_usd', 0):.2f}"
                     if summary else "—"
+                ),
+                (
+                    f"${summary.get('no_cache_cost_usd', 0):.2f}"
+                    if "no_cache_cost_usd" in summary else "—"
+                ),
+                (
+                    f"{summary.get('cache_read_rate', 0):.1%}"
+                    if "cache_read_rate" in summary else "—"
                 ),
                 valid,
                 stable,
