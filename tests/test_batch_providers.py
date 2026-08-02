@@ -12,6 +12,7 @@ from unittest import mock
 
 import util.batch_providers as BP
 import util.translation as T
+from util.api_errors import concise_api_error
 
 
 class _OpenAIFiles:
@@ -45,6 +46,17 @@ class _Batches:
 
 
 class BatchProviderDetectionTests(unittest.TestCase):
+    def test_html_api_failure_is_reduced_to_plain_text(self):
+        error = RuntimeError(
+            "Error code: 404 - <!DOCTYPE html><html><body>Not Found</body></html>"
+        )
+        error.status_code = 404
+
+        message = concise_api_error(error)
+
+        self.assertIn("404", message)
+        self.assertNotIn("<", message)
+
     def test_detects_native_routes_only(self):
         self.assertEqual(BP.detect_batch_provider("claude-sonnet-4-6", ""), "anthropic")
         self.assertEqual(

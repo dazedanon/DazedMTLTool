@@ -2580,6 +2580,10 @@ def _lookup_model_price(model: str):
     # unrelated generic catalog entry with incomplete prices.
     if model_lower.startswith("models/"):
         model_lower = model_lower.removeprefix("models/")
+    model_part = model_lower.rsplit("/", 1)[-1]
+    requested_provider = (
+        model_lower.split("/", 1)[0] if "/" in model_lower else ""
+    )
 
     def _extract(entry):
         inp = entry.get("input_cost_per_token")
@@ -2597,30 +2601,57 @@ def _lookup_model_price(model: str):
     # Build a lookup of (stripped_key → original_key) for passes 2-4
     stripped: list[tuple[str, str]] = []
     for key in db:
-        stripped.append((key.split("/")[-1].lower(), key))
+        stripped_key = key.rsplit("/", 1)[-1].lower()
+        # Catalog namespace placeholders such as
+        # ``fireworks_ai/accounts/fireworks/models/`` have an empty model
+        # portion. Every string starts with an empty string, so retaining one
+        # here can make an unrelated non-chat entry win the prefix passes.
+        if stripped_key:
+            stripped.append((stripped_key, key))
+
+    def _provider_preference(item: tuple[str, str]) -> int:
+        skey, original = item
+        original_lower = original.lower()
+        if requested_provider and original_lower.startswith(
+            requested_provider + "/"
+        ):
+            return 0
+        if original_lower == skey:
+            return 1
+        return 2
 
     # Pass 2: exact match on stripped key
-    for skey, orig in stripped:
-        if skey == model_lower:
-            result = _extract(db[orig])
-            if result:
-                return result
+    candidates = [item for item in stripped if item[0] == model_part]
+    for skey, orig in sorted(candidates, key=_provider_preference):
+        result = _extract(db[orig])
+        if result:
+            return result
 
     # Pass 3: model name is a prefix of the DB key (e.g. "claude-3-5-sonnet" matches
     #          "claude-3-5-sonnet-20241022")
-    candidates = [(skey, orig) for skey, orig in stripped if skey.startswith(model_lower)]
+    candidates = [
+        item for item in stripped if item[0].startswith(model_part)
+    ]
     if candidates:
         # Prefer the shortest (most generic) key
-        skey, orig = min(candidates, key=lambda x: len(x[0]))
+        skey, orig = min(
+            candidates,
+            key=lambda item: (len(item[0]), _provider_preference(item)),
+        )
         result = _extract(db[orig])
         if result:
             return result
 
     # Pass 4: DB key is a prefix of the model name (e.g. "gemini-2.0-flash" matches
     #          "gemini-2.0-flash-exp")
-    candidates = [(skey, orig) for skey, orig in stripped if model_lower.startswith(skey)]
+    candidates = [
+        item for item in stripped if model_part.startswith(item[0])
+    ]
     if candidates:
-        skey, orig = max(candidates, key=lambda x: len(x[0]))  # longest = most specific
+        skey, orig = min(
+            candidates,
+            key=lambda item: (-len(item[0]), _provider_preference(item)),
+        )
         result = _extract(db[orig])
         if result:
             return result

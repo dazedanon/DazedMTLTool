@@ -666,6 +666,19 @@ class EvaluationManifestTests(unittest.TestCase):
                 alternate_schema,
             )["extra_body"]["prompt_cache_key"],
         )
+        openrouter = evaluation._provider_params(
+            {
+                **candidates[0],
+                "endpoint": "https://openrouter.ai/api/v1",
+                "execution": "live",
+            },
+            request,
+        )
+        self.assertNotIn("extra_body", openrouter)
+        self.assertEqual(
+            openrouter["max_tokens"], evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST
+        )
+        self.assertIsInstance(openrouter["messages"][0]["content"], str)
         self.assertNotIn("temperature", params["gemini"])
         self.assertNotIn("extra_body", params["gemini"])
         self.assertEqual(
@@ -791,6 +804,66 @@ class EvaluationManifestTests(unittest.TestCase):
             )["input"],
             1.50,
         )
+
+    def test_openrouter_candidate_uses_router_live_pricing(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = json.dumps({
+            "data": {
+                "pricing": {
+                    "prompt": "0.00000009",
+                    "completion": "0.00000018",
+                    "input_cache_read": "0.000000018",
+                }
+            }
+        }).encode("utf-8")
+        evaluation._openrouter_pricing_cache.clear()
+        self.addCleanup(evaluation._openrouter_pricing_cache.clear)
+
+        with mock.patch.object(
+            evaluation.urllib.request, "urlopen", return_value=response
+        ) as urlopen:
+            rates = evaluation._candidate_rates({
+                "provider": "openai",
+                "endpoint": "https://openrouter.ai/api/v1/",
+                "model": "deepseek/deepseek-v4-flash-0731",
+                "execution": "live",
+            })
+            cached_rates = evaluation._candidate_rates({
+                "provider": "openai",
+                "endpoint": "https://openrouter.ai/api/v1/",
+                "model": "deepseek/deepseek-v4-flash-0731",
+                "execution": "live",
+            })
+
+        self.assertEqual(
+            rates,
+            {"input": 0.09, "cached_input": 0.018, "output": 0.18},
+        )
+        self.assertEqual(cached_rates, rates)
+        urlopen.assert_called_once()
+
+    def test_openrouter_batch_candidate_is_rejected_before_pricing(self):
+        candidates = [
+            {
+                "provider": "openai",
+                "endpoint": "https://openrouter.ai/api/v1/",
+                "model": "deepseek/deepseek-v4-pro",
+                "key_name": "OpenRouter",
+                "execution": "batch",
+            },
+            {
+                "provider": "openai",
+                "endpoint": "http://127.0.0.1:8000/v1",
+                "model": "local-model",
+                "key_name": "Local",
+                "keyless": True,
+                "execution": "live",
+            },
+        ]
+
+        with self.assertRaisesRegex(ValueError, "OpenRouter.*Live"):
+            evaluation._validate_candidates(candidates)
 
     def test_usage_pricing_applies_provider_cache_write_rates(self):
         usage = {

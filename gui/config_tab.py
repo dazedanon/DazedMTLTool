@@ -21,6 +21,7 @@ from gui.wolf_tab import WolfTab
 from gui.csv_tab import CSVTab
 from gui.srpg_tab import SRPGTab
 from util import api_keys as api_key_vault
+from util.api_errors import concise_api_error
 from gui.theme import COLORS, Geometry, Spacing
 from gui.ui_components import PageHeader, configure_action_button, set_status_text
 
@@ -32,6 +33,7 @@ API_URL_PRESETS = (
     ("DeepSeek", "https://api.deepseek.com/v1/"),
     ("Mistral", "https://api.mistral.ai/v1/"),
     ("Nvidia", "https://integrate.api.nvidia.com/v1/"),
+    ("OpenRouter", "https://openrouter.ai/api/v1"),
 )
 
 
@@ -87,7 +89,7 @@ class ModelFetchThread(QThread):
             try:
                 models.extend(fetcher())
             except Exception as exc:
-                errors.append(str(exc))
+                errors.append(concise_api_error(exc))
         if models:
             self.models_fetched.emit(sorted(set(models)))
         else:

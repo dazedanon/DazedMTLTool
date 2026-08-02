@@ -20,6 +20,8 @@ import shutil
 import tempfile
 import threading
 import time
+import urllib.parse
+import urllib.request
 import zipfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -29,6 +31,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 
 from util import batch_providers as batch_api
+from util.api_errors import concise_api_error
 from util.paths import read_active_glossary, read_game_glossary
 from util.provider_costs import cache_write_multiplier
 from util.project_scanner import find_data_folder
@@ -81,6 +84,12 @@ ATOMIC_REPLACE_INITIAL_DELAY_SECONDS = 0.05
 ATOMIC_REPLACE_MAX_DELAY_SECONDS = 0.5
 JAPANESE_RE = re.compile(r"[一-龠々〆〤ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]")
 LANGUAGE_REGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
+OPENROUTER_MODEL_API = "https://openrouter.ai/api/v1/model/"
+OPENROUTER_PRICING_TTL_SECONDS = 300
+_openrouter_pricing_cache: dict[
+    str, tuple[float, dict[str, float] | None]
+] = {}
+_openrouter_pricing_lock = threading.Lock()
 
 
 class _EvaluationRunBusyError(RuntimeError):
@@ -494,6 +503,70 @@ def pricing_for(model: str, *, on_date: date | None = None) -> dict[str, float]:
         "cached_input": input_rate * 0.10,
         "output": output_rate,
     }
+
+
+def is_openrouter_endpoint(endpoint: str) -> bool:
+    """Return whether an API base URL belongs to OpenRouter."""
+    try:
+        hostname = urllib.parse.urlsplit(str(endpoint or "").strip()).hostname
+    except ValueError:
+        return False
+    return bool(
+        hostname
+        and (
+            hostname.casefold() == "openrouter.ai"
+            or hostname.casefold().endswith(".openrouter.ai")
+        )
+    )
+
+
+def _openrouter_pricing_for(model: str) -> dict[str, float] | None:
+    """Return current OpenRouter live rates per million tokens.
+
+    OpenRouter publishes model-specific routing prices from its public model
+    endpoint. These can differ from a model vendor's native API prices, so an
+    OpenRouter evaluation must not reuse the provider-neutral LiteLLM rate.
+    """
+    model_id = str(model or "").strip()
+    if not model_id:
+        return None
+    cache_key = model_id.casefold()
+    now = time.time()
+    with _openrouter_pricing_lock:
+        cached = _openrouter_pricing_cache.get(cache_key)
+        if cached and now - cached[0] < OPENROUTER_PRICING_TTL_SECONDS:
+            return copy.deepcopy(cached[1])
+
+    encoded_model = urllib.parse.quote(model_id, safe="/~:")
+    request = urllib.request.Request(
+        OPENROUTER_MODEL_API + encoded_model,
+        headers={"User-Agent": "DazedMTLTool pricing lookup"},
+    )
+    rates: dict[str, float] | None = None
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        pricing = (payload.get("data") or {}).get("pricing") or {}
+        input_rate = float(pricing["prompt"]) * 1_000_000
+        output_rate = float(pricing["completion"]) * 1_000_000
+        cache_price = pricing.get("input_cache_read")
+        cached_rate = (
+            float(cache_price) * 1_000_000
+            if cache_price is not None
+            else input_rate * 0.10
+        )
+        if input_rate >= 0 and output_rate >= 0 and cached_rate >= 0:
+            rates = {
+                "input": input_rate,
+                "cached_input": cached_rate,
+                "output": output_rate,
+            }
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        rates = None
+
+    with _openrouter_pricing_lock:
+        _openrouter_pricing_cache[cache_key] = (now, rates)
+    return copy.deepcopy(rates)
 
 
 def _event_source_category(filename: str) -> str:
@@ -1411,6 +1484,12 @@ def _candidate_rates(candidate: dict) -> dict[str, float]:
         # Local inference has no provider token invoice. Electricity/hardware
         # costs are outside this API-budget guard.
         return {"input": 0.0, "cached_input": 0.0, "output": 0.0}
+    if is_openrouter_endpoint(endpoint):
+        openrouter_rates = _openrouter_pricing_for(candidate.get("model", ""))
+        if openrouter_rates is not None:
+            # OpenRouter publishes live routing rates and does not expose the
+            # OpenAI Batch API, so no provider batch discount applies.
+            return openrouter_rates
     rates = pricing_for(candidate["model"])
     if candidate.get("execution", "batch") == "live":
         # pricing_for returns provider Batch API rates. Live endpoints use the
@@ -1434,6 +1513,11 @@ def _validate_candidates(candidates: list[dict]) -> None:
         endpoint = str(candidate.get("endpoint") or "").strip()
         if not endpoint:
             raise ValueError(f"API URL is required for {provider}")
+        if is_openrouter_endpoint(endpoint) and execution == "batch":
+            raise ValueError(
+                "OpenRouter does not provide the OpenAI Batch API used by "
+                "Evaluation. Change the OpenRouter row to Live."
+            )
         if not str(candidate.get("model") or "").strip():
             raise ValueError(f"Model is required for {provider}")
         identity = (
@@ -2240,10 +2324,15 @@ def _provider_params(candidate: dict, request: dict) -> dict:
         params["max_tokens"] = MAX_OUTPUT_TOKENS_PER_REQUEST
         return params
 
+    request_provider = (
+        "openrouter"
+        if is_openrouter_endpoint(candidate.get("endpoint", ""))
+        else provider
+    )
     params = buildOpenAIRequest(
         request["system"], request["user"], request["history"], 0.0, "json",
         candidate["model"], request["schema_line_count"],
-        vocab_text=dynamic_context, api_provider=provider,
+        vocab_text=dynamic_context, api_provider=request_provider,
         context_kind=request.get("context_kind", CONTEXT_SOURCE),
         request_instructions=request.get("instructions"),
         use_cache_routing=(candidate.get("execution", "batch") == "live"),
@@ -2537,7 +2626,8 @@ def _execute_live_candidate(
                         log(
                             f"{candidate['label']} live request {index}/{total} "
                             f"hit a temporary error; retrying in {delay}s "
-                            f"({attempt}/{LIVE_REQUEST_MAX_ATTEMPTS}): {exc}"
+                            f"({attempt}/{LIVE_REQUEST_MAX_ATTEMPTS}): "
+                            f"{concise_api_error(exc)}"
                         )
                         if should_stop is not None and should_stop():
                             return False, checkpoint_path
@@ -2546,7 +2636,7 @@ def _execute_live_candidate(
                             return False, checkpoint_path
                         continue
 
-                    candidate["live_retryable_error"] = str(exc)[:500]
+                    candidate["live_retryable_error"] = concise_api_error(exc)
                     state["updated_at"] = _utc_now()
                     persist_live_progress()
                     log(
@@ -2576,8 +2666,11 @@ def _execute_live_candidate(
                 result.get("thinking_tokens", 0) or 0
             )
         except Exception as exc:
-            errors.append([execution_id, str(exc)[:500]])
-            log(f"{candidate['label']} live request {index}/{total} failed: {exc}")
+            errors.append([execution_id, concise_api_error(exc)])
+            log(
+                f"{candidate['label']} live request {index}/{total} failed: "
+                f"{concise_api_error(exc)}"
+            )
         completed_ids.add(execution_id)
         candidate["live_completed_requests"] = len(completed_ids)
         state["updated_at"] = _utc_now()
@@ -2828,7 +2921,7 @@ def _submit_run_unlocked(run_dir: str | Path, credentials: dict[str, str],
             submission_errors = []
             for index, exc in failures:
                 candidate = state["candidates"][index]
-                message = str(exc)[:500] or type(exc).__name__
+                message = concise_api_error(exc)
                 candidate["submission_error"] = message
                 candidate["submission_error_at"] = _utc_now()
                 submission_errors.append({

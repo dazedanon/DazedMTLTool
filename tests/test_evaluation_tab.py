@@ -661,7 +661,7 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertEqual(self.tab._candidate_widgets[0]["key"].currentIndex(), -1)
         self.assertEqual(self.tab._candidate_widgets[0]["key"].currentText(), "")
 
-    def test_custom_url_uses_openai_compatible_protocol(self):
+    def test_custom_urls_use_compatible_protocol_and_openrouter_live(self):
         row = self.tab._candidate_widgets[0]
         row["endpoint"].setText("http://127.0.0.1:8000/v1")
         row["model"].clear()
@@ -673,6 +673,15 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertEqual(candidate["provider"], "openai")
         self.assertEqual(candidate["endpoint"], "http://127.0.0.1:8000/v1")
         self.assertTrue(candidate["keyless"])
+
+        self.tab._add_candidate_row(
+            "https://openrouter.ai/api/v1/",
+            "deepseek/deepseek-v4-flash-0731",
+            "batch",
+        )
+        self.assertEqual(
+            self.tab._candidate_widgets[-1]["execution"].currentData(), "live"
+        )
 
     def test_provider_and_key_changes_schedule_automatic_model_scan(self):
         scheduler = EvaluationTab._schedule_candidate_model_scan

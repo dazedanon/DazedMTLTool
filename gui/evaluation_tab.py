@@ -1378,7 +1378,8 @@ class EvaluationTab(QWidget):
         endpoint_edit.setCursorPosition(0)
         endpoint_edit.setPlaceholderText("https://provider.example/v1")
         endpoint_edit.setToolTip(
-            "API base URL. Custom URLs use the OpenAI-compatible Batch API format."
+            "API base URL. Custom URLs use OpenAI-compatible requests; Batch "
+            "mode also requires the provider to expose OpenAI's Batch API."
         )
         endpoint_edit.setMinimumWidth(220)
         endpoint_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -1422,11 +1423,20 @@ class EvaluationTab(QWidget):
         execution_combo = _EvaluationComboBox()
         execution_combo.addItem("Batch", "batch")
         execution_combo.addItem("Live", "live")
+        if evaluation.is_openrouter_endpoint(endpoint):
+            execution = "live"
         execution_index = execution_combo.findData(execution)
         execution_combo.setCurrentIndex(max(0, execution_index))
-        execution_combo.setToolTip(
-            "Batch is cheaper and asynchronous. Live also supports chat-only local servers."
-        )
+        if evaluation.is_openrouter_endpoint(endpoint):
+            execution_combo.setToolTip(
+                "OpenRouter supports live chat requests but does not expose "
+                "the OpenAI Batch API required by Evaluation."
+            )
+        else:
+            execution_combo.setToolTip(
+                "Batch is cheaper and asynchronous. Live also supports "
+                "chat-only local servers."
+            )
         execution_combo.setMinimumWidth(104)
 
         scan_btn = QPushButton("Scan")
@@ -1634,11 +1644,13 @@ class EvaluationTab(QWidget):
     def _apply_endpoint_preset(self, widgets: dict, endpoint: str):
         widgets["endpoint"].setText(endpoint)
         widgets["endpoint"].setCursorPosition(0)
+        self._apply_endpoint_execution_support(widgets)
         self._refresh_model_suggestions(widgets)
         self._refresh_candidate_key(widgets, prefer_provider=True)
         self._schedule_candidate_model_scan(widgets)
 
     def _on_candidate_endpoint_changed(self, widgets: dict):
+        self._apply_endpoint_execution_support(widgets)
         self._refresh_model_suggestions(widgets)
         self._refresh_candidate_key(widgets)
         self._schedule_candidate_model_scan(widgets)
@@ -1649,8 +1661,25 @@ class EvaluationTab(QWidget):
         if endpoint:
             widgets["endpoint"].setText(endpoint)
             widgets["endpoint"].setCursorPosition(0)
+            self._apply_endpoint_execution_support(widgets)
             self._refresh_model_suggestions(widgets)
         self._schedule_candidate_model_scan(widgets)
+
+    @staticmethod
+    def _apply_endpoint_execution_support(widgets: dict):
+        execution = widgets["execution"]
+        if evaluation.is_openrouter_endpoint(widgets["endpoint"].text()):
+            live_index = execution.findData("live")
+            execution.setCurrentIndex(max(0, live_index))
+            execution.setToolTip(
+                "OpenRouter supports live chat requests but does not expose "
+                "the OpenAI Batch API required by Evaluation."
+            )
+            return
+        execution.setToolTip(
+            "Batch is cheaper and asynchronous. Live also supports chat-only "
+            "local servers."
+        )
 
     def _schedule_candidate_model_scan(
         self, widgets: dict, *, delay_ms: int = 450, force: bool = False

@@ -39,6 +39,27 @@ class PricingBatchSizeOverrideTests(unittest.TestCase):
                 (1.5, 7.5),
             )
 
+    def test_provider_model_id_ignores_empty_catalog_placeholder(self):
+        pricing_db = {
+            "deepseek/deepseek-v4-flash": {
+                "input_cost_per_token": 0.00000009,
+                "output_cost_per_token": 0.00000018,
+            },
+            "deepseek-v4-flash": {
+                "input_cost_per_token": 0.00000014,
+                "output_cost_per_token": 0.00000028,
+            },
+            "fireworks_ai/accounts/fireworks/models/": {
+                "input_cost_per_token": 0.0000001,
+                "output_cost_per_token": 0.0,
+            },
+        }
+        with patch("util.translation._load_litellm_pricing", return_value=pricing_db):
+            self.assertEqual(
+                _lookup_model_price("deepseek/deepseek-v4-flash-0731"),
+                (0.09, 0.18),
+            )
+
     def test_gemini_36_offline_fallback_uses_current_standard_rates(self):
         with patch("util.translation._lookup_model_price", return_value=None):
             cfg = getPricingConfig("models/gemini-3.6-flash")
