@@ -768,6 +768,45 @@ class EvaluationTabTests(unittest.TestCase):
             "210",
         )
 
+    def test_model_excluded_from_blind_review_does_not_show_zero_wins(self):
+        candidates = [
+            {
+                "id": candidate_id,
+                "model": model,
+                "provider": "openai",
+                "status": "completed",
+                "estimate": {"cost_usd": 1.0},
+                "summary": {},
+            }
+            for candidate_id, model in (
+                ("candidate-1", "terra"),
+                ("candidate-2", "luna"),
+                ("candidate-3", "sol"),
+            )
+        ]
+        self.tab._display_state({
+            "status": "completed",
+            "human_review": {
+                "reviewed_candidate_ids": ["candidate-1", "candidate-3"],
+                "points": {
+                    "candidate-1": 0,
+                    "candidate-2": 0,
+                    "candidate-3": 0,
+                },
+                "wins": {
+                    "candidate-1": 0,
+                    "candidate-2": 0,
+                    "candidate-3": 0,
+                },
+            },
+            "candidates": candidates,
+        })
+
+        best_overall = self.tab.COLUMNS.index("Best overall")
+        self.assertEqual(self.tab.table.item(0, best_overall).text(), "0")
+        self.assertEqual(self.tab.table.item(1, best_overall).text(), "—")
+        self.assertEqual(self.tab.table.item(2, best_overall).text(), "0")
+
     def test_failed_evaluation_displays_failure_and_keeps_recovery_actions(self):
         with tempfile.TemporaryDirectory() as temporary:
             self.tab.current_run_dir = Path(temporary)

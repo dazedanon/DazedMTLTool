@@ -2170,6 +2170,7 @@ class EvaluationTab(QWidget):
         self.table.setRowCount(len(state.get("candidates", [])))
         human_review = state.get("human_review") or {}
         human_points = human_review.get("points")
+        has_review_subset = "reviewed_candidate_ids" in human_review
         reviewed_candidate_ids = set(
             human_review.get("reviewed_candidate_ids")
             or (human_points or {}).keys()
@@ -2193,7 +2194,9 @@ class EvaluationTab(QWidget):
             else:
                 raw_status = candidate.get("api_status") or local_status
                 display_status = str(raw_status or "").replace("_", " ").title()
-            if (
+            if has_review_subset and candidate["id"] not in reviewed_candidate_ids:
+                review_score = "—"
+            elif (
                 isinstance(human_points, dict)
                 and candidate["id"] in reviewed_candidate_ids
             ):
