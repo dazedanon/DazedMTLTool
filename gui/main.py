@@ -106,17 +106,11 @@ class UpdateCandidate(str):
 class UpdateThread(QThread):
     """Downloads and applies a tool update from the first healthy mirror."""
 
-    REPO_HOST = "https://git.dazed.dev"
+    REPO_HOST = "https://git.dazedtl.dev"
     REPO_OWNER = "dazed"
     REPO_SLUG = "dazed-mtl-tool"
     REPO_BRANCH = "main"
     UPDATE_SOURCES = (
-        UpdateSource(
-            "git.dazed.dev",
-            "https://git.dazed.dev/api/v1/repos/dazed/dazed-mtl-tool/branches/{branch}",
-            "https://git.dazed.dev/dazed/dazed-mtl-tool/archive/{sha}.zip",
-            ("commit", "id"),
-        ),
         UpdateSource(
             "GitHub",
             "https://api.github.com/repos/dazedanon/DazedMTLTool/branches/{branch}",
@@ -127,6 +121,12 @@ class UpdateThread(QThread):
             "GitGud",
             "https://gitgud.io/api/v4/projects/DazedAnon%2FDazedMTLTool/repository/branches/{branch}",
             "https://gitgud.io/DazedAnon/DazedMTLTool/-/archive/{sha}/DazedMTLTool-{sha}.zip",
+            ("commit", "id"),
+        ),
+        UpdateSource(
+            "git.dazedtl.dev",
+            "https://git.dazedtl.dev/api/v1/repos/dazed/DazedTL/branches/{branch}",
+            "https://git.dazedtl.dev/dazed/DazedTL/archive/{sha}.zip",
             ("commit", "id"),
         ),
     )

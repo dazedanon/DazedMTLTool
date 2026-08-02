@@ -390,6 +390,14 @@ class CheckToolUpdateTests(unittest.TestCase):
 
         latest_sha = "b" * 40
         sources = UpdateThread.UPDATE_SOURCES
+        self.assertEqual(
+            UpdateThread.branch_api_url(sources[2]),
+            "https://git.dazedtl.dev/api/v1/repos/dazed/DazedTL/branches/main",
+        )
+        self.assertEqual(
+            UpdateThread.archive_zip_url(sources[2], latest_sha),
+            f"https://git.dazedtl.dev/dazed/DazedTL/archive/{latest_sha}.zip",
+        )
         scenarios = (
             ([OSError("primary unavailable"), latest_sha], sources[1]),
             (
@@ -424,7 +432,7 @@ class CheckToolUpdateTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 RuntimeError,
-                "git.dazed.dev.*GitHub.*GitGud",
+                "GitHub.*GitGud.*git.dazedtl.dev",
             ):
                 UpdateThread.fetch_latest_sha()
 
