@@ -10,7 +10,7 @@ from unittest import mock
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget
+from PyQt5.QtWidgets import QApplication, QMessageBox, QStackedWidget, QWidget
 
 from gui.config_tab import ModelFetchThread
 from gui.evaluation_tab import EvaluationTab, _EvaluationWorker
@@ -288,9 +288,9 @@ class EvaluationTabTests(unittest.TestCase):
             )
             self.assertEqual(self.tab._last_review_path, output)
 
-    def test_history_lists_and_selects_previous_evaluations(self):
-        older = Path("/tmp/evaluation-older")
-        newer = Path("/tmp/evaluation-newer")
+    def test_hidden_page_initializes_and_selects_history_only_once(self):
+        older = self.project_root / "evaluation-older"
+        newer = self.project_root / "evaluation-newer"
         runs = [
             {
                 "run_dir": newer,
@@ -316,24 +316,54 @@ class EvaluationTabTests(unittest.TestCase):
                 "reviewed": 0,
             },
         ]
-        with mock.patch(
-            "gui.evaluation_tab.evaluation.list_runs", return_value=runs
-        ):
-            self.tab._refresh_history(older)
+        stack = QStackedWidget()
+        placeholder = QWidget()
+        stack.addWidget(placeholder)
+        evaluation_page = EvaluationTab(self.host)
+        stack.addWidget(evaluation_page)
 
-        self.assertEqual(self.tab.history_combo.count(), 2)
-        self.assertIn("model-a, model-b", self.tab.history_combo.itemText(0))
-        self.assertIn("Batch, Live", self.tab.history_combo.itemText(0))
-        self.assertIn(
-            "Review complete (357 eligible lines)",
-            self.tab.history_combo.itemText(0),
-        )
-        self.assertEqual(self.tab._selected_history_run(), older)
-        self.assertTrue(self.tab.history_combo.isEnabled())
-        self.assertTrue(self.tab.export_evaluation_btn.isEnabled())
-        with mock.patch.object(self.tab, "_open_run") as open_run:
-            self.tab.history_combo.activated.emit(self.tab.history_combo.currentIndex())
-        open_run.assert_called_once_with(older)
+        with (
+            mock.patch(
+                "gui.evaluation_tab.evaluation.list_runs", return_value=runs
+            ) as list_runs,
+            mock.patch.object(evaluation_page, "_open_run") as open_run,
+        ):
+            stack.show()
+            self.app.processEvents()
+            list_runs.assert_not_called()
+
+            stack.setCurrentWidget(evaluation_page)
+            self.app.processEvents()
+
+            list_runs.assert_called_once_with(self.project_root)
+            open_run.assert_called_once_with(newer, refresh_history=False)
+            self.assertEqual(evaluation_page.history_combo.count(), 2)
+            self.assertIn(
+                "model-a, model-b", evaluation_page.history_combo.itemText(0)
+            )
+            self.assertIn(
+                "Batch, Live", evaluation_page.history_combo.itemText(0)
+            )
+            self.assertIn(
+                "Review complete (357 eligible lines)",
+                evaluation_page.history_combo.itemText(0),
+            )
+            self.assertTrue(evaluation_page.history_combo.isEnabled())
+            self.assertTrue(evaluation_page.export_evaluation_btn.isEnabled())
+
+            older_index = evaluation_page.history_combo.findData(str(older))
+            evaluation_page.history_combo.setCurrentIndex(older_index)
+            evaluation_page.history_combo.activated.emit(older_index)
+            open_run.assert_called_with(older)
+
+            stack.setCurrentWidget(placeholder)
+            stack.setCurrentWidget(evaluation_page)
+            self.app.processEvents()
+            list_runs.assert_called_once_with(self.project_root)
+
+        evaluation_page.close()
+        stack.close()
+        self.app.processEvents()
 
     def test_history_selects_current_prepared_run_without_saving_it(self):
         prepared = Path("/tmp/current-prepared-evaluation")

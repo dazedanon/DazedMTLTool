@@ -456,7 +456,10 @@ class WorkflowStageCard(QFrame):
         title_label.setObjectName("workflowStageTitle")
         title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         copy.addWidget(title_label)
-        description_label = QLabel(description)
+        # This label is made visible before the nested layouts are attached to
+        # the card. Give it a parent up front so Qt cannot briefly map it as an
+        # independent top-level window during application startup.
+        description_label = QLabel(description, self)
         description_label.setObjectName("workflowStageDescription")
         description_label.setWordWrap(True)
         description_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -712,8 +715,8 @@ class DisclosureSection(QWidget):
         self.toggle.setMinimumHeight(Geometry.CONTROL)
         root.addWidget(self.toggle)
         self.content = content
-        content.setVisible(expanded)
         root.addWidget(content)
+        content.setVisible(expanded)
         self.toggle.toggled.connect(lambda checked: self._set_expanded(title, checked))
         self.setStyleSheet(
             f"QToolButton#workflowDisclosureToggle{{background:transparent;"

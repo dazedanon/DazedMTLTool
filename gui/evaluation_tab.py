@@ -174,11 +174,11 @@ class EvaluationTab(QWidget):
         self._content_map_items: dict[str, QTreeWidgetItem] = {}
         self._custom_content_selection: dict | None = None
         self._active_content_preset = "balanced"
+        self._initial_load_scheduled = False
         self._init_ui()
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(60_000)
         self._poll_timer.timeout.connect(self.refresh_results)
-        QTimer.singleShot(0, self._load_latest)
 
     def _workflow_game_root(self) -> str:
         """Return the same configured game root used by normal translation."""
@@ -370,7 +370,11 @@ class EvaluationTab(QWidget):
         self._apply_content_selection(
             evaluation.normalize_content_selection({"preset": "balanced"})
         )
-        self._update_source_resolution()
+        set_status_text(
+            self.source_resolution_label,
+            "Open Evaluation to scan the selected game's available content.",
+            "neutral",
+        )
 
         options = QGridLayout()
         options.setHorizontalSpacing(12)
@@ -598,6 +602,9 @@ class EvaluationTab(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self._refresh_keys()
+        if not self._initial_load_scheduled:
+            self._initial_load_scheduled = True
+            QTimer.singleShot(0, self._load_latest)
 
     def _append_log(self, message: str):
         if message:
@@ -1644,16 +1651,12 @@ class EvaluationTab(QWidget):
         )
 
     def _load_latest(self):
-        self._refresh_keys()
         self._refresh_history()
-        latest = evaluation.latest_run(self.project_root)
-        if latest:
-            self._open_run(latest, refresh_history=False)
-            self._refresh_history(latest)
+        selected = self._selected_history_run()
+        if selected is not None:
+            self._open_run(selected, refresh_history=False)
         else:
-            selected = self._selected_history_run()
-            if selected is not None:
-                self._open_run(selected, refresh_history=False)
+            self._update_source_resolution()
 
     def prepare_benchmark(self):
         translation_worker = getattr(

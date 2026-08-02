@@ -8,12 +8,28 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QLabel
+from PyQt5.QtCore import QEvent, QObject, Qt
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget
 
 from gui.guide_tab import GuideTab
 from gui.theme import COLORS, contrast_ratio
 from gui.ui_components import PageHeader, SectionCard, make_action_button, set_status_text
+from gui.workflow_components import DisclosureSection, WorkflowStageCard
+
+
+class _TopLevelShowFilter(QObject):
+    def __init__(self):
+        super().__init__()
+        self.shown = []
+
+    def eventFilter(self, watched, event):
+        if (
+            event.type() == QEvent.Show
+            and isinstance(watched, QWidget)
+            and watched.isWindow()
+        ):
+            self.shown.append(watched)
+        return False
 
 
 class GUIUXContractTests(unittest.TestCase):
@@ -31,16 +47,28 @@ class GUIUXContractTests(unittest.TestCase):
             with self.subTest(foreground=foreground, background=background):
                 self.assertGreaterEqual(contrast_ratio(foreground, background), 4.5)
 
-    def test_shared_components_expose_semantic_roles(self):
-        header = PageHeader("Title", "Purpose")
-        card = SectionCard("Task", "Description")
-        primary = make_action_button("Apply changes", variant="primary")
+    def test_shared_components_expose_roles_without_transient_windows(self):
+        show_filter = _TopLevelShowFilter()
+        self.app.installEventFilter(show_filter)
+        try:
+            header = PageHeader("Title", "Purpose")
+            card = SectionCard("Task", "Description")
+            primary = make_action_button("Apply changes", variant="primary")
+            stage = WorkflowStageCard(1, "Choose a game", "Select its folder.")
+            disclosure = DisclosureSection(
+                "Advanced", QWidget(), expanded=True
+            )
+        finally:
+            self.app.removeEventFilter(show_filter)
 
         self.assertEqual(header.objectName(), "appPageHeader")
         self.assertEqual(header.title_label.objectName(), "appPageTitle")
         self.assertEqual(card.objectName(), "appSectionCard")
         self.assertEqual(primary.objectName(), "appActionButton")
         self.assertEqual(primary.property("variant"), "primary")
+        self.assertEqual(stage.objectName(), "workflowStageCard")
+        self.assertTrue(disclosure.content.isVisibleTo(disclosure))
+        self.assertEqual(show_filter.shown, [])
 
     def test_status_updates_text_and_semantic_state_together(self):
         status = QLabel()
