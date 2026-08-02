@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -9,10 +10,10 @@ from unittest import mock
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from gui.config_tab import API_URL_PRESETS, ModelFetchThread
-from gui.evaluation_tab import EvaluationTab
+from gui.evaluation_tab import EvaluationTab, _EvaluationWorker
 from util import evaluation
 
 
@@ -618,10 +619,88 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertTrue(self.tab.cancel_btn.isEnabled())
         self.tab.cancel_evaluation()
 
-        worker.requestInterruption.assert_called_once_with()
+        worker.request_stop.assert_called_once_with()
         self.assertFalse(self.tab.cancel_btn.isEnabled())
         self.tab._worker = None
         self.tab._worker_cancelable = False
+
+    def test_evaluation_worker_stop_sets_shared_model_event(self):
+        stop_event = threading.Event()
+        worker = _EvaluationWorker(
+            lambda _log: None, stop_event=stop_event
+        )
+        with mock.patch.object(worker, "requestInterruption") as interrupt:
+            worker.stop()
+
+        self.assertTrue(stop_event.is_set())
+        self.assertTrue(worker._graceful_shutdown_only)
+        interrupt.assert_called_once_with()
+
+    def test_partial_submission_error_still_starts_batch_polling(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            self.tab.current_run_dir = Path(temporary)
+            prepared = {
+                "status": "prepared",
+                "budget_usd_per_model": 10.0,
+                "candidates": [{
+                    "id": "candidate-1",
+                    "label": "accepted-model",
+                    "model": "accepted-model",
+                    "provider": "openai",
+                    "endpoint": "https://api.openai.com/v1",
+                    "execution": "batch",
+                    "status": "prepared",
+                    "estimate": {
+                        "cost_usd": 0.01,
+                        "maximum_cost_usd": 0.02,
+                    },
+                }],
+            }
+            updated = {
+                **prepared,
+                "status": "partially_submitted",
+                "submission_errors": [{
+                    "candidate_id": "candidate-2",
+                    "label": "failed-model",
+                    "error": "provider unavailable",
+                }],
+                "candidates": [{
+                    **prepared["candidates"][0],
+                    "status": "submitted",
+                    "batch_id": "batch-paid",
+                }],
+            }
+            manifest = {"executions": []}
+            with (
+                mock.patch.object(
+                    evaluation,
+                    "refresh_run_estimates",
+                    return_value=(prepared, manifest),
+                ),
+                mock.patch.object(
+                    self.tab, "_bind_imported_credentials", return_value=prepared
+                ),
+                mock.patch.object(self.tab, "_credentials", return_value={}),
+                mock.patch.object(evaluation, "submit_run", return_value=updated),
+                mock.patch.object(evaluation, "locate_run", return_value=None),
+                mock.patch(
+                    "gui.evaluation_tab.QMessageBox.question",
+                    return_value=QMessageBox.Yes,
+                ),
+                mock.patch(
+                    "gui.evaluation_tab.QMessageBox.warning"
+                ) as warning,
+            ):
+                self.tab.submit_batches()
+                worker = self.tab._worker
+                self.assertIsNotNone(worker)
+                self.assertTrue(worker.wait(2_000))
+                self.app.processEvents()
+
+            self.assertTrue(self.tab._poll_timer.isActive())
+            self.assertIn("Some models could not start", self.tab.status_label.text())
+            self.assertIn("failed-model", warning.call_args.args[2])
+            self.tab._poll_timer.stop()
 
     def test_paused_live_run_enables_resume_without_batch_polling(self):
         self.tab._display_state({

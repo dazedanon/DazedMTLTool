@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import tempfile
+import threading
 import unittest
 import zipfile
 from collections import Counter
@@ -1001,7 +1002,7 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertEqual(state["candidates"][0]["status"], "failed")
         self.assertEqual(state["candidates"][1]["batch_id"], "batch-new")
 
-    def test_live_stop_prevents_later_candidates_from_starting(self):
+    def test_stop_before_submission_prevents_candidates_from_starting(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
             evaluation._atomic_write_json(run_dir / "manifest.json", self.manifest)
@@ -1034,14 +1035,6 @@ class EvaluationManifestTests(unittest.TestCase):
                 "status": "prepared",
                 "candidates": candidates,
             })
-            stopped = False
-
-            def finish_then_stop(_root, _state, _manifest, candidate, *_args, **_kwargs):
-                nonlocal stopped
-                candidate["status"] = "completed"
-                stopped = True
-                return True, run_dir / "results" / "unused.partial.json"
-
             with (
                 mock.patch.object(
                     evaluation,
@@ -1059,20 +1052,193 @@ class EvaluationManifestTests(unittest.TestCase):
                 mock.patch.object(
                     evaluation,
                     "_execute_live_candidate",
-                    side_effect=finish_then_stop,
-                ),
+                ) as execute,
                 mock.patch.object(evaluation.batch_api, "submit_batch") as submit,
             ):
                 state = evaluation.submit_run(
                     run_dir,
                     {"live-first": "key", "batch-second": "key"},
-                    should_stop=lambda: stopped,
+                    should_stop=lambda: True,
                 )
 
+        execute.assert_not_called()
         submit.assert_not_called()
-        self.assertEqual(state["candidates"][0]["status"], "completed")
+        self.assertEqual(state["candidates"][0]["status"], "prepared")
         self.assertEqual(state["candidates"][1]["status"], "prepared")
-        self.assertEqual(state["status"], "partially_submitted")
+        self.assertEqual(state["status"], "prepared")
+
+    def test_each_model_runs_on_a_concurrent_worker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            evaluation._atomic_write_json(run_dir / "manifest.json", self.manifest)
+            candidates = [
+                {
+                    "id": f"candidate-{index}",
+                    "provider": "openai",
+                    "model": f"live-model-{index}",
+                    "label": f"live-model-{index}",
+                    "key_name": "OpenAI",
+                    "endpoint": "https://api.openai.com/v1",
+                    "execution": "live",
+                    "status": "prepared",
+                    "estimate": {"cost_usd": 1.0},
+                }
+                for index in (1, 2)
+            ]
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "parallel-models",
+                "status": "prepared",
+                "candidates": candidates,
+            })
+            rendezvous = threading.Barrier(2, timeout=2)
+            worker_threads: set[int] = set()
+
+            def finish_together(
+                _root, _state, _manifest, candidate, *_args, **_kwargs
+            ):
+                worker_threads.add(threading.get_ident())
+                rendezvous.wait()
+                candidate["status"] = "completed"
+                return True, run_dir / "results" / f"{candidate['id']}.partial.json"
+
+            with (
+                mock.patch.object(
+                    evaluation,
+                    "estimate_candidate",
+                    return_value={
+                        "cost_usd": 0.01,
+                        "maximum_cost_usd": 0.02,
+                        "automatic_attempts": evaluation.LIVE_REQUEST_MAX_ATTEMPTS,
+                    },
+                ),
+                mock.patch.object(
+                    evaluation,
+                    "_execute_live_candidate",
+                    side_effect=finish_together,
+                ),
+            ):
+                state = evaluation.submit_run(
+                    run_dir,
+                    {"candidate-1": "key", "candidate-2": "key"},
+                )
+
+        self.assertEqual(len(worker_threads), 2)
+        self.assertEqual(state["status"], "completed")
+        self.assertTrue(all(
+            candidate["status"] == "completed"
+            for candidate in state["candidates"]
+        ))
+
+    def test_parallel_failure_preserves_another_models_paid_batch_id(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            evaluation._atomic_write_json(run_dir / "manifest.json", self.manifest)
+            candidates = [
+                {
+                    "id": f"candidate-{index}",
+                    "provider": "openai",
+                    "model": f"batch-model-{index}",
+                    "label": f"batch-model-{index}",
+                    "key_name": "OpenAI",
+                    "endpoint": "https://api.openai.com/v1",
+                    "execution": "batch",
+                    "status": "prepared",
+                    "estimate": {"cost_usd": 1.0},
+                }
+                for index in (1, 2)
+            ]
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "parallel-partial-failure",
+                "status": "prepared",
+                "candidates": candidates,
+            })
+
+            def submit(_provider, _requests, *, client, **_kwargs):
+                if client == "candidate-1":
+                    return {"id": "paid-batch-1"}
+                raise RuntimeError("second provider unavailable")
+
+            with (
+                mock.patch.object(
+                    evaluation,
+                    "estimate_candidate",
+                    return_value={
+                        "cost_usd": 0.01,
+                        "maximum_cost_usd": 0.02,
+                        "automatic_attempts": 1,
+                    },
+                ),
+                mock.patch.object(
+                    evaluation,
+                    "_clients",
+                    side_effect=lambda candidate, _secret: (
+                        candidate["id"], None
+                    ),
+                ),
+                mock.patch.object(
+                    evaluation.batch_api, "submit_batch", side_effect=submit
+                ),
+                mock.patch("util.batch_history.upsert_history_entry"),
+            ):
+                state = evaluation.submit_run(
+                    run_dir,
+                    {"candidate-1": "key", "candidate-2": "key"},
+                )
+
+            saved, _manifest = evaluation.load_run(run_dir)
+
+        self.assertEqual(state, saved)
+        self.assertEqual(saved["status"], "partially_submitted")
+        self.assertEqual(saved["candidates"][0]["batch_id"], "paid-batch-1")
+        self.assertEqual(saved["candidates"][1]["status"], "prepared")
+        self.assertIn(
+            "second provider unavailable",
+            saved["candidates"][1]["submission_error"],
+        )
+        self.assertEqual(
+            saved["submission_errors"][0]["candidate_id"], "candidate-2"
+        )
+
+    def test_duplicate_candidate_ids_block_submission_before_provider(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            candidate = {
+                "id": "duplicate-id",
+                "provider": "openai",
+                "model": "batch-model",
+                "label": "batch-model",
+                "key_name": "OpenAI",
+                "endpoint": "https://api.openai.com/v1",
+                "execution": "batch",
+                "status": "prepared",
+                "estimate": {"cost_usd": 1.0},
+            }
+            evaluation._atomic_write_json(run_dir / "manifest.json", self.manifest)
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "duplicate-candidate-ids",
+                "status": "prepared",
+                "candidates": [candidate, {**candidate, "label": "second"}],
+            })
+            with (
+                mock.patch.object(
+                    evaluation,
+                    "estimate_candidate",
+                    return_value={
+                        "cost_usd": 0.01,
+                        "maximum_cost_usd": 0.02,
+                        "automatic_attempts": 1,
+                    },
+                ),
+                mock.patch.object(evaluation, "_clients") as clients,
+                mock.patch.object(
+                    evaluation.batch_api, "submit_batch"
+                ) as submit,
+            ):
+                with self.assertRaisesRegex(ValueError, "Duplicate.*candidate id"):
+                    evaluation.submit_run(run_dir, {"duplicate-id": "key"})
+
+            clients.assert_not_called()
+            submit.assert_not_called()
 
     def test_live_evaluation_resumes_from_per_request_checkpoint(self):
         with tempfile.TemporaryDirectory() as temporary:

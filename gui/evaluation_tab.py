@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 
 from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
@@ -53,9 +54,19 @@ class _EvaluationWorker(QThread):
     done = pyqtSignal(bool, str, object)
     log = pyqtSignal(str)
 
-    def __init__(self, task, parent=None):
+    def __init__(self, task, parent=None, stop_event=None):
         super().__init__(parent)
         self._task = task
+        self._graceful_shutdown_only = stop_event is not None
+        self._stop_event = stop_event or threading.Event()
+
+    def request_stop(self):
+        self._stop_event.set()
+        self.requestInterruption()
+
+    def stop(self):
+        """Propagate application shutdown to nested model workers."""
+        self.request_stop()
 
     def run(self):
         try:
@@ -1581,7 +1592,7 @@ class EvaluationTab(QWidget):
 
     def _run_task(
         self, task, on_done, *, cancelable=False,
-        uses_translation_runtime=False,
+        uses_translation_runtime=False, stop_event=None,
     ):
         if self._worker is not None and self._worker.isRunning():
             QMessageBox.information(self, "Evaluation busy", "An evaluation operation is still running.")
@@ -1589,7 +1600,7 @@ class EvaluationTab(QWidget):
         self._worker_cancelable = bool(cancelable)
         self._worker_uses_translation_runtime = bool(uses_translation_runtime)
         self._set_busy(True)
-        worker = _EvaluationWorker(task, self)
+        worker = _EvaluationWorker(task, self, stop_event=stop_event)
         self._worker = worker
         worker.log.connect(self._append_log)
 
@@ -1624,7 +1635,7 @@ class EvaluationTab(QWidget):
             or not self._worker_cancelable
         ):
             return
-        worker.requestInterruption()
+        worker.request_stop()
         self.cancel_btn.setEnabled(False)
         set_status_text(
             self.status_label,
@@ -1820,12 +1831,14 @@ class EvaluationTab(QWidget):
             return
         set_status_text(self.status_label, "Starting evaluation requests…", "info")
 
+        stop_event = threading.Event()
+
         def task(log):
             return evaluation.submit_run(
                 self.current_run_dir,
                 credentials,
                 log,
-                should_stop=lambda: QThread.currentThread().isInterruptionRequested(),
+                should_stop=stop_event.is_set,
             )
 
         def done(updated):
@@ -1836,7 +1849,31 @@ class EvaluationTab(QWidget):
                 self.current_run_dir = relocated
             self._display_state(updated)
             self._refresh_history(self.current_run_dir)
-            if updated["status"] == "completed":
+            submission_errors = updated.get("submission_errors") or []
+            if submission_errors:
+                details = "\n".join(
+                    f"{item.get('label') or item.get('candidate_id')}: "
+                    f"{item.get('error') or 'unknown error'}"
+                    for item in submission_errors
+                )
+                set_status_text(
+                    self.status_label,
+                    "Some models could not start. Submitted batches will still "
+                    "be checked; press Run evaluation to retry failed models.",
+                    "error",
+                )
+                QMessageBox.warning(
+                    self,
+                    "Evaluation model errors",
+                    "Some models could not start:\n\n" + details,
+                )
+            elif updated["status"] == "prepared" and stop_event.is_set():
+                set_status_text(
+                    self.status_label,
+                    "Evaluation stopped before any requests were sent.",
+                    "info",
+                )
+            elif updated["status"] == "completed":
                 self._poll_timer.stop()
                 set_status_text(
                     self.status_label,
@@ -1870,7 +1907,12 @@ class EvaluationTab(QWidget):
                         "success",
                     )
 
-        self._run_task(task, done, cancelable=has_resumable_live)
+        self._run_task(
+            task,
+            done,
+            cancelable=has_resumable_live,
+            stop_event=stop_event,
+        )
 
     def refresh_results(self):
         if not self.current_run_dir or (

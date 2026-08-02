@@ -22,6 +22,7 @@ import threading
 import time
 import zipfile
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -1445,6 +1446,25 @@ def _validate_candidates(candidates: list[dict]) -> None:
         _candidate_rates(candidate)
 
 
+def _validate_candidate_ids(candidates: list[dict]) -> None:
+    """Require stable, unique IDs before candidate state is keyed or paid."""
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            raise ValueError("Evaluation candidate is invalid")
+        candidate_id = str(candidate.get("id") or "")
+        if (
+            not re.fullmatch(r"[A-Za-z0-9._-]+", candidate_id)
+            or candidate_id in {".", ".."}
+        ):
+            raise ValueError(f"Unsafe evaluation candidate id {candidate_id!r}")
+        if candidate_id in seen:
+            raise ValueError(
+                f"Duplicate evaluation candidate id {candidate_id!r}"
+            )
+        seen.add(candidate_id)
+
+
 def _evaluation_storage_roots(project_root: str | Path) -> tuple[Path, Path]:
     log_root = Path(project_root).resolve() / "log"
     return log_root / EVALUATION_ARCHIVE_DIR, log_root / EVALUATION_WORK_DIR
@@ -2016,6 +2036,7 @@ def import_run_archive(
         candidates = state.get("candidates") or []
         if not isinstance(candidates, list):
             raise ValueError("Evaluation archive candidate list is invalid")
+        _validate_candidate_ids(candidates)
         result_names: set[str] = set()
         for candidate in candidates:
             if not isinstance(candidate, dict):
@@ -2326,6 +2347,7 @@ def _execute_live_candidate(
     root: Path, state: dict, manifest: dict, candidate: dict,
     requests: dict[str, dict], secret: str, log: Callable[[str], None],
     should_stop: Callable[[], bool] | None = None,
+    persist_candidate: Callable[[dict], None] | None = None,
 ) -> tuple[bool, Path]:
     # The evaluator owns the retry/checkpoint policy. Disable the SDKs' hidden
     # retries so LIVE_REQUEST_MAX_ATTEMPTS is the actual network-attempt cap.
@@ -2395,6 +2417,12 @@ def _execute_live_candidate(
             f"Live evaluation checkpoint has unknown requests: {checkpoint_path}"
         )
 
+    def persist_live_progress() -> None:
+        if persist_candidate is not None:
+            persist_candidate(candidate)
+        else:
+            _atomic_write_json(root / "state.json", state)
+
     total = len(executions)
     candidate["status"] = "running_live"
     candidate["live_completed_requests"] = len(completed_ids)
@@ -2402,7 +2430,7 @@ def _execute_live_candidate(
     candidate.setdefault("live_started_at", _utc_now())
     state["status"] = "partially_submitted"
     state["updated_at"] = _utc_now()
-    _atomic_write_json(root / "state.json", state)
+    persist_live_progress()
     if completed_ids:
         log(
             f"Resuming {candidate['label']} after {len(completed_ids)}/{total} "
@@ -2452,7 +2480,7 @@ def _execute_live_candidate(
 
                     candidate["live_retryable_error"] = str(exc)[:500]
                     state["updated_at"] = _utc_now()
-                    _atomic_write_json(root / "state.json", state)
+                    persist_live_progress()
                     log(
                         f"{candidate['label']} live request {index}/{total} remains "
                         "temporarily unavailable after retries. The evaluation was "
@@ -2492,7 +2520,7 @@ def _execute_live_candidate(
             "errors": errors,
             "usage": usage,
         })
-        _atomic_write_json(root / "state.json", state)
+        persist_live_progress()
         if len(completed_ids) == total or len(completed_ids) % 5 == 0:
             log(
                 f"{candidate['label']}: {len(completed_ids)}/{total} "
@@ -2558,6 +2586,92 @@ def submit_run(run_dir: str | Path, credentials: dict[str, str],
         return _submit_run_unlocked(root, credentials, log, should_stop)
 
 
+def _submit_candidate(
+    root: Path,
+    state: dict,
+    manifest: dict,
+    candidate: dict,
+    requests: dict[str, dict],
+    secret: str,
+    log: Callable[[str], None],
+    should_stop: Callable[[], bool] | None,
+    persist_candidate: Callable[[dict], None],
+) -> None:
+    """Submit or execute one isolated candidate on its worker thread."""
+    if should_stop is not None and should_stop():
+        return
+    if candidate.get("execution", "batch") == "live":
+        completed, checkpoint_path = _execute_live_candidate(
+            root,
+            state,
+            manifest,
+            candidate,
+            requests,
+            secret,
+            log,
+            should_stop=should_stop,
+            persist_candidate=persist_candidate,
+        )
+        state["updated_at"] = _utc_now()
+        persist_candidate(candidate)
+        if completed:
+            try:
+                checkpoint_path.unlink(missing_ok=True)
+            except OSError as exc:
+                log(f"Could not remove completed live checkpoint: {exc}")
+        return
+
+    custom_ids: dict[str, str] = {}
+    batch_requests: list[dict] = []
+    for index, execution in enumerate(manifest["executions"], start=1):
+        custom_id = f"eval-{index:06d}"
+        execution_id = execution["id"]
+        request = requests[execution["logical_request_id"]]
+        custom_ids[custom_id] = execution_id
+        batch_requests.append({
+            "custom_id": custom_id,
+            "params": _provider_params(candidate, request),
+        })
+    log(f"Submitting {len(batch_requests)} requests to {candidate['label']}…")
+    client, google_client = _clients(candidate, secret)
+    submitted = batch_api.submit_batch(
+        candidate["provider"], batch_requests,
+        client=client, google_client=google_client,
+    )
+    candidate.update({
+        "batch_id": submitted["id"],
+        "input_file_id": submitted.get("input_file_id", ""),
+        "custom_ids": custom_ids,
+        "status": "submitted",
+        "submitted_at": _utc_now(),
+    })
+    # Persist the paid provider ID before doing optional history bookkeeping.
+    persist_candidate(candidate)
+    try:
+        from util.batch_history import upsert_history_entry
+
+        upsert_history_entry(
+            submitted["id"],
+            status="submitted",
+            api_status="in_progress",
+            provider=candidate["provider"],
+            model=candidate["model"],
+            request_count=len(custom_ids),
+            custom_ids=custom_ids,
+            cost_estimate=candidate["estimate"],
+            file_set=[Path(manifest["source_dir"]).name],
+            notes=f"Evaluation {state['run_id']}",
+            workflow="evaluation",
+            run_id=state["run_id"],
+            candidate_id=candidate["id"],
+            key_name=candidate.get("key_name", ""),
+            endpoint=candidate.get("endpoint", ""),
+        )
+    except Exception as exc:
+        log(f"Batch History registration failed: {exc}")
+    log(f"{candidate['label']}: {submitted['id']}")
+
+
 def _submit_run_unlocked(run_dir: str | Path, credentials: dict[str, str],
                          log: Callable[[str], None] | None = None,
                          should_stop: Callable[[], bool] | None = None) -> dict:
@@ -2572,12 +2686,12 @@ def _submit_run_unlocked(run_dir: str | Path, credentials: dict[str, str],
         )
     if state["status"] not in {"prepared", "partially_submitted"}:
         raise ValueError(f"Run cannot be submitted from state {state['status']!r}")
+    _validate_candidate_ids(state.get("candidates") or [])
     requests = _request_lookup(manifest)
     log = log or (lambda _message: None)
-
-    for candidate in state["candidates"]:
-        if should_stop is not None and should_stop():
-            break
+    state.pop("submission_errors", None)
+    pending: list[tuple[int, str]] = []
+    for index, candidate in enumerate(state["candidates"]):
         if candidate.get("batch_id") or candidate.get("status") in {
             "completed", "failed",
         }:
@@ -2585,72 +2699,83 @@ def _submit_run_unlocked(run_dir: str | Path, credentials: dict[str, str],
         secret = str(credentials.get(candidate["id"]) or "").strip()
         if not secret and not candidate.get("keyless"):
             raise ValueError(f"No API key is available for {candidate['label']}")
-        if candidate.get("execution", "batch") == "live":
-            completed, checkpoint_path = _execute_live_candidate(
-                root, state, manifest, candidate, requests, secret, log,
-                should_stop=should_stop,
-            )
+        candidate.pop("submission_error", None)
+        candidate.pop("submission_error_at", None)
+        pending.append((index, secret))
+
+    if pending and not (should_stop is not None and should_stop()):
+        state_lock = threading.Lock()
+        candidates_by_id = {
+            str(candidate["id"]): candidate for candidate in state["candidates"]
+        }
+
+        def persist_candidate(candidate: dict) -> None:
+            snapshot = copy.deepcopy(candidate)
+            with state_lock:
+                saved = candidates_by_id[str(snapshot["id"])]
+                saved.clear()
+                saved.update(snapshot)
+                state["status"] = _run_completion_status(state["candidates"])
+                state["updated_at"] = _utc_now()
+                _atomic_write_json(root / "state.json", state)
+
+        jobs = []
+        for index, secret in pending:
+            worker_state = copy.deepcopy(state)
+            worker_candidate = worker_state["candidates"][index]
+            jobs.append((
+                index,
+                worker_state,
+                worker_candidate,
+                secret,
+            ))
+
+        failures: list[tuple[int, Exception]] = []
+        with ThreadPoolExecutor(
+            max_workers=len(jobs), thread_name_prefix="evaluation-model"
+        ) as executor:
+            future_indexes = {
+                executor.submit(
+                    _submit_candidate,
+                    root,
+                    worker_state,
+                    manifest,
+                    worker_candidate,
+                    requests,
+                    secret,
+                    log,
+                    should_stop,
+                    persist_candidate,
+                ): index
+                for index, worker_state, worker_candidate, secret in jobs
+            }
+            for future in as_completed(future_indexes):
+                try:
+                    future.result()
+                except Exception as exc:
+                    failures.append((future_indexes[future], exc))
+
+        if failures:
+            failures.sort(key=lambda item: item[0])
+            submission_errors = []
+            for index, exc in failures:
+                candidate = state["candidates"][index]
+                message = str(exc)[:500] or type(exc).__name__
+                candidate["submission_error"] = message
+                candidate["submission_error_at"] = _utc_now()
+                submission_errors.append({
+                    "candidate_id": candidate["id"],
+                    "label": candidate.get("label") or candidate.get("model")
+                    or candidate["id"],
+                    "error": message,
+                })
+                log(
+                    f"{submission_errors[-1]['label']}: could not start: {message}"
+                )
+            state["submission_errors"] = submission_errors
+            state["status"] = _run_completion_status(state["candidates"])
             state["updated_at"] = _utc_now()
             _atomic_write_json(root / "state.json", state)
-            if completed:
-                try:
-                    checkpoint_path.unlink(missing_ok=True)
-                except OSError as exc:
-                    log(f"Could not remove completed live checkpoint: {exc}")
-            else:
-                break
-            continue
-
-        custom_ids: dict[str, str] = {}
-        batch_requests: list[dict] = []
-        for index, execution in enumerate(manifest["executions"], start=1):
-            custom_id = f"eval-{index:06d}"
-            execution_id = execution["id"]
-            request = requests[execution["logical_request_id"]]
-            custom_ids[custom_id] = execution_id
-            batch_requests.append({
-                "custom_id": custom_id,
-                "params": _provider_params(candidate, request),
-            })
-        log(f"Submitting {len(batch_requests)} requests to {candidate['label']}…")
-        client, google_client = _clients(candidate, secret)
-        submitted = batch_api.submit_batch(
-            candidate["provider"], batch_requests,
-            client=client, google_client=google_client,
-        )
-        candidate.update({
-            "batch_id": submitted["id"],
-            "input_file_id": submitted.get("input_file_id", ""),
-            "custom_ids": custom_ids,
-            "status": "submitted",
-            "submitted_at": _utc_now(),
-        })
-        state["status"] = "partially_submitted"
-        state["updated_at"] = _utc_now()
-        _atomic_write_json(root / "state.json", state)
-        try:
-            from util.batch_history import upsert_history_entry
-
-            upsert_history_entry(
-                submitted["id"],
-                status="submitted",
-                api_status="in_progress",
-                provider=candidate["provider"],
-                model=candidate["model"],
-                request_count=len(custom_ids),
-                custom_ids=custom_ids,
-                cost_estimate=candidate["estimate"],
-                file_set=[Path(manifest["source_dir"]).name],
-                notes=f"Evaluation {state['run_id']}",
-                workflow="evaluation",
-                run_id=state["run_id"],
-                candidate_id=candidate["id"],
-                key_name=candidate.get("key_name", ""),
-                endpoint=candidate.get("endpoint", ""),
-            )
-        except Exception as exc:
-            log(f"Batch History registration failed: {exc}")
-        log(f"{candidate['label']}: {submitted['id']}")
 
     state["status"] = _run_completion_status(state["candidates"])
     state["updated_at"] = _utc_now()

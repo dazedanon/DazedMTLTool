@@ -793,6 +793,12 @@ class DazedMTLGUI(QMainWindow):
                         except Exception:
                             pass
                 if not obj.wait(400):
+                    if getattr(obj, "_graceful_shutdown_only", False):
+                        # Python model workers cannot be safely terminated.
+                        # Their shared stop event lets them finish the current
+                        # provider call, checkpoint, and unwind the executor.
+                        obj.wait()
+                        continue
                     try:
                         obj.terminate()
                         obj.wait(400)
