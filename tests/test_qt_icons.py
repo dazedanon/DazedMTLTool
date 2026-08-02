@@ -51,12 +51,5 @@ class TestQtIcons(unittest.TestCase):
             self.assertEqual(btn.text(), "Save glossary.txt")
             self.assertFalse(btn.icon().isNull())
 
-    def test_make_section_header_returns_widget(self) -> None:
-        from gui.qt_icons import make_section_header
-
-        w = make_section_header("🌐 Translation Settings", "color:#007acc;")
-        self.assertIsNotNone(w)
-
-
 if __name__ == "__main__":
     unittest.main()

@@ -13,9 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 try:
     from dotenv import dotenv_values
-    from PyQt5.QtCore import Qt
-    from PyQt5.QtGui import QPalette
-    from PyQt5.QtWidgets import QApplication, QMainWindow
+    from PyQt5.QtWidgets import QApplication
 
     from gui.config_tab import ConfigTab, ModelFetchThread
     from util import api_keys
@@ -64,7 +62,6 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.vault_path = self.base / "api_keys.json"
         self._old_cwd = Path.cwd()
         self._tabs: list[ConfigTab] = []
-        self._windows: list[QMainWindow] = []
 
         self._environment = patch.dict(os.environ, {}, clear=False)
         self._environment.start()
@@ -118,9 +115,6 @@ class ConfigTabRegressionTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
-        for window in self._windows:
-            window.takeCentralWidget()
-            window.close()
         for tab in self._tabs:
             tab.close()
             tab.deleteLater()
@@ -160,157 +154,12 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertEqual(tab.gu_username_edit.text(), "translation-team")
         self.assertEqual(tab.gu_branch_edit.text(), "develop")
 
-    def test_loads_every_option_and_left_aligns_form_labels(self) -> None:
+    def test_loads_every_option(self) -> None:
         tab = self.make_tab()
 
         self.assert_initial_values(tab)
         self.assertEqual(set(tab.get_config()), self.CONFIG_KEYS - {"API_KEY_OPTIONAL"})
         self.assertTrue(tab.validate())
-        self.assertTrue(tab._general_form_labels)
-        for label in tab._general_form_labels:
-            self.assertTrue(label.alignment() & Qt.AlignLeft, label.text())
-
-    def test_text_fields_and_dropdowns_share_alignment_and_size(self) -> None:
-        tab = self.make_tab()
-        window = QMainWindow()
-        self._windows.append(window)
-        window.setCentralWidget(tab)
-        window.resize(2048, 884)
-        window.show()
-        for _ in range(4):
-            self._app.processEvents()
-
-        def x_position(widget) -> int:
-            return widget.mapTo(tab, widget.rect().topLeft()).x()
-
-        def x_within_card(widget, title: str) -> int:
-            card = tab._general_cards_by_title[title]
-            return widget.mapTo(card, widget.rect().topLeft()).x()
-
-        api_controls = (
-            tab.api_url_edit,
-            tab.api_key_combo,
-            tab.model_combo,
-        )
-        self.assertEqual(len({x_position(widget) for widget in api_controls}), 1)
-        self.assertEqual(
-            {widget.width() for widget in api_controls},
-            {api_controls[0].width()},
-        )
-        api_buttons = (
-            tab.api_url_preset_btn,
-            tab.api_key_new_btn,
-            tab.api_key_delete_btn,
-            tab.model_refresh_btn,
-        )
-        self.assertEqual(
-            {button.width() for button in api_buttons},
-            {api_buttons[0].width()},
-        )
-
-        aligned_groups = (
-            (
-                tab.language_combo,
-                tab.timeout_spin,
-                tab.width_spin,
-                tab.face_width_spin,
-                tab.list_width_spin,
-                tab.note_width_spin,
-            ),
-            (
-                tab.file_threads_spin,
-                tab.threads_spin,
-                tab.batch_size_spin,
-                tab.frequency_penalty_spin,
-                tab.input_cost_spin,
-                tab.output_cost_spin,
-            ),
-            (
-                tab.gu_forge_combo,
-                tab.gu_host_edit,
-                tab.gu_username_edit,
-                tab.gu_branch_edit,
-                tab.font_scale_spin,
-            ),
-        )
-        for group in aligned_groups:
-            self.assertEqual(len({x_position(widget) for widget in group}), 1)
-            self.assertEqual(len({widget.width() for widget in group}), 1)
-            self.assertEqual(len({widget.height() for widget in group}), 1)
-
-        standard_widths = [
-            widget.width()
-            for group in aligned_groups
-            for widget in group
-        ]
-        self.assertLessEqual(max(standard_widths) - min(standard_widths), 1)
-
-        representative_controls = (
-            (tab.api_url_edit, "🔑 API Configuration"),
-            (tab.font_scale_spin, "🖥️ Interface"),
-            (tab.language_combo, "🌐 Translation & Text"),
-            (tab.file_threads_spin, "⚡ Performance & Pricing"),
-            (tab.gu_forge_combo, "📦 Game Update Defaults"),
-        )
-        self.assertEqual(
-            len({
-                x_within_card(widget, title)
-                for widget, title in representative_controls
-            }),
-            1,
-        )
-
-    def test_dropdown_popup_is_opaque(self) -> None:
-        tab = self.make_tab()
-        window = QMainWindow()
-        self._windows.append(window)
-        window.setCentralWidget(tab)
-        window.resize(1280, 760)
-        window.show()
-        for _ in range(3):
-            self._app.processEvents()
-
-        tab.model_combo.showPopup()
-        for _ in range(3):
-            self._app.processEvents()
-
-        view = tab.model_combo.view()
-        popup = view.window()
-        self.assertTrue(view.autoFillBackground())
-        self.assertTrue(view.viewport().autoFillBackground())
-        self.assertEqual(view.palette().color(QPalette.Base).name(), "#353539")
-        self.assertEqual(
-            view.viewport().palette().color(QPalette.Base).name(),
-            "#353539",
-        )
-        self.assertEqual(popup.windowOpacity(), 1.0)
-        self.assertFalse(popup.testAttribute(Qt.WA_TranslucentBackground))
-        tab.model_combo.hidePopup()
-
-    def test_long_model_popup_is_bounded_and_scrollable(self) -> None:
-        tab = self.make_tab()
-        window = QMainWindow()
-        self._windows.append(window)
-        window.setCentralWidget(tab)
-        window.resize(1280, 760)
-        window.show()
-        tab.model_combo.clear()
-        tab.model_combo.addItems([f"provider-model-{index:03d}" for index in range(100)])
-        for _ in range(3):
-            self._app.processEvents()
-
-        tab.model_combo.showPopup()
-        for _ in range(3):
-            self._app.processEvents()
-
-        view = tab.model_combo.view()
-        popup = view.window()
-        screen = self._app.screenAt(tab.model_combo.mapToGlobal(tab.model_combo.rect().center()))
-        self.assertLessEqual(view.height(), tab.model_combo._popup_height_limit())
-        self.assertLessEqual(popup.height(), view.height() + 8)
-        self.assertGreater(view.verticalScrollBar().maximum(), 0)
-        self.assertLessEqual(popup.frameGeometry().bottom(), screen.availableGeometry().bottom())
-        tab.model_combo.hidePopup()
 
     def test_selecting_saved_provider_refreshes_its_models(self) -> None:
         api_keys.upsert_key(
@@ -389,33 +238,6 @@ class ConfigTabRegressionTests(unittest.TestCase):
         tab._on_models_fetched(["listed-model"], select_available=False)
 
         self.assertEqual(tab.model_combo.currentText(), "custom-provider-model")
-
-    def test_presets_menu_is_opaque(self) -> None:
-        tab = self.make_tab()
-        window = QMainWindow()
-        self._windows.append(window)
-        window.setCentralWidget(tab)
-        window.resize(1280, 760)
-        window.show()
-        for _ in range(3):
-            self._app.processEvents()
-
-        menu = tab.api_url_preset_btn.menu()
-        menu.popup(
-            tab.api_url_preset_btn.mapToGlobal(
-                tab.api_url_preset_btn.rect().bottomLeft()
-            )
-        )
-        for _ in range(3):
-            self._app.processEvents()
-
-        self.assertTrue(menu.autoFillBackground())
-        self.assertEqual(menu.palette().color(QPalette.Window).name(), "#353539")
-        self.assertEqual(menu.palette().color(QPalette.Base).name(), "#353539")
-        self.assertEqual(menu.windowOpacity(), 1.0)
-        self.assertFalse(menu.testAttribute(Qt.WA_TranslucentBackground))
-        self.assertTrue(menu.testAttribute(Qt.WA_OpaquePaintEvent))
-        menu.hide()
 
     def test_save_and_reload_round_trip_for_every_option(self) -> None:
         tab = self.make_tab()

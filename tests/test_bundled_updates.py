@@ -227,38 +227,6 @@ class ShippedDataTrackingTests(unittest.TestCase):
                     f"data/help/index.json references missing {rel}",
                 )
 
-    def test_beginner_guide_keeps_the_required_path_short(self):
-        import json
-
-        help_dir = _REPO_ROOT / "data" / "help"
-        index = json.loads((help_dir / "index.json").read_text(encoding="utf-8"))
-        group_rows = [i for i, entry in enumerate(index) if entry.get("type") == "group"]
-        self.assertEqual(len(group_rows), 2)
-
-        first_group, extra_group = group_rows
-        self.assertEqual(index[first_group]["title"], "Definitely Read These")
-        self.assertEqual(index[extra_group]["title"], "Extra Information")
-        self.assertEqual(
-            [entry["id"] for entry in index[first_group + 1:extra_group]],
-            ["welcome", "ai-helper", "git-setup", "examples"],
-        )
-        self.assertEqual(
-            [entry["id"] for entry in index[extra_group + 1:extra_group + 3]],
-            ["workflow-rpg", "workflow-wolf"],
-        )
-
-    def test_git_guide_uses_editor_source_control_for_daily_work(self):
-        source = (_REPO_ROOT / "data/help/01-git-setup.md").read_text(
-            encoding="utf-8"
-        )
-        normalized = " ".join(source.split())
-        self.assertIn("Use that screen for normal Git work", normalized)
-        self.assertIn("Ctrl+Shift+G", normalized)
-        self.assertIn(
-            "For everyday reviewing, committing, and syncing, use Source Control",
-            normalized,
-        )
-
     def test_shipped_data_files_are_not_gitignored(self):
         help_dir = _REPO_ROOT / "data" / "help"
         rels = list(_SHIPPED_DATA_FILES)

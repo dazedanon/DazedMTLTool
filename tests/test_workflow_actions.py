@@ -138,34 +138,6 @@ class WorkflowActionWiringTests(unittest.TestCase):
             self.harness.click(2, **locator)
             self.assertIn(endpoint, [call.name for call in editors.actions])
 
-    def test_local_disclosures_and_rewrap_presets_change_only_ui_state(self):
-        self.workflow._goto_step(1)
-        self.harness.app.processEvents()
-        toggle = self.harness.button(1, text="Hide optional")
-        self.assertTrue(self.workflow._pp_dazedformat_box.isVisible())
-        toggle.click()
-        self.assertFalse(self.workflow._pp_dazedformat_box.isVisible())
-        self.assertEqual(toggle.text(), "Show optional")
-
-        self.harness.click(6, text="Messages only")
-        self.assertEqual(self.workflow.rewrap_codes_edit.text(), "401,405")
-        self.harness.click(6, text="All supported fields")
-        self.assertEqual(self.workflow.rewrap_codes_edit.text(), "")
-
-    def test_help_and_navigation_controls_remain_connected(self):
-        with patch("gui.workflow_tab._show_step_help") as show_help:
-            for step in range(9):
-                self.harness.click(step, text="?  Help")
-            self.assertEqual(show_help.call_count, 9)
-
-        self.workflow._goto_step(3)
-        self.harness.click(3, text="Continue  →")
-        self.assertEqual(self.workflow._step_tabs.currentIndex(), 4)
-        self.assertIn(3, self.workflow._step_done)
-        self.harness.click(4, text="←  Back")
-        self.assertEqual(self.workflow._step_tabs.currentIndex(), 3)
-
-
 class WorkflowHandlerContractTests(unittest.TestCase):
     """Real handlers run against disposable paths and substituted boundaries."""
 

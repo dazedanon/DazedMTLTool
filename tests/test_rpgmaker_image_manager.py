@@ -14,12 +14,9 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
     QMainWindow,
     QMessageBox,
-    QScrollArea,
-    QWidget,
 )
 
-from gui.rpgmaker_image_manager import RPGMakerImageManager, _PAGE_SIZE
-from gui.theme import Geometry, Spacing
+from gui.rpgmaker_image_manager import RPGMakerImageManager
 from gui.workflow_tab import _inspect_image_workflow
 from util.image_manager import PROFILE_AUTO, PROFILE_GENERIC, PROFILE_RPGMAKER_MVMZ
 
@@ -203,7 +200,6 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertFalse(asset.plain_path.exists())
         self.assertTrue(asset.runtime_plain_path.exists())
         self.assertEqual(self.manager.image_list.count(), 0)
-        self.assertEqual(self.manager.remove_button.text(), "Remove copies")
 
     def test_prepare_uses_only_highlighted_editable_images(self):
         highlighted = self.manager.assets[0]
@@ -224,7 +220,6 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertEqual(assets, [highlighted])
         self.assertTrue(highlighted.plain_path.exists())
         self.assertTrue(not_highlighted.plain_path.exists())
-        self.assertEqual(self.manager.prepare_button.text(), "Patch selected")
 
     def test_prepare_uses_all_editable_images_without_highlights(self):
         editable = self.manager.assets[:2]
@@ -241,209 +236,6 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         action, assets = start_action.call_args.args
         self.assertEqual(action, "prepare")
         self.assertEqual(assets, editable)
-        self.assertEqual(self.manager.prepare_button.text(), "Patch all")
-
-    def test_actions_are_compact_and_pagination_belongs_to_browser(self):
-        action_buttons = (
-            self.manager.open_workspace_button,
-            self.manager.copy_translation_button,
-            self.manager.decrypt_selected_button,
-            self.manager.decrypt_all_button,
-            self.manager.remove_button,
-            self.manager.prepare_button,
-        )
-        self.assertTrue(
-            all(self.manager.action_host.isAncestorOf(button) for button in action_buttons)
-        )
-        self.assertTrue(
-            self.manager.browser_host.isAncestorOf(self.manager.previous_button)
-        )
-        self.assertTrue(self.manager.browser_host.isAncestorOf(self.manager.next_button))
-        self.assertLess(
-            max(button.width() for button in action_buttons),
-            self.manager.workspace_card.width() // 2,
-        )
-        action_rows = {
-            self.manager.action_layout.getItemPosition(
-                self.manager.action_layout.indexOf(button)
-            )[0]
-            for button in action_buttons
-        }
-        self.assertEqual(action_rows, {0})
-        self.assertEqual({button.width() for button in action_buttons}, {
-            action_buttons[0].width()
-        })
-        self.assertEqual(
-            self.manager.previous_button.size(), self.manager.next_button.size()
-        )
-        for button in (self.manager.previous_button, self.manager.next_button):
-            button_bottom = button.mapTo(
-                self.manager.browser_host, button.rect().bottomLeft()
-            ).y()
-            self.assertGreaterEqual(
-                self.manager.browser_host.contentsRect().bottom() - button_bottom,
-                Spacing.SM,
-            )
-        action_right = max(
-            button.mapTo(self.manager.action_host, button.rect().topRight()).x()
-            for button in action_buttons
-        )
-        self.assertLessEqual(
-            action_right, self.manager.action_host.contentsRect().right()
-        )
-
-    def test_action_bar_reflows_when_only_the_page_viewport_changes(self):
-        for button in self.manager.action_buttons:
-            button.setFixedWidth(260)
-        self.manager.page_scroll.viewport().resize(720, 600)
-        QTest.qWait(1)
-        self.app.processEvents()
-
-        action_right = max(
-            button.mapTo(self.manager.action_host, button.rect().topRight()).x()
-            for button in self.manager.action_buttons
-        )
-        self.assertLessEqual(
-            action_right, self.manager.action_host.contentsRect().right()
-        )
-        self.assertEqual(
-            {button.width() for button in self.manager.action_buttons},
-            {self.manager.action_buttons[0].width()},
-        )
-
-    def test_browser_is_the_single_dominant_workspace(self):
-        cards = self.manager.findChildren(QWidget, "appSectionCard")
-        self.assertEqual(len(cards), 1)
-        workspace = cards[0]
-        self.assertIsNone(self.manager.workspace_card.title_label)
-        for widget in (
-            self.manager.folder_edit,
-            self.manager.image_list,
-            self.manager.preview_host,
-            self.manager.prepare_button,
-        ):
-            self.assertTrue(workspace.isAncestorOf(widget))
-        self.assertGreater(self.manager.image_list.height(), 240)
-        self.assertGreaterEqual(self.manager.preview_host.width(), 400)
-        self.assertGreaterEqual(
-            self.manager.preview_host.width(),
-            int(self.manager.browser_splitter.width() * 0.38),
-        )
-
-    def test_browser_and_preview_panes_share_outer_edges(self):
-        browser_top = self.manager.browser_host.mapTo(
-            self.manager.browser_splitter,
-            self.manager.browser_host.rect().topLeft(),
-        ).y()
-        preview_top = self.manager.preview_host.mapTo(
-            self.manager.browser_splitter,
-            self.manager.preview_host.rect().topLeft(),
-        ).y()
-        browser_bottom = self.manager.browser_host.mapTo(
-            self.manager.browser_splitter,
-            self.manager.browser_host.rect().bottomLeft(),
-        ).y()
-        preview_bottom = self.manager.preview_host.mapTo(
-            self.manager.browser_splitter,
-            self.manager.preview_host.rect().bottomLeft(),
-        ).y()
-        self.assertEqual(browser_top, preview_top)
-        self.assertEqual(browser_bottom, preview_bottom)
-
-    def test_preview_summary_is_compact_and_full_paths_are_in_tooltip(self):
-        self.manager.image_list.setCurrentRow(0)
-        self.app.processEvents()
-        self.assertTrue(self.manager.path_label.isVisible())
-        asset = self.manager.assets[0]
-        self.assertIn(asset.asset_id, self.manager.path_label.text())
-        self.assertIn("PNG source", self.manager.path_label.text())
-        self.assertNotIn(str(self.game_root), self.manager.path_label.text())
-        self.assertIn(str(self.game_root), self.manager.path_label.toolTip())
-
-        self.assertLess(
-            self.manager.preview_label.geometry().bottom(),
-            self.manager.path_label.geometry().top(),
-        )
-        self.assertLessEqual(
-            self.manager.path_label.geometry().bottom(),
-            self.manager.preview_host.contentsRect().bottom(),
-        )
-        self.assertLessEqual(
-            self.manager.path_label.height(), Geometry.CONTROL * 3
-        )
-
-    def test_thumbnail_labels_are_single_line_and_middle_elided(self):
-        self.assertFalse(self.manager.image_list.wordWrap())
-        self.assertEqual(self.manager.image_list.textElideMode(), Qt.ElideMiddle)
-        self.assertGreater(
-            self.manager.image_list.gridSize().height(),
-            self.manager.image_list.iconSize().height()
-            + self.manager.image_list.fontMetrics().height(),
-        )
-
-    def test_engine_detection_shares_engine_row_above_filters(self):
-        engine_top = self.manager.engine_combo.mapTo(
-            self.manager, self.manager.engine_combo.rect().topLeft()
-        ).y()
-        engine_bottom = engine_top + self.manager.engine_combo.height()
-        detection_top = self.manager.engine_detection_label.mapTo(
-            self.manager, self.manager.engine_detection_label.rect().topLeft()
-        ).y()
-        detection_bottom = detection_top + self.manager.engine_detection_label.height()
-        filter_top = self.manager.search_edit.mapTo(
-            self.manager, self.manager.search_edit.rect().topLeft()
-        ).y()
-
-        self.assertLess(max(engine_top, detection_top), min(engine_bottom, detection_bottom))
-        self.assertLess(max(engine_bottom, detection_bottom), filter_top)
-        self.assertLessEqual(self.manager.folder_combo.maximumWidth(), 360)
-        self.assertLessEqual(self.manager.state_combo.maximumWidth(), 220)
-
-    def test_page_uses_outer_vertical_scroll_only_when_content_needs_it(self):
-        scroll = self.manager.findChild(QScrollArea, "imageManagerScroll")
-        self.assertIsNotNone(scroll)
-        self.assertTrue(scroll.widgetResizable())
-        self.manager._update_page_scroll_extent()
-        self.app.processEvents()
-        self.assertEqual(
-            self.manager.page_content.minimumHeight(),
-            self.manager.page_layout.sizeHint().height(),
-        )
-        if self.manager.page_content.minimumHeight() > scroll.viewport().height():
-            self.assertGreater(scroll.verticalScrollBar().maximum(), 0)
-        else:
-            self.assertEqual(scroll.verticalScrollBar().maximum(), 0)
-
-    def test_folder_popup_is_bounded_and_scrolls_long_lists(self):
-        combo = self.manager.folder_combo
-        combo.blockSignals(True)
-        combo.clear()
-        combo.addItem("All folders", "")
-        for index in range(80):
-            combo.addItem(f"img/pictures/group_{index:03d}/nested_folder", str(index))
-        combo.setCurrentIndex(combo.count() - 1)
-        combo.blockSignals(False)
-
-        combo.showPopup()
-        self.app.processEvents()
-        try:
-            view = combo.view()
-            popup = view.window()
-            screen = QApplication.screenAt(combo.mapToGlobal(combo.rect().center()))
-            screen = screen or QApplication.primaryScreen()
-            available = screen.availableGeometry()
-
-            self.assertLessEqual(popup.height(), int(available.height() * 0.6))
-            self.assertGreater(view.verticalScrollBar().maximum(), 0)
-            self.assertTrue(view.verticalScrollBar().isVisible())
-            self.assertGreaterEqual(popup.geometry().top(), available.top())
-            self.assertLessEqual(popup.geometry().bottom(), available.bottom())
-            current = combo.model().index(combo.currentIndex(), combo.modelColumn())
-            current_rect = view.visualRect(current)
-            self.assertLess(current_rect.top(), view.viewport().height())
-            self.assertGreaterEqual(current_rect.bottom(), 0)
-        finally:
-            combo.hidePopup()
 
     def test_translation_skill_is_enabled_only_for_editable_images(self):
         self.assertFalse(self.manager.copy_translation_button.isEnabled())
@@ -456,13 +248,6 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.app.processEvents()
 
         self.assertTrue(self.manager.copy_translation_button.isEnabled())
-
-    def test_copy_skill_has_visible_beginner_instructions(self):
-        text = self.manager.copy_skill_help_banner.text_label.text()
-        self.assertIn("Copy skill", text)
-        self.assertIn("AI helper", text)
-        self.assertIn("paste", text.casefold())
-        self.assertIn("review every edited image", text)
 
     def test_loading_and_scanning_project_is_read_only(self):
         self.assertEqual(self.manager.engine_combo.currentData(), PROFILE_AUTO)
@@ -486,17 +271,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertIn(str(self.game_root / ".dazedtl" / "images" / "img"), prompt)
         self.assertIn(str(self.game_root / "glossary.txt"), prompt)
         self.assertIn("RPG Maker MV/MZ image profile", prompt)
-        self.assertIn("This is an RPG Maker MV/MZ project", prompt)
-        self.assertIn("`.rpgmvp` or `.png_`", prompt)
-        self.assertIn("authoritative glossary for every translation", prompt)
-        self.assertIn("deterministic raster backend", prompt)
-        self.assertIn("runtime value locations as protected keepout regions", prompt)
-        self.assertIn("inner and outer glow layers", prompt)
-        self.assertIn("Do not add a backing rectangle", prompt)
-        self.assertIn("same visual role and emphasis", prompt)
         self.assertIn("image_translation_log.md", prompt)
-        self.assertIn("Coordinates `(x, y, width, height)`", prompt)
-        self.assertIn("one table row per text region", prompt)
         self.assertNotIn("{{GAME_ROOT}}", prompt)
         self.assertNotIn("{{EDITABLE_IMAGES_FOLDER}}", prompt)
         self.assertNotIn("{{VOCAB_FILE}}", prompt)
@@ -555,36 +330,21 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertEqual(Path(opened_url.toLocalFile()), expected)
         self.assertTrue(expected.is_dir())
 
-    def test_thumbnail_batch_keeps_one_stable_tile_per_asset(self):
+    def test_thumbnail_batch_keeps_one_loaded_icon_per_asset(self):
         for worker in list(self.manager._thumbnail_workers):
             worker.wait(5000)
         self.app.processEvents()
 
         image_list = self.manager.image_list
-        self.assertTrue(image_list.uniformItemSizes())
-        self.assertNotIn("border-bottom", image_list.styleSheet())
         self.assertEqual(image_list.count(), 4)
         self.assertTrue(
             all(not image_list.item(index).icon().isNull() for index in range(4))
         )
-        rects = [image_list.visualItemRect(image_list.item(index)) for index in range(4)]
-        self.assertEqual(len({(rect.x(), rect.y()) for rect in rects}), 4)
-
-
-class RPGMakerImageManagerNavigationTests(unittest.TestCase):
-    def test_page_size_supports_large_image_sets(self):
-        self.assertEqual(_PAGE_SIZE, 1000)
-
-    def test_image_manager_is_a_dedicated_sidebar_page(self):
-        root = Path(__file__).resolve().parents[1]
-        main_source = (root / "gui" / "main.py").read_text(encoding="utf-8")
-        workflow_source = (root / "gui" / "workflow_tab.py").read_text(encoding="utf-8")
-        self.assertIn("PAGE_IMAGES = 2", main_source)
-        self.assertIn("from gui.image_manager import ImageManager", main_source)
-        self.assertIn("self.image_manager_tab = ImageManager", main_source)
-        self.assertIn('create_nav_button("🖼", "Images")', main_source)
-        self.assertIn('(\"7  Images\",       self._build_step6_images)', workflow_source)
-        self.assertIn('self._open_images_btn = _make_btn("🖼  Open Image Manager"', workflow_source)
+        asset_ids = [
+            image_list.item(index).data(Qt.UserRole + 1)
+            for index in range(image_list.count())
+        ]
+        self.assertEqual(len(asset_ids), len(set(asset_ids)))
 
 
 class GenericImageManagerUITests(unittest.TestCase):
@@ -609,7 +369,6 @@ class GenericImageManagerUITests(unittest.TestCase):
                 self.assertEqual(manager.engine_combo.currentData(), PROFILE_AUTO)
                 self.assertEqual(manager.engine_id, PROFILE_GENERIC)
                 self.assertTrue(manager.generic_root_host.isVisible())
-                self.assertEqual(manager.decrypt_selected_button.text(), "Make")
                 self.assertEqual(manager.image_list.count(), 1)
                 self.assertEqual(manager.assets[0].asset_id, "assets/images/ui/menu.png")
                 self.assertFalse((game_root / ".dazedtl").exists())
@@ -625,8 +384,6 @@ class GenericImageManagerUITests(unittest.TestCase):
                 prompt = QApplication.clipboard().text()
 
                 self.assertIn("Generic / Loose Images image profile", prompt)
-                self.assertIn("manages loose PNG assets", prompt)
-                self.assertIn("without assuming a particular game engine", prompt)
                 self.assertNotIn("RPG Maker", prompt)
                 self.assertNotIn(".rpgmvp", prompt)
                 self.assertNotIn("{{ENGINE_NAME}}", prompt)

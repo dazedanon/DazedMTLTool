@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run DazedTL unit tests using the project venv (cwd = project root).
+# Run DazedTL tests using the project venv (cwd = project root).
 
 set -euo pipefail
 
@@ -24,7 +24,15 @@ if ! "$PYTHON" -c "import colorama, dotenv, tqdm" >/dev/null 2>&1; then
 fi
 
 if [[ "$#" -eq 0 ]]; then
-    set -- discover -s tests -p 'test_*.py' -v
+    set -- core
 fi
 
-exec "$PYTHON" -m unittest "$@"
+case "$1" in
+    core|extended|full)
+        exec "$PYTHON" scripts/run_test_suite.py "$@"
+        ;;
+    *)
+        # Preserve targeted unittest invocations used by contributors and docs.
+        exec "$PYTHON" -m unittest "$@"
+        ;;
+esac

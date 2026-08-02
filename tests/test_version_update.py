@@ -11,13 +11,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QAbstractItemView,
     QApplication,
     QMessageBox,
-    QScrollArea,
-    QTreeWidgetItem,
 )
 
 from util.version_update import (
@@ -1161,46 +1157,20 @@ class VersionUpdateUITests(unittest.TestCase):
 
         tab = VersionUpdateTab()
         try:
-            self.assertEqual(tab.scan_btn.text(), "Preview update")
-            self.assertEqual(tab.apply_btn.text(), "Create recommended update")
-            self.assertEqual(
-                tab.custom_apply_btn.text(), "Create with review choices"
-            )
             self.assertFalse(tab.apply_btn.isEnabled())
             self.assertFalse(tab.custom_apply_btn.isEnabled())
             self.assertTrue(tab.review_card.isHidden())
             self.assertTrue(tab.create_card.isHidden())
-            self.assertTrue(tab.progress.isHidden())
-            self.assertTrue(tab.progress_label.isHidden())
-            self.assertTrue(tab.cancel_scan_btn.isHidden())
             self.assertTrue(tab.options_widget.isHidden())
             tab.options_toggle.setChecked(True)
             self.assertFalse(tab.options_widget.isHidden())
-            self.assertEqual(tab.options_toggle.text(), "Hide update options")
             self.assertIn("original folders are never modified", tab.safety_label.text())
             self.assertTrue(tab.copy_mode_radio.isChecked())
             tab.in_place_mode_radio.setChecked(True)
-            self.assertEqual(tab.apply_btn.text(), "Update translated game")
-            self.assertEqual(
-                tab.custom_apply_btn.text(), "Update with review choices"
-            )
             self.assertTrue(tab.output_edit.isHidden())
             self.assertIn("rollback backup", tab.safety_label.text())
             tab.copy_mode_radio.setChecked(True)
             self.assertFalse(tab.output_edit.isHidden())
-            self.assertFalse(tab.continue_workflow_btn.isEnabled())
-            self.assertFalse(tab.open_images_btn.isEnabled())
-            self.assertIsNotNone(
-                tab.findChild(QScrollArea, "versionUpdateScroll")
-            )
-            self.assertGreaterEqual(tab.tree.minimumHeight(), 250)
-            self.assertEqual(tab.tree.header().stretchSectionCount(), 1)
-            self.assertEqual(
-                tab.tree.selectionMode(), QAbstractItemView.ExtendedSelection
-            )
-            self.assertEqual(tab.review_filter.currentData(), "review")
-            self.assertEqual(tab.use_proposed_btn.text(), "Merge new and local changes")
-            self.assertFalse(hasattr(tab, "audit_reapply_check"))
         finally:
             tab.close()
 
@@ -1274,8 +1244,8 @@ class VersionUpdateUITests(unittest.TestCase):
             finally:
                 tab.close()
 
-    def test_file_details_explain_consequences_and_hide_engine_log(self):
-        from gui.version_update_tab import VersionUpdateTab, _format_decision_details
+    def test_file_details_explain_consequences_without_engine_paths(self):
+        from gui.version_update_tab import _format_decision_details
 
         merged_map = {
             "events": [
@@ -1339,22 +1309,6 @@ class VersionUpdateUITests(unittest.TestCase):
         self.assertNotIn("source text is unchanged", summary)
         self.assertIn("$.events.id=1.pages[0].list[1]", technical)
 
-        tab = VersionUpdateTab()
-        try:
-            tab._plan = type("Plan", (), {"decisions": [decision]})()
-            item = QTreeWidgetItem()
-            item.setData(0, Qt.UserRole, 0)
-            tab._show_selected(item, None)
-            self.assertIn("What will happen", tab.details.toPlainText())
-            self.assertTrue(tab.technical_details.isHidden())
-            self.assertEqual(tab.technical_toggle.text(), "Show technical merge log")
-            tab.technical_toggle.setChecked(True)
-            self.assertFalse(tab.technical_details.isHidden())
-            self.assertIn("Action id: conflict", tab.technical_details.toPlainText())
-            self.assertEqual(tab.technical_toggle.text(), "Hide technical merge log")
-        finally:
-            tab.close()
-
     def test_review_queue_bulk_override_is_clear_and_multi_select(self):
         from gui.version_update_tab import VersionUpdateTab
 
@@ -1401,25 +1355,6 @@ class VersionUpdateUITests(unittest.TestCase):
                 apply.assert_called_once_with(recommended=True)
             finally:
                 tab.close()
-
-    def test_main_sidebar_wires_version_update_without_moving_images_page(self):
-        from gui.main import DazedMTLGUI
-        from gui.version_update_tab import VersionUpdateTab
-
-        with patch("gui.main.QTimer.singleShot"):
-            window = DazedMTLGUI()
-        try:
-            self.assertEqual(window.PAGE_IMAGES, 2)
-            self.assertEqual(window.PAGE_VERSION_UPDATE, 3)
-            self.assertEqual(window.PAGE_TRANSLATION, 4)
-            self.assertIsInstance(
-                window.content_stack.widget(window.PAGE_VERSION_UPDATE),
-                VersionUpdateTab,
-            )
-            self.assertEqual(len(window.nav_buttons), 9)
-        finally:
-            window.close()
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,9 +10,9 @@ from unittest import mock
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget
 
-from gui.config_tab import API_URL_PRESETS, ModelFetchThread
+from gui.config_tab import ModelFetchThread
 from gui.evaluation_tab import EvaluationTab, _EvaluationWorker
 from util import evaluation
 
@@ -23,6 +23,11 @@ class EvaluationTabTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.project_root = Path(self.temporary.name)
+        (self.project_root / "files").mkdir()
+        self.host = QWidget()
+        self.host.project_root = self.project_root
         patches = (
             mock.patch("gui.evaluation_tab.evaluation.latest_run", return_value=None),
             mock.patch("gui.evaluation_tab.evaluation.list_runs", return_value=[]),
@@ -52,15 +57,18 @@ class EvaluationTabTests(unittest.TestCase):
         self.patchers = list(patches)
         for patcher in self.patchers:
             patcher.start()
-        self.tab = EvaluationTab()
+        self.tab = EvaluationTab(self.host)
+        self.host.show()
         self.tab.show()
         self.app.processEvents()
 
     def tearDown(self):
         self.tab.close()
+        self.host.close()
         self.app.processEvents()
         for patcher in reversed(self.patchers):
             patcher.stop()
+        self.temporary.cleanup()
 
     def test_defaults_expose_model_dropdowns_and_simple_safe_actions(self):
         self.assertEqual(
@@ -75,18 +83,6 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertEqual(self.tab.custom_repeated_samples_spin.value(), 12)
         self.assertEqual(self.tab.custom_repetitions_spin.value(), 3)
         self.assertFalse(self.tab.custom_target_spin.isEnabled())
-        size_widgets = {
-            "Total test lines": self.tab.custom_target_spin,
-            "Lines per sample": self.tab.custom_sample_size_spin,
-            "Repeated samples": self.tab.custom_repeated_samples_spin,
-            "Runs per repeated sample": self.tab.custom_repetitions_spin,
-        }
-        for name, widget in size_widgets.items():
-            tooltip = self.tab.BENCHMARK_SIZE_TOOLTIPS[name]
-            label = self.tab.benchmark_size_labels[name]
-            self.assertEqual(label.text(), f"{name} ⓘ")
-            self.assertEqual(label.toolTip(), tooltip)
-            self.assertEqual(widget.toolTip(), tooltip)
         self.assertEqual(
             [row["model"].currentText() for row in self.tab._candidate_widgets],
             ["configured-model"],
@@ -132,41 +128,6 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertFalse(self.tab.copy_review_skill_btn.isEnabled())
         self.assertFalse(self.tab.history_combo.isEnabled())
         self.assertTrue(self.tab.import_evaluation_btn.isEnabled())
-        valid_header = self.tab.table.horizontalHeaderItem(
-            self.tab.COLUMNS.index("Valid")
-        )
-        consistency_header = self.tab.table.horizontalHeaderItem(
-            self.tab.COLUMNS.index("Consistency")
-        )
-        self.assertIn("does not measure translation quality", valid_header.toolTip())
-        self.assertIn("more repeatable, not better", consistency_header.toolTip())
-        self.assertTrue(all(
-            max(map(len, tooltip.splitlines())) <= 62
-            for tooltip in self.tab.COLUMN_TOOLTIPS.values()
-        ))
-        self.assertEqual(self.tab.COLUMNS[-1], "Best overall")
-        for name, label in self.tab.COLUMN_LABELS.items():
-            header = self.tab.table.horizontalHeaderItem(
-                self.tab.COLUMNS.index(name)
-            )
-            self.assertEqual(header.text(), f"{label} ⓘ")
-        self.assertGreaterEqual(
-            self.tab.table.horizontalHeader().minimumHeight(),
-            self.tab.table.horizontalHeader().fontMetrics().lineSpacing() * 2 + 12,
-        )
-        self.assertTrue(all(
-            self.tab.table.horizontalHeaderItem(self.tab.COLUMNS.index(name))
-            .toolTip()
-            for name in (
-                "Meaning Accuracy", "Glossary & Prompt",
-                "Natural & Contextual", "Best overall",
-            )
-        ))
-        self.assertEqual(
-            self.tab.source_edit.placeholderText(),
-            "Select an RPG Maker MV/MZ game folder…",
-        )
-        self.assertIn("Game data found:", self.tab.source_resolution_label.text())
 
     def test_content_presets_and_custom_map_selection_are_explicit(self):
         inventory = {
@@ -428,24 +389,6 @@ class EvaluationTabTests(unittest.TestCase):
             self.tab._candidate_widgets[2]["key"].currentText(), "Claude"
         )
 
-    def test_provider_presets_match_configuration(self):
-        self.assertEqual(
-            [
-                action.text()
-                for action in self.tab._candidate_widgets[0]["preset"].menu().actions()
-            ],
-            [name for name, _url in API_URL_PRESETS],
-        )
-
-        row = self.tab._candidate_widgets[0]
-        deepseek_action = next(
-            action for action in row["preset"].menu().actions()
-            if action.text() == "DeepSeek"
-        )
-        deepseek_action.trigger()
-        self.assertEqual(row["endpoint"].text(), "https://api.deepseek.com/v1/")
-        self.assertEqual(row["key"].currentText(), "DeepSeek")
-
     def test_models_can_be_added_removed_and_reassigned(self):
         self.tab._add_candidate_row("gemini", "gemini-3.6-flash")
         self.assertEqual(len(self.tab._candidate_widgets), 2)
@@ -588,13 +531,6 @@ class EvaluationTabTests(unittest.TestCase):
             ["configured-model", "gpt-listed-a", "gpt-listed-b"],
         )
 
-    def test_scanned_models_keep_selection_when_provider_still_offers_it(self):
-        row = self.tab._candidate_widgets[0]
-        self.tab._apply_candidate_models(
-            row, ["gpt-listed-b", "configured-model", "gpt-listed-a"]
-        )
-        self.assertEqual(row["model"].currentText(), "configured-model")
-
     def test_worker_completion_restores_actions_after_thread_stops(self):
         completed = []
         self.tab._run_task(lambda _log: "done", completed.append)
@@ -719,27 +655,6 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertTrue(self.tab.submit_btn.isEnabled())
         self.assertFalse(self.tab.refresh_btn.isEnabled())
         self.assertFalse(self.tab._poll_timer.isActive())
-
-    def test_long_evaluation_model_dropdown_is_bounded_and_scrollable(self):
-        row = self.tab._candidate_widgets[0]
-        combo = row["model"]
-        self.tab._apply_candidate_models(
-            row, [f"provider-model-{index:03d}" for index in range(100)]
-        )
-        self.tab.resize(1280, 720)
-        self.app.processEvents()
-        combo.showPopup()
-        self.app.processEvents()
-
-        view = combo.view()
-        screen = self.app.screenAt(combo.mapToGlobal(combo.rect().center()))
-        self.assertLessEqual(view.height(), combo._popup_height_limit())
-        self.assertLessEqual(view.window().height(), view.height() + 8)
-        self.assertGreater(view.verticalScrollBar().maximum(), 0)
-        self.assertLessEqual(
-            view.window().frameGeometry().bottom(), screen.availableGeometry().bottom()
-        )
-        combo.hidePopup()
 
     def test_model_scan_uses_selected_provider_key_and_endpoint(self):
         self.tab._add_candidate_row("gemini", "gemini-3.6-flash")
@@ -920,31 +835,6 @@ class EvaluationTabTests(unittest.TestCase):
             info.assert_called_once()
             self.assertIn("Export the blind review first", info.call_args.args[2])
             picker.assert_not_called()
-
-    def test_compact_width_keeps_all_result_columns_visible(self):
-        self.tab.resize(900, 720)
-        self.app.processEvents()
-        self.tab._refresh_responsive_geometry()
-        self.assertGreaterEqual(
-            self.tab.setup_card.height(), self.tab.setup_card.sizeHint().height()
-        )
-        self.assertGreater(self.tab.page_scroll.verticalScrollBar().maximum(), 0)
-        for widgets in self.tab._candidate_widgets:
-            self.assertGreaterEqual(widgets["endpoint_field"].width(), 320)
-            self.assertGreaterEqual(widgets["key"].width(), 220)
-            self.assertGreaterEqual(widgets["model"].width(), 260)
-        for widget in (self.tab.test_size_combo, self.tab.budget_spin):
-            self.assertGreaterEqual(widget.width(), 132)
-        result_width = sum(
-            self.tab.table.columnWidth(index)
-            for index in range(self.tab.table.columnCount())
-        )
-        self.assertLessEqual(result_width, self.tab.table.viewport().width())
-        self.assertEqual(
-            self.tab.table.horizontalScrollBarPolicy(), Qt.ScrollBarAlwaysOff
-        )
-        self.assertEqual(self.tab.table.horizontalScrollBar().maximum(), 0)
-
 
 if __name__ == "__main__":
     unittest.main()

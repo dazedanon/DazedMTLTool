@@ -493,7 +493,26 @@ class EvaluationContentSelectionTests(unittest.TestCase):
 class EvaluationManifestTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.manifest = evaluation.build_manifest(ROOT / "files")
+        cls._fixture = tempfile.TemporaryDirectory()
+        cls.data_root = Path(cls._fixture.name)
+        records = [None] + [
+            {
+                "id": index,
+                "name": f"名{index}",
+                "description": f"文{index}",
+                "message1": f"技{index}",
+                "message2": f"術{index}",
+            }
+            for index in range(1, 101)
+        ]
+        (cls.data_root / "Skills.json").write_text(
+            json.dumps(records, ensure_ascii=False), encoding="utf-8"
+        )
+        cls.manifest = evaluation.build_manifest(cls.data_root)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._fixture.cleanup()
 
     def test_default_corpus_is_stratified_and_repeated_deterministically(self):
         manifest = self.manifest
@@ -508,7 +527,7 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertGreater(summary["eligible_segments"], summary["selected_segments"])
         self.assertGreaterEqual(summary["selected_files"], 1)
         self.assertLessEqual(summary["selected_files"], summary["eligible_files"])
-        rebuilt = evaluation.build_corpus(ROOT / "files")
+        rebuilt = evaluation.build_corpus(self.data_root)
         self.assertCountEqual(
             [item["id"] for item in rebuilt],
             [item["id"] for item in manifest["segments"]],

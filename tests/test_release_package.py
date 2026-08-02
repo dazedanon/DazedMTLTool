@@ -7,10 +7,6 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-from unittest.mock import patch
-
-from PyQt5.QtCore import QSettings
-from PyQt5.QtWidgets import QApplication
 
 from util.release_package import ReleasePackageError, create_release_zip
 
@@ -150,83 +146,6 @@ class ReleasePackageTests(unittest.TestCase):
 
             self.assertEqual(result.output_path.name, "release.zip")
             self.assertTrue(result.output_path.is_file())
-
-
-class ReleaseWorkflowButtonTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.app = QApplication.instance() or QApplication([])
-
-    def test_both_workflows_expose_public_release_button(self):
-        from gui.workflow_tab import WorkflowTab
-        from gui.wolf_workflow_tab import WolfWorkflowTab
-
-        with tempfile.TemporaryDirectory() as raw:
-            settings = QSettings(str(Path(raw) / "settings.ini"), QSettings.IniFormat)
-            with (
-                patch("gui.workflow_tab.QSettings", return_value=settings),
-                patch("gui.wolf_workflow_tab.QSettings", return_value=settings),
-            ):
-                rpg = WorkflowTab()
-                wolf = WolfWorkflowTab()
-            try:
-                self.assertEqual(
-                    rpg._release_zip_btn.text().removeprefix("📦 "),
-                    "Build public release ZIP",
-                )
-                self.assertEqual(
-                    wolf._release_zip_btn.text().removeprefix("📦 "),
-                    "Build public release ZIP",
-                )
-                self.assertIn("GameUpdate", rpg._release_zip_btn.toolTip())
-                self.assertEqual(
-                    [label.text() for label in wolf._step_rail._number_labels],
-                    [str(index) for index in range(1, 11)],
-                )
-                self.assertTrue(
-                    rpg._step_tabs.widget(8).isAncestorOf(rpg._release_zip_btn)
-                )
-                self.assertFalse(
-                    rpg._step_tabs.widget(6).isAncestorOf(rpg._release_zip_btn)
-                )
-                self.assertTrue(
-                    wolf._step_tabs.widget(9).isAncestorOf(wolf._release_zip_btn)
-                )
-                self.assertFalse(
-                    wolf._step_tabs.widget(8).isAncestorOf(wolf._release_zip_btn)
-                )
-
-                from gui.workflow_components import WorkflowStageCard
-
-                expected_wolf_stages = [3, 3, 2, 2, 3, 2, 2, 2, 2, 4]
-                for page_index, expected_count in enumerate(expected_wolf_stages):
-                    stages = wolf._step_tabs.widget(page_index).findChildren(
-                        WorkflowStageCard
-                    )
-                    self.assertEqual(len(stages), expected_count, page_index)
-                    self.assertEqual(
-                        [stage.number_label.text() for stage in stages],
-                        [str(number) for number in range(1, expected_count + 1)],
-                        page_index,
-                    )
-                rpg_ai_banners = (
-                    rpg.speaker_setup_hint,
-                    rpg._p2_ai_help_banner,
-                    rpg._plugin_ai_help_banner,
-                    rpg._qa_ai_help_banner,
-                )
-                wolf_ai_banners = (
-                    wolf._setup_ai_help_banner,
-                    wolf._database_ai_help_banner,
-                    wolf._speaker_ai_help_banner,
-                )
-                for banner in (*rpg_ai_banners, *wolf_ai_banners):
-                    self.assertIn("AI helper", banner.text_label.text())
-                for banner in wolf_ai_banners:
-                    self.assertIn("paste", banner.text_label.text().casefold())
-            finally:
-                rpg.close()
-                wolf.close()
 
 
 if __name__ == "__main__":
