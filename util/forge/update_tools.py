@@ -4,11 +4,10 @@ Upstream: https://gitgud.io/zero64801/forge-mvmz
 CI builds a unified forge.js plugin (master branch artifacts) for MZ.
 
 RPG Maker MV ships with NW.js / Chrome ~65, which cannot run the rewritten
-Svelte Forge bundle. MV therefore keeps the pre-rewrite legacy plugin in
-``Forge_MV.js`` and its offline ``upstream/Forge_MV.js`` copy.
+Svelte Forge bundle. MV therefore keeps the pre-rewrite legacy plugin as
+``upstream/Forge_MV.js``.
 
-Offline copies: util/forge/upstream/
-Active plugins: util/forge/Forge_MZ.js (modern), util/forge/Forge_MV.js (legacy)
+Canonical offline copies: util/forge/upstream/
 
 End users receive curated copies shipped with DazedTL updates.
 Upstream fetches are maintainer-only (``--refresh-offline`` or ``--force``)
@@ -18,7 +17,6 @@ and only refresh the MZ modern plugin.
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 import urllib.parse
 import urllib.request
@@ -39,15 +37,11 @@ VERSION_FILE = _PKG_ROOT / ".forge_version.json"
 USER_AGENT = "DazedTL"
 
 
-def bundled_plugin_path(engine: str) -> Path:
+def upstream_plugin_path(engine: str) -> Path:
     name = PLUGIN_BY_ENGINE.get(engine)
     if not name:
         raise ValueError(f"Unsupported engine: {engine}")
-    return _PKG_ROOT / f"{name}.js"
-
-
-def upstream_plugin_path(engine: str) -> Path:
-    return UPSTREAM_DIR / f"{PLUGIN_BY_ENGINE[engine]}.js"
+    return UPSTREAM_DIR / f"{name}.js"
 
 
 def _load_versions() -> dict:
@@ -67,15 +61,6 @@ def _api_json(url: str) -> dict | list:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read().decode("utf-8"))
-
-
-def _download(url: str, dest: Path) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_suffix(dest.suffix + ".part")
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=600) as resp, open(tmp, "wb") as fh:
-        shutil.copyfileobj(resp, fh)
-    tmp.replace(dest)
 
 
 def _project_id() -> str:
@@ -106,20 +91,6 @@ def _log(msg: str, log_fn) -> None:
         print(msg, flush=True)
 
 
-def _seed_from_offline(engine: str, log_fn) -> bool:
-    """Copy bundled offline copy into the active plugin path if missing."""
-    dest = bundled_plugin_path(engine)
-    if dest.is_file():
-        return True
-    offline = upstream_plugin_path(engine)
-    if not offline.is_file():
-        return False
-    shutil.copy2(offline, dest)
-    if log_fn:
-        _log(f"Using offline bundled {dest.name}", log_fn)
-    return True
-
-
 def _fetch_plugins(log_fn) -> bytes:
     """Download the unified forge.js CI artifact."""
     _log(f"Downloading forge.js from {FORGE_PROJECT} ({FORGE_BRANCH} CI)...", log_fn)
@@ -127,9 +98,8 @@ def _fetch_plugins(log_fn) -> bytes:
 
 
 def _install_modern_mz_bytes(data: bytes) -> None:
-    """Write modern forge.js into MZ active + offline paths only (never MV)."""
+    """Write modern forge.js into the canonical MZ path only (never MV)."""
     UPSTREAM_DIR.mkdir(parents=True, exist_ok=True)
-    bundled_plugin_path("MZ").write_bytes(data)
     upstream_plugin_path("MZ").write_bytes(data)
 
 
@@ -171,18 +141,9 @@ def refresh_forge_plugins(log_fn=print) -> bool:
     return True
 
 
-def seed_forge_plugins(log_fn=None) -> None:
-    """Copy offline-bundled Forge plugins if missing (no network)."""
-    for engine in PLUGIN_BY_ENGINE:
-        _seed_from_offline(engine, log_fn)
-
-
 def ensure_forge_plugins(force: bool = False, log_fn=print) -> bool:
     """Ensure Forge plugins are present from the offline bundle (no upstream fetch)."""
-    for engine in PLUGIN_BY_ENGINE:
-        _seed_from_offline(engine, log_fn)
-
-    missing = [e for e in PLUGIN_BY_ENGINE if not bundled_plugin_path(e).is_file()]
+    missing = [e for e in PLUGIN_BY_ENGINE if not upstream_plugin_path(e).is_file()]
     if missing and not force:
         names = ", ".join(PLUGIN_BY_ENGINE[e] + ".js" for e in missing)
         _log(
@@ -195,13 +156,13 @@ def ensure_forge_plugins(force: bool = False, log_fn=print) -> bool:
     if force:
         if refresh_forge_plugins(log_fn=log_fn):
             return True
-        have_local = all(bundled_plugin_path(e).is_file() for e in PLUGIN_BY_ENGINE)
+        have_local = all(upstream_plugin_path(e).is_file() for e in PLUGIN_BY_ENGINE)
         if not have_local:
             _log("ERROR: Forge plugin update failed.", log_fn)
             return False
         _log("Warning: could not update Forge plugins; using local copy.", log_fn)
 
-    return all(bundled_plugin_path(e).is_file() for e in PLUGIN_BY_ENGINE)
+    return all(upstream_plugin_path(e).is_file() for e in PLUGIN_BY_ENGINE)
 
 
 def main() -> int:

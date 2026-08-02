@@ -1,6 +1,6 @@
 """Forge plugin build — install-time hotkey and UI scale injection.
 
-Vanilla Forge_MV.js / Forge_MZ.js stay untouched on disk.
+Canonical Forge_MV.js / Forge_MZ.js sources stay untouched under ``upstream/``.
 Patches are applied in memory when installing or applying settings to a game.
 
 MV uses the pre-rewrite legacy plugin (old NW.js / Chrome ~65).
@@ -29,7 +29,7 @@ def bundled_plugin_path(engine: str) -> Path:
     name = PLUGIN_BY_ENGINE.get(engine)
     if not name:
         raise ValueError(f"Unsupported engine: {engine}")
-    return _PKG_ROOT / f"{name}.js"
+    return _PKG_ROOT / "upstream" / f"{name}.js"
 
 
 def _js_literal(value) -> str:

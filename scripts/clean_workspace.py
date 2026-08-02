@@ -171,7 +171,10 @@ def stale_tool_targets(root: Path) -> list[CleanupTarget]:
             targets.append(candidate)
 
     forge = root / "util" / "forge"
-    if (forge / "Forge_MV.js").is_file() and (forge / "upstream" / "Forge_MV.js").is_file():
+    upstream = forge / "upstream"
+    if (upstream / "Forge_MV.js").is_file() and (
+        upstream / "Forge_MZ.js"
+    ).is_file():
         candidate = _target(forge / "legacy", "stale-tool", root)
         if candidate:
             targets.append(candidate)

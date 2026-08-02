@@ -57,12 +57,6 @@ def main():
         print(f"Warning: Ace tool setup failed ({exc}). Ace features may be unavailable.")
 
     try:
-        from util.forge.update_tools import seed_forge_plugins
-        seed_forge_plugins()
-    except Exception as exc:
-        print(f"Warning: Forge plugin setup failed ({exc}). Playtest Forge may be unavailable.")
-
-    try:
         from gui.main import main as gui_main
         gui_main()
     except ImportError as e:

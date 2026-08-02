@@ -461,17 +461,15 @@ class ForgeBundledOnlyTests(unittest.TestCase):
         upstream.mkdir(parents=True, exist_ok=True)
         plugin_body = b"// forge plugin\n"
         paths = {
-            "_PKG_ROOT": base,
             "UPSTREAM_DIR": upstream,
             "VERSION_FILE": base / ".forge_version.json",
         }
         if with_plugins:
             for name in ("Forge_MV.js", "Forge_MZ.js"):
-                (base / name).write_bytes(plugin_body)
                 (upstream / name).write_bytes(plugin_body)
         return paths
 
-    def test_ensure_forge_plugins_does_not_contact_upstream(self):
+    def test_ensure_forge_plugins_uses_canonical_bundle_without_copying(self):
         with tempfile.TemporaryDirectory() as raw:
             base = Path(raw)
             paths = self._forge_paths(base, with_plugins=True)
@@ -490,20 +488,8 @@ class ForgeBundledOnlyTests(unittest.TestCase):
                         side_effect=AssertionError("must not refresh upstream"),
                     ):
                         self.assertTrue(forge.ensure_forge_plugins(force=False))
-
-    def test_ensure_forge_plugins_seeds_from_upstream_folder(self):
-        with tempfile.TemporaryDirectory() as raw:
-            base = Path(raw)
-            paths = self._forge_paths(base, with_plugins=False)
-            (paths["UPSTREAM_DIR"] / "Forge_MV.js").write_bytes(b"// mv")
-            (paths["UPSTREAM_DIR"] / "Forge_MZ.js").write_bytes(b"// mz")
-
-            import util.forge.update_tools as forge
-
-            with patch.multiple("util.forge.update_tools", **paths):
-                self.assertTrue(forge.ensure_forge_plugins(force=False))
-            self.assertTrue((base / "Forge_MV.js").is_file())
-            self.assertTrue((base / "Forge_MZ.js").is_file())
+            self.assertFalse((base / "Forge_MV.js").exists())
+            self.assertFalse((base / "Forge_MZ.js").exists())
 
     def test_ensure_forge_plugins_fails_when_missing_everywhere(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -637,7 +623,6 @@ class MaintainerRefreshTests(unittest.TestCase):
             import util.forge.update_tools as forge
 
             paths = {
-                "_PKG_ROOT": base,
                 "UPSTREAM_DIR": upstream,
                 "VERSION_FILE": base / ".forge_version.json",
             }
@@ -648,8 +633,7 @@ class MaintainerRefreshTests(unittest.TestCase):
                     with patch.object(forge, "_fetch_plugins", return_value=plugin):
                         self.assertTrue(forge.refresh_forge_plugins(log_fn=None))
 
-            # Maintainer refresh updates MZ modern only; MV stays on the legacy bundle.
-            self.assertEqual((base / "Forge_MZ.js").read_bytes(), plugin)
+            # Maintainer refresh updates canonical MZ only; MV stays on its legacy bundle.
             self.assertEqual((upstream / "Forge_MZ.js").read_bytes(), plugin)
             self.assertFalse((base / "Forge_MV.js").exists())
             self.assertFalse((upstream / "Forge_MV.js").exists())
