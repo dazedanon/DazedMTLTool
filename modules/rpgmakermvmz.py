@@ -2429,6 +2429,8 @@ def searchCodes(page, pbar, jobList, filename):
     match = []
     totalTokens = [0, 0]
     translatedText = ""
+    sourceQuestion = ""
+    romashaCommentContext = False
     speaker = ""
     speakerID = None
     syncIndex = 0
@@ -3222,6 +3224,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Remove any textwrap & TL
                     jaString = re.sub(r"\n", " ", jaString)
+                    sourceQuestion = jaString
                     response = translateAI(jaString, "")
                     translatedText = response[0]
                     totalTokens[0] += response[1][0]
@@ -3235,11 +3238,14 @@ def searchCodes(page, pbar, jobList, filename):
                     jaString = codeList[i]["parameters"][3]["choices"]
                     matchList = re.findall(r'"label[\\]*":[\\]*"(.*?)[\\]', jaString)
                     if matchList != None:
-                        # Translate
-                        question = codeList[i]["parameters"][3]["messageText"]
+                        # Give choices the original Japanese question, never
+                        # the translated text written back above.
                         response = translateAI(
                             matchList,
-                            ctx("events.plugin_with_context", context=question),
+                            {
+                                "instructions": [ctx("events.choice")],
+                                "source_items": [sourceQuestion],
+                            },
                             True,
                         )
                         totalTokens[0] += response[1][0]
@@ -3545,7 +3551,7 @@ def searchCodes(page, pbar, jobList, filename):
                             speakerPrefix = translatedName if translatedName else ""
                             
                             if setData:
-                                textHistory.append('"These comments are always about Romasha or her squad"')
+                                romashaCommentContext = True
                                 for s in translatable:
                                     if speakerPrefix:
                                         list355655.append(f"[{speakerPrefix}]: {s}")
@@ -4147,6 +4153,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # Remove any textwrap & TL
                         jaString = re.sub(r"\n", " ", jaString)
+                        sourceQuestion = jaString
                         response = translateAI(jaString, "")
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
@@ -4167,11 +4174,13 @@ def searchCodes(page, pbar, jobList, filename):
                         jaString = match.group(1)
                         choiceList = jaString.split(",")
 
-                        # Translate
-                        question = translatedText
+                        # Keep the original Japanese message as choice context.
                         response = translateAI(
                             choiceList,
-                            ctx("events.plugin_with_context", context=question),
+                            {
+                                "instructions": [ctx("events.choice")],
+                                "source_items": [sourceQuestion],
+                            },
                             True,
                         )
                         totalTokens[0] += response[1][0]
@@ -4222,7 +4231,10 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(textHistory) > 0:
                         response = translateAI(
                             choiceList,
-                            ctx("events.choice_with_context", context=str(textHistory)),
+                            {
+                                "instructions": [ctx("events.choice")],
+                                "source_items": textHistory,
+                            },
                             True,
                         )
                     else:
@@ -4436,7 +4448,18 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 355/655
         if len(list355655) > 0:
-            response = translateAI(list355655, textHistory)
+            list355655_context = textHistory
+            if romashaCommentContext:
+                list355655_context = {
+                    "instructions": [
+                        "These comments are always about Romasha or her squad."
+                    ],
+                    "source_items": textHistory,
+                }
+            response = translateAI(
+                list355655,
+                list355655_context,
+            )
             list355655TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -5389,7 +5412,7 @@ def translateAI(text, history, history_ctx=None):
         filename=tl_filename,
         pbar=PBAR,
         lock=LOCK,
-        mismatchList=MISMATCH
+        mismatchList=MISMATCH,
     )
     THREAD_CTX.last_translation_had_mismatch = last_translation_had_mismatch()
 
@@ -5450,8 +5473,81 @@ def pendingSpeakerNames() -> list[str]:
     return pending
 
 
+def _glossary_section_pattern(title: str):
+    return re.compile(
+        rf"^[\t ]*#+\s*{re.escape(title)}\s*(?:\r?\n|\Z).*?"
+        rf"(?=^[\t ]*#|\Z)",
+        re.MULTILINE | re.DOTALL | re.IGNORECASE,
+    )
+
+
+def _merge_speaker_rows_into_game_characters(content: str, generated_pairs):
+    """Migrate legacy speaker rows and new names into Game Characters."""
+    newline = "\r\n" if "\r\n" in content else "\n"
+    speaker_pattern = _glossary_section_pattern("Speakers")
+    legacy_blocks = list(speaker_pattern.finditer(content))
+    content_without_speakers = speaker_pattern.sub("", content)
+
+    game_pattern = _glossary_section_pattern("Game Characters")
+    game_match = game_pattern.search(content_without_speakers)
+    existing_lines = []
+    if game_match:
+        existing_lines = game_match.group(0).splitlines()[1:]
+
+    pair_pattern = re.compile(r"^(.+?)\s+\(([^()]*)\)(.*)$")
+    existing_sources = set()
+    for raw in existing_lines:
+        pair = pair_pattern.match(raw.strip())
+        if pair:
+            existing_sources.add(pair.group(1).strip())
+
+    candidates = []
+    for block in legacy_blocks:
+        candidates.extend(block.group(0).splitlines()[1:])
+    candidates.extend(
+        f"{source} ({translated})"
+        for source, translated in generated_pairs
+        if source and translated and _speaker_translation_valid(source, translated)
+    )
+
+    appended_lines = []
+    seen_sources = set(existing_sources)
+    seen_raw = {line.strip() for line in existing_lines if line.strip()}
+    for raw in candidates:
+        line = str(raw).strip()
+        if not line:
+            continue
+        pair = pair_pattern.match(line)
+        if pair:
+            source = pair.group(1).strip()
+            if source in seen_sources:
+                continue
+            seen_sources.add(source)
+        elif line in seen_raw:
+            continue
+        seen_raw.add(line)
+        appended_lines.append(line)
+
+    if not legacy_blocks and not appended_lines:
+        return content
+
+    merged_lines = [line.rstrip() for line in existing_lines if line.strip()]
+    merged_lines.extend(appended_lines)
+    section = "# Game Characters" + newline
+    if merged_lines:
+        section += newline.join(merged_lines) + newline
+    section += newline
+
+    if game_match:
+        before = content_without_speakers[:game_match.start()]
+        after = content_without_speakers[game_match.end():].lstrip("\r\n")
+        return before + section + after
+
+    return section + content_without_speakers.lstrip("\r\n")
+
+
 def finalizeSpeakerParse():
-    """Batch translate collected speakers and merge them into # Speakers."""
+    """Batch translate collected speakers into # Game Characters."""
     if not SPEAKER_PARSE_MODE:
         return False
     try:
@@ -5463,8 +5559,8 @@ def finalizeSpeakerParse():
             return False
 
         # Step 1: seed curated vocab hits, then batch translate only unresolved
-        # speakers. This avoids generating a contradictory # Speakers spelling
-        # for a name already defined under # Game Characters.
+        # speakers. All persisted names are merged into # Game Characters;
+        # legacy # Speakers rows are migrated below.
         _reload_vocab()
         pending = set(pendingSpeakerNames())
         to_translate = []
@@ -5543,71 +5639,9 @@ def finalizeSpeakerParse():
                 pass
 
         content = vocab_path.read_text(encoding="utf-8")
-
-        # Merge generated names into the existing section. Parse Speakers can be
-        # run on an arbitrary file subset, so replacing the section would erase
-        # valid names learned from files outside that selection.
-        speakers_pattern = re.compile(r"^[\t ]*#+\s*Speakers\s*$\r?\n.*?(?=^[\t ]*#|\Z)", re.MULTILINE | re.DOTALL)
-        existing_match = speakers_pattern.search(content)
-        rows: list[tuple[str | None, str, str | None]] = []
-        source_indexes: dict[str, int] = {}
-        if existing_match:
-            for raw in existing_match.group(0).splitlines()[1:]:
-                line = raw.strip()
-                if not line:
-                    continue
-                pair = re.match(r"^(.+?)\s+\(([^()]*)\)(.*)$", line)
-                if pair:
-                    source = pair.group(1).strip()
-                    source_indexes.setdefault(source, len(rows))
-                    rows.append((source, raw.rstrip(), pair.group(2).strip()))
-                else:
-                    rows.append((None, raw.rstrip(), None))
-
-        seen = set()
-        for orig, tl in NAMESLIST:
-            if not orig or not tl:
-                continue
-            if orig in seen:
-                continue
-            seen.add(orig)
-            if not _speaker_translation_valid(orig, tl):
-                continue
-            new_line = f"{orig} ({tl})"
-            existing_index = source_indexes.get(orig)
-            if existing_index is None:
-                source_indexes[orig] = len(rows)
-                rows.append((orig, new_line, str(tl).strip()))
-            else:
-                source, old_line, old_translation = rows[existing_index]
-                if str(old_translation or "").strip() != str(tl).strip():
-                    rows[existing_index] = (source, new_line, str(tl).strip())
-
-        lines = [line for _source, line, _translation in rows if line]
-        if not lines:
-            return True
-        section_block = "# Speakers\n" + "\n".join(lines) + "\n\n"
-
-        content = speakers_pattern.sub("", content)
-
-        game_char_header = re.compile(r"^[\t ]*#\s*Game Characters\s*$", re.MULTILINE)
-        match_gc = game_char_header.search(content)
-        if match_gc:
-            subsequent_headers = list(re.finditer(r"^[\t ]*#\s+.*$", content[match_gc.end():], re.MULTILINE))
-            if subsequent_headers:
-                insert_index = match_gc.end() + subsequent_headers[0].start()
-            else:
-                insert_index = len(content)
-        else:
-            insert_index = 0
-
-        before = content[:insert_index]
-        after = content[insert_index:]
-        if not before.endswith("\n\n"):
-            if not before.endswith("\n"):
-                before += "\n"
-            before += "\n"
-        new_content = before + section_block + after.lstrip("\n")
+        new_content = _merge_speaker_rows_into_game_characters(
+            content, NAMESLIST
+        )
 
         tmp_path = vocab_path.with_suffix(vocab_path.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp")
         tmp_path.write_text(new_content, encoding="utf-8")

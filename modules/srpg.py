@@ -117,7 +117,7 @@ MAP_FILES = [
 def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
     """Update or insert a section in glossary.txt for the given category with provided pairs.
     Only writes when there's an actual translation (dst is non-empty and differs from src after normalization).
-    - category: e.g., "Items", "Weapons", "Speakers", etc. Section header will be "# {category}".
+    - category: e.g., "Items", "Weapons", "Game Characters", etc. Section header will be "# {category}".
     - pairs: list of (source, translated) strings. Duplicates by source are deduped (last wins).
     The existing section is replaced entirely; other sections are preserved.
     """
@@ -940,7 +940,7 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
                 file_lower = filename.lower()
                 section = None
                 if "characters" in file_lower:
-                    section = "Speakers"
+                    section = "Game Characters"
                 elif "items" in file_lower:
                     section = "Items"
                 elif "skills" in file_lower:

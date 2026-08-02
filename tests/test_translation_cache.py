@@ -69,6 +69,32 @@ class CacheKeyTests(CacheTestBase):
             ),
         )
 
+    def test_source_and_instruction_fields_change_the_key(self):
+        payload = '{"Line1": "そうです"}'
+        lines = ["果歩 \"前の行\""]
+        self.assertNotEqual(
+            T.get_cache_key(
+                payload,
+                "English",
+                request_context=T._typed_request_context(lines, []),
+            ),
+            T.get_cache_key(
+                payload,
+                "English",
+                request_context=T._typed_request_context([], lines),
+            ),
+        )
+
+    def test_instruction_change_does_not_collide_with_same_source(self):
+        payload = '{"Line1": "そうです"}'
+        source = ["果歩 \"前の行\""]
+        first = T._typed_request_context(source, ["Keep it brief."])
+        second = T._typed_request_context(source, ["Use a formal register."])
+        self.assertNotEqual(
+            T.get_cache_key(payload, "English", request_context=first),
+            T.get_cache_key(payload, "English", request_context=second),
+        )
+
     def test_empty_matched_context_keeps_legacy_key(self):
         payload = '{"Line1": "名前のない文章"}'
         self.assertEqual(

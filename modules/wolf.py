@@ -577,13 +577,20 @@ def searchCodes(events, pbar, jobList, filename):
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
 
-                    # Translate Question
-                    jaString = translatedText
                     codeList[i]['stringArgs'][2] = translatedText
 
-                    # Translate Choices
-                    if 'jaString' in locals() and jaString:
-                        response = translateAI(choiceList, jaString)
+                    # Translate choices using the original Japanese question as
+                    # context, never the model's translated output.
+                    if question:
+                        response = translateAI(
+                            choiceList,
+                            {
+                                "instructions": [
+                                    f"Reply with the {LANGUAGE} translation of the dialogue choice"
+                                ],
+                                "source_items": [question],
+                            },
+                        )
                     else:
                         response = translateAI(choiceList, f"Reply with the {LANGUAGE} translation of the dialogue choice")
                     choiceListTL = response[0]
@@ -2694,5 +2701,5 @@ def translateAI(text, history, history_ctx=None):
         filename=FILENAME,
         pbar=PBAR,
         lock=LOCK,
-        mismatchList=MISMATCH
+        mismatchList=MISMATCH,
     )

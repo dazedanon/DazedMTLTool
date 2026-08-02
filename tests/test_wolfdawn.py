@@ -196,7 +196,7 @@ class TestSpeakerPreflight(unittest.TestCase):
 
         translate.assert_called_once_with(["騎士", "秘書官"], wd.ctx("names.npc"))
         update.assert_called_once_with(
-            "Speakers",
+            "Game Characters",
             [("騎士", "Knight"), ("秘書官", "Secretary")],
             merge=True,
         )
@@ -248,7 +248,7 @@ class TestSpeakerPreflight(unittest.TestCase):
 
         self.assertEqual(tokens, [5, 1])
         update.assert_called_once_with(
-            "Speakers", [("騎士", "骑士")], merge=True
+            "Game Characters", [("騎士", "骑士")], merge=True
         )
 
     def test_chinese_speaker_rejects_unchanged_japanese_kana(self):

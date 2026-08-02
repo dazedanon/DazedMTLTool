@@ -293,7 +293,7 @@ How it works (all engine modules are supported automatically):
 1. **Pass 1 (collect)** — files are processed normally, but instead of calling the API each
    request is queued to `log/batch_requests.json`. Requests are byte-identical to live ones:
    the static `data/skills/system.md` block is cached with a 1h TTL, matched Glossary entries,
-   matched local SFX suggestions, and translation history ride along per request, while
+   matched local SFX suggestions, and preceding Japanese source context ride along per request, while
    structured output enforces the exact line count.
    Speaker/variable names still translate live during this pass (they get embedded into the
    dialogue payloads, so both passes must resolve them identically) — they're a tiny share
@@ -310,11 +310,12 @@ How it works (all engine modules are supported automatically):
    original text; it never turns into an unconfirmed full-price live request. Start normal
    Translate explicitly if you want to retry those files at live pricing.
 
-Context note: in live mode the rolling translation history contains the previous batch's
-English lines; in batch mode requests are independent, so the history carries the previous
-batch's *source* lines instead. The model still sees the surrounding scene, the Glossary
-(`glossary.txt`) keeps names and terms consistent, and matched SFX suggestions provide
-context-dependent meanings without forcing fixed wording.
+Context note: live and provider-batch modes both carry the previous chunk's original
+Japanese source lines. The model always sees the unmodified surrounding scene rather than
+another model response. Per-call instructions remain attached to every chunk independently
+of that rolling source context. The Glossary (`glossary.txt`) keeps names and terms
+consistent, and matched SFX suggestions provide context-dependent meanings without forcing
+fixed wording.
 
 Cost tracking is exact: per-file and total costs printed after the consume pass use the real
 billed token counts (cache reads at 0.1x, cache writes at 2x, output at the output rate) with
@@ -354,8 +355,9 @@ into tiny allocations across every map. Its deterministic ordering is seeded by
 a fingerprint of the selected game's corpus, so the same game and settings
 reproduce the same selection while a different game receives a different stable
 ordering. Each model gets the same source, system
-prompt, matched glossary, previous Japanese source lines, output schema, and
-hidden consistency-check schedule. Prompt and glossary context are built by the
+prompt, matched glossary, explicitly labeled preceding Japanese source context,
+output schema, and hidden consistency-check schedule. Source context is never
+presented as prior translated output. Prompt and glossary context are built by the
 normal translation engine from the selected game's `glossary.txt`,
 `skills/game.md`, `skills/quirks.md`, and optional custom game skills.
 
@@ -478,7 +480,7 @@ Here's the recommended step-by-step process for translating an RPG Maker MV/MZ g
 
 | Step | Action |
 |------|--------|
-| **1** | **Parse speakers → Glossary** — Use the Parse Speakers feature to add character names from the game files to the selected game's `glossary.txt`. |
+| **1** | **Parse speakers → Glossary** — Use the Parse Speakers feature to add character names to `# Game Characters` in the selected game's `glossary.txt`. Legacy `# Speakers` rows are migrated. |
 | **2** | **Identify speaker genders** — Figure out which characters are male/female and update the Glossary accordingly. This helps the AI use correct pronouns. |
 | **3** | **Translate Actors.json, MapInfos.json** — These are small files with character and map names. Good to do first. |
 | **4** | **Translate Items, System, Weapons, etc.** — All the data files that aren't maps or events. Place them in `files/`, translate, then copy results back. |

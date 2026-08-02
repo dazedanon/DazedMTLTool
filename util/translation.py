@@ -652,7 +652,17 @@ CACHE_LOCK = threading.RLock()
 CACHE_PENDING_MARKER = "__translation_pending__"
 CACHE_PENDING_TTL = 600
 CACHE_WAIT_INTERVAL = 0.25
-BATCH_CACHE_KEY_VERSION = 2
+BATCH_CACHE_KEY_VERSION = 4
+
+# Request context has two independent parts: preceding Japanese source and
+# per-call instructions. Keeping both in the provider payload and cache key
+# prevents source text from masquerading as model output or dropping directives.
+CONTEXT_SOURCE = "source_context"
+CONTEXT_INSTRUCTIONS = "instructions"
+_REQUEST_CONTEXT_KINDS = {
+    CONTEXT_SOURCE,
+    CONTEXT_INSTRUCTIONS,
+}
 _cache = None
 
 @contextmanager
@@ -865,6 +875,130 @@ def _normalize_cache_request_context(request_context):
         )
     value = str(request_context)
     return value if value.strip() else ""
+
+
+def _context_items(context):
+    """Return non-empty request-context strings without changing their order."""
+    if isinstance(context, (list, tuple)):
+        return [str(item) for item in context if item and str(item).strip()]
+    if context and str(context).strip():
+        return [str(context)]
+    return []
+
+
+def _typed_request_context(source_context=None, instructions=None):
+    """Build the cache-safe context document used by live and batch calls."""
+    source_items = _context_items(source_context)
+    instruction_items = _context_items(instructions)
+    if not source_items and not instruction_items:
+        return None
+    return {
+        "instructions": instruction_items,
+        "source_items": source_items,
+    }
+
+
+def _initial_context_kind(context):
+    """Infer legacy translateAI arguments while callers migrate to typed context."""
+    if not _context_items(context):
+        return CONTEXT_SOURCE
+    # Existing scalar contexts come from data/translation_contexts.json and are
+    # request instructions. Existing lists are preceding source captured by the
+    # game parsers. Results generated inside translateAI are marked explicitly.
+    return CONTEXT_SOURCE if isinstance(context, (list, tuple)) else CONTEXT_INSTRUCTIONS
+
+
+def _request_context_parts(context, kind=None, request_instructions=None):
+    """Return independent ``(source_items, instruction_items)`` lists.
+
+    Legacy callers still pass either a source list or an instruction scalar.
+    Modern callers and persisted batch entries use a document containing both.
+    """
+    parsed = context
+    if isinstance(context, str) and context.strip().startswith("{"):
+        try:
+            parsed = json.loads(context)
+        except json.JSONDecodeError:
+            parsed = context
+
+    source_items = []
+    instruction_items = []
+    if isinstance(parsed, dict):
+        if "source_items" in parsed or "instructions" in parsed:
+            source_items = _context_items(parsed.get("source_items"))
+            instruction_items = _context_items(parsed.get("instructions"))
+        else:
+            legacy_kind = parsed.get("kind")
+            legacy_items = parsed.get("items")
+            if legacy_kind == CONTEXT_INSTRUCTIONS:
+                instruction_items = _context_items(legacy_items)
+            elif legacy_kind == CONTEXT_SOURCE:
+                source_items = _context_items(legacy_items)
+            else:
+                resolved_kind = (
+                    kind if kind in _REQUEST_CONTEXT_KINDS else CONTEXT_SOURCE
+                )
+                if resolved_kind == CONTEXT_INSTRUCTIONS:
+                    instruction_items = _context_items(context)
+                else:
+                    source_items = _context_items(context)
+    else:
+        resolved_kind = (
+            kind if kind in _REQUEST_CONTEXT_KINDS else _initial_context_kind(parsed)
+        )
+        if resolved_kind == CONTEXT_INSTRUCTIONS:
+            instruction_items = _context_items(parsed)
+        else:
+            source_items = _context_items(parsed)
+
+    instruction_items.extend(_context_items(request_instructions))
+    return source_items, instruction_items
+
+
+def _coerce_typed_request_context(context, default_kind=CONTEXT_SOURCE):
+    """Return a typed context document, accepting serialized modern input."""
+    source_items, instruction_items = _request_context_parts(
+        context, default_kind
+    )
+    return _typed_request_context(source_items, instruction_items)
+
+
+def _serialized_request_context_is_typed(context):
+    """Whether persisted non-empty context uses the current typed schema."""
+    if context is None or context == "":
+        return True
+    parsed = context
+    if isinstance(context, str):
+        try:
+            parsed = json.loads(context)
+        except json.JSONDecodeError:
+            return False
+    if not isinstance(parsed, dict):
+        return False
+    if set(parsed) != {"instructions", "source_items"}:
+        return False
+    instructions = parsed.get("instructions")
+    source_items = parsed.get("source_items")
+    if not isinstance(instructions, list) or not isinstance(source_items, list):
+        return False
+    combined = instructions + source_items
+    return bool(combined) and all(
+        item is not None and str(item).strip() for item in combined
+    )
+
+
+def _batch_entry_context_is_current(entry):
+    """Whether a queued request is safe under the current context schema."""
+    if not isinstance(entry, dict) or "request_context" not in entry:
+        return False
+    try:
+        version = int(entry.get("cache_key_version", 1) or 1)
+    except (TypeError, ValueError):
+        return False
+    return (
+        version >= BATCH_CACHE_KEY_VERSION
+        and _serialized_request_context_is_typed(entry.get("request_context"))
+    )
 
 
 def get_cache_key(payload, language, cache_context=None, request_context=None):
@@ -1204,7 +1338,12 @@ def queue_batch_request(
     buffered in memory and merged to disk by flush_batch_queue() at the end of
     each translateAI call.
     """
-    normalized_request_context = _normalize_cache_request_context(request_context)
+    typed_request_context = _coerce_typed_request_context(
+        request_context, CONTEXT_SOURCE
+    )
+    normalized_request_context = _normalize_cache_request_context(
+        typed_request_context
+    )
     key = get_cache_key(
         payload, language, cache_context, normalized_request_context
     )
@@ -1264,10 +1403,9 @@ def batchQueueStaleContextCount(vocab_text=None, use_sfx_reference=None):
 
     stale = 0
     for recorded_key, entry in queue.items():
-        # Queues created before conversation history became part of the key
-        # cannot be submitted safely: their paid results would be routed under
-        # the legacy key and the consume pass could not find them.
-        if "request_context" not in entry:
+        # Queues created before instructions and source were independently
+        # keyed cannot be submitted safely: consume would build another key.
+        if not _batch_entry_context_is_current(entry):
             stale += 1
             continue
         payload = entry.get("payload", "")
@@ -1316,7 +1454,7 @@ def take_batch_result(
     # must never fall back across contexts.
     with _batch_file_lock():
         state = _read_batch_file(BATCH_STATE_FILE)
-    if int(state.get("cache_key_version", 1) or 1) < BATCH_CACHE_KEY_VERSION:
+    if int(state.get("cache_key_version", 1) or 1) < 2:
         legacy_key = get_cache_key(payload, language, cache_context)
         return _batch_results.get(legacy_key)
     return None
@@ -1659,9 +1797,9 @@ def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
     if not queue:
         print("[BATCH] No batch requests queued.", flush=True)
         return []
-    if any("request_context" not in entry for entry in queue.values()):
+    if any(not _batch_entry_context_is_current(entry) for entry in queue.values()):
         raise ValueError(
-            "This queued batch predates context-aware request keys and cannot "
+            "This queued batch predates combined instruction/source context and cannot "
             "be submitted safely. Re-collect it before submitting so paid "
             "results can be matched during consume."
         )
@@ -2752,13 +2890,28 @@ def _text_for_vocab_search(subbedText):
     return "\n".join(values) if values else text
 
 
+def _speaker_alias_in_text(alias, text):
+    """Match a character-name component only in a speaker-tag position."""
+    if not alias or len(alias) < 2:
+        return False
+    # Supported forms include `果歩 "..."`, `果歩「...」`, `[果歩]: ...`, and
+    # `【果歩】...`. Restricting aliases to the start of a logical line avoids
+    # treating ordinary prose mentions as speaker identity.
+    pattern = (
+        rf"(?m)^\s*(?:\[|【)?{re.escape(alias)}(?:\]|】)?\s*"
+        rf"(?=[:：|「『“\"'(（])"
+    )
+    return bool(re.search(pattern, text))
+
+
 def buildMatchedVocabText(vocabPairs, subbedText, history=None):
     """Build formatted vocabulary text for terms found in the current batch."""
     matchedCategories = {}
 
-    # Generated # Speakers entries can overlap hand-curated character entries.
+    # Legacy # Speakers entries can overlap hand-curated character entries.
     # Keep only the highest-authority spelling for each character source.
     character_authority = {}
+    character_component_sources = {}
     for candidate_term, candidate_line, candidate_category in vocabPairs:
         if not isinstance(candidate_term, tuple) or len(candidate_term) != 2:
             continue
@@ -2773,6 +2926,14 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
         previous = character_authority.get(source)
         if previous is None or priority > previous[0]:
             character_authority[source] = (priority, candidate_line)
+        if candidate_primary == "game characters":
+            components = [
+                item for item in re.split(r"[\s\u3000]+", source.strip())
+                if len(item) >= 2
+            ]
+            if len(components) > 1:
+                for component in components:
+                    character_component_sources.setdefault(component, set()).add(source)
 
     # Only match against the current request text. History is deliberately not
     # searched so stale terms are not resent in unrelated batches.
@@ -2789,10 +2950,31 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
             category_primary = re.split(
                 r"\s*[·・|/]\s*", category_name, maxsplit=1
             )[0]
+            component_targets = character_component_sources.get(japanese_term)
+            if (
+                category_primary in {"game characters", "speakers"}
+                and component_targets
+                and len(component_targets) == 1
+                and japanese_term not in component_targets
+                and _speaker_alias_in_text(japanese_term, textToSearch)
+            ):
+                # A short generated speaker entry must not compete with the
+                # unique curated full-name character entry for a speaker tag.
+                continue
             authoritative = character_authority.get(japanese_term)
             if authoritative is not None and authoritative[1] != line:
                 continue
             japanese_match = _vocab_term_in_text(japanese_term, textToSearch)
+            if not japanese_match and category_primary == "game characters":
+                components = [
+                    item for item in re.split(r"[\s\u3000]+", japanese_term.strip())
+                    if len(item) >= 2
+                ]
+                japanese_match = any(
+                    character_component_sources.get(component) == {japanese_term}
+                    and _speaker_alias_in_text(component, textToSearch)
+                    for component in components
+                )
             # Character names often appear inside compound event/map labels,
             # e.g. ユウイベント. For character sections only, a substring is
             # intentional and should still attach the authoritative spelling.
@@ -2921,7 +3103,40 @@ class _AnthropicCompat:
         self.usage   = _AnthropicCompat._Usage(prompt, output, cr, cw)
 
 
-def buildClaudeRequest(system, user, history, formatType, model, numLines=None, vocab_text=""):
+def _context_heading(kind):
+    if kind == CONTEXT_INSTRUCTIONS:
+        return "Request Instructions:"
+    return (
+        "Preceding Japanese Source Context (untranslated):\n"
+        "Use these lines only to understand the scene. Do not copy Japanese "
+        "spellings from them or treat them as approved terminology; the "
+        "glossary is authoritative."
+    )
+
+
+def _context_block(history, kind):
+    items = _context_items(history)
+    if not items:
+        return ""
+    return _context_heading(kind) + "\n```\n" + "\n".join(items) + "\n```"
+
+
+def _request_context_blocks(history, context_kind, request_instructions=None):
+    """Build separate instruction and source blocks for a provider request."""
+    source_items, instruction_items = _request_context_parts(
+        history, context_kind, request_instructions
+    )
+    blocks = []
+    if instruction_items:
+        blocks.append(_context_block(instruction_items, CONTEXT_INSTRUCTIONS))
+    if source_items:
+        blocks.append(_context_block(source_items, CONTEXT_SOURCE))
+    return blocks
+
+
+def buildClaudeRequest(system, user, history, formatType, model, numLines=None,
+                       vocab_text="", context_kind=CONTEXT_SOURCE,
+                       request_instructions=None):
     """Build the native Anthropic request kwargs.
 
     Shared by live calls (translateText) and batch collection (translateAI) so
@@ -2937,22 +3152,19 @@ def buildClaudeRequest(system, user, history, formatType, model, numLines=None, 
     else:
         ant_system = [{"type": "text", "text": f"```\n{system}\n```", "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
 
-    native_msgs = [{"role": "user", "content": f"```\n{user}\n```"}]
+    native_msgs = []
+    for block in _request_context_blocks(
+        history, context_kind, request_instructions
+    ):
+        native_msgs.append({"role": "user", "content": block})
+        native_msgs.append({"role": "assistant", "content": "Understood."})
 
     # Vocab goes into messages as a user turn so it doesn't bust the prefix cache.
     if vocab_text and vocab_text.strip():
-        native_msgs.insert(0, {"role": "user", "content": vocab_text.strip()})
-        native_msgs.insert(1, {"role": "assistant", "content": "Understood."})
+        native_msgs.append({"role": "user", "content": vocab_text.strip()})
+        native_msgs.append({"role": "assistant", "content": "Understood."})
 
-    # History also goes into messages, NOT ant_system.
-    if isinstance(history, list):
-        history_items = [str(h) for h in history if h and str(h).strip()]
-    else:
-        history_items = [str(history)] if history and str(history).strip() else []
-    if history_items:
-        history_block = "Translation History:\n```\n" + "\n".join(history_items) + "\n```"
-        native_msgs.insert(0, {"role": "user", "content": history_block})
-        native_msgs.insert(1, {"role": "assistant", "content": "Understood."})
+    native_msgs.append({"role": "user", "content": f"```\n{user}\n```"})
 
     ant_kwargs = dict(
         model=model,
@@ -2977,7 +3189,9 @@ def buildClaudeRequest(system, user, history, formatType, model, numLines=None, 
 
 
 def buildOpenAIRequest(system, user, history, penalty, formatType, model,
-                       numLines=None, vocab_text="", api_provider=None):
+                       numLines=None, vocab_text="", api_provider=None,
+                       context_kind=CONTEXT_SOURCE,
+                       request_instructions=None):
     """Build OpenAI-compatible kwargs shared by live and batch requests."""
     if not system or not str(system).strip():
         raise ValueError("System content cannot be empty")
@@ -2989,14 +3203,13 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
     is_deepseek = "deepseek" in model_l
     is_mistral = provider == "mistral" or isMistralAPI()
     messages = [{"role": "system", "content": f"```\n{system + vocab_text}\n```"}]
-    if isinstance(history, list):
-        valid_history = [h for h in history if h and str(h).strip()]
-        if valid_history:
-            messages.append({"role": "system", "content": "Translation History:\n```"})
-            messages.extend({"role": "assistant", "content": h} for h in valid_history)
-            messages.append({"role": "system", "content": "```"})
-    elif history and str(history).strip():
-        messages.append({"role": "assistant", "content": history})
+    for context_block in _request_context_blocks(
+        history, context_kind, request_instructions
+    ):
+        messages.append({
+            "role": "user",
+            "content": context_block,
+        })
     messages.append({"role": "user", "content": f"```\n{user}\n```"})
 
     params = {"model": model, "messages": messages}
@@ -3042,7 +3255,9 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
     return params
 
 
-def translateText(system, user, history, penalty, formatType, model, numLines=None, vocab_text=""):
+def translateText(system, user, history, penalty, formatType, model, numLines=None,
+                  vocab_text="", context_kind=CONTEXT_SOURCE,
+                  request_instructions=None):
     """Send translation request to the selected API.
 
     system:     Static system prompt (data/skills/system.md). Cached by Claude.
@@ -3085,17 +3300,12 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         combined_system = system + vocab_text
         msg = [{"role": "system", "content": f"```\n{combined_system}\n```"}]
 
-    # History
-    if isinstance(history, list):
-        # Filter out empty or None history items to prevent API errors
-        valid_history = [h for h in history if h and str(h).strip()]
-        if valid_history:
-            msg.append({"role": "system", "content": "Translation History:\n```"})
-            msg.extend([{"role": "assistant", "content": h} for h in valid_history])
-            msg.append({"role": "system", "content": "```"})
-    else:
-        if history and str(history).strip():
-            msg.append({"role": "assistant", "content": history})
+    # Typed request context. The canonical builders below replace this list,
+    # but keeping the preliminary shape correct protects provider fallbacks.
+    for context_block in _request_context_blocks(
+        history, context_kind, request_instructions
+    ):
+        msg.append({"role": "user", "content": context_block})
 
     # Response format per provider:
     # OpenAI/Gemini: json_schema  |  Deepseek: json_object  |  text: omit entirely
@@ -3191,6 +3401,8 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         params = buildOpenAIRequest(
             system, user, history, penalty, formatType, model, numLines,
             vocab_text=vocab_text, api_provider=api_provider,
+            context_kind=context_kind,
+            request_instructions=request_instructions,
         )
         responseFormat = params.get("response_format", {"type": "text"})
 
@@ -3199,7 +3411,11 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     if _is_claude:
         # Built by the shared builder so live and batch requests are
         # byte-identical and share the same prompt cache.
-        ant_kwargs = buildClaudeRequest(system, user, history, formatType, model, numLines, vocab_text=vocab_text)
+        ant_kwargs = buildClaudeRequest(
+            system, user, history, formatType, model, numLines,
+            vocab_text=vocab_text, context_kind=context_kind,
+            request_instructions=request_instructions,
+        )
 
         ant_client = anthropic.Anthropic(api_key=openai.api_key)
         try:
@@ -3571,11 +3787,14 @@ def last_translation_had_mismatch() -> bool:
 
 @_cache_reservation_scope()
 @retry(exceptions=Exception, tries=5, delay=5)
-def translateAI(text, history, config, filename=None, pbar=None, lock=None, mismatchList=None):
+def translateAI(text, history, config, filename=None, pbar=None, lock=None,
+                mismatchList=None, context_kind=None, request_instructions=None):
     """
     Main translation entry point used by all modules.
 
-    Returns [translatedText, [inputTokens, outputTokens]].
+    Returns [translatedText, [inputTokens, outputTokens]]. Legacy ``history``
+    arguments are inferred by shape; ``request_instructions`` remains attached
+    to every chunk while Japanese source context rolls forward independently.
     """
     _thread_local.last_translation_had_mismatch = False
     if not text:
@@ -3637,26 +3856,32 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         formatType = "json"
         tList = [text]
 
-    # Batch collection sends preceding source lines as history. Keep that
-    # request context stable during consume even though earlier fetched
-    # translations have already replaced those source lines by then.
+    # Every mode sends preceding source lines as context. Keep a stable copy so
+    # live translations and fetched batch results never replace that Japanese
+    # context with model output.
     initial_history = list(history) if isinstance(history, list) else history
+    initial_source, persistent_instructions = _request_context_parts(
+        initial_history,
+        context_kind,
+        request_instructions,
+    )
     source_batches = [
         list(item) if isinstance(item, list) else item for item in tList
     ]
 
     for index, tItem in enumerate(tList):
-        request_history = history
-        if batch_phase in {"collect", "consume"} and isinstance(tItem, list):
-            if index == 0:
-                request_history = initial_history
-            else:
+        request_history = initial_source
+        if isinstance(tItem, list):
+            if index > 0:
                 previous_source = source_batches[index - 1]
                 request_history = (
                     previous_source[-config.maxHistory:]
                     if isinstance(previous_source, list)
                     else previous_source
                 )
+        request_context = _typed_request_context(
+            request_history, persistent_instructions
+        )
         # Check if text contains target language
         if not re.search(config.langRegex, str(tItem)):
             if pbar is not None:
@@ -3667,7 +3892,6 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 tList[index] = tItem
             else:
                 tList[index] = cleanTranslatedText(tItem, config.language)
-            history = tItem[-config.maxHistory:] if isinstance(tItem, list) else tItem
             continue
 
         # Ellipsis-only bypass: strings whose translatable content is purely '…' characters
@@ -3725,7 +3949,6 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             tList[index] = tItem
             if pbar is not None:
                 pbar.update(1)
-            history = tItem
             continue
 
         # Skip non-Japanese lines (AI empties them); restore after translation.
@@ -3758,7 +3981,6 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 tList[index] = result
                 if pbar is not None:
                     pbar.update(len(tItem))
-                history = result[-config.maxHistory:]
                 continue
 
             # Rebuild protected_items and all_replacements for translatable items only
@@ -3802,11 +4024,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         # consume pass to wait on)
         if queue_for_batch:
             cached_result = peek_cached_translation(
-                subbedT, config.language, vocab_text, request_history
+                subbedT, config.language, vocab_text, request_context
             )
         else:
             cached_result = get_cached_translation(
-                subbedT, config.language, vocab_text, request_history
+                subbedT, config.language, vocab_text, request_context
             )
         if cached_result is not None:
             cached_values = cached_result if isinstance(cached_result, list) else [cached_result]
@@ -3842,18 +4064,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                             cached_result, tItem, corrupted_map, no_japanese_map
                         )
                         tList[index] = expanded_cached
-                        history = expanded_cached[-config.maxHistory:]
                     else:
                         tList[index] = cached_result
-                        history = cached_result[-config.maxHistory:] if isinstance(cached_result, list) else cached_result
                 else:
                     tList[index] = cached_result
-                    history = cached_result
-            else:
-                if isinstance(cached_result, list) and cached_result:
-                    history = cached_result[-config.maxHistory:]
-                elif cached_result:
-                    history = cached_result
 
             if lock and pbar is not None:
                 with lock:
@@ -3894,12 +4108,16 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 params = buildClaudeRequest(
                     static_system, user, request_history, formatType,
                     config.model, numLines, vocab_text=vocab_text,
+                    context_kind=CONTEXT_SOURCE,
+                    request_instructions=persistent_instructions,
                 )
             else:
                 params = buildOpenAIRequest(
                     static_system, user, request_history, 0.05, formatType,
                     config.model, numLines, vocab_text=vocab_text,
                     api_provider=batch_provider,
+                    context_kind=CONTEXT_SOURCE,
+                    request_instructions=persistent_instructions,
                 )
             queue_batch_request(
                 subbedT,
@@ -3907,18 +4125,18 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 params,
                 cache_context=vocab_text,
                 provider=batch_provider,
-                request_context=request_history,
+                request_context=request_context,
             )
             if lock and pbar is not None:
                 with lock:
                     pbar.update(len(tItem))
-            history = tItem[-config.maxHistory:]
             continue
 
         # Calculate estimate if in estimate mode
         if config.estimateMode:
+            token_context = persistent_instructions + _context_items(request_history)
             estimate = countTokens(
-                static_system + vocab_text, user, request_history
+                static_system + vocab_text, user, token_context
             )
             totalTokens[0] += estimate[0]
             totalTokens[1] += estimate[1]
@@ -3964,13 +4182,13 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 cache_translation(
                     subbedT, tItem, config.language,
                     cache_context=vocab_text,
-                    request_context=request_history,
+                    request_context=request_context,
                 )
             else:
                 cache_translation(
                     subbedT, [tItem], config.language,
                     cache_context=vocab_text,
-                    request_context=request_history,
+                    request_context=request_context,
                 )
             
             continue
@@ -4015,7 +4233,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                     subbedT,
                     config.language,
                     cache_context=vocab_text,
-                    request_context=request_history,
+                    request_context=request_context,
                 )
                 response = _AnthropicCompat(
                     batch_result.get("text", ""),
@@ -4036,7 +4254,13 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                         "was stopped before any full-price fallback request."
                     )
                 try:
-                    response = translateText(static_system, current_user, request_history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text)
+                    response = translateText(
+                        static_system, current_user, request_history, 0.05,
+                        formatType, config.model, numLines,
+                        vocab_text=vocab_text,
+                        context_kind=CONTEXT_SOURCE,
+                        request_instructions=persistent_instructions,
+                    )
                 except Exception as api_err:
                     err_msg = f"[API_ERROR] {api_err}"
                     # Print to stdout so the GUI captures it immediately
@@ -4267,7 +4491,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                         list(final_translations),
                         config.language,
                         cache_context=vocab_text,
-                        request_context=request_history,
+                        request_context=request_context,
                     )
 
                 # Re-insert skipped items at original positions
@@ -4306,15 +4530,13 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                     final_translations,
                     config.language,
                     cache_context=vocab_text,
-                    request_context=request_history,
+                    request_context=request_context,
                 )
 
             if isinstance(tItem, list):
                 tList[index] = final_translations
-                history = final_translations[-config.maxHistory:]
             else:
                 tList[index] = final_translations
-                history = final_translations
 
             if lock and pbar is not None:
                 with lock:
@@ -4364,7 +4586,6 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 mismatchList.append(filename)
             
             tList[index] = tItem
-            history = text[-config.maxHistory:] if isinstance(text, list) else text
 
     # Combine if multilist
     if tList and isinstance(tList[0], list):

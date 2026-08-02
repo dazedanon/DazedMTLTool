@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""Regression tests for typed translation request context."""
+
+from __future__ import annotations
+
+import json
+import unittest
+from unittest import mock
+
+import util.translation as T
+
+
+class RequestContextSerializationTests(unittest.TestCase):
+    def test_openai_source_context_is_not_assistant_history(self):
+        params = T.buildOpenAIRequest(
+            "Translate Japanese to English.",
+            '{"Line1":"次の行"}',
+            ['果歩 "前の行"'],
+            0.0,
+            "json",
+            "gpt-5.6-terra",
+            1,
+            api_provider="openai",
+            context_kind=T.CONTEXT_SOURCE,
+        )
+
+        messages = params["messages"]
+        context = next(
+            item for item in messages
+            if "Preceding Japanese Source Context" in str(item.get("content"))
+        )
+        self.assertEqual(context["role"], "user")
+        self.assertIn("glossary is authoritative", context["content"])
+        self.assertFalse(any(
+            item["role"] == "assistant" and "果歩" in str(item.get("content"))
+            for item in messages
+        ))
+        self.assertFalse(any(
+            "Translation History" in str(item.get("content")) for item in messages
+        ))
+
+    def test_claude_source_context_is_labeled_untranslated(self):
+        params = T.buildClaudeRequest(
+            "Translate Japanese to English.",
+            '{"Line1":"次の行"}',
+            ['果歩 "前の行"'],
+            "json",
+            "claude-sonnet-4-6",
+            1,
+            context_kind=T.CONTEXT_SOURCE,
+        )
+
+        context = params["messages"][0]
+        self.assertEqual(context["role"], "user")
+        self.assertIn("Preceding Japanese Source Context", context["content"])
+        self.assertIn("untranslated", context["content"])
+        self.assertNotIn("Translation History", context["content"])
+
+    def test_default_context_is_untranslated_source_not_assistant_history(self):
+        params = T.buildOpenAIRequest(
+            "Translate Japanese to English.",
+            '{"Line1":"次の行"}',
+            ['果歩 "前の行"'],
+            0.0,
+            "json",
+            "gpt-5.6-terra",
+            1,
+            api_provider="openai",
+        )
+
+        self.assertTrue(any(
+            item["role"] == "user"
+            and "Preceding Japanese Source Context" in str(item.get("content"))
+            for item in params["messages"]
+        ))
+        self.assertFalse(any(
+            item["role"] == "assistant" and "果歩" in str(item.get("content"))
+            for item in params["messages"]
+        ))
+
+    def test_explicit_request_instructions_remain_separate_from_source(self):
+        params = T.buildOpenAIRequest(
+            "Translate Japanese to English.",
+            '{"Line1":"短い名前"}',
+            "Keep the translation brief.",
+            0.0,
+            "json",
+            "gpt-5.6-terra",
+            1,
+            api_provider="openai",
+            context_kind=T.CONTEXT_INSTRUCTIONS,
+        )
+
+        context = params["messages"][1]
+        self.assertEqual(context["role"], "user")
+        self.assertIn("Request Instructions:", context["content"])
+        self.assertNotIn("Japanese Source Context", context["content"])
+
+    def test_provider_request_can_carry_instructions_and_source_together(self):
+        params = T.buildOpenAIRequest(
+            "Translate Japanese to English.",
+            '{"Line1":"次の行"}',
+            ['果歩 "前の行"'],
+            0.0,
+            "json",
+            "gpt-5.6-terra",
+            1,
+            api_provider="openai",
+            request_instructions="Keep every line gender-neutral.",
+        )
+
+        contents = [str(item.get("content")) for item in params["messages"]]
+        self.assertTrue(any("Request Instructions:" in item for item in contents))
+        self.assertTrue(any(
+            "Preceding Japanese Source Context" in item for item in contents
+        ))
+
+        claude = T.buildClaudeRequest(
+            "Translate Japanese to English.",
+            '{"Line1":"次の行"}',
+            ['果歩 "前の行"'],
+            "json",
+            "claude-sonnet-4-6",
+            1,
+            request_instructions="Keep every line gender-neutral.",
+        )
+        claude_contents = [
+            str(item.get("content")) for item in claude["messages"]
+        ]
+        self.assertTrue(any(
+            "Request Instructions:" in item for item in claude_contents
+        ))
+        self.assertTrue(any(
+            "Preceding Japanese Source Context" in item
+            for item in claude_contents
+        ))
+
+    def test_batch_split_marks_preceding_source_as_source_context(self):
+        config = T.TranslationConfig(
+            model="claude-sonnet-4-6",
+            prompt="Translate Japanese to English.",
+            vocab="",
+            batchSize=2,
+        )
+        captured = []
+
+        def capture(_system, _user, history, *_args, **kwargs):
+            captured.append((
+                history,
+                kwargs.get("context_kind"),
+                kwargs.get("request_instructions"),
+            ))
+            return {"model": config.model, "messages": []}
+
+        with (
+            mock.patch.object(T, "get_batch_phase", return_value="collect"),
+            mock.patch.object(T, "getBatchProvider", return_value="anthropic"),
+            mock.patch.object(T, "peek_cached_translation", return_value=None),
+            mock.patch.object(T, "buildClaudeRequest", side_effect=capture),
+            mock.patch.object(T, "queue_batch_request"),
+            mock.patch.object(T, "flush_batch_queue"),
+            mock.patch.object(T, "save_cache"),
+        ):
+            T.translateAI(
+                ['果歩 "一"', 'カミナ "二"', '凛 "三"'], [], config
+            )
+
+        self.assertEqual(captured[0], ([], T.CONTEXT_SOURCE, []))
+        self.assertEqual(
+            captured[1],
+            (['果歩 "一"', 'カミナ "二"'], T.CONTEXT_SOURCE, []),
+        )
+
+    def test_scalar_instruction_persists_across_every_batch_chunk(self):
+        config = T.TranslationConfig(
+            model="claude-sonnet-4-6",
+            prompt="Translate Japanese to English.",
+            vocab="",
+            batchSize=2,
+        )
+        captured = []
+
+        def capture(_system, _user, history, *_args, **kwargs):
+            captured.append((history, kwargs.get("request_instructions")))
+            return {"model": config.model, "messages": []}
+
+        with (
+            mock.patch.object(T, "get_batch_phase", return_value="collect"),
+            mock.patch.object(T, "getBatchProvider", return_value="anthropic"),
+            mock.patch.object(T, "peek_cached_translation", return_value=None),
+            mock.patch.object(T, "buildClaudeRequest", side_effect=capture),
+            mock.patch.object(T, "queue_batch_request"),
+            mock.patch.object(T, "flush_batch_queue"),
+            mock.patch.object(T, "save_cache"),
+        ):
+            T.translateAI(
+                ["一行目", "二行目", "三行目"],
+                "Keep every line gender-neutral.",
+                config,
+            )
+
+        self.assertEqual(captured, [
+            ([], ["Keep every line gender-neutral."]),
+            (["一行目", "二行目"], ["Keep every line gender-neutral."]),
+        ])
+
+    def test_live_split_also_uses_preceding_japanese_source(self):
+        config = T.TranslationConfig(
+            model="gpt-5.6-terra",
+            prompt="Translate Japanese to English.",
+            vocab="",
+            batchSize=2,
+        )
+        captured = []
+
+        def translate(_system, _user, history, *_args, **kwargs):
+            captured.append((
+                history,
+                kwargs.get("context_kind"),
+                kwargs.get("request_instructions"),
+            ))
+            line_count = _args[3]
+            output = {
+                f"Line{index}": f"Translated line {index}"
+                for index in range(1, line_count + 1)
+            }
+            return T._AnthropicCompat(
+                json.dumps(output), 0, 0, 0, 0
+            )
+
+        with (
+            mock.patch.object(T, "get_batch_phase", return_value=None),
+            mock.patch.object(T, "getBatchProvider", return_value=None),
+            mock.patch.object(T, "get_cached_translation", return_value=None),
+            mock.patch.object(T, "translateText", side_effect=translate),
+            mock.patch.object(T, "cache_translation"),
+            mock.patch.object(T, "save_cache"),
+        ):
+            T.translateAI(
+                ['果歩 "一"', 'カミナ "二"', '凛 "三"'], [], config
+            )
+
+        self.assertEqual(captured[0], ([], T.CONTEXT_SOURCE, []))
+        self.assertEqual(
+            captured[1],
+            (['果歩 "一"', 'カミナ "二"'], T.CONTEXT_SOURCE, []),
+        )
+
+    def test_legacy_scalar_context_is_inferred_as_request_instructions(self):
+        config = T.TranslationConfig(
+            model="gpt-5.6-terra",
+            prompt="Translate Japanese to English.",
+            vocab="",
+        )
+        captured = []
+
+        def translate(_system, _user, history, *_args, **kwargs):
+            captured.append((
+                history,
+                kwargs.get("context_kind"),
+                kwargs.get("request_instructions"),
+            ))
+            return T._AnthropicCompat('{"Line1":"Short name"}', 0, 0, 0, 0)
+
+        with (
+            mock.patch.object(T, "get_batch_phase", return_value=None),
+            mock.patch.object(T, "getBatchProvider", return_value=None),
+            mock.patch.object(T, "get_cached_translation", return_value=None),
+            mock.patch.object(T, "translateText", side_effect=translate),
+            mock.patch.object(T, "cache_translation"),
+            mock.patch.object(T, "save_cache"),
+        ):
+            T.translateAI("短い名前", "Keep the translation brief.", config)
+
+        self.assertEqual(
+            captured,
+            [([], T.CONTEXT_SOURCE, ["Keep the translation brief."])],
+        )
+
+    def test_scalar_instruction_persists_across_every_live_chunk(self):
+        config = T.TranslationConfig(
+            model="gpt-5.6-terra",
+            prompt="Translate Japanese to English.",
+            vocab="",
+            batchSize=2,
+        )
+        captured = []
+
+        def translate(_system, _user, history, *_args, **kwargs):
+            captured.append((history, kwargs.get("request_instructions")))
+            line_count = _args[3]
+            output = {
+                f"Line{index}": f"Translated {index}"
+                for index in range(1, line_count + 1)
+            }
+            return T._AnthropicCompat(json.dumps(output), 0, 0, 0, 0)
+
+        with (
+            mock.patch.object(T, "get_batch_phase", return_value=None),
+            mock.patch.object(T, "getBatchProvider", return_value=None),
+            mock.patch.object(T, "get_cached_translation", return_value=None),
+            mock.patch.object(T, "translateText", side_effect=translate),
+            mock.patch.object(T, "cache_translation"),
+            mock.patch.object(T, "save_cache"),
+        ):
+            T.translateAI(
+                ["一行目", "二行目", "三行目"],
+                "Keep every line gender-neutral.",
+                config,
+            )
+
+        self.assertEqual(captured, [
+            ([], ["Keep every line gender-neutral."]),
+            (["一行目", "二行目"], ["Keep every line gender-neutral."]),
+        ])
+
+    def test_combined_context_document_rolls_source_and_keeps_instructions(self):
+        config = T.TranslationConfig(
+            model="gpt-5.6-terra",
+            prompt="Translate Japanese to English.",
+            vocab="",
+            batchSize=2,
+        )
+        captured = []
+
+        def translate(_system, _user, history, *_args, **kwargs):
+            captured.append((history, kwargs.get("request_instructions")))
+            line_count = _args[3]
+            output = {
+                f"Line{index}": f"Translated {index}"
+                for index in range(1, line_count + 1)
+            }
+            return T._AnthropicCompat(json.dumps(output), 0, 0, 0, 0)
+
+        with (
+            mock.patch.object(T, "get_batch_phase", return_value=None),
+            mock.patch.object(T, "getBatchProvider", return_value=None),
+            mock.patch.object(T, "get_cached_translation", return_value=None),
+            mock.patch.object(T, "translateText", side_effect=translate),
+            mock.patch.object(T, "cache_translation"),
+            mock.patch.object(T, "save_cache"),
+        ):
+            T.translateAI(
+                ["一行目", "二行目", "三行目"],
+                {
+                    "instructions": ["Translate these as dialogue choices."],
+                    "source_items": ["導入の質問"],
+                },
+                config,
+            )
+
+        self.assertEqual(captured, [
+            (["導入の質問"], ["Translate these as dialogue choices."]),
+            (["一行目", "二行目"], ["Translate these as dialogue choices."]),
+        ])
+
+
+if __name__ == "__main__":
+    unittest.main()

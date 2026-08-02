@@ -491,7 +491,7 @@ def pendingSpeakerNames(speakers) -> list[str]:
 
 
 def translateSpeakerNames(speakers) -> list[int] | bool:
-    """Translate unresolved WOLF speakers as lists and merge them into the glossary."""
+    """Translate unresolved WOLF speakers into Game Characters."""
     global VOCAB
     pending = pendingSpeakerNames(speakers)
     if not pending:
@@ -511,7 +511,7 @@ def translateSpeakerNames(speakers) -> list[int] | bool:
             return False
         pairs.append((source, normalized))
     if pairs:
-        wolf_vocab.update_vocab_section("Speakers", pairs, merge=True)
+        wolf_vocab.update_vocab_section("Game Characters", pairs, merge=True)
         VOCAB = read_active_glossary()
         TRANSLATION_CONFIG.vocab = VOCAB
         with _speakerCacheLock:

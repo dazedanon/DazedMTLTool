@@ -125,7 +125,8 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
             written = vocab_path.read_text(encoding="utf-8")
 
         translate.assert_not_called()
-        self.assertIn("# Speakers\nユウ (Yuu)", written)
+        self.assertIn("# Game Characters\nユウ (Yuu)", written)
+        self.assertNotIn("# Speakers", written)
 
     def test_parse_speakers_translates_unresolved_names_in_one_list_call(self):
         mvmz.SPEAKER_PARSE_MODE = True
@@ -152,6 +153,8 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         )
         self.assertIn("騎士 (Knight)", written)
         self.assertIn("秘書官 (Secretary)", written)
+        self.assertIn("# Game Characters", written)
+        self.assertNotIn("# Speakers", written)
 
     def test_parse_speakers_preserves_entries_from_unselected_files(self):
         mvmz.SPEAKER_PARSE_MODE = True
@@ -173,6 +176,36 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         translate.assert_not_called()
         self.assertIn("騎士 (Knight)", written)
         self.assertIn("司祭 (Priest)", written)
+        self.assertIn("# Game Characters", written)
+        self.assertNotIn("# Speakers", written)
+
+    def test_legacy_short_speaker_migrates_without_competing_in_prompt(self):
+        mvmz.SPEAKER_PARSE_MODE = True
+        mvmz.SPEAKER_COLLECTED = ["果歩"]
+        with TemporaryDirectory() as tmp:
+            glossary_path = Path(tmp) / "glossary.txt"
+            glossary_path.write_text(
+                "# Game Characters\n天草 果歩 (Kaho Amakusa)\n\n"
+                "# Speakers\n果歩 (Kaho)\n",
+                encoding="utf-8",
+            )
+            with (
+                patch.object(mvmz, "VOCAB_PATH", glossary_path),
+                patch.object(mvmz, "active_glossary_path", return_value=glossary_path),
+                patch.object(mvmz, "translateAI") as translate,
+            ):
+                self.assertTrue(mvmz.finalizeSpeakerParse())
+            written = glossary_path.read_text(encoding="utf-8")
+
+        translate.assert_not_called()
+        self.assertNotIn("# Speakers", written)
+        self.assertIn("# Game Characters", written)
+        self.assertIn("果歩 (Kaho)", written)
+        matched = buildMatchedVocabText(
+            parseVocabWithCategories(written), '果歩 "どうしたの？"'
+        )
+        self.assertIn("天草 果歩 (Kaho Amakusa)", matched)
+        self.assertNotIn("\n果歩 (Kaho)\n", matched)
 
     def test_parse_speakers_rejects_source_fallback_without_touching_glossary(self):
         mvmz.SPEAKER_PARSE_MODE = True
@@ -217,6 +250,8 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
             written = glossary_path.read_text(encoding="utf-8")
 
         self.assertIn("騎士 (Рыцарь)", written)
+        self.assertIn("# Game Characters", written)
+        self.assertNotIn("# Speakers", written)
 
     def test_parse_speakers_persists_and_resolves_chinese_target_name(self):
         mvmz.SPEAKER_PARSE_MODE = True
@@ -241,6 +276,8 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
                 self.assertEqual(mvmz._vocab_speaker_lookup("騎士"), "骑士")
 
         self.assertIn("騎士 (骑士)", written)
+        self.assertIn("# Game Characters", written)
+        self.assertNotIn("# Speakers", written)
 
     def test_chinese_speaker_rejects_unchanged_japanese_kana(self):
         with patch.object(mvmz, "LANGUAGE", "Chinese"):
@@ -263,6 +300,49 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
 
 
 class CharacterCompoundMatchingTests(unittest.TestCase):
+    def test_unique_full_name_component_matches_speaker_tag(self):
+        pairs = parseVocabWithCategories(
+            "# Game Characters\n"
+            "天草 果歩 (Kaho Amakusa)\n"
+            "星宮 凛 (Rin Hoshimiya)\n"
+        )
+
+        matched = buildMatchedVocabText(pairs, '果歩 "どうしたの？"')
+
+        self.assertIn("天草 果歩 (Kaho Amakusa)", matched)
+
+    def test_full_name_component_does_not_match_ordinary_prose(self):
+        pairs = parseVocabWithCategories(
+            "# Game Characters\n天草 果歩 (Kaho Amakusa)\n"
+        )
+
+        matched = buildMatchedVocabText(pairs, "果歩を見つけた。")
+
+        self.assertEqual(matched, "")
+
+    def test_ambiguous_name_component_does_not_choose_a_character(self):
+        pairs = parseVocabWithCategories(
+            "# Game Characters\n"
+            "天草 果歩 (Kaho Amakusa)\n"
+            "山田 果歩 (Kaho Yamada)\n"
+        )
+
+        matched = buildMatchedVocabText(pairs, '果歩 "どうしたの？"')
+
+        self.assertEqual(matched, "")
+
+    def test_curated_full_name_suppresses_generated_short_speaker_alias(self):
+        pairs = parseVocabWithCategories(
+            "# Game Characters\n"
+            "天草 果歩 (Kaho Amakusa)\n"
+            "果歩 (Kaho)\n"
+        )
+
+        matched = buildMatchedVocabText(pairs, '果歩 "どうしたの？"')
+
+        self.assertIn("天草 果歩 (Kaho Amakusa)", matched)
+        self.assertNotIn("\n果歩 (Kaho)\n", matched)
+
     def test_character_entry_matches_inside_katakana_compound(self):
         pairs = parseVocabWithCategories(VOCAB)
         matched = buildMatchedVocabText(pairs, "ユウイベント5")

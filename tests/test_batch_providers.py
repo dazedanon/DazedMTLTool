@@ -67,7 +67,15 @@ class BatchProviderDetectionTests(unittest.TestCase):
         self.assertEqual(params["reasoning_effort"], "none")
         self.assertEqual(params["response_format"]["type"], "json_schema")
         self.assertIn("猫 (Cat)", params["messages"][0]["content"])
-        self.assertTrue(any(m.get("content") == "prior" for m in params["messages"]))
+        self.assertTrue(any(
+            "Preceding Japanese Source Context" in str(m.get("content"))
+            and "prior" in str(m.get("content"))
+            for m in params["messages"]
+        ))
+        self.assertFalse(any(
+            m.get("role") == "assistant" and "prior" in str(m.get("content"))
+            for m in params["messages"]
+        ))
 
     def test_keyless_custom_openai_client_uses_sdk_placeholder(self):
         with mock.patch.object(BP.openai, "OpenAI") as client_class:

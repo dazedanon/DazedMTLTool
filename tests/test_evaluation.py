@@ -585,6 +585,8 @@ class EvaluationManifestTests(unittest.TestCase):
         audit = evaluation.context_audit(self.manifest)
         self.assertTrue(audit["all_have_system"])
         self.assertTrue(audit["all_have_source"])
+        self.assertTrue(audit["source_context_typed"])
+        self.assertTrue(audit["instructions_typed"])
         self.assertTrue(audit["history_limit_ok"])
         for request in self.manifest["logical_requests"]:
             logical = {
@@ -592,10 +594,13 @@ class EvaluationManifestTests(unittest.TestCase):
                 "glossary": request["glossary"],
                 "sfx_reference": request["sfx_reference"],
                 "history": request["history"],
+                "context_kind": request["context_kind"],
+                "instructions": request["instructions"],
                 "user": request["user"],
                 "schema_line_count": request["schema_line_count"],
             }
             self.assertEqual(request["logical_hash"], evaluation._sha256(logical))
+            self.assertEqual(request["context_kind"], "source_context")
 
     def test_provider_adapters_change_settings_not_logical_context(self):
         request = self.manifest["logical_requests"][0]

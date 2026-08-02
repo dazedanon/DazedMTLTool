@@ -242,7 +242,7 @@ def translateJSON(data, pbar):
                                 tokens[0] += response[1][0]
                                 tokens[1] += response[1][1]
                                 translatedBatch = response[0]
-                                textHistory = translatedBatch[-10:]
+                                textHistory = batch[-10:]
 
                                 # Set Values
                                 if len(batch) == len(translatedBatch):
@@ -295,7 +295,7 @@ def translateJSON(data, pbar):
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             translatedBatch = response[0]
-            textHistory = translatedBatch[-10:]
+            textHistory = batch[-10:]
 
             # Set Values
             if len(batch) == len(translatedBatch):

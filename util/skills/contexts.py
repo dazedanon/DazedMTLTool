@@ -1,4 +1,4 @@
-"""Load per-call translation history templates from data/translation_contexts.json."""
+"""Load per-call translation instruction templates from data/translation_contexts.json."""
 
 from __future__ import annotations
 

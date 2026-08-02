@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -181,7 +182,33 @@ class BatchRunStateTests(BatchHistoryTestBase):
         self.assertEqual(len(queue), 2)
         self.assertEqual(
             {entry["request_context"] for entry in queue.values()},
-            {'["He agreed."]', '["She disagreed."]'},
+            {
+                '{"instructions":[],"source_items":["He agreed."]}',
+                '{"instructions":[],"source_items":["She disagreed."]}',
+            },
+        )
+
+    def test_queue_serializes_source_and_instructions_together(self):
+        payload = '{"Line1": "そうです"}'
+        request_context = T._typed_request_context(
+            ['果歩 "前の行"'], ["Keep every line gender-neutral."]
+        )
+        T.queue_batch_request(
+            payload,
+            "English",
+            {"model": "gpt-test"},
+            provider="openai",
+            request_context=request_context,
+        )
+        T.flush_batch_queue()
+
+        entry = next(iter(T._read_batch_file(T.BATCH_QUEUE_FILE).values()))
+        self.assertEqual(
+            json.loads(entry["request_context"]),
+            {
+                "instructions": ["Keep every line gender-neutral."],
+                "source_items": ['果歩 "前の行"'],
+            },
         )
 
     def test_legacy_queue_is_stale_before_submission(self):
@@ -191,6 +218,41 @@ class BatchRunStateTests(BatchHistoryTestBase):
                 "language": "English",
                 "params": {"model": "gpt-5.6-terra", "messages": []},
                 "provider": "openai",
+            },
+        })
+
+        self.assertEqual(T.batchQueueStaleContextCount(""), (1, 1))
+
+    def test_untyped_version_two_queue_is_stale_before_submission(self):
+        payload = '{"Line1":"そうです"}'
+        request_context = T._normalize_cache_request_context(["果歩 \"前の行\""])
+        old_key = T.get_cache_key(
+            payload, "English", "", request_context=request_context
+        )
+        T._write_batch_file(T.BATCH_QUEUE_FILE, {
+            old_key: {
+                "payload": payload,
+                "language": "English",
+                "params": {"model": "gpt-test"},
+                "provider": "openai",
+                "request_context": request_context,
+                "cache_key_version": 2,
+            },
+        })
+
+        self.assertEqual(T.batchQueueStaleContextCount(""), (1, 1))
+
+    def test_single_kind_version_three_queue_is_stale_before_submission(self):
+        T._write_batch_file(T.BATCH_QUEUE_FILE, {
+            "old-v3-key": {
+                "payload": '{"Line1":"そうです"}',
+                "language": "English",
+                "params": {"model": "gpt-test"},
+                "provider": "openai",
+                "request_context": (
+                    '{"items":["果歩 \\"前の行\\""],"kind":"source_context"}'
+                ),
+                "cache_key_version": 3,
             },
         })
 
@@ -207,7 +269,45 @@ class BatchRunStateTests(BatchHistoryTestBase):
         })
 
         with mock.patch("util.batch_providers.submit_batch") as submit:
-            with self.assertRaisesRegex(ValueError, "predates context-aware"):
+            with self.assertRaisesRegex(ValueError, "predates combined"):
+                T.submitTranslationBatches()
+
+        submit.assert_not_called()
+
+    def test_version_two_queue_is_blocked_at_paid_boundary(self):
+        T._write_batch_file(T.BATCH_QUEUE_FILE, {
+            "old-v2-key": {
+                "payload": '{"Line1":"そうです"}',
+                "language": "English",
+                "params": {"model": "gpt-test", "messages": []},
+                "provider": "openai",
+                "request_context": '["果歩 \\"前の行\\""]',
+                "cache_key_version": 2,
+            },
+        })
+
+        with mock.patch("util.batch_providers.submit_batch") as submit:
+            with self.assertRaisesRegex(ValueError, "predates combined"):
+                T.submitTranslationBatches()
+
+        submit.assert_not_called()
+
+    def test_version_three_queue_is_blocked_at_paid_boundary(self):
+        T._write_batch_file(T.BATCH_QUEUE_FILE, {
+            "old-v3-key": {
+                "payload": '{"Line1":"そうです"}',
+                "language": "English",
+                "params": {"model": "gpt-test", "messages": []},
+                "provider": "openai",
+                "request_context": (
+                    '{"items":["果歩 \\"前の行\\""],"kind":"source_context"}'
+                ),
+                "cache_key_version": 3,
+            },
+        })
+
+        with mock.patch("util.batch_providers.submit_batch") as submit:
+            with self.assertRaisesRegex(ValueError, "predates combined"):
                 T.submitTranslationBatches()
 
         submit.assert_not_called()

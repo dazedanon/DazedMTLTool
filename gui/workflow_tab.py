@@ -1643,7 +1643,7 @@ class WorkflowTab(QWidget):
         self.speaker_collect_names_btn = _make_btn("🔍  1  Collect names", "#0e639c")
         self.speaker_collect_names_btn.setToolTip(
             "Start here. Collect recognized speaker names from event files into the "
-            "Glossary's # Speakers section. Run this again if you later enable an extra format. "
+            "Glossary's # Game Characters section. Run this again if you later enable an extra format. "
             "Normal translation does not create or rebuild this section."
         )
         self.speaker_collect_names_btn.clicked.connect(self._run_parse_speakers)
@@ -1719,7 +1719,7 @@ class WorkflowTab(QWidget):
             self._log("─" * 54)
             self._log("🔍  Switching to Parse Speakers mode…")
             self._log("   Event files selected. Speaker names will be")
-            self._log("   collected and added to the Glossary (# Speakers).")
+            self._log("   collected and added to the Glossary (# Game Characters).")
             self._log("─" * 54)
 
         except Exception as exc:
@@ -4145,7 +4145,7 @@ class WorkflowTab(QWidget):
             self._log(f"❌ Could not load Project Setup skill: {exc}")
 
     def _read_vocab_speakers(self) -> list[tuple[str, str]]:
-        """Parse the '# Speakers' section from glossary.txt and return (orig, tl) pairs."""
+        """Parse character names, retaining legacy Speakers compatibility."""
         game_root = self.folder_edit.text().strip()
         if not game_root:
             return []
@@ -4156,24 +4156,24 @@ class WorkflowTab(QWidget):
             return []
 
         import re as _re
-        # Find the # Speakers block (ends at next # header or EOF)
-        m = _re.search(
-            r"^[\t ]*#\s*Speakers\s*$\r?\n(.*?)(?=^[\t ]*#|\Z)",
-            content,
-            _re.MULTILINE | _re.DOTALL,
-        )
-        if not m:
-            return []
-
         results = []
-        for line in m.group(1).splitlines():
-            line = line.strip()
-            if not line:
+        for header in (r"Game Characters", r"Speakers"):
+            m = _re.search(
+                rf"^[\t ]*#\s*{header}\s*$\r?\n(.*?)(?=^[\t ]*#|\Z)",
+                content,
+                _re.MULTILINE | _re.DOTALL,
+            )
+            if not m:
                 continue
-            # Expected format: "日本語 (English)"
-            pm = _re.match(r"^(.+?)\s+\((.+?)\)\s*$", line)
-            if pm:
-                results.append((pm.group(1), pm.group(2)))
+            for line in m.group(1).splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                pm = _re.match(r"^(.+?)\s+\((.+?)\)\s*$", line)
+                if pm:
+                    pair = (pm.group(1), pm.group(2))
+                    if pair not in results:
+                        results.append(pair)
         return results
 
     # ─────────────────────────────────────────────────────────────────────────

@@ -36,6 +36,7 @@ from util.skills import load_system_prompt
 from util.translation import (
     buildClaudeRequest,
     buildOpenAIRequest,
+    CONTEXT_SOURCE,
     createContextParts,
     countTokens,
     extractTranslation,
@@ -50,7 +51,7 @@ from util.translation import (
 )
 
 
-EVALUATION_VERSION = 5
+EVALUATION_VERSION = 7
 EVALUATION_ARCHIVE_VERSION = 1
 MANIFEST_HASH_VERSION = 2
 ARTIFACT_BINDING_VERSION = 5
@@ -1072,6 +1073,8 @@ def _build_logical_requests(segments: list[dict], system_prompt: str,
                 "glossary": matched_glossary,
                 "sfx_reference": matched_sfx,
                 "history": history,
+                "context_kind": CONTEXT_SOURCE,
+                "instructions": [],
                 "user": user,
                 "schema_line_count": len(chunk),
             }
@@ -2217,6 +2220,8 @@ def _provider_params(candidate: dict, request: dict) -> dict:
             request["system"], request["user"], request["history"], "json",
             candidate["model"], request["schema_line_count"],
             vocab_text=dynamic_context,
+            context_kind=request.get("context_kind", CONTEXT_SOURCE),
+            request_instructions=request.get("instructions"),
         )
         # Translation does not need expensive adaptive reasoning. More
         # importantly, this matches GPT reasoning=none and Gemini=minimal.
@@ -2228,6 +2233,8 @@ def _provider_params(candidate: dict, request: dict) -> dict:
         request["system"], request["user"], request["history"], 0.0, "json",
         candidate["model"], request["schema_line_count"],
         vocab_text=dynamic_context, api_provider=provider,
+        context_kind=request.get("context_kind", CONTEXT_SOURCE),
+        request_instructions=request.get("instructions"),
     )
     if provider == "gemini":
         # Gemini's OpenAI-compatible Batch API accepts reasoning_effort
@@ -3698,5 +3705,13 @@ def context_audit(manifest: dict) -> dict:
         "executions": len(manifest["executions"]),
         "all_have_system": all(bool(r["system"].strip()) for r in manifest["logical_requests"]),
         "all_have_source": all(bool(r["sources"]) for r in manifest["logical_requests"]),
+        "source_context_typed": all(
+            r.get("context_kind") == CONTEXT_SOURCE
+            for r in manifest["logical_requests"]
+        ),
+        "instructions_typed": all(
+            isinstance(r.get("instructions"), list)
+            for r in manifest["logical_requests"]
+        ),
         "history_limit_ok": all(len(r["history"]) <= 10 for r in manifest["logical_requests"]),
     }
