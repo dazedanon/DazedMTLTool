@@ -510,31 +510,31 @@ class ConfigTab(QWidget):
         self.nav_buttons = []
         
         # General Settings button
-        btn_general = self.create_nav_button("🔧", "General Settings")
+        btn_general = self.create_nav_button("General Settings")
         btn_general.clicked.connect(lambda: self.switch_page(0))
         nav_layout.addWidget(btn_general)
         self.nav_buttons.append(btn_general)
         
         # RPG Maker MV/MZ button
-        btn_mvmz = self.create_nav_button("🎮", "RPG Maker MV/MZ", engine_key="mvmz")
+        btn_mvmz = self.create_nav_button("RPG Maker MV/MZ")
         btn_mvmz.clicked.connect(lambda: self.switch_page(1))
         nav_layout.addWidget(btn_mvmz)
         self.nav_buttons.append(btn_mvmz)
         
         # Wolf RPG button
-        btn_wolf = self.create_nav_button("🐺", "Wolf RPG", engine_key="wolf")
+        btn_wolf = self.create_nav_button("Wolf RPG")
         btn_wolf.clicked.connect(lambda: self.switch_page(2))
         nav_layout.addWidget(btn_wolf)
         self.nav_buttons.append(btn_wolf)
         
         # CSV button
-        btn_csv = self.create_nav_button("📄", "CSV")
+        btn_csv = self.create_nav_button("CSV")
         btn_csv.clicked.connect(lambda: self.switch_page(3))
         nav_layout.addWidget(btn_csv)
         self.nav_buttons.append(btn_csv)
 
         # SRPG Studio button
-        btn_srpg = self.create_nav_button("⚔️", "SRPG Studio", engine_key="srpg")
+        btn_srpg = self.create_nav_button("SRPG Studio")
         btn_srpg.clicked.connect(lambda: self.switch_page(4))
         nav_layout.addWidget(btn_srpg)
         self.nav_buttons.append(btn_srpg)
@@ -573,7 +573,7 @@ class ConfigTab(QWidget):
         # Select first page by default
         self.switch_page(0)
     
-    def create_nav_button(self, icon_text, tooltip, engine_key=None):
+    def create_nav_button(self, tooltip):
         """Create a labeled secondary-navigation button."""
         btn = QPushButton(tooltip)
         btn.setObjectName("appSubnavButton")

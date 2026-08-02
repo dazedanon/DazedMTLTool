@@ -155,24 +155,9 @@ def configure_nav_toolbutton(
     *,
     horizontal: bool = False,
     update_available: bool = False,
-    engine_key: str | None = None,
 ) -> None:
-    """Apply nav icon - engine PNG when available, else emoji/glyph fallback."""
-    from util.paths import ENGINE_ICONS_DIR
-
+    """Apply a QtAwesome icon or the platform-safe glyph fallback."""
     icon_dim = max(28, min(btn.width(), btn.height()) - 8)
-
-    engine_png = (ENGINE_ICONS_DIR / f"{engine_key}.png") if engine_key else None
-    if engine_png is not None and engine_png.is_file():
-        icon = QIcon(str(engine_png))
-        btn.setIcon(icon)
-        btn.setIconSize(QSize(icon_dim, icon_dim))
-        btn.setText("")
-        btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
-        btn.setStyleSheet(_nav_toolbutton_stylesheet(
-            horizontal=horizontal, icon_only=True, update_available=update_available,
-        ))
-        return
 
     # Preferred path: render a real vector icon via qtawesome so the glyph is
     # identical on Windows and Linux (no tofu, no emoji font dependency).
