@@ -5,9 +5,10 @@ import json
 import subprocess
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QLineEdit, QWidget
 
 from util.version_update import (
     GitWorkflowError,
@@ -67,6 +68,7 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertEqual(status.original_version, "1.00")
         self.assertEqual(status.translation_version, "1.00")
         self.assertTrue(status.worktree_clean)
+        self.assertTrue(status.asset_manifest_available)
         self.assertEqual(result.repo_root, self.translated)
         self.assertTrue(result.gitignore_installed)
         self.assertTrue(self.translated.joinpath(".gitignore").is_file())
@@ -182,6 +184,8 @@ class GitVersionUpdateTests(unittest.TestCase):
         )
         bootstrap_repository(self.translated, self.old, "1.00")
 
+        preview = preview_official_update(self.translated, self.new, "1.03")
+        self.assertTrue(preview.file_changes[0].whole_file_replaced)
         result = apply_official_update(self.translated, self.new, "1.03")
 
         self.assertEqual(result.official_won_paths, ("data.json",))
@@ -210,6 +214,11 @@ class GitVersionUpdateTests(unittest.TestCase):
         )
         bootstrap_repository(self.translated, self.old, "1.00")
 
+        preview = preview_official_update(self.translated, self.new, "1.03")
+        self.assertFalse(preview.file_changes[0].whole_file_replaced)
+        self.assertEqual(
+            preview.file_changes[0].result, "Merged with translation edits"
+        )
         result = apply_official_update(self.translated, self.new, "1.03")
 
         self.assertEqual(result.official_won_paths, ("game.txt",))
@@ -282,7 +291,7 @@ class GitVersionUpdateTests(unittest.TestCase):
 
     def test_preview_reports_file_changes_formatting_overlap_and_json_warnings(self):
         for folder in (self.old, self.translated, self.new):
-            folder.joinpath(".gitignore").write_text("cache/\n")
+            folder.joinpath(".gitignore").write_text("cache/\n!*.png\n")
         self.old.joinpath("data.json").write_text('{"name":"Japanese","value":1}')
         self.translated.joinpath("data.json").write_text(
             json.dumps({"name": "English", "value": 1}, indent=4, ensure_ascii=False)
@@ -291,6 +300,21 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.old.joinpath("removed.txt").write_text("old\n")
         self.translated.joinpath("removed.txt").write_text("old\n")
         self.new.joinpath("added.txt").write_text("new\n")
+        base_lines = [f"line {index}" for index in range(10)]
+        translated_lines = list(base_lines)
+        translated_lines[1] = "translated line"
+        official_lines = list(base_lines)
+        official_lines[8] = "updated official line"
+        self.old.joinpath("mergeable.txt").write_text("\n".join(base_lines) + "\n")
+        self.translated.joinpath("mergeable.txt").write_text(
+            "\n".join(translated_lines) + "\n"
+        )
+        self.new.joinpath("mergeable.txt").write_text(
+            "\n".join(official_lines) + "\n"
+        )
+        self.old.joinpath("portrait.png").write_bytes(b"\x89PNG\x00old")
+        self.translated.joinpath("portrait.png").write_bytes(b"\x89PNG\x00translated")
+        self.new.joinpath("portrait.png").write_bytes(b"\x89PNG\x00official")
         for folder in (self.old, self.translated):
             folder.joinpath("broken.json").write_text('{"duplicate":1,"duplicate":2}')
         self.new.joinpath("broken.json").write_text('{"duplicate":3,"duplicate":4}')
@@ -313,6 +337,23 @@ class GitVersionUpdateTests(unittest.TestCase):
         )
         self.assertIn("cache/generated.bin", preview.ignored_paths)
         self.assertNotIn("cache/generated.bin", preview.added_paths)
+        changes = {change.path: change for change in preview.file_changes}
+        self.assertEqual(changes["added.txt"].added_lines, 1)
+        self.assertEqual(changes["removed.txt"].deleted_lines, 1)
+        self.assertTrue(changes["data.json"].whole_file_replaced)
+        self.assertFalse(changes["mergeable.txt"].whole_file_replaced)
+        self.assertEqual(
+            changes["mergeable.txt"].result, "Merged with translation edits"
+        )
+        self.assertTrue(changes["portrait.png"].is_image)
+        self.assertTrue(changes["portrait.png"].whole_file_replaced)
+        self.assertIn("image replaced", changes["portrait.png"].result)
+        image = next(
+            change for change in preview.image_changes if change.path == "portrait.png"
+        )
+        self.assertEqual(image.change, "Replaced")
+        self.assertTrue(image.tracked)
+        self.assertTrue(image.warning)
 
         self.new.joinpath("added.txt").write_text("changed after preview\n")
         with self.assertRaisesRegex(GitWorkflowError, "changed after preview"):
@@ -322,6 +363,77 @@ class GitVersionUpdateTests(unittest.TestCase):
                 "1.03",
                 expected_tree=preview.proposed_tree,
             )
+
+    def test_ignored_official_assets_are_previewed_and_synchronized_outside_git(self):
+        self.write_versions("old\n", "translated\n", "translated\n")
+        self.old.joinpath("replaced.png").write_bytes(b"old image")
+        self.translated.joinpath("replaced.png").write_bytes(b"old image")
+        self.new.joinpath("replaced.png").write_bytes(b"new image")
+        self.old.joinpath("removed.png").write_bytes(b"removed image")
+        self.translated.joinpath("removed.png").write_bytes(b"removed image")
+        self.new.joinpath("added.png").write_bytes(b"added image")
+        self.old.joinpath("theme.ogg").write_bytes(b"old audio")
+        self.translated.joinpath("theme.ogg").write_bytes(b"old audio")
+        self.new.joinpath("theme.ogg").write_bytes(b"new audio")
+        self.old.joinpath("unchanged.png").write_bytes(b"official image")
+        self.translated.joinpath("unchanged.png").write_bytes(b"local image")
+        self.new.joinpath("unchanged.png").write_bytes(b"official image")
+        self.old.joinpath("Save01.dat").write_bytes(b"bundled save")
+        self.translated.joinpath("Save01.dat").write_bytes(b"player save")
+        self.new.joinpath("Save01.dat").write_bytes(b"changed bundled save")
+        bootstrap_repository(self.translated, self.old, "1.00")
+
+        preview = preview_official_update(self.translated, self.new, "1.03")
+        self.assertTrue(preview.content_change_expected)
+
+        images = {change.path: change for change in preview.image_changes}
+        self.assertEqual(images["added.png"].change, "Added")
+        self.assertEqual(images["removed.png"].change, "Removed")
+        self.assertEqual(images["replaced.png"].change, "Replaced")
+        self.assertTrue(all(not change.tracked for change in images.values()))
+        self.assertTrue(all(not change.warning for change in images.values()))
+        self.assertTrue(
+            all("outside Git" in change.result for change in images.values())
+        )
+        self.assertTrue(all(not change.is_image for change in preview.file_changes))
+        audio = next(
+            change
+            for change in preview.external_changes
+            if change.path == "theme.ogg"
+        )
+        self.assertEqual(audio.category, "Audio")
+        self.assertEqual(audio.change, "Replaced")
+        self.assertNotIn(
+            "unchanged.png", {change.path for change in preview.external_changes}
+        )
+
+        self.new.joinpath("theme.ogg").write_bytes(b"changed after preview")
+        with self.assertRaisesRegex(GitWorkflowError, "assets changed after preview"):
+            apply_official_update(
+                self.translated,
+                self.new,
+                "1.03",
+                expected_tree=preview.proposed_tree,
+                expected_asset_manifest=preview.proposed_asset_manifest,
+            )
+        self.new.joinpath("theme.ogg").write_bytes(b"new audio")
+
+        result = apply_official_update(
+            self.translated,
+            self.new,
+            "1.03",
+            expected_tree=preview.proposed_tree,
+            expected_asset_manifest=preview.proposed_asset_manifest,
+        )
+
+        self.assertEqual(self.translated.joinpath("replaced.png").read_bytes(), b"new image")
+        self.assertEqual(self.translated.joinpath("added.png").read_bytes(), b"added image")
+        self.assertFalse(self.translated.joinpath("removed.png").exists())
+        self.assertEqual(self.translated.joinpath("theme.ogg").read_bytes(), b"new audio")
+        self.assertEqual(self.translated.joinpath("unchanged.png").read_bytes(), b"local image")
+        self.assertEqual(self.translated.joinpath("Save01.dat").read_bytes(), b"player save")
+        self.assertTrue(result.external_changes)
+        self.assertTrue(result.content_changed)
 
     def test_update_explicitly_records_when_official_patch_is_already_present(self):
         self.write_versions("old official\n", "new official\n", "new official\n")
@@ -370,6 +482,9 @@ class GitVersionUpdateTests(unittest.TestCase):
 
     def test_pending_conflict_can_abort_then_apply_registered_original(self):
         self.write_versions("old\n", "translated\n", "new official\n")
+        self.old.joinpath("theme.ogg").write_bytes(b"old audio")
+        self.translated.joinpath("theme.ogg").write_bytes(b"old audio")
+        self.new.joinpath("theme.ogg").write_bytes(b"new audio")
         bootstrap_repository(self.translated, self.old, "1.00")
 
         pending = apply_official_update(
@@ -378,16 +493,20 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertFalse(pending.complete)
         self.assertEqual(pending.pending_conflicts, ("game.txt",))
         self.assertTrue(inspect_repository(self.translated).pending_cherry_pick)
+        self.assertEqual(self.translated.joinpath("theme.ogg").read_bytes(), b"old audio")
 
         aborted = abort_update(self.translated)
         self.assertFalse(aborted.pending_cherry_pick)
         self.assertEqual(self.translated.joinpath("game.txt").read_text(), "translated\n")
         self.assertEqual(aborted.original_version, "1.03")
         self.assertEqual(aborted.translation_version, "1.00")
+        self.assertTrue(aborted.asset_sync_pending)
 
         applied = apply_registered_original(self.translated)
         self.assertEqual(applied.official_won_paths, ("game.txt",))
         self.assertEqual(self.translated.joinpath("game.txt").read_text(), "new official\n")
+        self.assertEqual(self.translated.joinpath("theme.ogg").read_bytes(), b"new audio")
+        self.assertFalse(inspect_repository(self.translated).asset_sync_pending)
 
     def test_existing_repository_without_original_is_reconciled_in_place(self):
         self.write_versions("Japanese\n", "English\n", "New\n")
@@ -437,6 +556,44 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.git(self.translated, "checkout", "main")
         switched = checkout_translation_branch(self.translated)
         self.assertEqual(switched.current_branch, "translation")
+        self.assertFalse(switched.asset_manifest_available)
+
+        self.old.joinpath("unchanged.png").write_bytes(b"official image")
+        self.translated.joinpath("unchanged.png").write_bytes(b"translated image")
+        self.new.joinpath("unchanged.png").write_bytes(b"official image")
+        self.new.joinpath("theme.ogg").write_bytes(b"new audio")
+        with self.assertRaisesRegex(GitWorkflowError, "does not match"):
+            preview_official_update(
+                self.translated,
+                self.new,
+                "1.03",
+                previous_official_game=self.new,
+            )
+        preview = preview_official_update(
+            self.translated,
+            self.new,
+            "1.03",
+            previous_official_game=self.old,
+        )
+        self.assertFalse(preview.asset_manifest_available)
+        self.assertEqual(preview.external_changes[0].path, "theme.ogg")
+        self.assertNotIn(
+            "unchanged.png", {change.path for change in preview.external_changes}
+        )
+        apply_official_update(
+            self.translated,
+            self.new,
+            "1.03",
+            expected_tree=preview.proposed_tree,
+            expected_asset_manifest=preview.proposed_asset_manifest,
+            previous_official_game=self.old,
+            expected_baseline_asset_manifest=preview.baseline_asset_manifest,
+        )
+        self.assertEqual(self.translated.joinpath("theme.ogg").read_bytes(), b"new audio")
+        self.assertEqual(
+            self.translated.joinpath("unchanged.png").read_bytes(), b"translated image"
+        )
+        self.assertTrue(inspect_repository(self.translated).asset_manifest_available)
 
     def test_nested_game_folder_updates_only_its_repository_prefix(self):
         repo = self.translated
@@ -446,6 +603,9 @@ class GitVersionUpdateTests(unittest.TestCase):
         repo.joinpath("README.md").write_text("keep me\n")
         self.old.joinpath("dialogue.txt").write_text("Japanese\n")
         self.new.joinpath("dialogue.txt").write_text("New Japanese\n")
+        self.old.joinpath("theme.ogg").write_bytes(b"old audio")
+        game.joinpath("theme.ogg").write_bytes(b"old audio")
+        self.new.joinpath("theme.ogg").write_bytes(b"new audio")
         self.git(repo, "init", "-b", "main")
         self.git(repo, "config", "user.name", "Test")
         self.git(repo, "config", "user.email", "test@example.invalid")
@@ -458,6 +618,7 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertTrue(result.complete)
         self.assertEqual(repo.joinpath("README.md").read_text(), "keep me\n")
         self.assertEqual(game.joinpath("dialogue.txt").read_text(), "New Japanese\n")
+        self.assertEqual(game.joinpath("theme.ogg").read_bytes(), b"new audio")
 
     @unittest.skipUnless(hasattr(os, "symlink"), "symbolic links unavailable")
     def test_bootstrap_rejects_symbolic_links_in_official_tree(self):
@@ -477,14 +638,40 @@ class VersionUpdateUITests(unittest.TestCase):
 
         tab = VersionUpdateTab()
         try:
-            self.assertIn("original branch", tab.bootstrap_explanation.text())
-            self.assertEqual(tab.bootstrap_btn.text(), "Create original + translation branches")
-            self.assertEqual(tab.preview_btn.text(), "Preview changes")
-            self.assertEqual(tab.update_btn.text(), "Approve and apply")
+            self.assertEqual(tab.preview_btn.text(), "Preview update")
+            self.assertEqual(tab.update_btn.text(), "Apply update")
             self.assertFalse(tab.update_btn.isEnabled())
-            self.assertFalse(tab.update_card.isEnabled())
+            self.assertTrue(tab.bootstrap_card.isHidden())
+            self.assertTrue(tab.update_card.isHidden())
+            self.assertTrue(tab.refresh_btn.isHidden())
+
+            with tempfile.TemporaryDirectory() as temporary:
+                tab.current_edit.setText(temporary)
+                tab.refresh_status()
+                self.assertFalse(tab.bootstrap_card.isHidden())
+                self.assertTrue(tab.update_card.isHidden())
+                self.assertFalse(tab.show_bootstrap_btn.isHidden())
+                self.assertTrue(tab.bootstrap_fields.isHidden())
+
+                tab._show_bootstrap_fields()
+                self.assertFalse(tab.bootstrap_fields.isHidden())
+                self.assertTrue(tab.show_bootstrap_btn.isHidden())
         finally:
             tab.close()
+
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = QWidget()
+            workflow_tab = QWidget(parent)
+            workflow_tab.folder_edit = QLineEdit(workflow_tab)
+            workflow_tab.folder_edit.setText(temporary)
+            parent.workflow_tab = workflow_tab
+            parent.wolf_workflow_tab = None
+            synced = VersionUpdateTab(parent)
+            try:
+                self.assertEqual(synced.current_edit.text(), temporary)
+                self.assertFalse(synced.bootstrap_card.isHidden())
+            finally:
+                parent.close()
 
     def test_already_applied_versions_are_detected_from_git_history(self):
         from gui.version_update_tab import VersionUpdateTab
@@ -499,40 +686,116 @@ class VersionUpdateUITests(unittest.TestCase):
             old.joinpath("game.txt").write_text("Japanese\n")
             translated.joinpath("game.txt").write_text("English\n")
             new.joinpath("game.txt").write_text("New Japanese\n")
+            for folder in (old, translated, new):
+                folder.joinpath(".gitignore").write_text("!*.png\n")
+            old.joinpath("portrait.png").write_bytes(b"\x89PNG\x00old")
+            translated.joinpath("portrait.png").write_bytes(
+                b"\x89PNG\x00translated"
+            )
+            new.joinpath("portrait.png").write_bytes(b"\x89PNG\x00official")
+            old.joinpath("theme.ogg").write_bytes(b"old audio")
+            translated.joinpath("theme.ogg").write_bytes(b"old audio")
+            new.joinpath("theme.ogg").write_bytes(b"new audio")
             bootstrap_repository(translated, old, "1.00")
             tab = VersionUpdateTab()
             try:
                 tab.current_edit.setText(str(translated))
                 tab.refresh_status()
-                self.assertIn("Original version: 1.00", tab.version_status.text())
-                self.assertIn("Translation version: 1.00", tab.version_status.text())
+                self.assertIn("Original 1.00", tab.version_status.text())
+                self.assertIn("Translation 1.00", tab.version_status.text())
                 self.assertTrue(tab.bootstrap_card.isHidden())
+                self.assertFalse(tab.update_card.isHidden())
                 self.assertTrue(tab.update_card.isEnabled())
+                self.assertTrue(tab.baseline_panel.isHidden())
+                tab._render_status(
+                    replace(tab._status, asset_manifest_available=False)
+                )
+                self.assertFalse(tab.baseline_panel.isHidden())
+                tab._render_status(tab._status)
                 preview = preview_official_update(translated, new, "1.03")
                 tab._show_preview(preview)
-                self.assertIn("Modified: 1", tab.preview_details.toPlainText())
+                self.assertFalse(tab.preview_panel.isHidden())
+                self.assertIn("2 warning", tab.preview_summary.text())
+                self.assertIn("Git-tracked patch", tab.preview_expected.text())
                 self.assertIn(
-                    "Potential translation overlaps", tab.preview_details.toPlainText()
+                    "images, audio, video, fonts, and other packaged files",
+                    tab.preview_expected.text(),
                 )
+                replacement_group = tab.preview_changes.topLevelItem(0)
+                self.assertTrue(
+                    replacement_group.text(0).startswith(
+                        "Warnings — entire file replaced"
+                    )
+                )
+                replacement = replacement_group.child(0)
+                self.assertEqual(replacement.text(0), "game.txt")
+                self.assertEqual(replacement.text(2), "+1 / −1")
+                self.assertIn("Entire translated file", replacement.text(3))
+                image_warning_group = tab.preview_changes.topLevelItem(1)
+                self.assertTrue(
+                    image_warning_group.text(0).startswith(
+                        "⚠ Warnings — tracked images"
+                    )
+                )
+                self.assertIn(
+                    "will be replaced", image_warning_group.child(0).text(3)
+                )
+                asset_groups = [
+                    tab.preview_changes.topLevelItem(index)
+                    for index in range(tab.preview_changes.topLevelItemCount())
+                ]
+                audio_group = next(
+                    group
+                    for group in asset_groups
+                    if group.text(0).startswith("Other game assets replaced")
+                )
+                self.assertEqual(audio_group.child(0).text(0), "theme.ogg")
+                self.assertEqual(audio_group.child(0).text(2), "Audio")
+                self.assertIn("outside Git", audio_group.child(0).text(3))
                 self.assertTrue(tab.update_btn.isEnabled())
 
                 new.joinpath("game.txt").write_text("English\n")
+                new.joinpath("portrait.png").write_bytes(
+                    b"\x89PNG\x00translated"
+                )
+                new.joinpath("theme.ogg").write_bytes(b"old audio")
                 no_op_preview = preview_official_update(translated, new, "1.03")
                 tab._show_preview(no_op_preview)
-                self.assertIn(
-                    "No translated-game content changes are expected",
-                    tab.preview_details.toPlainText(),
-                )
-                self.assertIn(
-                    "Official release delta (previous original → new original):",
-                    tab.preview_details.toPlainText(),
-                )
-                self.assertIn(
-                    "Translation impact:\nFiles that would change: 0",
-                    tab.preview_details.toPlainText(),
-                )
+                self.assertIn("only the version", tab.preview_summary.text())
+                self.assertIn("already present", tab.preview_expected.text())
+                self.assertIn("No full-file", tab.preview_notice.text())
                 self.assertEqual(
                     tab.update_btn.text(), "Record version (no content changes)"
+                )
+
+                new.joinpath(".gitignore").write_text("cache/\n")
+                new.joinpath("cache").mkdir()
+                new.joinpath("cache/generated.bin").write_bytes(b"ignored")
+                ignored_preview = preview_official_update(translated, new, "1.03")
+                tab._show_preview(ignored_preview)
+                self.assertIn("No full-file", tab.preview_notice.text())
+                tree_rows = []
+                for index in range(tab.preview_changes.topLevelItemCount()):
+                    group = tab.preview_changes.topLevelItem(index)
+                    tree_rows.append(group.text(0))
+                    tree_rows.extend(
+                        group.child(child).text(0)
+                        for child in range(group.childCount())
+                    )
+                tree_text = "\n".join(tree_rows)
+                self.assertNotIn("excluded", tree_text.casefold())
+                self.assertNotIn("generated.bin", tree_text)
+
+                new.joinpath("broken.json").write_text(
+                    '{"duplicate":1,"duplicate":2}'
+                )
+                warning_preview = preview_official_update(translated, new, "1.03")
+                tab._show_preview(warning_preview)
+                self.assertIn("warning", tab.preview_summary.text())
+                self.assertTrue(
+                    tab.preview_changes.topLevelItem(0)
+                    .text(0)
+                    .startswith("Warnings — structured files")
                 )
             finally:
                 tab.close()
@@ -553,10 +816,18 @@ class VersionUpdateUITests(unittest.TestCase):
                 tab.current_edit.setText(str(translated))
                 tab.refresh_status()
                 self.assertFalse(tab.recovery_card.isHidden())
+                self.assertTrue(tab.update_card.isHidden())
                 self.assertIn("game.txt", tab.conflict_summary.toPlainText())
                 self.assertEqual(
                     tab.continue_btn.text(), "Use official conflicts and continue"
                 )
+                abort_update(translated)
+                tab.refresh_status()
+                self.assertFalse(tab.finish_assets_btn.isHidden())
+                self.assertEqual(
+                    tab.finish_assets_btn.text(), "Apply registered update"
+                )
             finally:
                 tab.close()
-                abort_update(translated)
+                if inspect_repository(translated).pending_cherry_pick:
+                    abort_update(translated)

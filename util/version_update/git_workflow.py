@@ -9,8 +9,10 @@ No game file is parsed or reconstructed.
 from __future__ import annotations
 
 import os
+import hashlib
 import json
 import re
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -33,6 +35,58 @@ _VERSION_HINT = re.compile(
     r"(?i)(?:\bversion\b|\bver\.?|\bv|update(?:d)?(?:\s+original)?\s+game\s+files\s+to)"
     r"[\s:._-]*(\d+(?:\.\d+)+)"
 )
+_IMAGE_EXTENSIONS = frozenset(
+    {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".png_", ".rpgmvp", ".webp"}
+)
+_AUDIO_EXTENSIONS = frozenset(
+    {
+        ".aac",
+        ".flac",
+        ".m4a",
+        ".m4a_",
+        ".mid",
+        ".midi",
+        ".mp3",
+        ".ogg",
+        ".ogg_",
+        ".opus",
+        ".rpgmvm",
+        ".rpgmvo",
+        ".wav",
+        ".wma",
+    }
+)
+_VIDEO_EXTENSIONS = frozenset(
+    {".avi", ".m4v", ".mkv", ".mov", ".mp4", ".ogv", ".webm", ".webm_", ".wmv"}
+)
+_FONT_EXTENSIONS = frozenset({".eot", ".otf", ".ttf", ".woff", ".woff2"})
+_ASSET_MANIFEST_FORMAT = 1
+_LOCAL_ONLY_DIRECTORIES = frozenset(
+    {
+        ".dazedtl",
+        "cache",
+        "caches",
+        "crash",
+        "crashes",
+        "log",
+        "logs",
+        "save",
+        "saves",
+        "screenshots",
+        "temp",
+        "tmp",
+    }
+)
+_LOCAL_ONLY_FILENAMES = frozenset(
+    {
+        "cg.dat",
+        "kabe3_save.dat",
+        "kabe3_system.dat",
+        "previous_patch_sha.txt",
+        "psbpack.dat",
+        "scene.dat",
+    }
+)
 
 
 class GitWorkflowError(RuntimeError):
@@ -54,6 +108,8 @@ class RepositoryStatus:
     worktree_clean: bool
     pending_cherry_pick: bool
     git_available: bool = True
+    asset_sync_pending: bool = False
+    asset_manifest_available: bool = False
 
     @property
     def ready(self) -> bool:
@@ -64,6 +120,7 @@ class RepositoryStatus:
             and self.current_branch == TRANSLATION_BRANCH
             and self.worktree_clean
             and not self.pending_cherry_pick
+            and not self.asset_sync_pending
         )
 
 
@@ -89,10 +146,43 @@ class UpdateResult:
     pending_conflicts: tuple[str, ...] = ()
     content_changed: bool = True
     already_present_paths: tuple[str, ...] = ()
+    external_changes: tuple[UpdateExternalChange, ...] = ()
 
     @property
     def complete(self) -> bool:
         return self.translation_commit is not None and not self.pending_conflicts
+
+
+@dataclass(frozen=True)
+class UpdateFileChange:
+    path: str
+    change: str
+    added_lines: int | None
+    deleted_lines: int | None
+    is_image: bool = False
+    translation_changed: bool = False
+    already_present: bool = False
+    whole_file_replaced: bool = False
+    result: str = ""
+
+
+@dataclass(frozen=True)
+class UpdateImageChange:
+    path: str
+    change: str
+    tracked: bool
+    warning: bool
+    result: str
+
+
+@dataclass(frozen=True)
+class UpdateExternalChange:
+    path: str
+    change: str
+    category: str
+    already_present: bool
+    size_bytes: int
+    result: str
 
 
 @dataclass(frozen=True)
@@ -111,6 +201,13 @@ class UpdatePreview:
     formatted_json_paths: tuple[str, ...]
     json_warnings: tuple[str, ...]
     ignored_paths: tuple[str, ...]
+    file_changes: tuple[UpdateFileChange, ...] = ()
+    image_changes: tuple[UpdateImageChange, ...] = ()
+    external_changes: tuple[UpdateExternalChange, ...] = ()
+    proposed_asset_manifest: str = ""
+    baseline_asset_manifest: str = ""
+    asset_manifest_available: bool = True
+    baseline_source_root: Path | None = None
 
     @property
     def changed_paths(self) -> tuple[str, ...]:
@@ -123,7 +220,10 @@ class UpdatePreview:
 
     @property
     def content_change_expected(self) -> bool:
-        return bool(self.translation_change_paths)
+        return bool(
+            self.translation_change_paths
+            or any(not change.already_present for change in self.external_changes)
+        )
 
 
 @dataclass(frozen=True)
@@ -141,6 +241,13 @@ class _TreeBuild:
     formatted_json_paths: tuple[str, ...]
     json_warnings: tuple[str, ...]
     ignored_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _AssetManifestEntry:
+    sha256: str
+    size: int
+    mode: str
 
 
 def _run_git(
@@ -261,6 +368,12 @@ def inspect_repository(game_root: str | Path) -> RepositoryStatus:
         ),
         worktree_clean=not bool(status),
         pending_cherry_pick=_cherry_pick_path(repo).exists(),
+        asset_sync_pending=_asset_state_path(
+            repo, prefix, "pending-assets"
+        ).exists(),
+        asset_manifest_available=_asset_state_path(
+            repo, prefix, "official-assets"
+        ).exists(),
     )
 
 
@@ -367,13 +480,180 @@ def _source_files(source: Path, *, format_json: bool) -> list[_SourceFile]:
     return files
 
 
-def _ensure_local_excludes(repo: Path) -> None:
-    """Keep removed legacy updater metadata out of the exact game branches."""
+def _hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _git_common_dir(repo: Path) -> Path:
     common_text = _run_git(repo, "rev-parse", "--git-common-dir").stdout.strip()
     common = Path(common_text)
     if not common.is_absolute():
         common = repo / common
-    exclude = common.resolve() / "info" / "exclude"
+    return common.resolve()
+
+
+def _asset_state_path(repo: Path, game_prefix: str, name: str) -> Path:
+    key = hashlib.sha256(game_prefix.encode("utf-8")).hexdigest()[:16]
+    return _git_common_dir(repo) / "dazedtl" / "version-update" / f"{key}-{name}.json"
+
+
+def _manifest_payload(
+    manifest: Mapping[str, _AssetManifestEntry],
+) -> dict[str, dict[str, str | int]]:
+    return {
+        path: {"sha256": entry.sha256, "size": entry.size, "mode": entry.mode}
+        for path, entry in sorted(manifest.items())
+    }
+
+
+def _manifest_digest(manifest: Mapping[str, _AssetManifestEntry]) -> str:
+    encoded = json.dumps(
+        _manifest_payload(manifest),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _write_json_atomic(path: Path, payload: Mapping[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", dir=path.parent
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, sort_keys=True, indent=2)
+            handle.write("\n")
+        os.replace(temporary_name, path)
+    except Exception:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        try:
+            Path(temporary_name).unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _validate_manifest_path(path: str) -> None:
+    pure = PurePosixPath(path)
+    if pure.is_absolute() or not pure.parts or ".." in pure.parts:
+        raise GitWorkflowError(f"Asset manifest contains an unsafe path: {path!r}")
+    if any(character in path for character in ("\n", "\r", "\t")):
+        raise GitWorkflowError(f"Asset manifest contains an unsafe path: {path!r}")
+
+
+def _load_asset_manifest(
+    repo: Path, game_prefix: str
+) -> dict[str, _AssetManifestEntry] | None:
+    path = _asset_state_path(repo, game_prefix, "official-assets")
+    if not path.exists():
+        return None
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        if document.get("format") != _ASSET_MANIFEST_FORMAT:
+            raise ValueError("unsupported format")
+        raw_files = document["files"]
+        if not isinstance(raw_files, dict):
+            raise ValueError("files must be an object")
+        manifest = {}
+        for relative, raw in raw_files.items():
+            if not isinstance(relative, str) or not isinstance(raw, dict):
+                raise ValueError("invalid file entry")
+            _validate_manifest_path(relative)
+            sha256 = raw.get("sha256")
+            size = raw.get("size")
+            mode = raw.get("mode")
+            if (
+                not isinstance(sha256, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", sha256)
+                or not isinstance(size, int)
+                or size < 0
+                or mode not in {"100644", "100755"}
+            ):
+                raise ValueError(f"invalid metadata for {relative}")
+            manifest[relative] = _AssetManifestEntry(sha256, size, mode)
+        return manifest
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise GitWorkflowError(f"Official asset manifest is invalid: {path}") from exc
+
+
+def _save_asset_manifest(
+    repo: Path,
+    game_prefix: str,
+    version: str,
+    original_commit: str,
+    manifest: Mapping[str, _AssetManifestEntry],
+) -> None:
+    _write_json_atomic(
+        _asset_state_path(repo, game_prefix, "official-assets"),
+        {
+            "format": _ASSET_MANIFEST_FORMAT,
+            "version": version,
+            "original_commit": original_commit,
+            "files": _manifest_payload(manifest),
+        },
+    )
+
+
+def _save_pending_asset_plan(
+    repo: Path,
+    game_prefix: str,
+    source: Path,
+    version: str,
+    original_commit: str,
+    manifest_digest: str,
+) -> None:
+    _write_json_atomic(
+        _asset_state_path(repo, game_prefix, "pending-assets"),
+        {
+            "format": _ASSET_MANIFEST_FORMAT,
+            "source": str(source),
+            "version": version,
+            "original_commit": original_commit,
+            "manifest_digest": manifest_digest,
+        },
+    )
+
+
+def _load_pending_asset_plan(
+    repo: Path, game_prefix: str
+) -> dict[str, str] | None:
+    path = _asset_state_path(repo, game_prefix, "pending-assets")
+    if not path.exists():
+        return None
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        required = ("source", "version", "original_commit", "manifest_digest")
+        if document.get("format") != _ASSET_MANIFEST_FORMAT or any(
+            not isinstance(document.get(key), str) or not document[key]
+            for key in required
+        ):
+            raise ValueError("invalid pending asset plan")
+        if not re.fullmatch(r"[0-9a-f]{64}", document["manifest_digest"]):
+            raise ValueError("invalid manifest digest")
+        return {key: document[key] for key in required}
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise GitWorkflowError(f"Pending asset update is invalid: {path}") from exc
+
+
+def _clear_pending_asset_plan(repo: Path, game_prefix: str) -> None:
+    try:
+        _asset_state_path(repo, game_prefix, "pending-assets").unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _ensure_local_excludes(repo: Path) -> None:
+    """Keep removed legacy updater metadata out of the exact game branches."""
+    exclude = _git_common_dir(repo) / "info" / "exclude"
     exclude.parent.mkdir(parents=True, exist_ok=True)
     existing = exclude.read_text("utf-8", errors="replace") if exclude.exists() else ""
     rule = ".dazedtl/version_update/"
@@ -481,6 +761,257 @@ def _ignored_paths(
         for entry, virtual in zip(files, virtual_paths)
         if virtual in ignored_virtual
     }
+
+
+def _build_ignored_asset_manifest(
+    source: Path, ignored_paths: Iterable[str]
+) -> dict[str, _AssetManifestEntry]:
+    ignored = set(ignored_paths)
+    manifest = {}
+    for entry in _source_files(source, format_json=False):
+        if entry.relative not in ignored or _is_local_only_asset(entry.relative):
+            continue
+        file_stat = entry.path.stat()
+        manifest[entry.relative] = _AssetManifestEntry(
+            _hash_file(entry.path), file_stat.st_size, entry.mode
+        )
+    return manifest
+
+
+def _asset_manifest_for_source(
+    repo: Path, source: Path, game_prefix: str
+) -> dict[str, _AssetManifestEntry]:
+    files = _source_files(source, format_json=False)
+    ignored = _ignored_paths(repo, files, game_prefix)
+    return {
+        entry.relative: _AssetManifestEntry(
+            _hash_file(entry.path), entry.path.stat().st_size, entry.mode
+        )
+        for entry in files
+        if entry.relative in ignored and not _is_local_only_asset(entry.relative)
+    }
+
+
+def _validate_official_asset_baseline(
+    repo: Path,
+    game: Path,
+    source_value: str | Path,
+    game_prefix: str,
+    original_commit: str,
+) -> tuple[Path, dict[str, _AssetManifestEntry]]:
+    source = _validate_source(source_value, game)
+    build = _write_tree_from_folder(
+        repo,
+        source,
+        game_prefix=game_prefix,
+        base_commit=original_commit,
+    )
+    differences = set(
+        _diff_status(repo, original_commit, build.tree, game_prefix)
+    )
+    differences.discard(_prefixed(game_prefix, ".gitignore"))
+    if differences:
+        raise GitWorkflowError(
+            "The previous official folder does not match the registered original "
+            "branch. Select the clean game folder for the currently registered version."
+        )
+    return source, _build_ignored_asset_manifest(source, build.ignored_paths)
+
+
+def _is_local_only_asset(path: str) -> bool:
+    pure = PurePosixPath(path)
+    lowered_parts = tuple(part.casefold() for part in pure.parts)
+    if any(part in _LOCAL_ONLY_DIRECTORIES for part in lowered_parts[:-1]):
+        return True
+    if lowered_parts[:2] == ("wolf_json", "originals"):
+        return True
+    name = lowered_parts[-1]
+    return bool(
+        name in _LOCAL_ONLY_FILENAMES
+        or name.startswith("save")
+        or name.startswith("bsxscript_")
+        or Path(name).suffix in {".log", ".tmp"}
+    )
+
+
+def _asset_category(path: str) -> str:
+    extension = Path(path).suffix.casefold()
+    if extension in _IMAGE_EXTENSIONS:
+        return "Image"
+    if extension in _AUDIO_EXTENSIONS:
+        return "Audio"
+    if extension in _VIDEO_EXTENSIONS:
+        return "Video"
+    if extension in _FONT_EXTENSIONS:
+        return "Font"
+    return "Other asset"
+
+
+def _destination_matches(game: Path, path: str, entry: _AssetManifestEntry) -> bool:
+    destination = game.joinpath(*PurePosixPath(path).parts)
+    if destination.is_symlink():
+        raise GitWorkflowError(f"Asset destination is a symbolic link: {path}")
+    if not destination.exists():
+        return False
+    if not destination.is_file():
+        raise GitWorkflowError(f"Asset destination is not a regular file: {path}")
+    return destination.stat().st_size == entry.size and _hash_file(destination) == entry.sha256
+
+
+def _external_asset_changes(
+    game: Path,
+    baseline: Mapping[str, _AssetManifestEntry] | None,
+    proposed: Mapping[str, _AssetManifestEntry],
+) -> tuple[UpdateExternalChange, ...]:
+    changes = []
+    if baseline is None:
+        candidates = proposed.keys()
+    else:
+        candidates = {
+            path
+            for path in set(baseline) | set(proposed)
+            if baseline.get(path) != proposed.get(path)
+        }
+    for path in sorted(candidates):
+        _validate_manifest_path(path)
+        old = baseline.get(path) if baseline is not None else None
+        new = proposed.get(path)
+        if new is None:
+            change = "Removed"
+            destination = game.joinpath(*PurePosixPath(path).parts)
+            if destination.is_symlink():
+                raise GitWorkflowError(f"Asset destination is a symbolic link: {path}")
+            already_present = not destination.exists()
+            size = old.size if old else 0
+            result = (
+                "Already absent; no removal needed"
+                if already_present
+                else "Will be removed outside Git"
+            )
+        else:
+            already_present = _destination_matches(game, path, new)
+            destination_exists = game.joinpath(*PurePosixPath(path).parts).exists()
+            change = "Added" if old is None and not destination_exists else "Replaced"
+            size = new.size
+            result = (
+                "Already present; no copy needed"
+                if already_present
+                else "Will be copied outside Git"
+            )
+            if baseline is None and already_present:
+                continue
+        changes.append(
+            UpdateExternalChange(
+                path=path,
+                change=change,
+                category=_asset_category(path),
+                already_present=already_present,
+                size_bytes=size,
+                result=result,
+            )
+        )
+    return tuple(changes)
+
+
+def _asset_destination(game: Path, relative: str) -> Path:
+    _validate_manifest_path(relative)
+    pure = PurePosixPath(relative)
+    current = game
+    for part in pure.parts[:-1]:
+        current /= part
+        if current.is_symlink():
+            raise GitWorkflowError(f"Asset destination crosses a symbolic link: {relative}")
+        if current.exists() and not current.is_dir():
+            raise GitWorkflowError(f"Asset destination parent is not a directory: {relative}")
+    destination = game.joinpath(*pure.parts)
+    if destination.is_symlink():
+        raise GitWorkflowError(f"Asset destination is a symbolic link: {relative}")
+    if destination.exists() and not destination.is_file():
+        raise GitWorkflowError(f"Asset destination is not a regular file: {relative}")
+    return destination
+
+
+def _sync_external_assets(
+    repo: Path,
+    game: Path,
+    source: Path,
+    changes: tuple[UpdateExternalChange, ...],
+    proposed: Mapping[str, _AssetManifestEntry],
+) -> tuple[UpdateExternalChange, ...]:
+    pending = tuple(change for change in changes if not change.already_present)
+    if not pending:
+        return ()
+    state_dir = _asset_state_path(repo, "", "sync-stage").parent
+    state_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="asset-sync-", dir=state_dir) as temporary:
+        stage_root = Path(temporary)
+        staged: dict[str, Path] = {}
+        backups: dict[str, Path | None] = {}
+        destinations = {}
+        for index, change in enumerate(pending):
+            destination = _asset_destination(game, change.path)
+            destinations[change.path] = destination
+            if destination.exists():
+                backup = stage_root / f"backup-{index}"
+                shutil.copy2(destination, backup)
+                backups[change.path] = backup
+            else:
+                backups[change.path] = None
+            if change.change != "Removed":
+                source_path = source.joinpath(*PurePosixPath(change.path).parts)
+                if source_path.is_symlink() or not source_path.is_file():
+                    raise GitWorkflowError(
+                        f"Official asset is no longer a regular file: {change.path}"
+                    )
+                expected = proposed.get(change.path)
+                if expected is None or not (
+                    source_path.stat().st_size == expected.size
+                    and _hash_file(source_path) == expected.sha256
+                ):
+                    raise GitWorkflowError(
+                        f"Official asset changed during synchronization: {change.path}"
+                    )
+                staged_path = stage_root / f"new-{index}"
+                shutil.copy2(source_path, staged_path)
+                if not (
+                    staged_path.stat().st_size == expected.size
+                    and _hash_file(staged_path) == expected.sha256
+                ):
+                    raise GitWorkflowError(
+                        f"Official asset could not be staged exactly: {change.path}"
+                    )
+                staged[change.path] = staged_path
+
+        applied: list[str] = []
+        try:
+            for change in pending:
+                destination = destinations[change.path]
+                if change.change == "Removed":
+                    if destination.exists():
+                        destination.unlink()
+                else:
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(staged[change.path], destination)
+                applied.append(change.path)
+        except Exception as exc:
+            rollback_errors = []
+            for relative in reversed(applied):
+                destination = destinations[relative]
+                backup = backups[relative]
+                try:
+                    if backup is None:
+                        if destination.exists():
+                            destination.unlink()
+                    else:
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(backup, destination)
+                except OSError as rollback_exc:
+                    rollback_errors.append(f"{relative}: {rollback_exc}")
+            detail = f"Could not synchronize official game assets: {exc}"
+            if rollback_errors:
+                detail += ". Rollback also failed for " + ", ".join(rollback_errors)
+            raise GitWorkflowError(detail) from exc
+    return pending
 
 
 def _materialize_normalized_json(files: list[_SourceFile]) -> None:
@@ -763,6 +1294,12 @@ def bootstrap_repository(
         raise GitWorkflowError(
             "Git baseline was created, but the translated worktree does not match it"
         )
+    official_assets = _build_ignored_asset_manifest(
+        original, original_tree.ignored_paths
+    )
+    _save_asset_manifest(
+        repo, prefix, version, original_commit, official_assets
+    )
     return BootstrapResult(
         repo,
         original_commit,
@@ -1111,6 +1648,92 @@ def _diff_status(
     return {tokens[index + 1]: tokens[index] for index in range(0, len(tokens), 2)}
 
 
+def _diff_numstat(
+    repo: Path, left: str, right: str, game_prefix: str
+) -> dict[str, tuple[int | None, int | None]]:
+    args = ["diff", "--numstat", "--no-renames", "-z", left, right]
+    if game_prefix:
+        args.extend(["--", game_prefix])
+    stats = {}
+    for record in _run_git(repo, *args).stdout.split("\x00"):
+        if not record:
+            continue
+        fields = record.split("\t", 2)
+        if len(fields) != 3:
+            raise GitWorkflowError("Git returned invalid line counts for the update preview")
+        added, deleted, path = fields
+        stats[path] = (
+            None if added == "-" else int(added),
+            None if deleted == "-" else int(deleted),
+        )
+    return stats
+
+
+def _tree_files(
+    repo: Path, ref: str, game_prefix: str
+) -> dict[str, tuple[str, str]]:
+    args = ["ls-tree", "-r", "-z", ref]
+    if game_prefix:
+        args.extend(["--", game_prefix])
+    files = {}
+    for record in _run_git(repo, *args).stdout.split("\x00"):
+        if not record:
+            continue
+        metadata, path = record.split("\t", 1)
+        mode, object_type, object_id = metadata.split()
+        if object_type == "blob":
+            files[path] = (mode, object_id)
+    return files
+
+
+def _replacement_outcome(
+    repo: Path,
+    official_change: str,
+    translation_change: str | None,
+    base: tuple[str, str] | None,
+    translated: tuple[str, str] | None,
+    official: tuple[str, str] | None,
+    *,
+    is_image: bool,
+) -> tuple[bool, str]:
+    if translation_change is None:
+        if official_change == "A":
+            return False, "New file"
+        if official_change == "D":
+            return False, "File removed"
+        return False, "Image replaced" if is_image else "Official changes applied"
+
+    if official_change == "D":
+        return True, "Translated file removed"
+    if official_change == "A" or translation_change == "D":
+        noun = "image" if is_image else "file"
+        return True, f"Translated {noun} replaced by official {noun}"
+
+    if not base or not translated or not official:
+        return True, "Translated file replaced by official file"
+    if translated[1] == base[1]:
+        return False, "Image replaced" if is_image else "Official changes applied"
+    if translated[1] == official[1]:
+        return False, "Official content already present; file metadata updated"
+    merged = _run_git(
+        repo,
+        "merge-file",
+        "--object-id",
+        "--theirs",
+        translated[1],
+        base[1],
+        official[1],
+        check=False,
+    )
+    merged_object = merged.stdout.strip()
+    if merged.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40,64}", merged_object):
+        noun = "image" if is_image else "binary file"
+        return True, f"Translated {noun} replaced by official {noun}"
+    if merged_object == official[1]:
+        return True, "Entire translated file replaced by official content"
+    return False, "Merged with translation edits"
+
+
 def _display_path(path: str, game_prefix: str) -> str:
     prefix = f"{game_prefix}/" if game_prefix else ""
     return path[len(prefix) :] if prefix and path.startswith(prefix) else path
@@ -1120,6 +1743,8 @@ def preview_official_update(
     translated_game: str | Path,
     new_official_game: str | Path,
     version: str,
+    *,
+    previous_official_game: str | Path | None = None,
 ) -> UpdatePreview:
     """Build a non-ref preview of the normalized official release tree."""
     game = Path(translated_game).expanduser().resolve()
@@ -1140,6 +1765,26 @@ def preview_official_update(
         game_prefix=status.game_prefix,
         base_commit=status.original_commit,
     )
+    baseline_assets = _load_asset_manifest(status.repo_root, status.game_prefix)
+    stored_asset_baseline = baseline_assets is not None
+    baseline_source = None
+    if baseline_assets is None:
+        if previous_official_game is None:
+            raise GitWorkflowError(
+                "Select the previous clean official game folder once so ignored "
+                "assets can be compared safely."
+            )
+        baseline_source, baseline_assets = _validate_official_asset_baseline(
+            status.repo_root,
+            game,
+            previous_official_game,
+            status.game_prefix,
+            status.original_commit,
+        )
+    proposed_assets = _build_ignored_asset_manifest(official, build.ignored_paths)
+    external_changes = _external_asset_changes(
+        game, baseline_assets, proposed_assets
+    )
     official_changes = _diff_status(
         status.repo_root, status.original_commit, build.tree, status.game_prefix
     )
@@ -1149,14 +1794,95 @@ def preview_official_update(
         status.translation_commit,
         status.game_prefix,
     )
+    original_files = _tree_files(
+        status.repo_root, status.original_commit, status.game_prefix
+    )
+    translated_files = _tree_files(
+        status.repo_root, status.translation_commit, status.game_prefix
+    )
+    proposed_files = _tree_files(status.repo_root, build.tree, status.game_prefix)
     overlap = sorted(set(official_changes) & set(translation_changes))
     already_present = tuple(
         sorted(
             path
             for path in official_changes
-            if _tree_entry(status.repo_root, build.tree, path)
-            == _tree_entry(status.repo_root, status.translation_commit, path)
+            if proposed_files.get(path) == translated_files.get(path)
         )
+    )
+    line_stats = _diff_numstat(
+        status.repo_root, status.original_commit, build.tree, status.game_prefix
+    )
+    file_changes = []
+    for path in sorted(official_changes):
+        display_path = _display_path(path, status.game_prefix)
+        change_code = official_changes[path]
+        is_image = Path(display_path).suffix.casefold() in _IMAGE_EXTENSIONS
+        if path in already_present:
+            whole_file_replaced = False
+            result = "Already present; no game change"
+        else:
+            whole_file_replaced, result = _replacement_outcome(
+                status.repo_root,
+                change_code,
+                translation_changes.get(path),
+                original_files.get(path),
+                translated_files.get(path),
+                proposed_files.get(path),
+                is_image=is_image,
+            )
+        added_lines, deleted_lines = line_stats.get(path, (None, None))
+        file_changes.append(
+            UpdateFileChange(
+                path=display_path,
+                change={"A": "Added", "D": "Removed"}.get(
+                    change_code, "Modified"
+                ),
+                added_lines=added_lines,
+                deleted_lines=deleted_lines,
+                is_image=is_image,
+                translation_changed=path in translation_changes,
+                already_present=path in already_present,
+                whole_file_replaced=whole_file_replaced,
+                result=result,
+            )
+        )
+
+    image_changes = []
+    for tracked_change in file_changes:
+        if not tracked_change.is_image or tracked_change.already_present:
+            continue
+        image_change = {
+            "Added": "Added",
+            "Removed": "Removed",
+        }.get(tracked_change.change, "Replaced")
+        warning = image_change in {"Removed", "Replaced"}
+        if warning:
+            result = (
+                "⚠ Tracked translation image will be removed"
+                if image_change == "Removed"
+                else "⚠ Tracked translation image will be replaced"
+            )
+        else:
+            result = "Tracked image will be added"
+        image_changes.append(
+            UpdateImageChange(
+                path=tracked_change.path,
+                change=image_change,
+                tracked=True,
+                warning=warning,
+                result=result,
+            )
+        )
+    image_changes.extend(
+        UpdateImageChange(
+            path=change.path,
+            change=change.change,
+            tracked=False,
+            warning=False,
+            result=change.result,
+        )
+        for change in external_changes
+        if change.category == "Image"
     )
 
     def paths_for(code: str) -> tuple[str, ...]:
@@ -1187,6 +1913,64 @@ def preview_official_update(
         formatted_json_paths=build.formatted_json_paths,
         json_warnings=build.json_warnings,
         ignored_paths=build.ignored_paths,
+        file_changes=tuple(file_changes),
+        image_changes=tuple(image_changes),
+        external_changes=external_changes,
+        proposed_asset_manifest=_manifest_digest(proposed_assets),
+        baseline_asset_manifest=_manifest_digest(baseline_assets),
+        asset_manifest_available=stored_asset_baseline,
+        baseline_source_root=baseline_source,
+    )
+
+
+def _complete_pending_asset_plan(
+    game: Path, result: UpdateResult
+) -> UpdateResult:
+    status = inspect_repository(game)
+    if not status.repo_root:
+        raise GitWorkflowError("The translated game is not in a Git repository")
+    plan = _load_pending_asset_plan(status.repo_root, status.game_prefix)
+    if plan is None:
+        return result
+    if (
+        plan["original_commit"] != result.original_commit
+        or plan["version"] != result.version
+    ):
+        raise GitWorkflowError(
+            "The pending asset update does not match the registered original version"
+        )
+    source = _validate_source(plan["source"], game)
+    proposed = _asset_manifest_for_source(
+        status.repo_root, source, status.game_prefix
+    )
+    if _manifest_digest(proposed) != plan["manifest_digest"]:
+        raise GitWorkflowError(
+            "The official folder changed before its assets were synchronized. "
+            "Restore that folder and finish the asset update."
+        )
+    baseline = _load_asset_manifest(status.repo_root, status.game_prefix)
+    changes = _external_asset_changes(game, baseline, proposed)
+    applied = _sync_external_assets(
+        status.repo_root, game, source, changes, proposed
+    )
+    _save_asset_manifest(
+        status.repo_root,
+        status.game_prefix,
+        result.version,
+        result.original_commit,
+        proposed,
+    )
+    _clear_pending_asset_plan(status.repo_root, status.game_prefix)
+    return UpdateResult(
+        repo_root=result.repo_root,
+        original_commit=result.original_commit,
+        translation_commit=result.translation_commit,
+        version=result.version,
+        official_won_paths=result.official_won_paths,
+        pending_conflicts=result.pending_conflicts,
+        content_changed=result.content_changed or bool(applied),
+        already_present_paths=result.already_present_paths,
+        external_changes=changes,
     )
 
 
@@ -1199,6 +1983,9 @@ def apply_official_update(
     expected_tree: str | None = None,
     expected_original_commit: str | None = None,
     expected_translation_commit: str | None = None,
+    expected_asset_manifest: str | None = None,
+    previous_official_game: str | Path | None = None,
+    expected_baseline_asset_manifest: str | None = None,
 ) -> UpdateResult:
     game = Path(translated_game).expanduser().resolve()
     version = _validate_version(version)
@@ -1228,9 +2015,44 @@ def apply_official_update(
         game_prefix=status.game_prefix,
         base_commit=status.original_commit,
     )
+    proposed_assets = _build_ignored_asset_manifest(
+        official, new_tree.ignored_paths
+    )
+    proposed_asset_digest = _manifest_digest(proposed_assets)
+    baseline_assets = _load_asset_manifest(repo, status.game_prefix)
+    baseline_was_missing = baseline_assets is None
+    if baseline_assets is None:
+        if previous_official_game is None:
+            raise GitWorkflowError(
+                "Select the previous clean official game folder once so ignored "
+                "assets can be compared safely."
+            )
+        _baseline_source, baseline_assets = _validate_official_asset_baseline(
+            repo,
+            game,
+            previous_official_game,
+            status.game_prefix,
+            status.original_commit,
+        )
+    baseline_asset_digest = _manifest_digest(baseline_assets)
     if expected_tree is not None and new_tree.tree != expected_tree:
         raise GitWorkflowError(
             "The official folder changed after preview. Run the preview again before applying."
+        )
+    if (
+        expected_asset_manifest is not None
+        and proposed_asset_digest != expected_asset_manifest
+    ):
+        raise GitWorkflowError(
+            "The official assets changed after preview. Run the preview again before applying."
+        )
+    if (
+        expected_baseline_asset_manifest is not None
+        and baseline_asset_digest != expected_baseline_asset_manifest
+    ):
+        raise GitWorkflowError(
+            "The previous official assets changed after preview. Run the preview again "
+            "before applying."
         )
     old_tree = _run_git(
         repo, "rev-parse", f"{status.original_commit}^{{tree}}"
@@ -1247,14 +2069,35 @@ def apply_official_update(
         _message(subject, version),
         (status.original_commit,),
     )
-    _run_git(
+    if baseline_was_missing:
+        _save_asset_manifest(
+            repo,
+            status.game_prefix,
+            status.original_version or "unknown",
+            status.original_commit,
+            baseline_assets,
+        )
+    _save_pending_asset_plan(
         repo,
-        "update-ref",
-        f"refs/heads/{ORIGINAL_BRANCH}",
+        status.game_prefix,
+        official,
+        version,
         original_commit,
-        status.original_commit,
+        proposed_asset_digest,
     )
-    return _cherry_pick(game, original_commit, version, auto_resolve=auto_resolve)
+    try:
+        _run_git(
+            repo,
+            "update-ref",
+            f"refs/heads/{ORIGINAL_BRANCH}",
+            original_commit,
+            status.original_commit,
+        )
+    except Exception:
+        _clear_pending_asset_plan(repo, status.game_prefix)
+        raise
+    result = _cherry_pick(game, original_commit, version, auto_resolve=auto_resolve)
+    return _complete_pending_asset_plan(game, result) if result.complete else result
 
 
 def apply_registered_original(
@@ -1271,13 +2114,23 @@ def apply_registered_original(
     if not status.worktree_clean:
         raise GitWorkflowError("Commit current translation changes before updating")
     if status.translation_version == status.original_version:
-        raise GitWorkflowError("The translation branch already has this original version")
-    return _cherry_pick(
+        if not status.asset_sync_pending:
+            raise GitWorkflowError("The translation branch already has this original version")
+        result = UpdateResult(
+            status.repo_root,
+            status.original_commit,
+            status.translation_commit,
+            status.original_version,
+            content_changed=False,
+        )
+        return _complete_pending_asset_plan(game, result)
+    result = _cherry_pick(
         game,
         status.original_commit,
         status.original_version,
         auto_resolve=auto_resolve,
     )
+    return _complete_pending_asset_plan(game, result) if result.complete else result
 
 
 def continue_with_official(translated_game: str | Path) -> UpdateResult:
@@ -1291,9 +2144,10 @@ def continue_with_official(translated_game: str | Path) -> UpdateResult:
     version = _version_from_history(status.repo_root, original_commit, original_commit) or "unknown"
     won = _resolve_conflicts_with_official(status.repo_root, status.game_prefix)
     translated_commit = _finish_cherry_pick(status.repo_root, original_commit)
-    return UpdateResult(
+    result = UpdateResult(
         status.repo_root, original_commit, translated_commit, version, won
     )
+    return _complete_pending_asset_plan(game, result)
 
 
 def abort_update(translated_game: str | Path) -> RepositoryStatus:

@@ -1259,6 +1259,8 @@ class DazedMTLGUI(QMainWindow):
             self._ensure_workflow_container()
         if index == self.PAGE_IMAGES and hasattr(self, "image_manager_tab"):
             self.image_manager_tab.refresh_game_root_from_settings()
+        if index == self.PAGE_VERSION_UPDATE and hasattr(self, "version_update_tab"):
+            self.version_update_tab.sync_from_workflow()
         self.content_stack.setCurrentIndex(index)
         
         # Update button checked states
