@@ -1163,10 +1163,10 @@ class DazedMTLGUI(QMainWindow):
         sidebar_layout.addWidget(btn_images)
         self.nav_buttons.append(btn_images)
 
-        # Translation-aware game version migration
+        # Git-backed game version workflow
         btn_version_update = self.create_nav_button("⇄", "Version Update")
         btn_version_update.setToolTip(
-            "Version Update - migrate a translated game to a newer official version"
+            "Version Update - apply exact official Git updates to the translation branch"
         )
         btn_version_update.clicked.connect(
             lambda: self.switch_page(self.PAGE_VERSION_UPDATE)

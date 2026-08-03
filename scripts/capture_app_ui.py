@@ -406,15 +406,17 @@ def _apply_state(window, state: str) -> None:
         translation._on_mode_changed(translation.mode_combo.currentText())
         translation._set_run_controls_enabled(True)
     if current is version_update:
-        version_update.review_card.setVisible(False)
-        version_update.create_card.setVisible(False)
-        version_update.empty_state_spacer.setVisible(True)
         version_update.progress.setVisible(False)
-        version_update.progress_label.setVisible(False)
-        version_update.cancel_scan_btn.setVisible(False)
-        version_update.tree.clear()
-        version_update.details.clear()
-        version_update.summary_label.setText("Run a preview to build the update plan.")
+        version_update.recovery_card.setVisible(False)
+        version_update.bootstrap_card.setVisible(True)
+        version_update.update_card.setEnabled(False)
+        version_update.apply_registered_btn.setVisible(False)
+        version_update.switch_translation_btn.setVisible(False)
+        version_update.preview_details.clear()
+        version_update.update_btn.setEnabled(False)
+        version_update.activity.clear()
+        version_update.repository_status.setText("Select a translated game folder.")
+        version_update.version_status.clear()
     buttons = [
         *current.findChildren(QPushButton),
         *current.findChildren(QToolButton),
@@ -463,27 +465,29 @@ def _apply_state(window, state: str) -> None:
                 image_manager._selection_changed()
             return
         if current is version_update:
-            version_update.review_card.setVisible(True)
-            version_update.create_card.setVisible(True)
-            version_update.empty_state_spacer.setVisible(False)
             version_update.progress.setVisible(True)
-            version_update.progress.setRange(0, 100)
-            version_update.progress.setValue(100)
-            version_update.progress_label.setVisible(True)
-            version_update.progress_label.setText("Preview complete")
-            version_update.summary_label.setText(
-                "382 files analyzed · 6 changes need review · 24 translations preserved"
+            version_update.progress.setRange(0, 0)
+            version_update.repository_status.setText(
+                "Repository: /games/example · Branch: translation · clean"
             )
-            item = QTreeWidgetItem(
-                ["Merge game data", "data/Map001.json", "RPG Maker JSON", "Review recommended"]
+            version_update.version_status.setText(
+                "Original version: 1.03 · Translation version: 1.03"
             )
-            version_update.tree.addTopLevelItem(item)
-            version_update.tree.setCurrentItem(item)
-            version_update.details.setPlainText(
-                "What will happen\n\nKeep reviewed local dialogue while applying the newer official map structure."
+            version_update.bootstrap_card.setVisible(False)
+            version_update.update_card.setEnabled(True)
+            version_update.preview_details.setPlainText(
+                "Official version 1.03\n\nAdded: 14\nModified: 38\nDeleted: 2\n"
+                "JSON files normalized: 31\nFiles also changed by translation: 6\n"
+                "Formatting warnings: 1\nFiles ignored by Git: 127\n\n"
+                "Potential translation overlaps:\n"
+                "data/Map001.json\njs/plugins/Combat.js"
             )
-            version_update.apply_btn.setEnabled(True)
-            version_update.custom_apply_btn.setEnabled(True)
+            version_update.update_btn.setEnabled(True)
+            version_update.activity.setPlainText(
+                "Official version 1.03 registered and applied.\n\n"
+                "Official version won these conflicts; review them for translation:\n"
+                "data/Map001.json\njs/plugins/Combat.js"
+            )
             return
         if current is not translation:
             return

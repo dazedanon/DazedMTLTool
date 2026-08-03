@@ -61,6 +61,42 @@ backups, but you should keep your own untouched copy of the game.
 This shows large Claude translation jobs that may take a while to finish. Open a finished job here
 to continue it on the Translation tab. If you only use Normal mode, you may never need this tab.
 
+## Version Update
+
+This page keeps official game releases and translations on two Git branches. Select your
+translated game first. DazedTL immediately checks for the `original` and `translation` branches
+and reads their recorded versions.
+
+If the branches are missing, select the clean original game that matches the current translation
+and enter its version. **Create original + translation branches** records both trees without
+replacing translated content. Valid JSON is normalized on both branch baselines so initialization
+does not create whole-file formatting changes. Files excluded by the repository's Git ignore
+rules remain on disk but are not committed. When bootstrap begins, it installs the bundled
+GameUpdate `.gitignore` before creating either commit. Existing project-specific rules are kept
+after the bundled rules so they still take precedence.
+
+For a later release, select the clean new official game, enter its version, and click **Preview
+changes**. The overview lists added, modified, deleted, and potentially overlapping files. Valid
+JSON is shown as normalized before commit so Git can compare individual lines. A JSON file that
+cannot be safely formatted is left unchanged and displayed as a warning. Files excluded by Git
+are listed separately and are not included in the release commit. Review the overview, then click
+**Approve and apply**. The official release is committed to `original` and
+cherry-picked into `translation`. When both versions changed the same file, the official file
+wins so game structure remains intact; the Activity list tells you which files need translation
+review.
+
+RPG Maker `plugins.js` is formatted with the same formatter used by Prepare before Git compares
+versions. This prevents formatting alone from turning the plugin configuration into one giant
+conflict and preserves translation-only plugin registrations when official settings change.
+
+The preview also reports official changes that are already identical on the translation branch.
+If every patch file is already present, the tool clearly records a metadata-only version marker;
+it does not present that marker as a content-changing patch.
+The official release delta and the resulting translation impact are displayed as separate counts.
+
+Commit unfinished translation work before updating. If a cherry-pick is interrupted, this page
+can either finish it with official files or abort it and restore the translation branch.
+
 ## Skills
 
 These are detailed written instructions given to the translation AI and your AI helper. Most users

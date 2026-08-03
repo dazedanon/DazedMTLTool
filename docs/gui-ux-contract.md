@@ -363,7 +363,7 @@ An active screen is migrated only when it has:
 | RPG Maker workflow | Guided-workflow rail, stage cards, footer, Activity panel |
 | WOLF workflow | Guided-workflow rail, page headers, footer, Activity panel |
 | Image Manager | `PageHeader`, dominant browser workspace, compact source/filter controls, bounded preview, contextual actions |
-| Version Update | `PageHeader`, compact source and output cards around an expanding review workspace |
+| Version Update | `PageHeader`, repository detection, first-time branch bootstrap, official-release update, recovery, and activity cards |
 | Translation | `PageHeader`, run setup plus file/progress cards, and a persistent side-by-side Translation Log; the log is primary run feedback and is never collapsed |
 | Batch History | `PageHeader`, toolbar card, shared table/editor card |
 | Skills & Prompts | `PageHeader`, shared editor card, tabs, actions and status |

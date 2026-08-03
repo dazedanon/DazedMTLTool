@@ -1,65 +1,42 @@
-#!/usr/bin/env python3
-"""Tests for whole-folder translated game version migration."""
-
 from __future__ import annotations
 
+import os
 import json
-import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
-from PyQt5.QtWidgets import (
-    QApplication,
-    QMessageBox,
-)
+from PyQt5.QtWidgets import QApplication
 
 from util.version_update import (
-    ConflictResolution,
-    FileKind,
-    RecoveryStatus,
-    UpdateAction,
-    UpdateDecision,
-    VersionUpdateError,
-    apply_in_place_update,
-    apply_staged_update,
-    detect_update_profile,
-    scan_version_update,
+    GitWorkflowError,
+    abort_update,
+    apply_official_update,
+    apply_registered_original,
+    bootstrap_repository,
+    checkout_translation_branch,
+    inspect_repository,
+    preview_official_update,
+    register_translation_branch,
 )
-from util.version_update.rpgmaker import merge_json_bytes
 
 
-class VersionUpdateTestBase(unittest.TestCase):
+class GitVersionUpdateTests(unittest.TestCase):
+    """Protect exact Git transport, bootstrap, and official-first conflicts."""
+
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.base = Path(self.temp.name)
-        self.old = self.base / "old"
-        self.current = self.base / "translated"
-        self.new = self.base / "new"
-        for root in (self.old, self.current, self.new):
-            root.mkdir()
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.old = self.root / "Original v1.00"
+        self.translated = self.root / "Translated v1.00"
+        self.new = self.root / "Original v1.03"
+        for folder in (self.old, self.translated, self.new):
+            folder.mkdir()
 
     def tearDown(self):
-        self.temp.cleanup()
+        self.temporary.cleanup()
 
-    @staticmethod
-    def write(root: Path, relative: str, content: bytes | str) -> Path:
-        path = root / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(content, str):
-            path.write_text(content, encoding="utf-8")
-        else:
-            path.write_bytes(content)
-        return path
-
-    def write_all(self, relative: str, content: bytes | str):
-        for root in (self.old, self.current, self.new):
-            self.write(root, relative, content)
-
-
-class GenericVersionUpdateTests(VersionUpdateTestBase):
     @staticmethod
     def git(repo: Path, *args: str) -> str:
         result = subprocess.run(
@@ -67,1401 +44,427 @@ class GenericVersionUpdateTests(VersionUpdateTestBase):
             check=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         return result.stdout.strip()
 
-    def test_whole_folder_rules_cover_plugins_and_media(self):
-        self.write_all("Game.exe", b"runtime-v1")
-        self.write_all("img/title.png", b"official-image")
-        self.current.joinpath("img/title.png").write_bytes(b"translated-image")
-        self.write_all("audio/bgm/theme.ogg", b"old-audio")
-        self.new.joinpath("audio/bgm/theme.ogg").write_bytes(b"new-audio")
-        self.write(self.new, "js/plugins/NewFeature.js", "new plugin\n")
-        self.write(self.current, "translator/readme.txt", "translation notes\n")
+    def write_versions(self, old: str, translated: str, new: str, name="game.txt"):
+        self.old.joinpath(name).write_text(old, encoding="utf-8")
+        self.translated.joinpath(name).write_text(translated, encoding="utf-8")
+        self.new.joinpath(name).write_text(new, encoding="utf-8")
 
-        plan = scan_version_update(
-            self.current,
-            self.new,
-            old_root=self.old,
-            old_version="1.00",
-            new_version="1.03",
+    def test_bootstrap_constructs_exact_branches_without_rewriting_translation(self):
+        self.write_versions("Japanese\n", "English\n", "New Japanese\n")
+        translated_before = self.translated.joinpath("game.txt").read_bytes()
+
+        result = bootstrap_repository(self.translated, self.old, "1.00")
+        status = inspect_repository(self.translated)
+
+        self.assertEqual(self.translated.joinpath("game.txt").read_bytes(), translated_before)
+        self.assertEqual(self.git(self.translated, "show", "original:game.txt"), "Japanese")
+        self.assertEqual(self.git(self.translated, "show", "translation:game.txt"), "English")
+        self.assertEqual(status.current_branch, "translation")
+        self.assertEqual(status.original_version, "1.00")
+        self.assertEqual(status.translation_version, "1.00")
+        self.assertTrue(status.worktree_clean)
+        self.assertEqual(result.repo_root, self.translated)
+        self.assertTrue(result.gitignore_installed)
+        self.assertTrue(self.translated.joinpath(".gitignore").is_file())
+
+    def test_bootstrap_installs_bundled_gitignore_before_building_branches(self):
+        self.write_versions("Japanese\n", "English\n", "New Japanese\n")
+        for folder in (self.old, self.translated):
+            folder.joinpath("debug.log").write_text("runtime log\n")
+            folder.joinpath("picture.png").write_bytes(b"runtime image")
+            folder.joinpath("data.json").write_text('{"value":1}')
+
+        result = bootstrap_repository(self.translated, self.old, "1.00")
+
+        ignore = self.translated.joinpath(".gitignore").read_text()
+        self.assertIn("# Ignore all files", ignore)
+        self.assertIn("!*.json", ignore)
+        self.assertTrue(result.gitignore_installed)
+        for ref in ("original", "translation"):
+            tracked = self.git(self.translated, "ls-tree", "-r", "--name-only", ref)
+            self.assertIn(".gitignore", tracked)
+            self.assertIn("data.json", tracked)
+            self.assertNotIn("debug.log", tracked)
+            self.assertNotIn("picture.png", tracked)
+        self.assertIn("debug.log", result.ignored_paths)
+        self.assertIn("picture.png", result.ignored_paths)
+
+    def test_bootstrap_ignores_legacy_updater_metadata_without_deleting_it(self):
+        self.write_versions("Japanese\n", "English\n", "New Japanese\n")
+        legacy = self.translated / ".dazedtl" / "version_update"
+        legacy.mkdir(parents=True)
+        legacy.joinpath("project.json").write_text('{"legacy":true}\n')
+
+        bootstrap_repository(self.translated, self.old, "1.00")
+
+        self.assertTrue(legacy.joinpath("project.json").exists())
+        self.assertTrue(inspect_repository(self.translated).worktree_clean)
+        tracked = self.git(self.translated, "ls-tree", "-r", "--name-only", "translation")
+        self.assertNotIn(".dazedtl/version_update", tracked)
+
+    def test_bootstrap_formats_both_json_baselines_and_respects_gitignore(self):
+        self.old.joinpath("data.json").write_text('{"name":"Japanese","items":[null,1]}')
+        self.translated.joinpath("data.json").write_text(
+            '{"name":"English","items":[null,1]}'
         )
-        actions = {decision.relative_path: decision.action for decision in plan.decisions}
+        self.new.joinpath("data.json").write_text('{"name":"New","items":[null,1]}')
+        for folder in (self.old, self.translated, self.new):
+            folder.joinpath(".gitignore").write_text("save/\n*.log\n")
+            folder.joinpath("save").mkdir()
+            folder.joinpath("save/slot.dat").write_bytes(b"user save")
+            folder.joinpath("debug.log").write_text("runtime log\n")
 
-        self.assertEqual(actions["img/title.png"], UpdateAction.PRESERVE_TRANSLATED)
-        self.assertEqual(actions["audio/bgm/theme.ogg"], UpdateAction.USE_NEW)
-        self.assertEqual(actions["js/plugins/NewFeature.js"], UpdateAction.ADD_NEW)
-        self.assertEqual(actions["translator/readme.txt"], UpdateAction.PRESERVE_ADDED)
-        self.assertEqual(plan.profile_id, "generic")
+        result = bootstrap_repository(self.translated, self.old, "1.00")
 
-        output = self.base / "updated"
-        result = apply_staged_update(plan, output)
-
-        self.assertEqual(output.joinpath("img/title.png").read_bytes(), b"translated-image")
-        self.assertEqual(output.joinpath("audio/bgm/theme.ogg").read_bytes(), b"new-audio")
-        self.assertEqual(
-            output.joinpath("js/plugins/NewFeature.js").read_text(encoding="utf-8"),
-            "new plugin\n",
+        expected_original = json.dumps(
+            {"name": "Japanese", "items": [None, 1]}, indent=4, ensure_ascii=False
         )
-        self.assertTrue(result.report_path.is_file())
-
-    def test_audio_always_follows_new_official_when_both_changed(self):
-        self.write_all("audio/voice.ogg", b"old")
-        self.current.joinpath("audio/voice.ogg").write_bytes(b"translated")
-        self.new.joinpath("audio/voice.ogg").write_bytes(b"upstream")
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        decision = plan.decisions[0]
-
-        self.assertEqual(decision.action, UpdateAction.USE_NEW)
-        apply_staged_update(plan, self.base / "audio-updated")
-        self.assertEqual(
-            self.base.joinpath("audio-updated/audio/voice.ogg").read_bytes(),
-            b"upstream",
+        expected_translation = json.dumps(
+            {"name": "English", "items": [None, 1]}, indent=4, ensure_ascii=False
         )
-
-    def test_audio_removed_from_new_official_is_deleted(self):
-        self.write(self.old, "audio/obsolete.ogg", b"old")
-        self.write(self.current, "audio/obsolete.ogg", b"current")
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-
-        self.assertEqual(plan.decisions[0].action, UpdateAction.DELETE)
-        apply_staged_update(plan, self.base / "audio-removed")
-        self.assertFalse(self.base.joinpath("audio-removed/audio/obsolete.ogg").exists())
-
-    def test_non_audio_both_changed_binary_still_requires_resolution(self):
-        self.write_all("archives/game.bin", b"old")
-        self.current.joinpath("archives/game.bin").write_bytes(b"translated")
-        self.new.joinpath("archives/game.bin").write_bytes(b"upstream")
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        conflict = plan.decisions[0]
-
-        self.assertEqual(conflict.action, UpdateAction.CONFLICT)
-        self.assertEqual(conflict.recommended_resolution, ConflictResolution.USE_NEW)
-        self.assertEqual(conflict.resolution, ConflictResolution.USE_NEW)
-        self.assertTrue(conflict.resolution_is_automatic)
-        self.assertTrue(conflict.translation_at_risk)
-        self.assertFalse(conflict.blocking)
-        apply_staged_update(plan, self.base / "resolved")
+        self.assertEqual(self.git(self.translated, "show", "original:data.json"), expected_original)
         self.assertEqual(
-            self.base.joinpath("resolved/archives/game.bin").read_bytes(), b"upstream"
-        )
-
-    def test_repository_and_workspace_metadata_is_outside_game_scope(self):
-        self.write_all("Game.exe", b"runtime")
-        self.write(self.old, ".gitignore", "old rules\n")
-        self.write(self.current, ".gitignore", "translation rules\n")
-        self.write(self.new, ".gitignore", "new rules\n")
-        self.write(self.current, "skills/game.md", "translation context\n")
-        self.write(self.old, "gameupdate/patch-config.txt", "repo=old\n")
-        self.write(self.current, "gameupdate/patch-config.txt", "repo=translation\n")
-        self.write(self.new, "gameupdate/patch-config.txt", "repo=new-official\n")
-        self.write(self.old, "GameUpdate.bat", "old launcher\n")
-        self.write(self.current, "GameUpdate.bat", "translation launcher\n")
-        self.write(self.new, "GameUpdate.bat", "new launcher\n")
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-
-        paths = {decision.relative_path for decision in plan.decisions}
-        self.assertNotIn(".gitignore", paths)
-        self.assertNotIn("skills/game.md", paths)
-        self.assertNotIn("gameupdate/patch-config.txt", paths)
-        self.assertNotIn("GameUpdate.bat", paths)
-        apply_staged_update(plan, self.base / "metadata-updated")
-        self.assertEqual(
-            self.base.joinpath("metadata-updated/.gitignore").read_text("utf-8"),
-            "translation rules\n",
+            self.translated.joinpath("data.json").read_text(), expected_translation
         )
         self.assertEqual(
-            self.base.joinpath(
-                "metadata-updated/gameupdate/patch-config.txt"
-            ).read_text("utf-8"),
-            "repo=translation\n",
+            self.git(self.translated, "show", "translation:data.json"),
+            expected_translation,
+        )
+        tracked = self.git(self.translated, "ls-tree", "-r", "--name-only", "translation")
+        self.assertNotIn("save/slot.dat", tracked)
+        self.assertNotIn("debug.log", tracked)
+        self.assertTrue(self.translated.joinpath("save/slot.dat").exists())
+        self.assertTrue(self.translated.joinpath("debug.log").exists())
+        self.assertIn("save/slot.dat", result.ignored_paths)
+        self.assertIn("debug.log", result.ignored_paths)
+        self.assertIn("data.json", result.formatted_json_paths)
+        combined_ignore = self.translated.joinpath(".gitignore").read_text()
+        self.assertIn("# Ignore all files", combined_ignore)
+        self.assertTrue(combined_ignore.endswith("save/\n*.log\n"))
+        diff = self.git(self.translated, "diff", "original", "translation", "--", "data.json")
+        self.assertIn('"name": "Japanese"', diff)
+        self.assertIn('"name": "English"', diff)
+        self.assertNotIn('{"name":', diff)
+
+    def test_update_preserves_nonconflicting_translation_and_applies_official_patch(self):
+        self.write_versions("Japanese\n", "English\n", "Japanese\n", "dialogue.txt")
+        self.old.joinpath("engine.txt").write_text("engine=1\n")
+        self.translated.joinpath("engine.txt").write_text("engine=1\n")
+        self.new.joinpath("engine.txt").write_text("engine=2\nnew-feature=yes\n")
+        bootstrap_repository(self.translated, self.old, "1.00")
+
+        result = apply_official_update(self.translated, self.new, "1.03")
+
+        self.assertTrue(result.complete)
+        self.assertEqual(result.official_won_paths, ())
+        self.assertEqual(
+            self.translated.joinpath("dialogue.txt").read_text("utf-8"),
+            "English\n",
         )
         self.assertEqual(
-            self.base.joinpath("metadata-updated/GameUpdate.bat").read_text("utf-8"),
-            "translation launcher\n",
+            self.translated.joinpath("engine.txt").read_text("utf-8"),
+            "engine=2\nnew-feature=yes\n",
         )
+        status = inspect_repository(self.translated)
+        self.assertEqual(status.original_version, "1.03")
+        self.assertEqual(status.translation_version, "1.03")
 
-    def test_non_overlapping_plugin_edits_merge_cleanly(self):
-        old = "const title = 'Japanese';\nconst version = 1;\nconst enabled = false;\n"
-        current = "const title = 'English';\nconst version = 1;\nconst enabled = false;\n"
-        new = "const title = 'Japanese';\nconst version = 2;\nconst enabled = false;\n"
-        self.write(self.old, "js/plugins/Core.js", old)
-        self.write(self.current, "js/plugins/Core.js", current)
-        self.write(self.new, "js/plugins/Core.js", new)
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        decision = plan.decisions[0]
-
-        self.assertEqual(decision.action, UpdateAction.MERGE_TEXT)
-        self.assertTrue(decision.needs_review)
-        apply_staged_update(plan, self.base / "merged")
-        merged = self.base.joinpath("merged/js/plugins/Core.js").read_text(encoding="utf-8")
-        self.assertIn("title = 'English'", merged)
-        self.assertIn("version = 2", merged)
-
-    def test_in_place_update_stages_then_keeps_complete_rollback_backup(self):
-        self.write_all("Game.exe", b"runtime-v1")
-        self.write_all("data.txt", "old\n")
-        self.current.joinpath("data.txt").write_text("translated\n", encoding="utf-8")
-        self.write(self.current, ".git/config", "repository metadata\n")
-        self.new.joinpath("Game.exe").write_bytes(b"runtime-v2")
-        plan = scan_version_update(
-            self.current,
-            self.new,
-            old_root=self.old,
-            old_version="v1/00",
-            new_version="v1.03",
+    def test_conflicting_file_uses_normalized_new_official_copy_and_is_reported(self):
+        self.write_versions(
+            '{"name":"Japanese","value":1}\n',
+            '{"name":"English","value":1}\n',
+            '{"name":"Changed Japanese","value":2}\n',
+            "data.json",
         )
+        bootstrap_repository(self.translated, self.old, "1.00")
 
-        result = apply_in_place_update(plan)
+        result = apply_official_update(self.translated, self.new, "1.03")
 
-        self.assertEqual(result.output_root, self.current.resolve())
-        self.assertEqual(self.current.joinpath("Game.exe").read_bytes(), b"runtime-v2")
+        self.assertEqual(result.official_won_paths, ("data.json",))
+        expected = json.dumps(
+            json.loads(self.new.joinpath("data.json").read_text()),
+            indent=4,
+            ensure_ascii=False,
+        ).encode("utf-8")
         self.assertEqual(
-            self.current.joinpath("data.txt").read_text(encoding="utf-8"),
-            "translated\n",
-        )
-        self.assertIsNotNone(result.backup_root)
-        self.assertTrue(result.backup_root.is_dir())
-        self.assertEqual(result.backup_root.joinpath("Game.exe").read_bytes(), b"runtime-v1")
-        self.assertEqual(
-            self.current.joinpath(".git/config").read_text(encoding="utf-8"),
-            "repository metadata\n",
-        )
-        self.assertTrue(result.backup_root.joinpath(".git/config").is_file())
-        self.assertNotIn("/", result.backup_root.name)
-        report = json.loads(
-            result.report_path.with_suffix(".json").read_text(encoding="utf-8")
-        )
-        self.assertEqual(report["apply"]["mode"], "in_place")
-        self.assertEqual(report["apply"]["backup_root"], str(result.backup_root))
-        self.assertEqual(report["output_root"], str(self.current.resolve()))
-
-    def test_in_place_swap_failure_restores_original_translated_folder(self):
-        from util.version_update import service as update_service
-
-        self.write_all("Game.exe", b"runtime-v1")
-        self.new.joinpath("Game.exe").write_bytes(b"runtime-v2")
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        real_replace = update_service.os.replace
-        failed = False
-
-        def fail_live_swap(source, destination):
-            nonlocal failed
-            source_path = Path(source)
-            destination_path = Path(destination)
-            if (
-                not failed
-                and destination_path == self.current.resolve()
-                and source_path.name.startswith(".translated.in-place-update-")
-            ):
-                failed = True
-                raise OSError("simulated live swap failure")
-            return real_replace(source, destination)
-
-        with patch("util.version_update.service.os.replace", side_effect=fail_live_swap):
-            with self.assertRaisesRegex(VersionUpdateError, "original translation was restored"):
-                apply_in_place_update(plan)
-
-        self.assertEqual(self.current.joinpath("Game.exe").read_bytes(), b"runtime-v1")
-        self.assertFalse(list(self.base.glob(".translated.in-place-update-*")))
-        self.assertFalse(list(self.base.glob("translated Backup *")))
-
-    def test_saved_baseline_allows_future_two_folder_scan(self):
-        self.write_all("Game.exe", b"v1")
-        first = scan_version_update(
-            self.current,
-            self.new,
-            old_root=self.old,
-            old_version="1.00",
-            new_version="1.03",
-        )
-        updated = self.base / "updated"
-        apply_staged_update(first, updated)
-        newer = self.base / "newer"
-        newer.mkdir()
-        self.write(newer, "Game.exe", b"v1")
-        self.write(newer, "bonus.dat", b"new")
-
-        second = scan_version_update(
-            updated,
-            newer,
-            old_version="1.03",
-            new_version="1.04",
+            self.translated.joinpath("data.json").read_bytes(), expected
         )
 
-        self.assertTrue(second.used_saved_baseline)
-        self.assertEqual(
-            next(d.action for d in second.decisions if d.relative_path == "bonus.dat"),
-            UpdateAction.ADD_NEW,
+    def test_conflict_uses_official_hunk_without_discarding_other_translations(self):
+        old_lines = [f"unchanged {index}\n" for index in range(20)]
+        translated_lines = old_lines.copy()
+        official_lines = old_lines.copy()
+        old_lines[1] = "Japanese source\n"
+        translated_lines[1] = "English replaced source\n"
+        official_lines[1] = "Changed Japanese source\n"
+        translated_lines[10] = "English translation must remain\n"
+        official_lines[17] = "New official feature\n"
+        self.write_versions(
+            "".join(old_lines),
+            "".join(translated_lines),
+            "".join(official_lines),
         )
+        bootstrap_repository(self.translated, self.old, "1.00")
 
-    def test_matching_saved_baseline_automatically_runs_recovery_audit(self):
-        self.write_all("Game.exe", b"v1")
-        self.new.joinpath("Game.exe").write_bytes(b"v2")
-        first = scan_version_update(
-            self.current,
-            self.new,
-            old_root=self.old,
-            old_version="1.00",
-            new_version="1.10",
+        result = apply_official_update(self.translated, self.new, "1.03")
+
+        self.assertEqual(result.official_won_paths, ("game.txt",))
+        merged = self.translated.joinpath("game.txt").read_text()
+        self.assertIn("Changed Japanese source", merged)
+        self.assertNotIn("English replaced source", merged)
+        self.assertIn("English translation must remain", merged)
+        self.assertIn("New official feature", merged)
+
+    def test_plugins_js_formatting_preserves_translation_plugins_during_update(self):
+        old = (
+            '// Generated by RPG Maker.\nvar $plugins = '
+            '[{"name":"Base","status":true,"description":"Japanese",'
+            '"parameters":{"version":"1"}}];\n'
         )
-        updated = self.base / "updated"
-        apply_staged_update(first, updated)
-
-        repeated = scan_version_update(updated, self.new)
-
-        self.assertTrue(repeated.official_version_already_applied)
-        self.assertTrue(repeated.audit_reapply)
-        self.assertEqual(repeated.decisions[0].action, UpdateAction.KEEP)
-        self.assertEqual(
-            repeated.decisions[0].recovery_status,
-            RecoveryStatus.ALREADY_PRESENT,
+        translated = (
+            '// Generated by RPG Maker.\nvar $plugins = '
+            '[{"name":"Base","status":true,"description":"English",'
+            '"parameters":{"version":"1"}},'
+            '{"name":"TLInspector","status":true,"description":"Tool",'
+            '"parameters":{}}];\n'
         )
-
-        inspection_only = scan_version_update(
-            updated, self.new, audit_reapply=False
+        new = (
+            '// Generated by RPG Maker.\nvar $plugins = '
+            '[{"name":"Base","status":true,"description":"Japanese",'
+            '"parameters":{"version":"2"}}];\n'
         )
-        self.assertFalse(inspection_only.audit_reapply)
-        with self.assertRaisesRegex(VersionUpdateError, "already applied"):
-            apply_staged_update(inspection_only, self.base / "should-not-apply")
+        self.write_versions(old, translated, new, "plugins.js")
+        bootstrap_repository(self.translated, self.old, "1.00")
 
-    def test_automatic_recovery_gracefully_reports_missing_history(self):
-        self.write_all("Game.exe", b"v1")
-        self.new.joinpath("Game.exe").write_bytes(b"v2")
-        first = scan_version_update(self.current, self.new, old_root=self.old)
-        updated = self.base / "updated"
-        apply_staged_update(first, updated)
-        shutil.rmtree(updated / ".dazedtl" / "version_update" / "runs")
+        result = apply_official_update(self.translated, self.new, "1.03")
 
-        repeated = scan_version_update(updated, self.new)
-
-        self.assertTrue(repeated.official_version_already_applied)
-        self.assertFalse(repeated.audit_reapply)
-        self.assertIn("needs the report", repeated.recovery_error)
-        with self.assertRaisesRegex(VersionUpdateError, "needs the report"):
-            scan_version_update(updated, self.new, audit_reapply=True)
-
-    def test_recovery_does_not_claim_later_local_edits_are_definite_reverts(self):
-        self.write_all("Game.exe", b"v1")
-        self.write(self.old, "js/plugins/Core.js", "title=jp\nversion=1\n")
-        self.write(self.current, "js/plugins/Core.js", "title=en\nversion=1\n")
-        self.write(self.new, "js/plugins/Core.js", "title=jp\nversion=2\n")
-        first = scan_version_update(self.current, self.new, old_root=self.old)
-        updated = self.base / "updated"
-        apply_staged_update(first, updated)
-
-        audit = scan_version_update(updated, self.new)
-        decision = next(
-            item for item in audit.decisions if item.relative_path == "js/plugins/Core.js"
+        merged = self.translated.joinpath("plugins.js").read_text()
+        self.assertIn('"description": "English"', merged)
+        self.assertIn('"version": "2"', merged)
+        self.assertIn('"name": "TLInspector"', merged)
+        self.assertNotEqual(
+            self.git(self.translated, "rev-parse", "translation:plugins.js"),
+            self.git(self.translated, "rev-parse", "original:plugins.js"),
         )
+        self.assertTrue(result.complete)
 
-        self.assertEqual(decision.recovery_status, RecoveryStatus.POSSIBLE_REVERT)
-        self.assertEqual(audit.summary()["possible_reverts"], 1)
+    def test_sparse_engine_data_is_never_parsed_or_compacted(self):
+        old = b'[null,{"id":1},null,null,{"id":4}]\n'
+        new = b'[null,{"id":1},null,{"id":3},null,{"id":5}]\n'
+        self.old.joinpath("Map008.json").write_bytes(old)
+        self.translated.joinpath("Map008.json").write_bytes(old)
+        self.new.joinpath("Map008.json").write_bytes(new)
+        self.old.joinpath("dialogue.txt").write_text("Japanese\n")
+        self.translated.joinpath("dialogue.txt").write_text("English\n")
+        self.new.joinpath("dialogue.txt").write_text("Japanese\n")
+        bootstrap_repository(self.translated, self.old, "1.00")
 
-    def test_audit_reapply_restores_reverted_update_from_retained_baseline(self):
-        self.write_all("Game.exe", b"v1")
-        self.write_all("js/plugins/Feature.js", "const enabled = false;\n")
-        self.new.joinpath("Game.exe").write_bytes(b"v2")
-        self.new.joinpath("js/plugins/Feature.js").write_text(
-            "const enabled = true;\n", encoding="utf-8"
-        )
-        first = scan_version_update(
-            self.current,
-            self.new,
-            old_root=self.old,
-            old_version="1.00",
-            new_version="1.10",
-        )
-        updated = self.base / "updated"
-        apply_staged_update(first, updated)
+        apply_official_update(self.translated, self.new, "1.03")
 
-        updated.joinpath("Game.exe").write_bytes(b"v1")
-        updated.joinpath("js/plugins/Feature.js").write_text(
-            "const enabled = false;\n", encoding="utf-8"
-        )
-        audit = scan_version_update(updated, self.new)
-        decisions = {item.relative_path: item for item in audit.decisions}
+        expected = json.dumps(json.loads(new), indent=4, ensure_ascii=False).encode("utf-8")
+        self.assertEqual(self.translated.joinpath("Map008.json").read_bytes(), expected)
+        parsed = json.loads(expected)
+        self.assertIsNone(parsed[0])
+        self.assertIsNone(parsed[2])
+        self.assertIsNone(parsed[4])
+        self.assertEqual(parsed[3]["id"], 3)
+        self.assertEqual(parsed[5]["id"], 5)
+        original_blob = subprocess.run(
+            ["git", "-C", str(self.translated), "show", "original:Map008.json"],
+            check=True,
+            capture_output=True,
+        ).stdout
+        self.assertEqual(original_blob, expected)
 
-        self.assertTrue(audit.official_version_already_applied)
-        self.assertTrue(audit.audit_reapply)
-        self.assertTrue(audit.used_saved_baseline)
-        self.assertIn("prior official baseline", audit.old_source_label)
-        self.assertEqual(audit.old_version, "1.00")
-        self.assertEqual(audit.new_version, "1.10")
-        self.assertEqual(decisions["Game.exe"].action, UpdateAction.USE_NEW)
-        self.assertEqual(
-            decisions["Game.exe"].recovery_status,
-            RecoveryStatus.DEFINITE_REVERT,
+    def test_preview_reports_file_changes_formatting_overlap_and_json_warnings(self):
+        for folder in (self.old, self.translated, self.new):
+            folder.joinpath(".gitignore").write_text("cache/\n")
+        self.old.joinpath("data.json").write_text('{"name":"Japanese","value":1}')
+        self.translated.joinpath("data.json").write_text(
+            json.dumps({"name": "English", "value": 1}, indent=4, ensure_ascii=False)
         )
-        self.assertEqual(
-            decisions["js/plugins/Feature.js"].action,
-            UpdateAction.USE_NEW,
-        )
+        self.new.joinpath("data.json").write_text('{"name":"Japanese","value":2}')
+        self.old.joinpath("removed.txt").write_text("old\n")
+        self.translated.joinpath("removed.txt").write_text("old\n")
+        self.new.joinpath("added.txt").write_text("new\n")
+        for folder in (self.old, self.translated):
+            folder.joinpath("broken.json").write_text('{"duplicate":1,"duplicate":2}')
+        self.new.joinpath("broken.json").write_text('{"duplicate":3,"duplicate":4}')
+        self.new.joinpath("cache").mkdir()
+        self.new.joinpath("cache/generated.bin").write_bytes(b"ignored")
+        bootstrap_repository(self.translated, self.old, "1.00")
 
-        recovered = self.base / "recovered"
-        apply_staged_update(audit, recovered)
-        self.assertEqual(recovered.joinpath("Game.exe").read_bytes(), b"v2")
-        self.assertEqual(
-            recovered.joinpath("js/plugins/Feature.js").read_text(encoding="utf-8"),
-            "const enabled = true;\n",
-        )
+        preview = preview_official_update(self.translated, self.new, "1.03")
 
-    def test_audit_reapply_can_fall_back_to_matching_git_original(self):
-        repo = self.base / "audit-repository"
-        repo.mkdir()
-        self.git(repo, "init")
-        self.git(repo, "config", "user.email", "tests@example.invalid")
-        self.git(repo, "config", "user.name", "Version Update Tests")
-        self.git(repo, "checkout", "-b", "original")
-        game = repo / "game"
-        self.write(game, "Game.exe", b"v1")
-        self.git(repo, "add", "game")
-        self.git(repo, "commit", "-m", "original game")
-        self.git(repo, "checkout", "-b", "translation")
-        self.write(game, "img/pictures/translated.png_", b"translated-image")
-        self.write(
-            game,
-            ".dazedtl/image_backups/img/pictures/translated.png_",
-            b"old-image",
-        )
-        self.write(self.new, "Game.exe", b"v2")
-        self.write(self.new, "img/pictures/translated.png_", b"old-image")
-
-        first = scan_version_update(
-            game,
-            self.new,
-            old_version="1.00",
-            new_version="1.10",
-        )
-        old_fingerprint = first.to_dict()["fingerprints"]["old_official"]
-        apply_in_place_update(first)
-        shutil.rmtree(
-            game / ".dazedtl" / "version_update" / "baselines" / old_fingerprint
-        )
-        game.joinpath("Game.exe").write_bytes(b"v1")
-
-        audit = scan_version_update(game, self.new)
-        try:
-            decision = next(
-                item for item in audit.decisions if item.relative_path == "Game.exe"
+        self.assertEqual(preview.added_paths, ("added.txt",))
+        self.assertEqual(preview.deleted_paths, ("removed.txt",))
+        self.assertIn("data.json", preview.modified_paths)
+        self.assertIn("data.json", preview.overlapping_paths)
+        self.assertIn("data.json", preview.formatted_json_paths)
+        self.assertTrue(
+            any(
+                "broken.json" in warning and "duplicate object key" in warning
+                for warning in preview.json_warnings
             )
-            self.assertTrue(audit.audit_reapply)
-            self.assertTrue(audit.used_git_original)
-            self.assertIn("audit/reapply", audit.old_source_label)
-            self.assertEqual(decision.action, UpdateAction.USE_NEW)
-        finally:
-            audit.cleanup_temporary_resources()
-
-    def test_corrupted_retained_baseline_source_is_rejected(self):
-        from util.version_update.baseline import load_baseline
-
-        self.write_all("Game.exe", b"v1")
-        self.write_all("js/plugins/Feature.js", "const version = 1;\n")
-        self.new.joinpath("js/plugins/Feature.js").write_text(
-            "const version = 2;\n", encoding="utf-8"
         )
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        updated = self.base / "updated"
-        apply_staged_update(plan, updated)
-        project = json.loads(
-            updated.joinpath(".dazedtl/version_update/project.json").read_text("utf-8")
-        )
-        source = updated / ".dazedtl" / "version_update" / "baselines"
-        source = source / project["active_source_fingerprint"]
-        source = source / "mergeable" / "js" / "plugins" / "Feature.js"
-        source.write_text("corrupted\n", encoding="utf-8")
+        self.assertIn("cache/generated.bin", preview.ignored_paths)
+        self.assertNotIn("cache/generated.bin", preview.added_paths)
 
-        with self.assertRaisesRegex(Exception, "source is corrupted"):
-            load_baseline(updated)
-
-    def test_unsafe_retained_baseline_manifest_path_is_rejected(self):
-        from util.version_update.baseline import load_baseline
-
-        self.write_all("Game.exe", b"v1")
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        updated = self.base / "updated"
-        apply_staged_update(plan, updated)
-        project = json.loads(
-            updated.joinpath(".dazedtl/version_update/project.json").read_text("utf-8")
-        )
-        manifest_path = (
-            updated
-            / ".dazedtl"
-            / "version_update"
-            / "baselines"
-            / project["active_source_fingerprint"]
-            / "manifest.json"
-        )
-        manifest = json.loads(manifest_path.read_text("utf-8"))
-        manifest["entries"][0]["path"] = "../../outside"
-        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-
-        with self.assertRaisesRegex(Exception, "unsafe path"):
-            load_baseline(updated)
-
-    def test_damaged_registered_baseline_rejects_unrelated_git_original(self):
-        repo = self.base / "damaged-baseline-repository"
-        repo.mkdir()
-        self.git(repo, "init")
-        self.git(repo, "config", "user.email", "tests@example.invalid")
-        self.git(repo, "config", "user.name", "Version Update Tests")
-        self.git(repo, "checkout", "-b", "original")
-        game = repo / "game"
-        self.write(game, "Game.exe", b"v1")
-        self.write(game, "js/plugins/Core.js", "version=1\n")
-        self.git(repo, "add", "game")
-        self.git(repo, "commit", "-m", "original game")
-        self.git(repo, "checkout", "-b", "translation")
-        self.write(self.new, "Game.exe", b"v2")
-        self.write(self.new, "js/plugins/Core.js", "version=2\n")
-        first = scan_version_update(game, self.new)
-        apply_in_place_update(first)
-        project = json.loads(
-            game.joinpath(".dazedtl/version_update/project.json").read_text("utf-8")
-        )
-        saved_source = (
-            game
-            / ".dazedtl"
-            / "version_update"
-            / "baselines"
-            / project["active_source_fingerprint"]
-            / "mergeable"
-            / "js"
-            / "plugins"
-            / "Core.js"
-        )
-        saved_source.write_text("damaged\n", encoding="utf-8")
-        newer = self.base / "newer"
-        newer.mkdir()
-        self.write(newer, "Game.exe", b"v3")
-        self.write(newer, "js/plugins/Core.js", "version=3\n")
-
-        with self.assertRaisesRegex(
-            VersionUpdateError, "does not match the registered active official version"
-        ):
-            scan_version_update(game, newer)
-
-    def test_history_pruning_retains_eight_reports_and_referenced_baselines(self):
-        from util.version_update import service as update_service
-
-        metadata = self.current / ".dazedtl" / "version_update"
-        runs = metadata / "runs"
-        baselines = metadata / "baselines"
-        runs.mkdir(parents=True)
-        baselines.mkdir(parents=True)
-        fingerprints = [f"{index:064x}" for index in range(11)]
-        metadata.joinpath("project.json").write_text(
-            json.dumps({"active_source_fingerprint": fingerprints[-1]}),
-            encoding="utf-8",
-        )
-        run_dirs = []
-        for index in range(10):
-            baselines.joinpath(fingerprints[index]).mkdir()
-            run_dir = runs / f"run-{index:02d}"
-            run_dir.mkdir()
-            run_dir.joinpath("report.json").write_text(
-                json.dumps(
-                    {
-                        "applied_at": f"2026-01-{index + 1:02d}T00:00:00+00:00",
-                        "fingerprints": {
-                            "old_official": fingerprints[index],
-                            "new_official": fingerprints[index + 1],
-                        },
-                    }
-                ),
-                encoding="utf-8",
-            )
-            run_dirs.append(run_dir)
-        baselines.joinpath(fingerprints[-1]).mkdir()
-
-        update_service._prune_update_history(
-            self.current,
-            keep_run=run_dirs[-1],
-        )
-
-        self.assertEqual(len(list(runs.iterdir())), 8)
-        self.assertEqual(
-            {path.name for path in baselines.iterdir()},
-            set(fingerprints[2:]),
-        )
-
-    def test_report_directories_remain_unique_on_timestamp_collision(self):
-        from util.version_update import service as update_service
-
-        real_datetime = update_service.datetime
-
-        class FixedDatetime:
-            @staticmethod
-            def now(tz=None):
-                return real_datetime(2026, 1, 2, 3, 4, 5, 678901, tzinfo=tz)
-
-        metadata = self.current / ".dazedtl" / "version_update"
-        with patch.object(update_service, "datetime", FixedDatetime):
-            first = update_service._new_run_directory(metadata)
-            second = update_service._new_run_directory(metadata)
-
-        self.assertNotEqual(first, second)
-        self.assertTrue(second.name.endswith("-1"))
-
-    def test_staged_copy_is_verified_before_publish(self):
-        self.write_all("Game.exe", b"v1")
-        self.new.joinpath("Game.exe").write_bytes(b"v2")
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-
-        def corrupt_copy(_entry, target):
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(b"corrupt")
-
-        with patch("util.version_update.service._copy_entry", side_effect=corrupt_copy):
-            with self.assertRaisesRegex(VersionUpdateError, "does not match"):
-                apply_staged_update(plan, self.base / "corrupt-output")
-        self.assertFalse(self.base.joinpath("corrupt-output").exists())
-
-    def test_apply_rejects_current_folder_changed_since_scan(self):
-        self.write_all("Game.exe", b"v1")
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        self.current.joinpath("Game.exe").write_bytes(b"external edit")
-
-        with self.assertRaisesRegex(Exception, "changed after the scan"):
-            apply_staged_update(plan, self.base / "stale")
-
-    def test_scan_rejects_nested_input_folders(self):
-        nested = self.current / "new"
-        nested.mkdir()
-        with self.assertRaisesRegex(VersionUpdateError, "cannot be nested"):
-            scan_version_update(self.current, nested, old_root=self.old)
-
-    def test_scan_rejects_symbolic_links(self):
-        self.write_all("Game.exe", b"v1")
-        outside = self.base / "outside.dat"
-        outside.write_bytes(b"outside")
-        try:
-            self.current.joinpath("linked.dat").symlink_to(outside)
-        except (OSError, NotImplementedError):
-            self.skipTest("symbolic links are unavailable")
-
-        with self.assertRaisesRegex(Exception, "Symbolic-link files"):
-            scan_version_update(self.current, self.new, old_root=self.old)
-
-    def test_report_records_fingerprints_and_readable_decisions(self):
-        self.write_all("Game.exe", b"v1")
-        self.write(self.new, "bonus.dat", b"new")
-        plan = scan_version_update(
-            self.current,
-            self.new,
-            old_root=self.old,
-            old_version="v1.00",
-            new_version="v1.03",
-        )
-        result = apply_staged_update(plan, self.base / "updated")
-        report_text = result.report_path.read_text(encoding="utf-8")
-        json_report = json.loads(
-            result.report_path.with_suffix(".json").read_text(encoding="utf-8")
-        )
-
-        self.assertIn("v1.00 → v1.03", report_text)
-        self.assertIn("bonus.dat", report_text)
-        self.assertEqual(set(json_report["fingerprints"]), {
-            "old_official", "current_translated", "new_official"
-        })
-
-    def test_cross_version_case_only_path_change_is_rejected(self):
-        self.write(self.old, "img/Menu.png", b"old")
-        self.write(self.current, "img/Menu.png", b"old")
-        self.write(self.new, "img/menu.png", b"new")
-
-        with self.assertRaisesRegex(VersionUpdateError, "changed only by case"):
-            scan_version_update(self.current, self.new, old_root=self.old)
-
-    def test_packed_wolf_cannot_be_forced_through_generic_mode(self):
-        for root in (self.old, self.current, self.new):
-            self.write(root, "Data.wolf", b"packed")
-
-        with self.assertRaisesRegex(VersionUpdateError, "cannot use Generic"):
-            scan_version_update(
-                self.current,
+        self.new.joinpath("added.txt").write_text("changed after preview\n")
+        with self.assertRaisesRegex(GitWorkflowError, "changed after preview"):
+            apply_official_update(
+                self.translated,
                 self.new,
-                old_root=self.old,
-                profile_id="generic",
+                "1.03",
+                expected_tree=preview.proposed_tree,
             )
 
-    def test_original_branch_is_used_without_checkout_and_json_format_is_ignored(self):
-        repo = self.base / "repository"
-        repo.mkdir()
-        self.git(repo, "init")
-        self.git(repo, "config", "user.email", "tests@example.invalid")
-        self.git(repo, "config", "user.name", "Version Update Tests")
-        self.git(repo, "checkout", "-b", "original")
-        game = repo / "game"
-        old_system = {"gameTitle": "日本語", "versionId": 1}
-        old_maps = [None, {"id": 1, "name": "マップ"}]
-        self.write(
-            game,
-            "data/System.json",
-            json.dumps(old_system, ensure_ascii=False, indent=4),
-        )
-        self.write(
-            game,
-            "data/MapInfos.json",
-            json.dumps(old_maps, ensure_ascii=False, indent=4),
-        )
-        self.write(game, "Game.exe", b"runtime")
-        self.git(repo, "add", "game")
-        self.git(repo, "commit", "-m", "original game")
-        original_commit = self.git(repo, "rev-parse", "original")
+    def test_update_explicitly_records_when_official_patch_is_already_present(self):
+        self.write_versions("old official\n", "new official\n", "new official\n")
+        bootstrap_repository(self.translated, self.old, "1.00")
+        translation_before = self.git(self.translated, "rev-parse", "translation")
 
-        self.git(repo, "checkout", "-b", "translation")
-        translated_system = {
-            "gameTitle": "English title",
-            "versionId": 1,
-            "_original": {"gameTitle": "日本語"},
-        }
-        self.write(
-            game,
-            "data/System.json",
-            json.dumps(translated_system, ensure_ascii=False, indent=2),
-        )
-        self.write(
-            game,
-            "data/MapInfos.json",
-            json.dumps(old_maps, ensure_ascii=False, indent=2),
-        )
-        self.write(game, "img/pictures/translated.png_", b"translated-image")
-        self.write(
-            game,
-            ".dazedtl/image_backups/img/pictures/translated.png_",
-            b"old-image",
-        )
-        self.write(game, "img/pictures/changed.png_", b"translated-changed-image")
-        self.write(
-            game,
-            ".dazedtl/image_backups/img/pictures/changed.png_",
-            b"old-changed-image",
-        )
-        self.write(game, "img/pictures/untranslated.png_", b"old-runtime-image")
+        preview = preview_official_update(self.translated, self.new, "1.03")
 
-        new_system = {"gameTitle": "日本語", "versionId": 2}
-        self.write(
+        self.assertEqual(preview.already_present_paths, ("game.txt",))
+        self.assertEqual(preview.translation_change_paths, ())
+        self.assertFalse(preview.content_change_expected)
+        result = apply_official_update(
+            self.translated,
             self.new,
-            "data/System.json",
-            json.dumps(new_system, ensure_ascii=False, separators=(",", ":")),
+            "1.03",
+            expected_tree=preview.proposed_tree,
+            expected_original_commit=preview.original_commit,
+            expected_translation_commit=preview.translation_commit,
         )
-        self.write(
-            self.new,
-            "data/MapInfos.json",
-            json.dumps(old_maps, ensure_ascii=False, separators=(",", ":")),
-        )
-        self.write(self.new, "Game.exe", b"runtime")
-        self.write(self.new, "img/pictures/translated.png_", b"old-image")
-        self.write(self.new, "img/pictures/changed.png_", b"new-changed-image")
-        self.write(self.new, "img/pictures/untranslated.png_", b"new-runtime-image")
 
-        plan = scan_version_update(game, self.new)
-        decisions = {item.relative_path: item for item in plan.decisions}
-
-        self.assertEqual(self.git(repo, "branch", "--show-current"), "translation")
-        self.assertTrue(plan.used_git_original)
-        self.assertFalse(plan.used_saved_baseline)
-        self.assertIn(original_commit[:10], plan.old_source_label)
+        self.assertFalse(result.content_changed)
+        self.assertEqual(result.already_present_paths, ("game.txt",))
         self.assertEqual(
-            decisions["data/System.json"].action,
-            UpdateAction.MERGE_SEMANTIC,
-        )
-        self.assertEqual(decisions["data/MapInfos.json"].action, UpdateAction.KEEP)
-        self.assertEqual(
-            decisions["img/pictures/translated.png_"].action,
-            UpdateAction.PRESERVE_TRANSLATED,
+            self.translated.joinpath("game.txt").read_text(), "new official\n"
         )
         self.assertEqual(
-            decisions["img/pictures/changed.png_"].action,
-            UpdateAction.CONFLICT,
-        )
-        self.assertEqual(
-            decisions["img/pictures/untranslated.png_"].action,
-            UpdateAction.USE_NEW,
-        )
-        decisions["img/pictures/changed.png_"].resolution = (
-            ConflictResolution.USE_NEW
-        )
-
-        output = self.base / "git-updated"
-        apply_staged_update(plan, output)
-        merged = json.loads(output.joinpath("data/System.json").read_text("utf-8"))
-        self.assertEqual(merged["gameTitle"], "English title")
-        self.assertEqual(merged["versionId"], 2)
-        self.assertEqual(
-            output.joinpath("img/pictures/translated.png_").read_bytes(),
-            b"translated-image",
-        )
-        self.assertEqual(
-            output.joinpath("img/pictures/changed.png_").read_bytes(),
-            b"new-changed-image",
-        )
-        self.assertEqual(
-            output.joinpath("img/pictures/untranslated.png_").read_bytes(),
-            b"new-runtime-image",
-        )
-
-
-class RPGMakerVersionUpdateTests(VersionUpdateTestBase):
-    def _write_json(self, root: Path, relative: str, value):
-        self.write(root, relative, json.dumps(value, ensure_ascii=False, indent=4))
-
-    def test_detects_mvmz_only_with_real_game_data_markers(self):
-        self._write_json(self.current, "data/System.json", {"gameTitle": "ゲーム"})
-
-        profile, reason = detect_update_profile(self.current)
-
-        self.assertEqual(profile, "rpgmaker-mvmz")
-        self.assertIn("System.json", reason)
-
-    def test_invalid_generated_rpgmaker_json_is_rejected_before_publish(self):
-        old = {"gameTitle": "ゲーム", "versionId": 1}
-        current = {
-            "gameTitle": "Game",
-            "versionId": 1,
-            "_original": {"gameTitle": "ゲーム"},
-        }
-        new = {"gameTitle": "ゲーム", "versionId": 2}
-        self._write_json(self.old, "data/System.json", old)
-        self._write_json(self.current, "data/System.json", current)
-        self._write_json(self.new, "data/System.json", new)
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        decision = plan.decisions[0]
-        self.assertEqual(decision.action, UpdateAction.MERGE_SEMANTIC)
-        decision.generated_content = b"{"
-
-        with self.assertRaisesRegex(VersionUpdateError, "JSON is invalid"):
-            apply_staged_update(plan, self.base / "invalid-json-output")
-        self.assertFalse(self.base.joinpath("invalid-json-output").exists())
-
-    def test_preserves_unchanged_translation_and_imports_new_record(self):
-        old_data = [None, {"id": 1, "name": "勇者", "description": "主人公"}]
-        translated_data = [
-            None,
-            {
-                "id": 1,
-                "name": "Hero",
-                "description": "Protagonist",
-                "_original": {"name": "勇者", "description": "主人公"},
-            },
-        ]
-        new_data = old_data + [{"id": 2, "name": "魔法使い", "description": "仲間"}]
-        self._write_json(self.old, "data/Actors.json", old_data)
-        self._write_json(self.current, "data/Actors.json", translated_data)
-        self._write_json(self.new, "data/Actors.json", new_data)
-        for root in (self.old, self.current, self.new):
-            self._write_json(root, "data/System.json", {"gameTitle": "ゲーム"})
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        decision = next(d for d in plan.decisions if d.relative_path == "data/Actors.json")
-
-        self.assertEqual(decision.action, UpdateAction.MERGE_SEMANTIC)
-        self.assertGreaterEqual(decision.preserved_translations, 2)
-        self.assertGreaterEqual(decision.needs_translation, 2)
-        apply_staged_update(plan, self.base / "updated")
-        result = json.loads(
-            self.base.joinpath("updated/data/Actors.json").read_text(encoding="utf-8")
-        )
-        self.assertEqual(result[1]["name"], "Hero")
-        self.assertEqual(result[1]["description"], "Protagonist")
-        self.assertEqual(result[2]["name"], "魔法使い")
-
-    def test_changed_source_replaces_stale_translation_and_original(self):
-        old_data = [None, {"id": 1, "name": "勇者"}]
-        translated_data = [
-            None,
-            {"id": 1, "name": "Hero", "_original": {"name": "勇者"}},
-        ]
-        new_data = [None, {"id": 1, "name": "新しい勇者"}]
-        self._write_json(self.old, "data/Actors.json", old_data)
-        self._write_json(self.current, "data/Actors.json", translated_data)
-        self._write_json(self.new, "data/Actors.json", new_data)
-        for root in (self.old, self.current, self.new):
-            self._write_json(root, "data/System.json", {"gameTitle": "ゲーム"})
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        apply_staged_update(plan, self.base / "updated")
-        result = json.loads(
-            self.base.joinpath("updated/data/Actors.json").read_text(encoding="utf-8")
-        )
-
-        self.assertEqual(result[1]["name"], "新しい勇者")
-        self.assertEqual(result[1]["_original"]["name"], "新しい勇者")
-        decision = next(d for d in plan.decisions if d.relative_path == "data/Actors.json")
-        self.assertEqual(decision.needs_translation, 1)
-
-    def test_new_rpgmaker_json_file_counts_text_for_translation(self):
-        system = {"gameTitle": "ゲーム"}
-        for root in (self.old, self.current, self.new):
-            self._write_json(root, "data/System.json", system)
-        self._write_json(
-            self.new,
-            "data/Map002.json",
-            {
-                "events": [
-                    None,
-                    {
-                        "id": 1,
-                        "pages": [
-                            {
-                                "list": [
-                                    {"code": 401, "indent": 0, "parameters": ["新しい台詞"]},
-                                    {"code": 0, "indent": 0, "parameters": []},
-                                ]
-                            }
-                        ],
-                    },
-                ]
-            },
-        )
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        decision = next(d for d in plan.decisions if d.relative_path == "data/Map002.json")
-
-        self.assertEqual(decision.action, UpdateAction.ADD_NEW)
-        self.assertEqual(decision.needs_translation, 1)
-
-    def test_event_command_insertion_preserves_aligned_dialogue(self):
-        old_map = {
-            "events": [
-                None,
-                {
-                    "id": 1,
-                    "pages": [
-                        {
-                            "list": [
-                                {"code": 401, "indent": 0, "parameters": ["こんにちは"]},
-                                {"code": 0, "indent": 0, "parameters": []},
-                            ]
-                        }
-                    ],
-                },
-            ]
-        }
-        translated_map = json.loads(json.dumps(old_map, ensure_ascii=False))
-        translated_command = translated_map["events"][1]["pages"][0]["list"][0]
-        translated_command["parameters"][0] = "Hello"
-        translated_command["_original"] = "こんにちは"
-        new_map = json.loads(json.dumps(old_map, ensure_ascii=False))
-        new_map["events"][1]["pages"][0]["list"].insert(
-            0, {"code": 121, "indent": 0, "parameters": [3, 3, 0]}
-        )
-        for root in (self.old, self.current, self.new):
-            self._write_json(root, "data/System.json", {"gameTitle": "ゲーム"})
-        self._write_json(self.old, "data/Map001.json", old_map)
-        self._write_json(self.current, "data/Map001.json", translated_map)
-        self._write_json(self.new, "data/Map001.json", new_map)
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        decision = next(d for d in plan.decisions if d.relative_path == "data/Map001.json")
-
-        self.assertEqual(decision.action, UpdateAction.MERGE_SEMANTIC)
-        apply_staged_update(plan, self.base / "updated")
-        merged = json.loads(
-            self.base.joinpath("updated/data/Map001.json").read_text(encoding="utf-8")
-        )
-        commands = merged["events"][1]["pages"][0]["list"]
-        self.assertEqual([command["code"] for command in commands], [121, 401, 0])
-        self.assertEqual(commands[1]["parameters"][0], "Hello")
-
-    def test_collapsed_dialogue_block_does_not_restore_source_continuations(self):
-        old_map = {
-            "events": [
-                None,
-                {
-                    "id": 1,
-                    "pages": [
-                        {
-                            "list": [
-                                {
-                                    "code": 101,
-                                    "indent": 0,
-                                    "parameters": ["", 0, 0, 2, "勇者"],
-                                },
-                                {"code": 401, "indent": 0, "parameters": ["一行目"]},
-                                {"code": 401, "indent": 0, "parameters": ["二行目"]},
-                                {
-                                    "code": 101,
-                                    "indent": 0,
-                                    "parameters": ["", 0, 0, 2, "仲間"],
-                                },
-                                {"code": 401, "indent": 0, "parameters": ["次の台詞"]},
-                                {"code": 0, "indent": 0, "parameters": []},
-                            ]
-                        }
-                    ],
-                },
-            ]
-        }
-        translated_map = json.loads(json.dumps(old_map, ensure_ascii=False))
-        translated_map["events"][1]["pages"][0]["list"] = [
-            {
-                "code": 101,
-                "indent": 0,
-                "parameters": ["", 0, 0, 2, "Hero"],
-                "_original": "勇者",
-            },
-            {
-                "code": 401,
-                "indent": 0,
-                "parameters": ["First line and second line."],
-                "_original": "一行目\n二行目",
-            },
-            {
-                "code": 101,
-                "indent": 0,
-                "parameters": ["", 0, 0, 2, "Companion"],
-                "_original": "仲間",
-            },
-            {
-                "code": 401,
-                "indent": 0,
-                "parameters": ["The next line."],
-                "_original": "次の台詞",
-            },
-            {"code": 0, "indent": 0, "parameters": []},
-        ]
-        new_map = json.loads(json.dumps(old_map, ensure_ascii=False))
-        new_map["events"][1]["pages"][0]["list"].insert(
-            0, {"code": 121, "indent": 0, "parameters": [3, 3, 0]}
-        )
-        for root in (self.old, self.current, self.new):
-            self._write_json(root, "data/System.json", {"gameTitle": "ゲーム"})
-        self._write_json(self.old, "data/Map001.json", old_map)
-        self._write_json(self.current, "data/Map001.json", translated_map)
-        self._write_json(self.new, "data/Map001.json", new_map)
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        decision = next(
-            d for d in plan.decisions if d.relative_path == "data/Map001.json"
-        )
-
-        self.assertEqual(decision.action, UpdateAction.MERGE_SEMANTIC)
-        self.assertEqual(decision.needs_translation, 0)
-        apply_staged_update(plan, self.base / "collapsed-dialogue-updated")
-        merged = json.loads(
-            self.base.joinpath(
-                "collapsed-dialogue-updated/data/Map001.json"
-            ).read_text(encoding="utf-8")
-        )
-        commands = merged["events"][1]["pages"][0]["list"]
-        self.assertEqual(
-            [command["code"] for command in commands],
-            [121, 101, 401, 101, 401, 0],
-        )
-        self.assertEqual(commands[2]["parameters"][0], "First line and second line.")
-        self.assertEqual(commands[2]["_original"], "一行目\n二行目")
-        visible_parameters = [
-            command["parameters"][0]
-            for command in commands
-            if command.get("parameters")
-        ]
-        self.assertNotIn("二行目", visible_parameters)
-
-    def test_rewritten_text_blocks_merge_across_rpgmaker_event_containers(self):
-        def wrap(container, commands):
-            if container == "map":
-                return {
-                    "events": [
-                        None,
-                        {"id": 1, "pages": [{"list": commands}]},
-                    ]
-                }
-            if container == "common_events":
-                return [None, {"id": 1, "list": commands}]
-            return [None, {"id": 1, "pages": [{"list": commands}]}]
-
-        def commands_in(container, value):
-            if container == "map":
-                return value["events"][1]["pages"][0]["list"]
-            if container == "common_events":
-                return value[1]["list"]
-            return value[1]["pages"][0]["list"]
-
-        def merged(old, current, new):
-            encode = lambda value: json.dumps(value, ensure_ascii=False).encode()
-            result = merge_json_bytes(encode(old), encode(current), encode(new))
-            return json.loads(result.content), result
-
-        source = ["一行目", "二行目"]
-        translated_by_code = {
-            401: ["Translated dialogue."],
-            405: ["Translated", "scrolling", "text."],
-            408: ["Translated comment."],
-        }
-        for container in ("map", "common_events", "troops"):
-            for code, translated_lines in translated_by_code.items():
-                with self.subTest(
-                    container=container, code=code, update="unrelated insertion"
-                ):
-                    old_commands = [
-                        {"code": code, "indent": 0, "parameters": [line]}
-                        for line in source
-                    ] + [{"code": 0, "indent": 0, "parameters": []}]
-                    current_commands = [
-                        {
-                            "code": code,
-                            "indent": 0,
-                            "parameters": [line],
-                            **({"_original": "\n".join(source)} if index == 0 else {}),
-                        }
-                        for index, line in enumerate(translated_lines)
-                    ] + [{"code": 0, "indent": 0, "parameters": []}]
-                    new_commands = [
-                        {"code": 121, "indent": 0, "parameters": [1, 1, 0]},
-                        *json.loads(json.dumps(old_commands, ensure_ascii=False)),
-                    ]
-
-                    output, result = merged(
-                        wrap(container, old_commands),
-                        wrap(container, current_commands),
-                        wrap(container, new_commands),
-                    )
-                    output_commands = commands_in(container, output)
-
-                    self.assertFalse(result.conflicts)
-                    self.assertEqual(result.needs_translation, 0)
-                    self.assertEqual(
-                        [item["parameters"][0] for item in output_commands[1:-1]],
-                        translated_lines,
-                    )
-                    self.assertEqual(output_commands[1]["_original"], "\n".join(source))
-
-                with self.subTest(
-                    container=container, code=code, update="source changed"
-                ):
-                    changed_commands = [
-                        {"code": 121, "indent": 0, "parameters": [1, 1, 0]},
-                        {"code": code, "indent": 0, "parameters": [source[0]]},
-                        {"code": code, "indent": 0, "parameters": ["変更した二行目"]},
-                        {"code": 0, "indent": 0, "parameters": []},
-                    ]
-                    output, result = merged(
-                        wrap(container, old_commands),
-                        wrap(container, current_commands),
-                        wrap(container, changed_commands),
-                    )
-                    output_commands = commands_in(container, output)
-
-                    self.assertFalse(result.conflicts)
-                    self.assertEqual(result.needs_translation, 2)
-                    self.assertEqual(
-                        [item["parameters"][0] for item in output_commands[1:-1]],
-                        [source[0], "変更した二行目"],
-                    )
-
-    def test_rewrapped_script_block_is_preserved_or_safely_invalidated(self):
-        old = {
-            "list": [
-                {
-                    "code": 355,
-                    "indent": 0,
-                    "parameters": ['var _MTxt = "原文" + "\\n";'],
-                },
-                {"code": 0, "indent": 0, "parameters": []},
-            ]
-        }
-        current = {
-            "list": [
-                {
-                    "code": 355,
-                    "indent": 0,
-                    "parameters": ['var _MTxt = "Translated" + "\\n";'],
-                },
-                {
-                    "code": 655,
-                    "indent": 0,
-                    "parameters": ['   _MTxt += "continuation" + "\\n";'],
-                },
-                {"code": 0, "indent": 0, "parameters": []},
-            ]
-        }
-
-        def merge(new):
-            encode = lambda value: json.dumps(value, ensure_ascii=False).encode()
-            result = merge_json_bytes(encode(old), encode(current), encode(new))
-            return json.loads(result.content), result
-
-        unchanged = json.loads(json.dumps(old, ensure_ascii=False))
-        unchanged["list"].insert(
-            0, {"code": 121, "indent": 0, "parameters": [1, 1, 0]}
-        )
-        output, result = merge(unchanged)
-
-        self.assertFalse(result.conflicts)
-        self.assertEqual(
-            [command["code"] for command in output["list"]], [121, 355, 655, 0]
-        )
-        self.assertIn("continuation", output["list"][2]["parameters"][0])
-
-        changed = json.loads(json.dumps(old, ensure_ascii=False))
-        changed["list"][0]["parameters"][0] = 'var _MTxt = "新版" + "\\n";'
-        output, result = merge(changed)
-
-        self.assertEqual(len(result.conflicts), 1)
-        self.assertEqual(result.needs_translation, 1)
-        self.assertEqual([command["code"] for command in output["list"]], [355, 0])
-        self.assertIn("新版", output["list"][0]["parameters"][0])
-
-    def test_in_place_event_translations_survive_neighboring_commands(self):
-        cases = [
-            ("name window", 101, ["", 0, 0, 2, "名前"], ["", 0, 0, 2, "Name"], "名前"),
-            ("short name window", 101, ["話者", 0, 0], ["Speaker", 0, 0], "話者"),
-            ("choices", 102, [["はい", "いいえ"], 0, 0, 2, 0], [["Yes", "No"], 0, 0, 2, 0], ["はい", "いいえ"]),
-            ("variable script", 122, [1, 1, 0, 4, "`原文`"], [1, 1, 0, 4, "`Translated`"], "原文"),
-            ("comment header", 108, ["原文"], ["Translated"], None),
-            ("conditional branch", 111, [12, "原文"], [12, "Translated"], None),
-            ("actor name", 320, [1, "原文"], [1, "Translated"], None),
-            ("actor nickname", 324, [1, "原文"], [1, "Translated"], None),
-            ("actor profile", 325, [1, "原文"], [1, "Translated"], None),
-            ("MV plugin command", 356, ["Plugin 原文"], ["Plugin Translated"], None),
-            (
-                "MZ plugin command",
-                357,
-                ["Plugin", "Command", "Display", {"Text": "原文"}],
-                ["Plugin", "Command", "Display", {"Text": "Translated"}],
-                None,
+            self.git(
+                self.translated,
+                "diff-tree",
+                "--no-commit-id",
+                "--name-only",
+                "-r",
+                result.translation_commit,
             ),
-            ("plugin annotation", 657, ["Key = 原文"], ["Key = Translated"], None),
-        ]
-        encode = lambda value: json.dumps(value, ensure_ascii=False).encode()
-
-        for label, code, source, translated, original in cases:
-            with self.subTest(command=label, code=code):
-                old = {
-                    "list": [
-                        {"code": code, "indent": 0, "parameters": source},
-                        {"code": 0, "indent": 0, "parameters": []},
-                    ]
-                }
-                current = json.loads(json.dumps(old, ensure_ascii=False))
-                current["list"][0]["parameters"] = translated
-                if original is not None:
-                    current["list"][0]["_original"] = original
-                new = json.loads(json.dumps(old, ensure_ascii=False))
-                new["list"].insert(
-                    0, {"code": 121, "indent": 0, "parameters": [1, 1, 0]}
-                )
-
-                result = merge_json_bytes(encode(old), encode(current), encode(new))
-                output = json.loads(result.content)
-
-                self.assertFalse(result.conflicts)
-                self.assertEqual(result.needs_translation, 0)
-                self.assertEqual(output["list"][1]["parameters"], translated)
-
-    def test_scalar_event_original_metadata_tracks_changed_source(self):
-        cases = [
-            (101, ["話者", 0, 0], ["Speaker", 0, 0], ["新版話者", 0, 0], "話者", "新版話者"),
-            (101, ["", 0, 0, 2, "名前"], ["", 0, 0, 2, "Name"], ["", 0, 0, 2, "新版名前"], "名前", "新版名前"),
-            (122, [1, 1, 0, 4, "`原文`"], [1, 1, 0, 4, "`Translated`"], [1, 1, 0, 4, "`新版`"], "原文", "新版"),
-        ]
-        encode = lambda value: json.dumps(value, ensure_ascii=False).encode()
-
-        for code, source, translated, changed, original, expected in cases:
-            with self.subTest(code=code, parameters=source):
-                old = {"code": code, "indent": 0, "parameters": source}
-                current = {
-                    "code": code,
-                    "indent": 0,
-                    "parameters": translated,
-                    "_original": original,
-                }
-                new = {"code": code, "indent": 0, "parameters": changed}
-
-                result = merge_json_bytes(
-                    encode({"list": [old]}),
-                    encode({"list": [current]}),
-                    encode({"list": [new]}),
-                )
-                output = json.loads(result.content)["list"][0]
-
-                self.assertEqual(result.needs_translation, 1)
-                self.assertEqual(output["parameters"], changed)
-                self.assertEqual(output["_original"], expected)
-
-    def test_changed_second_dialogue_line_refreshes_group_original(self):
-        old_map = {
-            "events": [
-                None,
-                {
-                    "id": 1,
-                    "pages": [
-                        {
-                            "list": [
-                                {"code": 401, "indent": 0, "parameters": ["一行目"]},
-                                {"code": 401, "indent": 0, "parameters": ["二行目"]},
-                                {"code": 0, "indent": 0, "parameters": []},
-                            ]
-                        }
-                    ],
-                },
-            ]
-        }
-        translated_map = json.loads(json.dumps(old_map, ensure_ascii=False))
-        commands = translated_map["events"][1]["pages"][0]["list"]
-        commands[0]["parameters"][0] = "First line"
-        commands[0]["_original"] = "一行目\n二行目"
-        commands[1]["parameters"][0] = "Second line"
-        new_map = json.loads(json.dumps(old_map, ensure_ascii=False))
-        new_map["events"][1]["pages"][0]["list"][1]["parameters"][0] = "変更した二行目"
-        for root in (self.old, self.current, self.new):
-            self._write_json(root, "data/System.json", {"gameTitle": "ゲーム"})
-        self._write_json(self.old, "data/Map001.json", old_map)
-        self._write_json(self.current, "data/Map001.json", translated_map)
-        self._write_json(self.new, "data/Map001.json", new_map)
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        apply_staged_update(plan, self.base / "updated")
-        merged = json.loads(
-            self.base.joinpath("updated/data/Map001.json").read_text(encoding="utf-8")
+            "",
         )
-        merged_commands = merged["events"][1]["pages"][0]["list"]
-
-        self.assertEqual(merged_commands[0]["parameters"][0], "First line")
-        self.assertEqual(merged_commands[1]["parameters"][0], "変更した二行目")
-        self.assertEqual(merged_commands[0]["_original"], "一行目\n変更した二行目")
-
-    def test_changed_choice_list_uses_hashable_command_alignment_key(self):
-        old_map = {
-            "events": [
-                None,
-                {
-                    "id": 1,
-                    "pages": [
-                        {
-                            "list": [
-                                {
-                                    "code": 102,
-                                    "indent": 0,
-                                    "parameters": [["はい", "いいえ"], 0, 0, 2, 0],
-                                },
-                                {"code": 0, "indent": 0, "parameters": []},
-                            ]
-                        }
-                    ],
-                },
-            ]
-        }
-        translated_map = json.loads(json.dumps(old_map, ensure_ascii=False))
-        choice = translated_map["events"][1]["pages"][0]["list"][0]
-        choice["parameters"][0] = ["Yes", "No"]
-        choice["_original"] = ["はい", "いいえ"]
-        new_map = json.loads(json.dumps(old_map, ensure_ascii=False))
-        new_map["events"][1]["pages"][0]["list"][0]["parameters"][0].append(
-            "たぶん"
-        )
-        for root in (self.old, self.current, self.new):
-            self._write_json(root, "data/System.json", {"gameTitle": "ゲーム"})
-        self._write_json(self.old, "data/Map001.json", old_map)
-        self._write_json(self.current, "data/Map001.json", translated_map)
-        self._write_json(self.new, "data/Map001.json", new_map)
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        apply_staged_update(plan, self.base / "updated")
-        merged = json.loads(
-            self.base.joinpath("updated/data/Map001.json").read_text(encoding="utf-8")
-        )
-        merged_choice = merged["events"][1]["pages"][0]["list"][0]
-
-        self.assertEqual(merged_choice["parameters"][0], ["Yes", "No", "たぶん"])
-        self.assertEqual(merged_choice["_original"], ["はい", "いいえ", "たぶん"])
-
-    def test_plugins_manifest_merges_by_name_and_preserves_nested_translation(self):
-        def plugins_js(plugins):
-            return "var $plugins = " + json.dumps(plugins, ensure_ascii=False) + ";\n"
-
-        old_plugins = [
-            {
-                "name": "Core",
-                "status": True,
-                "description": "基本",
-                "parameters": {
-                    "Config": json.dumps(
-                        {"label": "日本語", "speed": 1}, ensure_ascii=False
-                    )
-                },
-            },
-            {"name": "Menu", "status": True, "description": "", "parameters": {}},
-        ]
-        current_plugins = json.loads(json.dumps(old_plugins, ensure_ascii=False))
-        current_config = json.loads(current_plugins[0]["parameters"]["Config"])
-        current_config["label"] = "English"
-        current_plugins[0]["parameters"]["Config"] = json.dumps(
-            current_config, ensure_ascii=False
-        )
-        current_plugins.append(
-            {
-                "name": "TranslatorHelper",
-                "status": True,
-                "description": "local",
-                "parameters": {},
-            }
-        )
-        new_plugins = [
-            old_plugins[1],
-            json.loads(json.dumps(old_plugins[0], ensure_ascii=False)),
-            {
-                "name": "NewFeature",
-                "status": True,
-                "description": "新機能",
-                "parameters": {},
-            },
-        ]
-        new_config = json.loads(new_plugins[1]["parameters"]["Config"])
-        new_config["speed"] = 2
-        new_plugins[1]["parameters"]["Config"] = json.dumps(
-            new_config, ensure_ascii=False
-        )
-
-        for root in (self.old, self.current, self.new):
-            self._write_json(root, "data/System.json", {"gameTitle": "ゲーム"})
-        self.write(self.old, "js/plugins.js", plugins_js(old_plugins))
-        self.write(self.current, "js/plugins.js", plugins_js(current_plugins))
-        self.write(self.new, "js/plugins.js", plugins_js(new_plugins))
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        decision = next(d for d in plan.decisions if d.relative_path == "js/plugins.js")
-
-        self.assertEqual(decision.action, UpdateAction.MERGE_SEMANTIC)
-        apply_staged_update(plan, self.base / "plugins-updated")
-        text = self.base.joinpath("plugins-updated/js/plugins.js").read_text("utf-8")
-        merged_plugins = json.loads(text.split("var $plugins =", 1)[1].strip().rstrip(";"))
         self.assertEqual(
-            [plugin["name"] for plugin in merged_plugins],
-            ["Menu", "Core", "NewFeature", "TranslatorHelper"],
+            self.git(self.translated, "rev-parse", f"{result.translation_commit}^"),
+            translation_before,
         )
-        merged_config = json.loads(merged_plugins[1]["parameters"]["Config"])
-        self.assertEqual(merged_config["label"], "English")
-        self.assertEqual(merged_config["speed"], 2)
-
-    def test_ambiguous_semantic_merge_defaults_to_upstream_first_proposal(self):
-        old = {"gameTitle": "ゲーム", "versionId": 1}
-        current = {"gameTitle": "ゲーム", "versionId": 2}
-        new = {"gameTitle": "ゲーム", "versionId": 3}
-        self._write_json(self.old, "data/System.json", old)
-        self._write_json(self.current, "data/System.json", current)
-        self._write_json(self.new, "data/System.json", new)
-
-        plan = scan_version_update(self.current, self.new, old_root=self.old)
-        decision = plan.decisions[0]
-
-        self.assertEqual(decision.action, UpdateAction.CONFLICT)
-        self.assertEqual(
-            decision.recommended_resolution, ConflictResolution.USE_PROPOSED
+        self.assertIn(
+            "record already-present original game version 1.03",
+            self.git(self.translated, "show", "-s", "--format=%s", result.translation_commit),
         )
-        self.assertEqual(decision.resolution, ConflictResolution.USE_PROPOSED)
-        self.assertTrue(decision.resolution_is_automatic)
-        self.assertFalse(decision.translation_at_risk)
-        apply_staged_update(plan, self.base / "semantic-updated")
-        merged = json.loads(
-            self.base.joinpath("semantic-updated/data/System.json").read_text("utf-8")
+        self.assertEqual(inspect_repository(self.translated).translation_version, "1.03")
+
+    def test_pending_conflict_can_abort_then_apply_registered_original(self):
+        self.write_versions("old\n", "translated\n", "new official\n")
+        bootstrap_repository(self.translated, self.old, "1.00")
+
+        pending = apply_official_update(
+            self.translated, self.new, "1.03", auto_resolve=False
         )
-        self.assertEqual(merged["versionId"], 3)
+        self.assertFalse(pending.complete)
+        self.assertEqual(pending.pending_conflicts, ("game.txt",))
+        self.assertTrue(inspect_repository(self.translated).pending_cherry_pick)
+
+        aborted = abort_update(self.translated)
+        self.assertFalse(aborted.pending_cherry_pick)
+        self.assertEqual(self.translated.joinpath("game.txt").read_text(), "translated\n")
+        self.assertEqual(aborted.original_version, "1.03")
+        self.assertEqual(aborted.translation_version, "1.00")
+
+        applied = apply_registered_original(self.translated)
+        self.assertEqual(applied.official_won_paths, ("game.txt",))
+        self.assertEqual(self.translated.joinpath("game.txt").read_text(), "new official\n")
+
+    def test_existing_repository_without_original_is_reconciled_in_place(self):
+        self.write_versions("Japanese\n", "English\n", "New\n")
+        self.git(self.translated, "init", "-b", "main")
+        self.git(self.translated, "config", "user.name", "Test")
+        self.git(self.translated, "config", "user.email", "test@example.invalid")
+        self.git(self.translated, "add", ".")
+        self.git(self.translated, "commit", "-m", "existing translation")
+
+        bootstrap_repository(self.translated, self.old, "1.00")
+        status = inspect_repository(self.translated)
+
+        self.assertEqual(status.current_branch, "translation")
+        self.assertTrue(status.original_exists)
+        self.assertTrue(status.translation_exists)
+        self.assertEqual(self.translated.joinpath("game.txt").read_text(), "English\n")
+        self.assertTrue(status.worktree_clean)
+
+    def test_existing_original_can_register_and_switch_translation_branch(self):
+        self.write_versions("Japanese\n", "English\n", "New\n")
+        self.git(self.translated, "init", "-b", "main")
+        self.git(self.translated, "config", "user.name", "Test")
+        self.git(self.translated, "config", "user.email", "test@example.invalid")
+        self.git(self.translated, "add", ".")
+        self.git(self.translated, "commit", "-m", "translated game")
+        translated_head = self.git(self.translated, "rev-parse", "HEAD")
+        original_blob = self.git(self.translated, "hash-object", "-w", str(self.old / "game.txt"))
+        tree_input = f"100644 blob {original_blob}\tgame.txt\n"
+        original_tree = subprocess.run(
+            ["git", "-C", str(self.translated), "mktree"],
+            input=tree_input,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        original_commit = subprocess.run(
+            ["git", "-C", str(self.translated), "commit-tree", original_tree, "-m", "original v1.00"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.git(self.translated, "branch", "original", original_commit)
+
+        registered = register_translation_branch(self.translated, "1.00")
+        self.assertEqual(self.git(self.translated, "rev-parse", "translation^1"), translated_head)
+        self.assertEqual(registered.version, "1.00")
+        self.git(self.translated, "checkout", "main")
+        switched = checkout_translation_branch(self.translated)
+        self.assertEqual(switched.current_branch, "translation")
+
+    def test_nested_game_folder_updates_only_its_repository_prefix(self):
+        repo = self.translated
+        game = repo / "game"
+        game.mkdir()
+        game.joinpath("dialogue.txt").write_text("English\n")
+        repo.joinpath("README.md").write_text("keep me\n")
+        self.old.joinpath("dialogue.txt").write_text("Japanese\n")
+        self.new.joinpath("dialogue.txt").write_text("New Japanese\n")
+        self.git(repo, "init", "-b", "main")
+        self.git(repo, "config", "user.name", "Test")
+        self.git(repo, "config", "user.email", "test@example.invalid")
+        self.git(repo, "add", ".")
+        self.git(repo, "commit", "-m", "translation workspace")
+        bootstrap_repository(game, self.old, "1.00")
+
+        result = apply_official_update(game, self.new, "1.03")
+
+        self.assertTrue(result.complete)
+        self.assertEqual(repo.joinpath("README.md").read_text(), "keep me\n")
+        self.assertEqual(game.joinpath("dialogue.txt").read_text(), "New Japanese\n")
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "symbolic links unavailable")
+    def test_bootstrap_rejects_symbolic_links_in_official_tree(self):
+        self.write_versions("old\n", "translated\n", "new\n")
+        os.symlink(self.old / "game.txt", self.old / "linked.txt")
+        with self.assertRaisesRegex(GitWorkflowError, "Symbolic links"):
+            bootstrap_repository(self.translated, self.old, "1.00")
 
 
 class VersionUpdateUITests(unittest.TestCase):
@@ -1469,209 +472,91 @@ class VersionUpdateUITests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    def test_sidebar_page_exposes_safe_staged_workflow(self):
+    def test_sidebar_page_exposes_git_bootstrap_and_update_actions(self):
         from gui.version_update_tab import VersionUpdateTab
 
         tab = VersionUpdateTab()
         try:
-            self.assertFalse(tab.apply_btn.isEnabled())
-            self.assertFalse(tab.custom_apply_btn.isEnabled())
-            self.assertTrue(tab.review_card.isHidden())
-            self.assertTrue(tab.create_card.isHidden())
-            self.assertTrue(tab.options_widget.isHidden())
-            tab.options_toggle.setChecked(True)
-            self.assertFalse(tab.options_widget.isHidden())
-            self.assertIn("original folders are never modified", tab.safety_label.text())
-            self.assertTrue(tab.copy_mode_radio.isChecked())
-            tab.in_place_mode_radio.setChecked(True)
-            self.assertTrue(tab.output_edit.isHidden())
-            self.assertIn("rollback backup", tab.safety_label.text())
-            tab.copy_mode_radio.setChecked(True)
-            self.assertFalse(tab.output_edit.isHidden())
+            self.assertIn("original branch", tab.bootstrap_explanation.text())
+            self.assertEqual(tab.bootstrap_btn.text(), "Create original + translation branches")
+            self.assertEqual(tab.preview_btn.text(), "Preview changes")
+            self.assertEqual(tab.update_btn.text(), "Approve and apply")
+            self.assertFalse(tab.update_btn.isEnabled())
+            self.assertFalse(tab.update_card.isEnabled())
         finally:
             tab.close()
 
-    def test_already_applied_scan_offers_recovery_instead_of_an_empty_update(self):
+    def test_already_applied_versions_are_detected_from_git_history(self):
         from gui.version_update_tab import VersionUpdateTab
 
         with tempfile.TemporaryDirectory() as temporary:
-            base = Path(temporary)
-            old = base / "old"
-            current = base / "current"
-            new = base / "new"
-            for root in (old, current, new):
-                root.mkdir()
-            old.joinpath("Game.exe").write_bytes(b"v1")
-            current.joinpath("Game.exe").write_bytes(b"v1")
-            new.joinpath("Game.exe").write_bytes(b"v2")
-            first = scan_version_update(
-                current,
-                new,
-                old_root=old,
-                old_version="1.00",
-                new_version="1.10",
-            )
-            updated = base / "updated"
-            apply_staged_update(first, updated)
-
-            repeated = scan_version_update(updated, new)
+            root = Path(temporary)
+            old, translated = root / "Original v1.00", root / "Translated v1.00"
+            new = root / "Original v1.03"
+            old.mkdir()
+            translated.mkdir()
+            new.mkdir()
+            old.joinpath("game.txt").write_text("Japanese\n")
+            translated.joinpath("game.txt").write_text("English\n")
+            new.joinpath("game.txt").write_text("New Japanese\n")
+            bootstrap_repository(translated, old, "1.00")
             tab = VersionUpdateTab()
             try:
-                tab.current_edit.setText(str(updated))
-                tab._refresh_detection()
-                self.assertIn("runs automatically", tab.baseline_label.text())
-                tab._on_scan_done(repeated)
-                self.assertFalse(tab.review_card.isHidden())
-                self.assertFalse(tab.create_card.isHidden())
-                self.assertIn("Recovery audit", tab.summary_label.text())
-                self.assertEqual(tab.review_filter.currentData(), "recovery")
-                self.assertEqual(
-                    sum(not item.isHidden() for item in tab._items.values()), 0
-                )
-                self.assertEqual(
-                    tab.apply_btn.text(), "Reapply recovered changes"
-                )
-                self.assertEqual(
-                    tab.custom_apply_btn.text(), "Reapply with review choices"
-                )
-                self.assertTrue(tab.apply_btn.isEnabled())
-                self.assertTrue(tab.custom_apply_btn.isEnabled())
-
-                updated.joinpath("Game.exe").write_bytes(b"v1")
-                audit = scan_version_update(updated, new)
-                tab._on_scan_done(audit)
-                self.assertIn("Recovery audit", tab.summary_label.text())
-                self.assertIn("1 definite full-file revert", tab.summary_label.text())
-                self.assertEqual(
-                    sum(not item.isHidden() for item in tab._items.values()), 1
-                )
-                self.assertIn("Definite revert", next(iter(tab._items.values())).text(3))
-                self.assertTrue(tab.apply_btn.isEnabled())
-                self.assertTrue(tab.custom_apply_btn.isEnabled())
-                tab.output_edit.setText(str(base / "recovered"))
-                with patch.object(
-                    QMessageBox, "question", return_value=QMessageBox.No
-                ) as question:
-                    tab._apply(recommended=True)
-                self.assertEqual(question.call_args.args[1], "Reapply recovered changes")
+                tab.current_edit.setText(str(translated))
+                tab.refresh_status()
+                self.assertIn("Original version: 1.00", tab.version_status.text())
+                self.assertIn("Translation version: 1.00", tab.version_status.text())
+                self.assertTrue(tab.bootstrap_card.isHidden())
+                self.assertTrue(tab.update_card.isEnabled())
+                preview = preview_official_update(translated, new, "1.03")
+                tab._show_preview(preview)
+                self.assertIn("Modified: 1", tab.preview_details.toPlainText())
                 self.assertIn(
-                    "no files change unless you confirm this reapply",
-                    question.call_args.args[2],
+                    "Potential translation overlaps", tab.preview_details.toPlainText()
+                )
+                self.assertTrue(tab.update_btn.isEnabled())
+
+                new.joinpath("game.txt").write_text("English\n")
+                no_op_preview = preview_official_update(translated, new, "1.03")
+                tab._show_preview(no_op_preview)
+                self.assertIn(
+                    "No translated-game content changes are expected",
+                    tab.preview_details.toPlainText(),
+                )
+                self.assertIn(
+                    "Official release delta (previous original → new original):",
+                    tab.preview_details.toPlainText(),
+                )
+                self.assertIn(
+                    "Translation impact:\nFiles that would change: 0",
+                    tab.preview_details.toPlainText(),
+                )
+                self.assertEqual(
+                    tab.update_btn.text(), "Record version (no content changes)"
                 )
             finally:
                 tab.close()
 
-    def test_file_details_explain_consequences_without_engine_paths(self):
-        from gui.version_update_tab import _format_decision_details
-
-        merged_map = {
-            "events": [
-                None,
-                {
-                    "id": 1,
-                    "name": "Exit",
-                    "pages": [
-                        {
-                            "list": [
-                                {
-                                    "code": 401,
-                                    "indent": 0,
-                                    "parameters": ["The stairs are clear."],
-                                },
-                                {
-                                    "code": 401,
-                                    "indent": 0,
-                                    "parameters": ["Head to the barracks."],
-                                },
-                            ]
-                        }
-                    ],
-                },
-            ]
-        }
-        decision = UpdateDecision(
-            relative_path="data/Map002.json",
-            action=UpdateAction.CONFLICT,
-            kind=FileKind.JSON,
-            reason="RPG Maker data has ambiguous both-changed values",
-            generated_content=(
-                json.dumps(merged_map, ensure_ascii=False).encode("utf-8")
-            ),
-            needs_review=True,
-            preserved_translations=1,
-            details=[
-                "$.events.id=1.pages[0].list[0].parameters[0]: "
-                "source text is unchanged",
-                "$.events.id=1.pages[0].list[1]: an upstream command matches a "
-                "command removed by the translator",
-            ],
-            resolution=ConflictResolution.USE_PROPOSED,
-            recommended_resolution=ConflictResolution.USE_PROPOSED,
-            resolution_is_automatic=True,
-            recovery_status=RecoveryStatus.POSSIBLE_REVERT,
-        )
-
-        summary, technical = _format_decision_details(decision)
-
-        self.assertIn("What will happen", summary)
-        self.assertIn("Recovery finding", summary)
-        self.assertIn("matches neither official version", summary)
-        self.assertIn("Keep 1 existing translation", summary)
-        self.assertIn("Restore 1 event command that was removed locally", summary)
-        self.assertIn("What needs your attention", summary)
-        self.assertIn('Event 1 “Exit” · Page 1 · Dialogue 2', summary)
-        self.assertIn("Result: Head to the barracks.", summary)
-        self.assertIn("Selected automatically: Merge New + Local Changes", summary)
-        self.assertNotIn("$.events", summary)
-        self.assertNotIn("source text is unchanged", summary)
-        self.assertIn("$.events.id=1.pages[0].list[1]", technical)
-
-    def test_review_queue_bulk_override_is_clear_and_multi_select(self):
+    def test_review_queue_shows_pending_git_conflicts(self):
         from gui.version_update_tab import VersionUpdateTab
 
         with tempfile.TemporaryDirectory() as temporary:
-            base = Path(temporary)
-            roots = [base / name for name in ("old", "current", "new")]
-            for root in roots:
-                root.mkdir()
-            old, current, new = roots
-            for relative in ("one.bin", "two.bin"):
-                old.joinpath(relative).write_bytes(b"old")
-                current.joinpath(relative).write_bytes(b"local")
-                new.joinpath(relative).write_bytes(b"new")
-            plan = scan_version_update(current, new, old_root=old)
+            root = Path(temporary)
+            old, translated, new = root / "old", root / "translated", root / "new"
+            for folder, text in ((old, "old\n"), (translated, "translated\n"), (new, "new\n")):
+                folder.mkdir()
+                folder.joinpath("game.txt").write_text(text)
+            bootstrap_repository(translated, old, "1.00")
+            apply_official_update(translated, new, "1.03", auto_resolve=False)
             tab = VersionUpdateTab()
             try:
-                tab._plan = plan
-                tab._populate_plan()
+                tab.current_edit.setText(str(translated))
+                tab.refresh_status()
+                self.assertFalse(tab.recovery_card.isHidden())
+                self.assertIn("game.txt", tab.conflict_summary.toPlainText())
                 self.assertEqual(
-                    sum(not item.isHidden() for item in tab._items.values()), 2
+                    tab.continue_btn.text(), "Use official conflicts and continue"
                 )
-                items = list(tab._items.values())
-                tab.tree.clearSelection()
-                for item in items:
-                    item.setSelected(True)
-                tab._resolve_selected(ConflictResolution.KEEP_CURRENT)
-                self.assertTrue(
-                    all(
-                        decision.resolution == ConflictResolution.KEEP_CURRENT
-                        and not decision.resolution_is_automatic
-                        for decision in plan.decisions
-                    )
-                )
-                self.assertIn("Current wins", items[0].text(3))
-                with patch.object(tab, "_apply") as apply:
-                    tab._apply_recommended()
-                self.assertTrue(
-                    all(
-                        decision.resolution == decision.recommended_resolution
-                        and decision.resolution_is_automatic
-                        for decision in plan.decisions
-                    )
-                )
-                apply.assert_called_once_with(recommended=True)
             finally:
                 tab.close()
-
-if __name__ == "__main__":
-    unittest.main()
+                abort_update(translated)
