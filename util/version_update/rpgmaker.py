@@ -158,10 +158,17 @@ def _command_source_hint(command: dict[str, Any]) -> Any:
     code = command.get("code")
     if code in {401, 405, 408} and parameters:
         return parameters[0]
-    if code == 101 and len(parameters) > 4:
-        return parameters[4]
+    if code == 101:
+        if len(parameters) > 4:
+            return parameters[4]
+        if 0 < len(parameters) < 4:
+            return parameters[0]
     if code == 102 and parameters:
         return parameters[0]
+    if code == 122 and len(parameters) > 4 and isinstance(parameters[4], str):
+        matched = re.search(r"['\"`](.*)['\"`]", parameters[4])
+        if matched:
+            return matched.group(1)
     return None
 
 
@@ -173,6 +180,234 @@ def _command_signature(command: dict[str, Any], *, include_source: bool) -> tupl
         _freeze(_command_source_hint(command))
         if include_source
         else _skeleton(_command_source_hint(command)),
+    )
+
+
+@dataclass(frozen=True)
+class _CommandUnit:
+    """One event command, or one contiguous RPG Maker text block."""
+
+    start: int
+    stop: int
+    code: Any
+    indent: Any
+    is_text: bool
+    is_script: bool = False
+
+
+def _command_units(commands: list[Any]) -> list[_CommandUnit]:
+    """Group event commands whose physical shape translation may change."""
+    units: list[_CommandUnit] = []
+    index = 0
+    while index < len(commands):
+        command = commands[index]
+        if not isinstance(command, dict):
+            units.append(_CommandUnit(index, index + 1, None, None, False))
+            index += 1
+            continue
+        code = command.get("code")
+        indent = command.get("indent")
+        parameters = command.get("parameters")
+        if code == 355:
+            stop = index + 1
+            while stop < len(commands):
+                following = commands[stop]
+                if (
+                    not isinstance(following, dict)
+                    or following.get("code") != 655
+                    or following.get("indent") != indent
+                ):
+                    break
+                stop += 1
+            units.append(_CommandUnit(index, stop, code, indent, False, True))
+            index = stop
+            continue
+        if (
+            code not in {401, 405, 408}
+            or not isinstance(parameters, list)
+            or not parameters
+        ):
+            units.append(_CommandUnit(index, index + 1, code, indent, False))
+            index += 1
+            continue
+        stop = index + 1
+        while stop < len(commands):
+            following = commands[stop]
+            if not isinstance(following, dict):
+                break
+            following_parameters = following.get("parameters")
+            if (
+                following.get("code") != code
+                or following.get("indent") != indent
+                or not isinstance(following_parameters, list)
+                or not following_parameters
+            ):
+                break
+            stop += 1
+        units.append(_CommandUnit(index, stop, code, indent, True))
+        index = stop
+    return units
+
+
+def _text_unit_source(
+    commands: list[Any], unit: _CommandUnit, *, prefer_original: bool
+) -> str:
+    if prefer_original:
+        for index in range(unit.start, unit.stop):
+            command = commands[index]
+            if not isinstance(command, dict):
+                continue
+            original = command.get("_original")
+            if original is not None and not isinstance(original, (list, dict)):
+                text = str(original)
+                if text.strip():
+                    return text
+    parts: list[str] = []
+    for index in range(unit.start, unit.stop):
+        command = commands[index]
+        if not isinstance(command, dict):
+            continue
+        parameters = command.get("parameters")
+        if isinstance(parameters, list) and parameters:
+            parts.append(str(parameters[0]))
+    return "\n".join(parts)
+
+
+def _command_unit_signature(
+    commands: list[Any],
+    unit: _CommandUnit,
+    *,
+    include_source: bool,
+    prefer_original: bool,
+) -> tuple[Any, ...]:
+    if unit.is_text:
+        source = _text_unit_source(
+            commands, unit, prefer_original=prefer_original
+        )
+        return (
+            "text-block",
+            unit.code,
+            unit.indent,
+            _freeze(source) if include_source else "<text>",
+        )
+    if unit.is_script:
+        source = commands[unit.start : unit.stop]
+        return (
+            "script-block",
+            unit.indent,
+            _freeze(source) if include_source else "<script>",
+        )
+    command = commands[unit.start]
+    if isinstance(command, dict):
+        return ("command",) + _command_signature(
+            command, include_source=include_source
+        )
+    return ("other", _skeleton(command))
+
+
+def _compatible_command_units(left: _CommandUnit, right: _CommandUnit) -> bool:
+    if left.is_script or right.is_script:
+        return left.is_script and right.is_script and left.indent == right.indent
+    if left.is_text or right.is_text:
+        return (
+            left.is_text
+            and right.is_text
+            and left.code == right.code
+            and left.indent == right.indent
+        )
+    return left.code == right.code and left.indent == right.indent
+
+
+def _align_command_units(
+    base: list[Any],
+    variant: list[Any],
+    *,
+    translated_variant: bool,
+) -> tuple[list[_CommandUnit], list[_CommandUnit], dict[int, int], list[int]]:
+    """Align logical commands while using translated text-block metadata as source."""
+    base_units = _command_units(base)
+    variant_units = _command_units(variant)
+    base_signatures = [
+        _command_unit_signature(
+            base,
+            unit,
+            include_source=not translated_variant or unit.is_text,
+            prefer_original=False,
+        )
+        for unit in base_units
+    ]
+    variant_signatures = [
+        _command_unit_signature(
+            variant,
+            unit,
+            include_source=not translated_variant or unit.is_text,
+            prefer_original=translated_variant and unit.is_text,
+        )
+        for unit in variant_units
+    ]
+    mapping: dict[int, int] = {}
+    mapped_variant: set[int] = set()
+    matcher = SequenceMatcher(a=base_signatures, b=variant_signatures, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for offset in range(i2 - i1):
+                mapping[i1 + offset] = j1 + offset
+                mapped_variant.add(j1 + offset)
+        elif tag == "replace" and (i2 - i1) == (j2 - j1):
+            for offset in range(i2 - i1):
+                if _compatible_command_units(
+                    base_units[i1 + offset], variant_units[j1 + offset]
+                ):
+                    mapping[i1 + offset] = j1 + offset
+                    mapped_variant.add(j1 + offset)
+
+    # Exact source matching deliberately stops at a changed text block. A
+    # second structural pass lets that block align across nearby insertions or
+    # deletions without weakening exact matches already established above.
+    structural_base = [
+        _command_unit_signature(
+            base,
+            unit,
+            include_source=False,
+            prefer_original=False,
+        )
+        for unit in base_units
+    ]
+    structural_variant = [
+        _command_unit_signature(
+            variant,
+            unit,
+            include_source=False,
+            prefer_original=translated_variant and unit.is_text,
+        )
+        for unit in variant_units
+    ]
+    mapped_base = set(mapping)
+    structural_matcher = SequenceMatcher(
+        a=structural_base, b=structural_variant, autojunk=False
+    )
+    for tag, i1, i2, j1, j2 in structural_matcher.get_opcodes():
+        if tag == "equal":
+            pairs = zip(range(i1, i2), range(j1, j2))
+        elif tag == "replace" and (i2 - i1) == (j2 - j1):
+            pairs = zip(range(i1, i2), range(j1, j2))
+        else:
+            continue
+        for base_index, variant_index in pairs:
+            if base_index in mapped_base or variant_index in mapped_variant:
+                continue
+            if not _compatible_command_units(
+                base_units[base_index], variant_units[variant_index]
+            ):
+                continue
+            mapping[base_index] = variant_index
+            mapped_base.add(base_index)
+            mapped_variant.add(variant_index)
+    return (
+        base_units,
+        variant_units,
+        mapping,
+        [index for index in range(len(variant_units)) if index not in mapped_variant],
     )
 
 
@@ -356,10 +591,17 @@ class _Merger:
             return _MISSING
         if code in {401, 405, 408} and parameters:
             return parameters[0]
-        if code == 101 and len(parameters) > 4:
-            return parameters[4]
+        if code == 101:
+            if len(parameters) > 4:
+                return parameters[4]
+            if 0 < len(parameters) < 4:
+                return parameters[0]
         if code == 102 and parameters and isinstance(parameters[0], list):
             return parameters[0]
+        if code == 122 and len(parameters) > 4 and isinstance(parameters[4], str):
+            matched = re.search(r"['\"`](.*)['\"`]", parameters[4])
+            if matched:
+                return matched.group(1)
         return _MISSING
 
     def _merge_list(
@@ -416,10 +658,137 @@ class _Merger:
     def _merge_command_list(
         self, old: list[Any], current: list[Any], new: list[Any], path: tuple[Any, ...]
     ) -> list[Any]:
-        old_to_current, current_unmatched = _align_commands(old, current)
+        old_to_current, _current_unmatched = _align_commands(old, current)
         old_to_new, _new_unmatched = _align_commands(old, new, include_source=True)
+        (
+            old_units,
+            current_units,
+            old_units_to_current,
+            current_units_unmatched,
+        ) = _align_command_units(old, current, translated_variant=True)
+        (
+            _old_units_again,
+            new_units,
+            old_units_to_new,
+            _new_units_unmatched,
+        ) = _align_command_units(old, new, translated_variant=False)
+
+        # Logical-unit alignment also disambiguates repeated commands (especially
+        # code 101 name-window commands) around collapsed text blocks.
+        for old_unit_index, current_unit_index in old_units_to_current.items():
+            old_unit = old_units[old_unit_index]
+            current_unit = current_units[current_unit_index]
+            if (
+                old_unit.stop - old_unit.start == 1
+                and current_unit.stop - current_unit.start == 1
+            ):
+                old_to_current[old_unit.start] = current_unit.start
+        for old_unit_index, new_unit_index in old_units_to_new.items():
+            old_unit = old_units[old_unit_index]
+            new_unit = new_units[new_unit_index]
+            if (
+                old_unit.stop - old_unit.start == 1
+                and new_unit.stop - new_unit.start == 1
+            ):
+                old_to_new[old_unit.start] = new_unit.start
         new_to_old = {new_index: old_index for old_index, new_index in old_to_new.items()}
-        if current_unmatched:
+
+        # Dazed's translator can shrink 401/408 runs or grow 405 runs while
+        # storing the whole joined source in the anchor's _original metadata.
+        # Treat every recognized rewrite as one logical replacement. Merging
+        # command by command can otherwise restore source continuations or drop
+        # translated lines solely because the physical command count changed.
+        replacement_by_new_start: dict[int, list[Any]] = {}
+        covered_new_indices: set[int] = set()
+        for old_unit_index, current_unit_index in old_units_to_current.items():
+            old_unit = old_units[old_unit_index]
+            current_unit = current_units[current_unit_index]
+            if (
+                not old_unit.is_text
+                or not current_unit.is_text
+                or old_unit.stop - old_unit.start
+                == current_unit.stop - current_unit.start
+            ):
+                continue
+            old_source = _text_unit_source(old, old_unit, prefer_original=False)
+            current_source = _text_unit_source(
+                current, current_unit, prefer_original=True
+            )
+            if not old_source or current_source != old_source:
+                continue
+            new_unit_index = old_units_to_new.get(old_unit_index)
+            if new_unit_index is None:
+                continue
+            new_unit = new_units[new_unit_index]
+            if not _compatible_command_units(old_unit, new_unit):
+                continue
+            new_source = _text_unit_source(new, new_unit, prefer_original=False)
+            covered_new_indices.update(range(new_unit.start, new_unit.stop))
+            if new_source == old_source:
+                replacement_by_new_start[new_unit.start] = list(
+                    current[current_unit.start : current_unit.stop]
+                )
+                self.issue(
+                    path + (new_unit.start,),
+                    "preserved_translation",
+                    "source text block is unchanged",
+                    old_unit.stop - old_unit.start,
+                )
+            else:
+                replacement_by_new_start[new_unit.start] = list(
+                    new[new_unit.start : new_unit.stop]
+                )
+                self.issue(
+                    path + (new_unit.start,),
+                    "needs_translation",
+                    "translated source text block changed upstream",
+                    _count_japanese(new[new_unit.start : new_unit.stop]),
+                )
+
+        # Script translation may rewrap a code-355 block by inserting code-655
+        # continuations. Preserve that whole generated block when upstream did
+        # not touch it. If both sides changed the script, prefer the new source
+        # in the proposal and keep the file in the review queue.
+        for old_unit_index, current_unit_index in old_units_to_current.items():
+            old_unit = old_units[old_unit_index]
+            current_unit = current_units[current_unit_index]
+            if not old_unit.is_script or not current_unit.is_script:
+                continue
+            new_unit_index = old_units_to_new.get(old_unit_index)
+            if new_unit_index is None:
+                continue
+            new_unit = new_units[new_unit_index]
+            if not new_unit.is_script:
+                continue
+            old_block = old[old_unit.start : old_unit.stop]
+            current_block = current[current_unit.start : current_unit.stop]
+            new_block = new[new_unit.start : new_unit.stop]
+            if current_block == old_block:
+                continue
+            covered_new_indices.update(range(new_unit.start, new_unit.stop))
+            if new_block == old_block:
+                replacement_by_new_start[new_unit.start] = list(current_block)
+                self.issue(
+                    path + (new_unit.start,),
+                    "preserved_translation",
+                    "source script block is unchanged",
+                    _count_japanese(old_block),
+                )
+            else:
+                replacement_by_new_start[new_unit.start] = list(new_block)
+                self.issue(
+                    path + (new_unit.start,),
+                    "conflict",
+                    "translator and upstream both changed a script block",
+                )
+                self.issue(
+                    path + (new_unit.start,),
+                    "needs_translation",
+                    "translated source script block changed upstream",
+                    _count_japanese(new_block),
+                )
+
+        if current_units_unmatched:
             self.issue(
                 path,
                 "conflict",
@@ -428,6 +797,11 @@ class _Merger:
 
         output: list[Any] = []
         for new_index, new_command in enumerate(new):
+            if new_index in replacement_by_new_start:
+                output.extend(replacement_by_new_start[new_index])
+                continue
+            if new_index in covered_new_indices:
+                continue
             old_index = new_to_old.get(new_index)
             if old_index is None:
                 output.append(new_command)
@@ -466,46 +840,32 @@ class _Merger:
         The translator stores the joined source on the first 401/405/408 command.
         Updating only a later line must therefore refresh the anchor as a group.
         """
-        index = 0
-        while index < min(len(output), len(new)):
-            output_command = output[index]
-            new_command = new[index]
-            if not isinstance(output_command, dict) or not isinstance(new_command, dict):
-                index += 1
+        output_units = _command_units(output)
+        new_units = _command_units(new)
+        if len(output_units) != len(new_units):
+            return
+        for output_unit, new_unit in zip(output_units, new_units):
+            if (
+                not output_unit.is_text
+                or not new_unit.is_text
+                or not _compatible_command_units(output_unit, new_unit)
+            ):
                 continue
-            code = new_command.get("code")
-            if code not in {401, 405, 408}:
-                index += 1
-                continue
-            end = index
-            new_parts: list[str] = []
-            visible_parts: list[str] = []
-            metadata_present = False
-            while end < min(len(output), len(new)):
-                out_item = output[end]
-                new_item = new[end]
-                if (
-                    not isinstance(out_item, dict)
-                    or not isinstance(new_item, dict)
-                    or new_item.get("code") != code
-                ):
-                    break
-                out_params = out_item.get("parameters") or []
-                new_params = new_item.get("parameters") or []
-                if out_params:
-                    visible_parts.append(str(out_params[0]))
-                if new_params:
-                    new_parts.append(str(new_params[0]))
-                metadata_present = metadata_present or "_original" in out_item
-                end += 1
-            new_source = "\n".join(new_parts)
-            visible = "\n".join(visible_parts)
+            new_source = _text_unit_source(new, new_unit, prefer_original=False)
+            visible = _text_unit_source(output, output_unit, prefer_original=False)
+            metadata_present = any(
+                isinstance(output[index], dict) and "_original" in output[index]
+                for index in range(output_unit.start, output_unit.stop)
+            )
             if new_source and (metadata_present or visible != new_source):
+                output_command = output[output_unit.start]
+                if not isinstance(output_command, dict):
+                    continue
                 output_command["_original"] = new_source
-                for extra in output[index + 1 : end]:
+                for index in range(output_unit.start + 1, output_unit.stop):
+                    extra = output[index]
                     if isinstance(extra, dict):
                         extra.pop("_original", None)
-            index = max(index + 1, end)
 
 
 class _PluginMerger(_Merger):

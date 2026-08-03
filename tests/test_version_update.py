@@ -28,6 +28,7 @@ from util.version_update import (
     detect_update_profile,
     scan_version_update,
 )
+from util.version_update.rpgmaker import merge_json_bytes
 
 
 class VersionUpdateTestBase(unittest.TestCase):
@@ -966,6 +967,322 @@ class RPGMakerVersionUpdateTests(VersionUpdateTestBase):
         commands = merged["events"][1]["pages"][0]["list"]
         self.assertEqual([command["code"] for command in commands], [121, 401, 0])
         self.assertEqual(commands[1]["parameters"][0], "Hello")
+
+    def test_collapsed_dialogue_block_does_not_restore_source_continuations(self):
+        old_map = {
+            "events": [
+                None,
+                {
+                    "id": 1,
+                    "pages": [
+                        {
+                            "list": [
+                                {
+                                    "code": 101,
+                                    "indent": 0,
+                                    "parameters": ["", 0, 0, 2, "勇者"],
+                                },
+                                {"code": 401, "indent": 0, "parameters": ["一行目"]},
+                                {"code": 401, "indent": 0, "parameters": ["二行目"]},
+                                {
+                                    "code": 101,
+                                    "indent": 0,
+                                    "parameters": ["", 0, 0, 2, "仲間"],
+                                },
+                                {"code": 401, "indent": 0, "parameters": ["次の台詞"]},
+                                {"code": 0, "indent": 0, "parameters": []},
+                            ]
+                        }
+                    ],
+                },
+            ]
+        }
+        translated_map = json.loads(json.dumps(old_map, ensure_ascii=False))
+        translated_map["events"][1]["pages"][0]["list"] = [
+            {
+                "code": 101,
+                "indent": 0,
+                "parameters": ["", 0, 0, 2, "Hero"],
+                "_original": "勇者",
+            },
+            {
+                "code": 401,
+                "indent": 0,
+                "parameters": ["First line and second line."],
+                "_original": "一行目\n二行目",
+            },
+            {
+                "code": 101,
+                "indent": 0,
+                "parameters": ["", 0, 0, 2, "Companion"],
+                "_original": "仲間",
+            },
+            {
+                "code": 401,
+                "indent": 0,
+                "parameters": ["The next line."],
+                "_original": "次の台詞",
+            },
+            {"code": 0, "indent": 0, "parameters": []},
+        ]
+        new_map = json.loads(json.dumps(old_map, ensure_ascii=False))
+        new_map["events"][1]["pages"][0]["list"].insert(
+            0, {"code": 121, "indent": 0, "parameters": [3, 3, 0]}
+        )
+        for root in (self.old, self.current, self.new):
+            self._write_json(root, "data/System.json", {"gameTitle": "ゲーム"})
+        self._write_json(self.old, "data/Map001.json", old_map)
+        self._write_json(self.current, "data/Map001.json", translated_map)
+        self._write_json(self.new, "data/Map001.json", new_map)
+
+        plan = scan_version_update(self.current, self.new, old_root=self.old)
+        decision = next(
+            d for d in plan.decisions if d.relative_path == "data/Map001.json"
+        )
+
+        self.assertEqual(decision.action, UpdateAction.MERGE_SEMANTIC)
+        self.assertEqual(decision.needs_translation, 0)
+        apply_staged_update(plan, self.base / "collapsed-dialogue-updated")
+        merged = json.loads(
+            self.base.joinpath(
+                "collapsed-dialogue-updated/data/Map001.json"
+            ).read_text(encoding="utf-8")
+        )
+        commands = merged["events"][1]["pages"][0]["list"]
+        self.assertEqual(
+            [command["code"] for command in commands],
+            [121, 101, 401, 101, 401, 0],
+        )
+        self.assertEqual(commands[2]["parameters"][0], "First line and second line.")
+        self.assertEqual(commands[2]["_original"], "一行目\n二行目")
+        visible_parameters = [
+            command["parameters"][0]
+            for command in commands
+            if command.get("parameters")
+        ]
+        self.assertNotIn("二行目", visible_parameters)
+
+    def test_rewritten_text_blocks_merge_across_rpgmaker_event_containers(self):
+        def wrap(container, commands):
+            if container == "map":
+                return {
+                    "events": [
+                        None,
+                        {"id": 1, "pages": [{"list": commands}]},
+                    ]
+                }
+            if container == "common_events":
+                return [None, {"id": 1, "list": commands}]
+            return [None, {"id": 1, "pages": [{"list": commands}]}]
+
+        def commands_in(container, value):
+            if container == "map":
+                return value["events"][1]["pages"][0]["list"]
+            if container == "common_events":
+                return value[1]["list"]
+            return value[1]["pages"][0]["list"]
+
+        def merged(old, current, new):
+            encode = lambda value: json.dumps(value, ensure_ascii=False).encode()
+            result = merge_json_bytes(encode(old), encode(current), encode(new))
+            return json.loads(result.content), result
+
+        source = ["一行目", "二行目"]
+        translated_by_code = {
+            401: ["Translated dialogue."],
+            405: ["Translated", "scrolling", "text."],
+            408: ["Translated comment."],
+        }
+        for container in ("map", "common_events", "troops"):
+            for code, translated_lines in translated_by_code.items():
+                with self.subTest(
+                    container=container, code=code, update="unrelated insertion"
+                ):
+                    old_commands = [
+                        {"code": code, "indent": 0, "parameters": [line]}
+                        for line in source
+                    ] + [{"code": 0, "indent": 0, "parameters": []}]
+                    current_commands = [
+                        {
+                            "code": code,
+                            "indent": 0,
+                            "parameters": [line],
+                            **({"_original": "\n".join(source)} if index == 0 else {}),
+                        }
+                        for index, line in enumerate(translated_lines)
+                    ] + [{"code": 0, "indent": 0, "parameters": []}]
+                    new_commands = [
+                        {"code": 121, "indent": 0, "parameters": [1, 1, 0]},
+                        *json.loads(json.dumps(old_commands, ensure_ascii=False)),
+                    ]
+
+                    output, result = merged(
+                        wrap(container, old_commands),
+                        wrap(container, current_commands),
+                        wrap(container, new_commands),
+                    )
+                    output_commands = commands_in(container, output)
+
+                    self.assertFalse(result.conflicts)
+                    self.assertEqual(result.needs_translation, 0)
+                    self.assertEqual(
+                        [item["parameters"][0] for item in output_commands[1:-1]],
+                        translated_lines,
+                    )
+                    self.assertEqual(output_commands[1]["_original"], "\n".join(source))
+
+                with self.subTest(
+                    container=container, code=code, update="source changed"
+                ):
+                    changed_commands = [
+                        {"code": 121, "indent": 0, "parameters": [1, 1, 0]},
+                        {"code": code, "indent": 0, "parameters": [source[0]]},
+                        {"code": code, "indent": 0, "parameters": ["変更した二行目"]},
+                        {"code": 0, "indent": 0, "parameters": []},
+                    ]
+                    output, result = merged(
+                        wrap(container, old_commands),
+                        wrap(container, current_commands),
+                        wrap(container, changed_commands),
+                    )
+                    output_commands = commands_in(container, output)
+
+                    self.assertFalse(result.conflicts)
+                    self.assertEqual(result.needs_translation, 2)
+                    self.assertEqual(
+                        [item["parameters"][0] for item in output_commands[1:-1]],
+                        [source[0], "変更した二行目"],
+                    )
+
+    def test_rewrapped_script_block_is_preserved_or_safely_invalidated(self):
+        old = {
+            "list": [
+                {
+                    "code": 355,
+                    "indent": 0,
+                    "parameters": ['var _MTxt = "原文" + "\\n";'],
+                },
+                {"code": 0, "indent": 0, "parameters": []},
+            ]
+        }
+        current = {
+            "list": [
+                {
+                    "code": 355,
+                    "indent": 0,
+                    "parameters": ['var _MTxt = "Translated" + "\\n";'],
+                },
+                {
+                    "code": 655,
+                    "indent": 0,
+                    "parameters": ['   _MTxt += "continuation" + "\\n";'],
+                },
+                {"code": 0, "indent": 0, "parameters": []},
+            ]
+        }
+
+        def merge(new):
+            encode = lambda value: json.dumps(value, ensure_ascii=False).encode()
+            result = merge_json_bytes(encode(old), encode(current), encode(new))
+            return json.loads(result.content), result
+
+        unchanged = json.loads(json.dumps(old, ensure_ascii=False))
+        unchanged["list"].insert(
+            0, {"code": 121, "indent": 0, "parameters": [1, 1, 0]}
+        )
+        output, result = merge(unchanged)
+
+        self.assertFalse(result.conflicts)
+        self.assertEqual(
+            [command["code"] for command in output["list"]], [121, 355, 655, 0]
+        )
+        self.assertIn("continuation", output["list"][2]["parameters"][0])
+
+        changed = json.loads(json.dumps(old, ensure_ascii=False))
+        changed["list"][0]["parameters"][0] = 'var _MTxt = "新版" + "\\n";'
+        output, result = merge(changed)
+
+        self.assertEqual(len(result.conflicts), 1)
+        self.assertEqual(result.needs_translation, 1)
+        self.assertEqual([command["code"] for command in output["list"]], [355, 0])
+        self.assertIn("新版", output["list"][0]["parameters"][0])
+
+    def test_in_place_event_translations_survive_neighboring_commands(self):
+        cases = [
+            ("name window", 101, ["", 0, 0, 2, "名前"], ["", 0, 0, 2, "Name"], "名前"),
+            ("short name window", 101, ["話者", 0, 0], ["Speaker", 0, 0], "話者"),
+            ("choices", 102, [["はい", "いいえ"], 0, 0, 2, 0], [["Yes", "No"], 0, 0, 2, 0], ["はい", "いいえ"]),
+            ("variable script", 122, [1, 1, 0, 4, "`原文`"], [1, 1, 0, 4, "`Translated`"], "原文"),
+            ("comment header", 108, ["原文"], ["Translated"], None),
+            ("conditional branch", 111, [12, "原文"], [12, "Translated"], None),
+            ("actor name", 320, [1, "原文"], [1, "Translated"], None),
+            ("actor nickname", 324, [1, "原文"], [1, "Translated"], None),
+            ("actor profile", 325, [1, "原文"], [1, "Translated"], None),
+            ("MV plugin command", 356, ["Plugin 原文"], ["Plugin Translated"], None),
+            (
+                "MZ plugin command",
+                357,
+                ["Plugin", "Command", "Display", {"Text": "原文"}],
+                ["Plugin", "Command", "Display", {"Text": "Translated"}],
+                None,
+            ),
+            ("plugin annotation", 657, ["Key = 原文"], ["Key = Translated"], None),
+        ]
+        encode = lambda value: json.dumps(value, ensure_ascii=False).encode()
+
+        for label, code, source, translated, original in cases:
+            with self.subTest(command=label, code=code):
+                old = {
+                    "list": [
+                        {"code": code, "indent": 0, "parameters": source},
+                        {"code": 0, "indent": 0, "parameters": []},
+                    ]
+                }
+                current = json.loads(json.dumps(old, ensure_ascii=False))
+                current["list"][0]["parameters"] = translated
+                if original is not None:
+                    current["list"][0]["_original"] = original
+                new = json.loads(json.dumps(old, ensure_ascii=False))
+                new["list"].insert(
+                    0, {"code": 121, "indent": 0, "parameters": [1, 1, 0]}
+                )
+
+                result = merge_json_bytes(encode(old), encode(current), encode(new))
+                output = json.loads(result.content)
+
+                self.assertFalse(result.conflicts)
+                self.assertEqual(result.needs_translation, 0)
+                self.assertEqual(output["list"][1]["parameters"], translated)
+
+    def test_scalar_event_original_metadata_tracks_changed_source(self):
+        cases = [
+            (101, ["話者", 0, 0], ["Speaker", 0, 0], ["新版話者", 0, 0], "話者", "新版話者"),
+            (101, ["", 0, 0, 2, "名前"], ["", 0, 0, 2, "Name"], ["", 0, 0, 2, "新版名前"], "名前", "新版名前"),
+            (122, [1, 1, 0, 4, "`原文`"], [1, 1, 0, 4, "`Translated`"], [1, 1, 0, 4, "`新版`"], "原文", "新版"),
+        ]
+        encode = lambda value: json.dumps(value, ensure_ascii=False).encode()
+
+        for code, source, translated, changed, original, expected in cases:
+            with self.subTest(code=code, parameters=source):
+                old = {"code": code, "indent": 0, "parameters": source}
+                current = {
+                    "code": code,
+                    "indent": 0,
+                    "parameters": translated,
+                    "_original": original,
+                }
+                new = {"code": code, "indent": 0, "parameters": changed}
+
+                result = merge_json_bytes(
+                    encode({"list": [old]}),
+                    encode({"list": [current]}),
+                    encode({"list": [new]}),
+                )
+                output = json.loads(result.content)["list"][0]
+
+                self.assertEqual(result.needs_translation, 1)
+                self.assertEqual(output["parameters"], changed)
+                self.assertEqual(output["_original"], expected)
 
     def test_changed_second_dialogue_line_refreshes_group_original(self):
         old_map = {
