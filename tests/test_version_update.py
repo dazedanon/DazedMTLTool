@@ -155,6 +155,88 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertIn('"name": "English"', diff)
         self.assertNotIn('{"name":', diff)
 
+    def test_bootstrap_normalizes_crlf_so_eol_noise_cannot_wipe_translations(self):
+        # Pretty JSON that only differs by CRLF must become LF in Git. Otherwise a
+        # later LF official release conflicts on every line and replaces translations.
+        self.old.joinpath("data.json").write_bytes(
+            b'{\r\n    "name": "Japanese",\r\n    "value": 1\r\n}'
+        )
+        self.translated.joinpath("data.json").write_bytes(
+            b'{\r\n    "name": "English",\r\n    "value": 1\r\n}'
+        )
+        self.old.joinpath("game.txt").write_bytes(b"Japanese source\r\nshared line\r\n")
+        self.translated.joinpath("game.txt").write_bytes(b"English source\r\nshared line\r\n")
+        self.old.joinpath("payload").write_bytes(b"keep\r\nnull\x00byte")
+        self.translated.joinpath("payload").write_bytes(b"keep\r\nnull\x00byte")
+        self.old.joinpath("GameUpdate.bat").write_bytes(b"@echo off\r\necho keep-crlf\r\n")
+        self.translated.joinpath("GameUpdate.bat").write_bytes(
+            b"@echo off\r\necho keep-crlf\r\n"
+        )
+        self.new.joinpath("data.json").write_bytes(
+            b'{"name":"Japanese","value":1}\n'
+        )
+        self.new.joinpath("game.txt").write_bytes(
+            b"Japanese source\nshared line\nnew official feature\n"
+        )
+        self.new.joinpath("payload").write_bytes(b"keep\r\nnull\x00byte")
+        self.new.joinpath("GameUpdate.bat").write_bytes(b"@echo off\r\necho keep-crlf\r\n")
+
+        result = bootstrap_repository(self.translated, self.old, "1.00")
+
+        expected_translation = json.dumps(
+            {"name": "English", "value": 1}, indent=4, ensure_ascii=False
+        )
+        self.assertEqual(
+            self.translated.joinpath("data.json").read_bytes(),
+            expected_translation.encode("utf-8"),
+        )
+        self.assertEqual(
+            self.git(self.translated, "show", "original:data.json"),
+            json.dumps({"name": "Japanese", "value": 1}, indent=4, ensure_ascii=False),
+        )
+        self.assertEqual(
+            self.translated.joinpath("game.txt").read_bytes(),
+            b"English source\nshared line\n",
+        )
+        self.assertEqual(
+            self.git(self.translated, "show", "original:game.txt"),
+            "Japanese source\nshared line",
+        )
+        binary = subprocess.run(
+            ["git", "-C", str(self.translated), "show", "original:payload"],
+            check=True,
+            capture_output=True,
+        ).stdout
+        self.assertEqual(binary, b"keep\r\nnull\x00byte")
+        self.assertEqual(
+            self.translated.joinpath("payload").read_bytes(),
+            b"keep\r\nnull\x00byte",
+        )
+        bat = subprocess.run(
+            ["git", "-C", str(self.translated), "show", "original:GameUpdate.bat"],
+            check=True,
+            capture_output=True,
+        ).stdout
+        self.assertEqual(bat, b"@echo off\r\necho keep-crlf\r\n")
+        self.assertIn("data.json", result.formatted_json_paths)
+        self.assertIn("game.txt", result.formatted_json_paths)
+        self.assertNotIn("GameUpdate.bat", result.formatted_json_paths)
+
+        # Minified LF official JSON matches the normalized original blob, so it is
+        # not an official delta. The text update must still apply cleanly.
+        update = apply_official_update(self.translated, self.new, "1.02")
+
+        self.assertTrue(update.complete)
+        self.assertEqual(update.official_won_paths, ())
+        self.assertEqual(
+            self.translated.joinpath("game.txt").read_bytes(),
+            b"English source\nshared line\nnew official feature\n",
+        )
+        self.assertEqual(
+            self.translated.joinpath("data.json").read_bytes(),
+            expected_translation.encode("utf-8"),
+        )
+
     def test_update_preserves_nonconflicting_translation_and_applies_official_patch(self):
         self.write_versions("Japanese\n", "English\n", "Japanese\n", "dialogue.txt")
         self.old.joinpath("engine.txt").write_text("engine=1\n")

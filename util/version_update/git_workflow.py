@@ -63,6 +63,8 @@ _VIDEO_EXTENSIONS = frozenset(
     {".avi", ".m4v", ".mkv", ".mov", ".mp4", ".ogv", ".webm", ".webm_", ".wmv"}
 )
 _FONT_EXTENSIONS = frozenset({".eot", ".otf", ".ttf", ".woff", ".woff2"})
+# Windows batch/registry scripts are CRLF-sensitive; keep their exact bytes.
+_CRLF_SENSITIVE_EXTENSIONS = frozenset({".bat", ".cmd", ".reg"})
 _ASSET_MANIFEST_FORMAT = 1
 _ASSET_BASELINE_SOURCE_BOOTSTRAP = "bootstrap"
 _ASSET_BASELINE_SOURCE_CURRENT_GAME = "current-game"
@@ -468,6 +470,27 @@ def _validate_source(source: str | Path, destination: Path) -> Path:
     return root
 
 
+def _normalize_newlines(text: str) -> str:
+    """Force LF line endings so CRLF/CR noise cannot create false conflicts."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _decode_utf8_text(raw: bytes) -> str | None:
+    """Decode UTF-8 text while preserving CR characters.
+
+    ``Path.read_text()`` uses universal newlines and silently converts CRLF to
+    LF, which made already-pretty JSON look unchanged and left CRLF blobs in
+    Git. Decode from bytes instead so EOL differences are visible to
+    normalization.
+    """
+    if b"\x00" in raw:
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def _canonical_json(source_text: str) -> str:
     duplicate_keys: set[str] = set()
 
@@ -492,7 +515,7 @@ def _canonical_json(source_text: str) -> str:
         raise ValueError(f"duplicate object key(s): {names}")
     canonical = json.dumps(document, indent=4, ensure_ascii=False, allow_nan=False)
     canonical.encode("utf-8")
-    return canonical
+    return _normalize_newlines(canonical)
 
 
 def _canonical_plugins_js(source_text: str) -> str | None:
@@ -505,7 +528,7 @@ def _canonical_plugins_js(source_text: str) -> str | None:
     options.max_preserve_newlines = 2
     options.preserve_newlines = True
     options.end_with_newline = True
-    return jsbeautifier.beautify(source_text, options)
+    return _normalize_newlines(jsbeautifier.beautify(source_text, options))
 
 
 def _source_files(source: Path, *, format_json: bool) -> list[_SourceFile]:
@@ -531,22 +554,36 @@ def _source_files(source: Path, *, format_json: bool) -> list[_SourceFile]:
         mode = "100755" if candidate.stat().st_mode & executable_bits else "100644"
         normalized_text = None
         warning = None
+        raw = candidate.read_bytes()
+        source_text = _decode_utf8_text(raw)
         if format_json and candidate.suffix.casefold() == ".json":
-            try:
-                source_text = candidate.read_text(encoding="utf-8")
-                canonical = _canonical_json(source_text)
-                if canonical != source_text:
-                    normalized_text = canonical
-            except Exception as exc:  # formatting is optional; preserve source bytes
-                warning = f"{rel_text}: JSON formatting skipped ({exc})"
+            if source_text is None:
+                warning = f"{rel_text}: JSON formatting skipped (not valid UTF-8 text)"
+            else:
+                try:
+                    canonical = _canonical_json(source_text)
+                    if canonical != source_text:
+                        normalized_text = canonical
+                except Exception as exc:  # formatting is optional; preserve source bytes
+                    warning = f"{rel_text}: JSON formatting skipped ({exc})"
         elif format_json and candidate.name.casefold() == "plugins.js":
-            try:
-                source_text = candidate.read_text(encoding="utf-8")
-                canonical = _canonical_plugins_js(source_text)
-                if canonical is not None and canonical != source_text:
-                    normalized_text = canonical
-            except Exception as exc:  # preserve source bytes and warn visibly
-                warning = f"{rel_text}: plugins.js formatting skipped ({exc})"
+            if source_text is None:
+                warning = f"{rel_text}: plugins.js formatting skipped (not valid UTF-8 text)"
+            else:
+                try:
+                    canonical = _canonical_plugins_js(source_text)
+                    if canonical is not None and canonical != source_text:
+                        normalized_text = canonical
+                except Exception as exc:  # preserve source bytes and warn visibly
+                    warning = f"{rel_text}: plugins.js formatting skipped ({exc})"
+        elif (
+            format_json
+            and source_text is not None
+            and candidate.suffix.casefold() not in _CRLF_SENSITIVE_EXTENSIONS
+        ):
+            canonical = _normalize_newlines(source_text)
+            if canonical != source_text:
+                normalized_text = canonical
         files.append(_SourceFile(candidate, rel_text, mode, normalized_text, warning))
     return files
 
@@ -1195,7 +1232,7 @@ def _sync_external_assets(
     return pending
 
 
-def _materialize_normalized_json(files: list[_SourceFile]) -> None:
+def _materialize_normalized_text(files: list[_SourceFile]) -> None:
     for entry in files:
         if entry.normalized_text is None:
             continue
@@ -1204,8 +1241,10 @@ def _materialize_normalized_json(files: list[_SourceFile]) -> None:
             prefix=f".{entry.path.name}.dazedformat-", dir=entry.path.parent
         )
         try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                handle.write(entry.normalized_text)
+            # Write bytes so platform text-mode newline translation cannot
+            # reintroduce CRLF after we normalized to LF.
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(entry.normalized_text.encode("utf-8"))
             os.chmod(temporary_name, stat.S_IMODE(original_mode))
             os.replace(temporary_name, entry.path)
         except Exception:
@@ -1242,7 +1281,7 @@ def _write_tree_from_folder(
     ignored = _ignored_paths(repo, discovered_files, game_prefix)
     files = [entry for entry in discovered_files if entry.relative not in ignored]
     if materialize_json:
-        _materialize_normalized_json(files)
+        _materialize_normalized_text(files)
     index_name, index_env = _temporary_index()
     try:
         if base_commit:

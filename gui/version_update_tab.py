@@ -734,14 +734,14 @@ class VersionUpdateTab(QWidget):
             f"Original commit: {result.original_commit}",
             f"Translation commit: {result.translation_commit}",
             f"Version: {result.version}",
-            f"Translated structured files normalized: {len(result.formatted_json_paths)}",
+            f"Translated files normalized: {len(result.formatted_json_paths)}",
             f"Files ignored by Git: {len(result.ignored_paths)}",
             f"Formatting warnings: {len(result.json_warnings)}",
             f"GameUpdate .gitignore installed: {'yes' if result.gitignore_installed else 'already present'}",
         ]
         if result.formatted_json_paths:
             lines.extend(
-                ["", "Translated structured files normalized:", *result.formatted_json_paths]
+                ["", "Translated files normalized:", *result.formatted_json_paths]
             )
         if result.ignored_paths:
             lines.extend(["", "Ignored by Git:", *result.ignored_paths])

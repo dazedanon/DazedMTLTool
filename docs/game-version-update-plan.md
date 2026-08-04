@@ -3,8 +3,10 @@
 ## Contract
 
 Version Update transports official game releases through Git. It never performs
-an engine-aware or semantic merge. Valid UTF-8 JSON is normalized only for
-stable textual diffs, using DazedTL's existing four-space JSON representation.
+an engine-aware or semantic merge. Tracked UTF-8 text is normalized to LF line endings, except Windows
+CRLF-sensitive scripts such as `.bat`, `.cmd`, and `.reg`.
+Valid UTF-8 JSON is reformatted for stable textual diffs, using DazedTL's
+existing four-space JSON representation.
 RPG Maker `plugins.js` wrappers are formatted with the same JavaScript formatter
 as Prepare so plugin configuration does not collapse into a whole-file conflict.
 
@@ -35,9 +37,9 @@ missing, the user supplies the matching clean original folder and its version.
 The tool writes the original Git tree directly into repository objects and
 records the current translated tree separately, so bootstrap never swaps or
 replaces translated content. Both baseline trees receive the same deterministic
-JSON formatting, and the translated working JSON is normalized to match its
-recorded branch. This prevents formatting-only whole-file diffs immediately
-after initialization.
+JSON formatting and LF line endings, and the translated working files are
+normalized to match their recorded branch. This prevents formatting-only or
+EOL-only whole-file diffs immediately after initialization.
 
 Before either baseline is committed, bootstrap installs the bundled GameUpdate
 `.gitignore`. Existing project rules are retained after the bundled rules, so
@@ -64,16 +66,19 @@ branch.
 
 The user supplies a clean new official folder and version. A preview creates the
 proposed Git tree without moving either branch. Valid JSON is parsed and emitted
-with `indent=4` and `ensure_ascii=False`; the supplied folder itself is never
-modified. Invalid or non-UTF-8 JSON stays byte-for-byte unchanged and produces a
-visible warning. Recognized RPG Maker `plugins.js` files are formatted identically
-to Prepare. If a supported structured file cannot be safely formatted, it stays
+with `indent=4` and `ensure_ascii=False`. Other tracked UTF-8 text is normalized
+to LF line endings, except Windows CRLF-sensitive scripts such as `.bat`, `.cmd`,
+and `.reg`. The supplied official folder itself is never modified.
+Invalid or non-UTF-8 JSON stays byte-for-byte unchanged and produces a visible
+warning. Recognized RPG Maker `plugins.js` files are formatted identically to
+Prepare. If a supported structured file cannot be safely formatted, it stays
 unchanged and produces a warning. If the folder changes after preview, approval
 is rejected and a new preview is required.
 
 After approval, the proposed tree becomes the new `original` commit and is
-cherry-picked while `translation` is checked out. Non-conflicting translations
-remain. Conflicts use the official side, including official deletions, and every
+cherry-picked onto the configured translated branch. Non-conflicting translations
+remain. Conflicts prefer the new official release (hunk-level when a 3-way merge
+is possible; otherwise the official file), including official deletions, and every
 affected path is shown in the GUI Activity card.
 
 The working tree must be clean before bootstrap or update. This keeps rollback
