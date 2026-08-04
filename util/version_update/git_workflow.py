@@ -64,6 +64,9 @@ _VIDEO_EXTENSIONS = frozenset(
 )
 _FONT_EXTENSIONS = frozenset({".eot", ".otf", ".ttf", ".woff", ".woff2"})
 _ASSET_MANIFEST_FORMAT = 1
+_ASSET_BASELINE_SOURCE_BOOTSTRAP = "bootstrap"
+_ASSET_BASELINE_SOURCE_CURRENT_GAME = "current-game"
+_ASSET_BASELINE_SOURCE_PREVIOUS_OFFICIAL = "previous-official"
 _TOOL_RESOURCE_DIRECTORIES = frozenset(
     {
         ".agents",
@@ -143,6 +146,7 @@ class RepositoryStatus:
     git_available: bool = True
     asset_sync_pending: bool = False
     asset_manifest_available: bool = False
+    asset_baseline_repair_needed: bool = False
     translation_branch: str | None = None
 
     @property
@@ -439,6 +443,7 @@ def inspect_repository(game_root: str | Path) -> RepositoryStatus:
         asset_manifest_available=_asset_state_path(
             repo, prefix, "official-assets"
         ).exists(),
+        asset_baseline_repair_needed=_asset_manifest_needs_repair(repo, prefix),
         translation_branch=translation_branch,
     )
 
@@ -651,21 +656,60 @@ def _load_asset_manifest(
         raise GitWorkflowError(f"Official asset manifest is invalid: {path}") from exc
 
 
+def _load_asset_manifest_metadata(
+    repo: Path, game_prefix: str
+) -> dict[str, object]:
+    path = _asset_state_path(repo, game_prefix, "official-assets")
+    if not path.exists():
+        return {}
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(document, dict) or document.get("format") != _ASSET_MANIFEST_FORMAT:
+            return {}
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {}
+
+    metadata = {}
+    source_kind = document.get("baseline_source_kind")
+    if isinstance(source_kind, str) and source_kind:
+        metadata["baseline_source_kind"] = source_kind
+    has_unbased = document.get("has_unbased_tracked_assets")
+    if isinstance(has_unbased, bool):
+        metadata["has_unbased_tracked_assets"] = has_unbased
+    return metadata
+
+
+def _asset_manifest_needs_repair(repo: Path, game_prefix: str) -> bool:
+    metadata = _load_asset_manifest_metadata(repo, game_prefix)
+    return bool(
+        metadata.get("baseline_source_kind") == _ASSET_BASELINE_SOURCE_CURRENT_GAME
+        and metadata.get("has_unbased_tracked_assets") is True
+    )
+
+
 def _save_asset_manifest(
     repo: Path,
     game_prefix: str,
     version: str,
     original_commit: str,
     manifest: Mapping[str, _AssetManifestEntry],
+    *,
+    baseline_source_kind: str | None = None,
+    has_unbased_tracked_assets: bool | None = None,
 ) -> None:
+    document = {
+        "format": _ASSET_MANIFEST_FORMAT,
+        "version": version,
+        "original_commit": original_commit,
+        "files": _manifest_payload(manifest),
+    }
+    if baseline_source_kind is not None:
+        document["baseline_source_kind"] = baseline_source_kind
+    if has_unbased_tracked_assets is not None:
+        document["has_unbased_tracked_assets"] = has_unbased_tracked_assets
     _write_json_atomic(
         _asset_state_path(repo, game_prefix, "official-assets"),
-        {
-            "format": _ASSET_MANIFEST_FORMAT,
-            "version": version,
-            "original_commit": original_commit,
-            "files": _manifest_payload(manifest),
-        },
+        document,
     )
 
 
@@ -676,6 +720,8 @@ def _save_pending_asset_plan(
     version: str,
     original_commit: str,
     manifest_digest: str,
+    *,
+    preserved_translation_assets: tuple[str, ...] = (),
 ) -> None:
     _write_json_atomic(
         _asset_state_path(repo, game_prefix, "pending-assets"),
@@ -685,13 +731,14 @@ def _save_pending_asset_plan(
             "version": version,
             "original_commit": original_commit,
             "manifest_digest": manifest_digest,
+            "preserved_translation_assets": tuple(preserved_translation_assets),
         },
     )
 
 
 def _load_pending_asset_plan(
     repo: Path, game_prefix: str
-) -> dict[str, str] | None:
+) -> dict[str, object] | None:
     path = _asset_state_path(repo, game_prefix, "pending-assets")
     if not path.exists():
         return None
@@ -705,7 +752,18 @@ def _load_pending_asset_plan(
             raise ValueError("invalid pending asset plan")
         if not re.fullmatch(r"[0-9a-f]{64}", document["manifest_digest"]):
             raise ValueError("invalid manifest digest")
-        return {key: document[key] for key in required}
+        preserved_translation_assets = document.get("preserved_translation_assets", ())
+        if any(
+            not isinstance(path, str) or not path
+            for path in preserved_translation_assets
+        ):
+            raise ValueError("invalid preserved translation assets")
+        if not isinstance(preserved_translation_assets, list):
+            raise ValueError("invalid preserved translation assets")
+        return {
+            **{key: document[key] for key in required},
+            "preserved_translation_assets": tuple(preserved_translation_assets),
+        }
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         raise GitWorkflowError(f"Pending asset update is invalid: {path}") from exc
 
@@ -1427,7 +1485,13 @@ def bootstrap_repository(
         original, original_tree.ignored_paths
     )
     _save_asset_manifest(
-        repo, prefix, version, original_commit, official_assets
+        repo,
+        prefix,
+        version,
+        original_commit,
+        official_assets,
+        baseline_source_kind=_ASSET_BASELINE_SOURCE_BOOTSTRAP,
+        has_unbased_tracked_assets=False,
     )
     _set_translation_branch(repo, translation_branch)
     return BootstrapResult(
@@ -2124,27 +2188,29 @@ def preview_official_update(
     baseline_tree = _run_git(
         status.repo_root, "rev-parse", f"{status.original_commit}^{{tree}}"
     ).stdout.strip()
-    if baseline_assets is None:
-        if previous_official_game is not None:
-            baseline_source, baseline_assets, baseline_tree = (
-                _validate_official_asset_baseline(
-                    status.repo_root,
-                    game,
-                    previous_official_game,
-                    status.game_prefix,
-                    status.original_commit,
-                )
-            )
-        else:
-            baseline_assets = _asset_manifest_for_source(
-                status.repo_root,
-                game,
-                status.game_prefix,
-            )
+    if previous_official_game is not None:
+        baseline_source, baseline_assets, baseline_tree = _validate_official_asset_baseline(
+            status.repo_root,
+            game,
+            previous_official_game,
+            status.game_prefix,
+            status.original_commit,
+        )
+    elif baseline_assets is None:
+        baseline_assets = _asset_manifest_for_source(
+            status.repo_root,
+            game,
+            status.game_prefix,
+        )
     proposed_assets = _build_ignored_asset_manifest(official, build.ignored_paths)
     external_changes = _external_asset_changes(
         game, baseline_assets, proposed_assets
     )
+    if preserved_translation_assets:
+        preserved_set = set(preserved_translation_assets)
+        external_changes = tuple(
+            change for change in external_changes if change.path not in preserved_set
+        )
     official_changes = _diff_status(
         status.repo_root, baseline_tree, build.tree, status.game_prefix
     )
@@ -2310,16 +2376,28 @@ def _complete_pending_asset_plan(
             "Restore that folder and finish the asset update."
         )
     baseline = _load_asset_manifest(status.repo_root, status.game_prefix)
-    changes = _external_asset_changes(game, baseline, proposed)
+    preserved_translation_assets = plan.get("preserved_translation_assets", ())
+    changes = tuple(
+        change
+        for change in _external_asset_changes(game, baseline, proposed)
+        if change.path not in set(preserved_translation_assets)
+    )
     applied = _sync_external_assets(
         status.repo_root, game, source, changes, proposed
     )
+    existing_metadata = _load_asset_manifest_metadata(status.repo_root, status.game_prefix)
     _save_asset_manifest(
         status.repo_root,
         status.game_prefix,
         result.version,
         result.original_commit,
         proposed,
+        baseline_source_kind=existing_metadata.get("baseline_source_kind")
+        if isinstance(existing_metadata.get("baseline_source_kind"), str)
+        else None,
+        has_unbased_tracked_assets=existing_metadata.get("has_unbased_tracked_assets")
+        if isinstance(existing_metadata.get("has_unbased_tracked_assets"), bool)
+        else None,
     )
     _clear_pending_asset_plan(status.repo_root, status.game_prefix)
     return UpdateResult(
@@ -2384,8 +2462,9 @@ def apply_official_update(
         status.original_commit,
         status.game_prefix,
     )
+    preserved_translation_assets = ()
     if previous_official_game is None:
-        new_tree, _preserved_translation_assets = (
+        new_tree, preserved_translation_assets = (
             _preserve_unbased_translation_assets(
                 repo,
                 new_tree,
@@ -2400,13 +2479,17 @@ def apply_official_update(
     proposed_asset_digest = _manifest_digest(proposed_assets)
     baseline_assets = _load_asset_manifest(repo, status.game_prefix)
     baseline_was_missing = baseline_assets is None
+    baseline_metadata_kind = None
+    baseline_metadata_has_unbased_assets = None
+    existing_baseline_metadata = _load_asset_manifest_metadata(repo, status.game_prefix)
+    existing_baseline_source = existing_baseline_metadata.get("baseline_source_kind")
     registered_tree = _run_git(
         repo, "rev-parse", f"{status.original_commit}^{{tree}}"
     ).stdout.strip()
     baseline_tree = registered_tree
     if baseline_assets is None:
         if previous_official_game is not None:
-            _baseline_source, baseline_assets, baseline_tree = (
+            baseline_source, baseline_assets, baseline_tree = (
                 _validate_official_asset_baseline(
                     repo,
                     game,
@@ -2415,12 +2498,35 @@ def apply_official_update(
                     status.original_commit,
                 )
             )
+            baseline_metadata_kind = _ASSET_BASELINE_SOURCE_PREVIOUS_OFFICIAL
+            baseline_metadata_has_unbased_assets = False
         else:
+            baseline_metadata_kind = _ASSET_BASELINE_SOURCE_CURRENT_GAME
+            baseline_metadata_has_unbased_assets = bool(preserved_translation_assets)
             baseline_assets = _asset_manifest_for_source(
                 repo,
                 game,
                 status.game_prefix,
             )
+    elif previous_official_game is not None:
+        baseline_source, baseline_assets, baseline_tree = _validate_official_asset_baseline(
+            repo,
+            game,
+            previous_official_game,
+            status.game_prefix,
+            status.original_commit,
+        )
+        baseline_metadata_kind = _ASSET_BASELINE_SOURCE_PREVIOUS_OFFICIAL
+        baseline_metadata_has_unbased_assets = False
+    elif existing_baseline_source == _ASSET_BASELINE_SOURCE_CURRENT_GAME:
+        baseline_metadata_kind = _ASSET_BASELINE_SOURCE_CURRENT_GAME
+        baseline_metadata_has_unbased_assets = bool(
+            bool(existing_baseline_metadata.get("has_unbased_tracked_assets"))
+            or preserved_translation_assets
+        )
+    elif existing_baseline_source == _ASSET_BASELINE_SOURCE_BOOTSTRAP:
+        baseline_metadata_kind = _ASSET_BASELINE_SOURCE_CURRENT_GAME
+        baseline_metadata_has_unbased_assets = bool(preserved_translation_assets)
     baseline_asset_digest = _manifest_digest(baseline_assets)
     if expected_tree is not None and new_tree.tree != expected_tree:
         raise GitWorkflowError(
@@ -2472,6 +2578,18 @@ def apply_official_update(
             status.original_version or "unknown",
             baseline_parent,
             baseline_assets,
+            baseline_source_kind=baseline_metadata_kind,
+            has_unbased_tracked_assets=baseline_metadata_has_unbased_assets,
+        )
+    elif baseline_metadata_kind is not None:
+        _save_asset_manifest(
+            repo,
+            status.game_prefix,
+            status.original_version or "unknown",
+            baseline_parent,
+            baseline_assets,
+            baseline_source_kind=baseline_metadata_kind,
+            has_unbased_tracked_assets=baseline_metadata_has_unbased_assets,
         )
     _save_pending_asset_plan(
         repo,
@@ -2480,6 +2598,7 @@ def apply_official_update(
         version,
         original_commit,
         proposed_asset_digest,
+        preserved_translation_assets=preserved_translation_assets,
     )
     try:
         _run_git(

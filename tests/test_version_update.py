@@ -909,6 +909,80 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertTrue(self.translated.joinpath("skills/game.md").is_file())
         self.assertTrue(inspect_repository(self.translated).asset_manifest_available)
 
+    def test_repair_fallback_baseline_with_previous_official(self):
+        self.write_versions("old official\n", "translated\n", "new official\n")
+        self.translated.joinpath(".gitignore").write_text(
+            "*.*\n!*.txt\n!.gitignore\n!tracked.png_\n", encoding="utf-8"
+        )
+        self.translated.joinpath("tracked.png_").write_bytes(b"translated image")
+        self.new.joinpath("tracked.png_").write_bytes(b"new official image")
+
+        bootstrap_repository(self.translated, self.old, "1.00")
+
+        initial_preview = preview_official_update(
+            self.translated,
+            self.new,
+            "1.10",
+        )
+        self.assertEqual(
+            initial_preview.preserved_translation_asset_paths,
+            ("tracked.png_",),
+        )
+        apply_official_update(
+            self.translated,
+            self.new,
+            "1.10",
+            expected_tree=initial_preview.proposed_tree,
+            expected_original_commit=initial_preview.original_commit,
+            expected_translation_commit=initial_preview.translation_commit,
+            expected_asset_manifest=initial_preview.proposed_asset_manifest,
+            expected_baseline_asset_manifest=initial_preview.baseline_asset_manifest,
+        )
+
+        fallback_status = inspect_repository(self.translated)
+        self.assertTrue(fallback_status.asset_manifest_available)
+        self.assertTrue(fallback_status.asset_baseline_repair_needed)
+
+        newer = self.root / "Original v1.20"
+        newer.mkdir()
+        newer.joinpath("game.txt").write_text("newer official\n", encoding="utf-8")
+        newer.joinpath("tracked.png_").write_bytes(b"newer official image")
+
+        repaired_preview = preview_official_update(
+            self.translated,
+            newer,
+            "1.20",
+            previous_official_game=self.new,
+        )
+        self.assertIn(
+            ("tracked.png_", "Replaced", True),
+            [
+                (change.path, change.change, change.warning)
+                for change in repaired_preview.image_changes
+                if change.tracked
+            ],
+        )
+
+        apply_official_update(
+            self.translated,
+            newer,
+            "1.20",
+            expected_tree=repaired_preview.proposed_tree,
+            expected_original_commit=repaired_preview.original_commit,
+            expected_translation_commit=repaired_preview.translation_commit,
+            expected_asset_manifest=repaired_preview.proposed_asset_manifest,
+            previous_official_game=self.new,
+            expected_baseline_asset_manifest=repaired_preview.baseline_asset_manifest,
+        )
+
+        self.assertEqual(
+            self.translated.joinpath("tracked.png_").read_bytes(),
+            b"newer official image",
+        )
+        self.assertFalse(
+            inspect_repository(self.translated).asset_baseline_repair_needed
+        )
+
     def test_nested_game_folder_updates_only_its_repository_prefix(self):
         repo = self.translated
         game = repo / "game"
@@ -1262,6 +1336,13 @@ class VersionUpdateUITests(unittest.TestCase):
                     run.assert_called_once()
                     warning.assert_not_called()
                 tab._status = registered_status
+                repaired_status = replace(
+                    registered_status,
+                    asset_manifest_available=True,
+                    asset_baseline_repair_needed=True,
+                )
+                tab._render_status(repaired_status)
+                self.assertFalse(tab.baseline_panel.isHidden())
 
                 new.joinpath("game.txt").write_text("English\n")
                 new.joinpath("portrait.png").write_bytes(

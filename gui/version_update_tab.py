@@ -615,7 +615,11 @@ class VersionUpdateTab(QWidget):
         self.update_card.setVisible(branch_ready)
         self.update_card.setEnabled(branch_ready)
         self.baseline_panel.setVisible(
-            branch_ready and not status.asset_manifest_available
+            branch_ready
+            and (
+                not status.asset_manifest_available
+                or getattr(status, "asset_baseline_repair_needed", False)
+            )
         )
         self.baseline_explanation.setText(
             "Optional: select the clean official game for "
@@ -887,17 +891,19 @@ class VersionUpdateTab(QWidget):
                 f" {len(preview.preserved_translation_asset_paths)} tracked translation "
                 "asset(s) have no official baseline copy and will be preserved."
             )
-        if not preview.asset_manifest_available:
-            if preview.baseline_source_root is not None:
+        if preview.baseline_source_root is not None:
+            if preview.asset_manifest_available:
+                expected += " A clean previous official baseline was supplied for precise comparison."
+            else:
                 expected += (
                     " The selected previous official folder supplied the one-time asset "
                     "baseline; it will be remembered after this update."
                 )
-            else:
-                expected += (
-                    " The current game's existing external assets supplied the one-time "
-                    "baseline; it will be remembered after this update."
-                )
+        elif not preview.asset_manifest_available:
+            expected += (
+                " The current game's existing external assets supplied the one-time "
+                "baseline; it will be remembered after this update."
+            )
         self.preview_expected.setText(expected)
 
         if warning_count:
