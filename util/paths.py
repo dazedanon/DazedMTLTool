@@ -109,24 +109,8 @@ def game_glossary_path(game_root: str | Path | None) -> Path | None:
     return Path(game_root).expanduser().resolve() / GLOSSARY_FILENAME
 
 
-def ensure_game_glossary(game_root: str | Path | None) -> Path:
-    """Create or safely copy the selected game's glossary and return its path.
-
-    Older DazedTL versions copied ``vocab.txt`` into the game root. Copy that
-    file only when its DazedTL base marker proves its provenance. Keep the legacy
-    file as a backup; an unrelated game-owned ``vocab.txt`` must never be moved.
-    """
-    path = game_glossary_path(game_root)
-    if path is None:
-        raise ValueError("No game folder is selected.")
-    if not path.parent.is_dir():
-        raise FileNotFoundError(f"Game folder not found: {path.parent}")
-    if path.is_file():
-        return path
-
-    # Prefer a glossary that already lived with this game. Older releases used
-    # one global data/vocab.txt instead; seed every newly selected game from
-    # that file so upgrades do not silently lose the user's custom terms.
+def _seed_game_glossary_text(path: Path) -> str:
+    """Build the initial glossary text without changing the selected game."""
     for legacy in (
         path.with_name(LEGACY_GLOSSARY_FILENAME),
         LEGACY_GLOBAL_GLOSSARY_PATH,
@@ -156,21 +140,32 @@ def ensure_game_glossary(game_root: str | Path | None) -> Path:
                 if base_path.is_file()
                 else ""
             )
-            path.write_text(
-                custom_text + "\n\n" + GLOSSARY_BASE_SEPARATOR + base,
-                encoding="utf-8",
-            )
-            return path
+            return custom_text + "\n\n" + GLOSSARY_BASE_SEPARATOR + base
 
     base_path = glossary_base_path()
     base = base_path.read_text(encoding="utf-8") if base_path.is_file() else ""
-    path.write_text(
-        _EMPTY_GLOSSARY_PLACEHOLDER
-        + "\n"
-        + GLOSSARY_BASE_SEPARATOR
-        + base,
-        encoding="utf-8",
-    )
+    return _EMPTY_GLOSSARY_PLACEHOLDER + "\n" + GLOSSARY_BASE_SEPARATOR + base
+
+
+def ensure_game_glossary(game_root: str | Path | None) -> Path:
+    """Create or safely copy the selected game's glossary and return its path.
+
+    Older DazedTL versions copied ``vocab.txt`` into the game root. Copy that
+    file only when its DazedTL base marker proves its provenance. Keep the legacy
+    file as a backup; an unrelated game-owned ``vocab.txt`` must never be moved.
+    """
+    path = game_glossary_path(game_root)
+    if path is None:
+        raise ValueError("No game folder is selected.")
+    if not path.parent.is_dir():
+        raise FileNotFoundError(f"Game folder not found: {path.parent}")
+    if path.is_file():
+        return path
+
+    # Prefer a glossary that already lived with this game. Older releases used
+    # one global data/vocab.txt instead; seed every newly selected game from
+    # that file so upgrades do not silently lose the user's custom terms.
+    path.write_text(_seed_game_glossary_text(path), encoding="utf-8")
     return path
 
 
@@ -184,10 +179,18 @@ def active_glossary_path(*, create: bool = True) -> Path | None:
     return ensure_game_glossary(root) if create else game_glossary_path(root)
 
 
-def read_game_glossary(game_root: str | Path) -> str:
-    """Read one explicit game's glossary using normal translation semantics."""
-    path = ensure_game_glossary(game_root)
-    return path.read_text(encoding="utf-8")
+def read_game_glossary(game_root: str | Path, *, create: bool = True) -> str:
+    """Read one game's glossary, optionally previewing its seed without writing."""
+    path = game_glossary_path(game_root)
+    if path is None:
+        raise ValueError("No game folder is selected.")
+    if path.is_file():
+        return path.read_text(encoding="utf-8")
+    if create:
+        return ensure_game_glossary(game_root).read_text(encoding="utf-8")
+    if not path.parent.is_dir():
+        raise FileNotFoundError(f"Game folder not found: {path.parent}")
+    return _seed_game_glossary_text(path)
 
 
 def read_active_glossary() -> str:

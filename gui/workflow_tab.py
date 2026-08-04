@@ -57,6 +57,7 @@ from PyQt5.QtWidgets import (
 )
 
 from gui.setup_skills_editors import SetupSkillsEditors
+from gui.git_prepare import GitPreparationCard
 from gui.theme import COLORS, Geometry, Spacing, application_stylesheet
 from gui.workflow_components import (
     DisclosureSection,
@@ -91,7 +92,7 @@ WORKFLOW_TL_NORMAL_LABEL = "Normal Translate"
 
 _STEP_PURPOSES = {
     0: "Detect the game and choose which data files enter this translation run.",
-    1: "Optionally format project files and install the GameUpdate helper.",
+    1: "Set up Git version tracking, then optionally format files and install GameUpdate.",
     2: "Configure speaker detection, collect names, and maintain project guidance.",
     3: "Translate database and dialogue text, then build the variable cache.",
     4: "Translate audited variable, plugin, and script text only when required.",
@@ -218,14 +219,15 @@ _STEP_HELP: dict[int, str] = {
         "the two projects do not get mixed together."
     ),
     1: (
-        "<b>Step 1 - Prepare the project (optional)</b><br><br>"
-        "Most beginners can leave the detected paths alone.<br><br>"
+        "<b>Step 1 - Prepare the project</b><br><br>"
+        "Set up version tracking before translation changes the game. The remaining tasks are optional.<br><br>"
         "<b>What to do</b><br>"
+        "• In <b>Set up Git version tracking</b>, choose the matching clean original and current version when requested. Existing repositories and legacy branches are detected automatically.<br>"
         "• Use <b>Format game data</b> to make the game's data files easier to inspect.<br>"
         "• Use <b>Format plugins.js</b> to make the MV/MZ plugin list easier to read.<br>"
         "• Use <b>Install GameUpdate</b> only when you want that patch helper in the game.<br>"
-        "• Or click <b>Run available tasks</b> to run every task that is ready.<br><br>"
-        "Unavailable tasks are skipped. You can also skip this entire step and continue."
+        "• Or click <b>Run optional tasks</b> to run every optional task that is ready.<br><br>"
+        "Unavailable optional tasks are skipped."
     ),
     2: (
         "<b>Step 2 - Set up speakers and game guidance</b><br><br>"
@@ -926,7 +928,7 @@ class WorkflowTab(QWidget):
             step_idx,
             display_title,
             _STEP_PURPOSES.get(step_idx, "Complete this workflow step."),
-            optional=step_idx == 1,
+            optional=False,
         )
         for widget in extra_widgets or []:
             # The standard header already owns the Optional badge. Preserve
@@ -1048,29 +1050,27 @@ class WorkflowTab(QWidget):
 
     # Static clipboard prompts are loaded from editable data/skills/*.md files.
 
-    # ── Step 1 (Optional): Pre-process ────────────────────────────────
+    # ── Step 1: Git setup and optional pre-process tasks ──────────────
 
     def _build_step1_preprocess(self, layout: QVBoxLayout):
-        opt_badge = QLabel("optional")
-        opt_badge.setStyleSheet(
-            "color:#77777a;font-size:11px;border:1px solid #45454a;"
-            "padding:1px 8px;border-radius:8px;"
-            "background-color:#252526;"
-        )
         # Collapse/expand toggle
-        toggle_btn = make_workflow_button("Hide optional", variant="quiet")
+        toggle_btn = make_workflow_button("Hide optional tasks", variant="quiet")
         toggle_btn.setCheckable(True)
         toggle_btn.setChecked(True)
         toggle_btn.setFixedSize(208, Geometry.CONTROL)
         toggle_btn.setToolTip("Show or hide the optional preparation tasks")
         self._add_step_header(
             layout,
-            "Step 1 (Optional) — Prepare Project",
+            "Step 1 — Prepare Project",
             1,
-            extra_widgets=[opt_badge, toggle_btn],
+            extra_widgets=[toggle_btn],
         )
 
-        # Collapsible container — wraps tasks_box + run-all row
+        self.git_prepare = GitPreparationCard(1)
+        self.git_prepare.activity.connect(self._log)
+        layout.addWidget(self.git_prepare)
+
+        # Collapsible container — wraps the optional formatter/helper tasks.
         collapse_widget = QWidget()
         collapse_layout = QVBoxLayout(collapse_widget)
         collapse_layout.setContentsMargins(0, 0, 0, 0)
@@ -1085,7 +1085,7 @@ class WorkflowTab(QWidget):
 
         # ---- Task A: dazedformat -----------------------------------------
         ta = WorkflowStageCard(
-            1,
+            2,
             "Format game data",
             "Normalize every JSON file with the bundled formatter before review or translation.",
         )
@@ -1109,7 +1109,7 @@ class WorkflowTab(QWidget):
 
         # ---- Task B: prettier on plugins.js
         tb_box = WorkflowStageCard(
-            2,
+            3,
             "Format plugin configuration",
             "Make plugins.js easier to audit and edit without changing its behavior.",
         )
@@ -1137,7 +1137,7 @@ class WorkflowTab(QWidget):
 
         # ---- Task C: copy gameupdate/ -----------------------------------
         tc = WorkflowStageCard(
-            3,
+            4,
             "Install the GameUpdate helper",
             "Copy GameUpdate into the game and write its patch configuration from your saved defaults.",
         )
@@ -1186,18 +1186,18 @@ class WorkflowTab(QWidget):
 
         run_all_copy = QVBoxLayout()
         run_all_copy.setSpacing(Spacing.XS)
-        run_all_title = QLabel("Run all preparation tasks")
+        run_all_title = QLabel("Run optional preparation tasks")
         run_all_title.setStyleSheet(
             f"color:{COLORS.text_primary};font-size:13px;font-weight:600;"
         )
         run_all_copy.addWidget(run_all_title)
-        run_all_hint = QLabel("Runs each task above when its required file or folder is available.")
+        run_all_hint = QLabel("Runs the formatting and GameUpdate tasks when their required paths are available.")
         run_all_hint.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
         run_all_hint.setWordWrap(True)
         run_all_copy.addWidget(run_all_hint)
         run_all_layout.addLayout(run_all_copy, 1)
 
-        run_all_btn = _make_btn("►►  Run available tasks", "#0e639c")
+        run_all_btn = _make_btn("►►  Run optional tasks", "#0e639c")
         run_all_btn.setToolTip("Run each preparation task whose required path is available")
         run_all_btn.clicked.connect(self._run_all_preprocess)
         equalize_button_widths(
@@ -1222,7 +1222,9 @@ class WorkflowTab(QWidget):
         layout.addWidget(collapse_widget)
 
         def _toggle_preprocess(expanded: bool):
-            toggle_btn.setText("Hide optional" if expanded else "Show optional")
+            toggle_btn.setText(
+                "Hide optional tasks" if expanded else "Show optional tasks"
+            )
             collapse_widget.setVisible(expanded)
         toggle_btn.toggled.connect(_toggle_preprocess)
 
@@ -5118,13 +5120,16 @@ class WorkflowTab(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────────
-    # Step 1 (Optional) – Pre-process handlers
+    # Step 1 – Pre-process handlers
     # ─────────────────────────────────────────────────────────────────────────────
 
     def _populate_preprocess_paths(self):
         """Auto-fill pre-process paths from the detected game root and data path."""
         game_root = self.folder_edit.text().strip()
         data_path = self._data_path or ""
+
+        if hasattr(self, "git_prepare"):
+            self.git_prepare.set_game_root(game_root)
 
         # Update dazedformat label
         try:

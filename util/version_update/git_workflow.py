@@ -2,7 +2,8 @@
 
 This module deliberately knows nothing about RPG Maker or any other engine.
 Official game folders become Git trees, official releases become commits on the
-``original`` branch, and those commits are cherry-picked into ``translation``.
+``original`` branch, and those commits are cherry-picked into the repository's
+configured translated branch.
 No game file is parsed or reconstructed.
 """
 
@@ -16,7 +17,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping
 
@@ -24,7 +25,9 @@ import jsbeautifier
 
 
 ORIGINAL_BRANCH = "original"
-TRANSLATION_BRANCH = "translation"
+TRANSLATION_BRANCH = "main"
+_LEGACY_TRANSLATION_BRANCH = "translation"
+_TRANSLATION_BRANCH_CONFIG = "dazedtl.translationBranch"
 VERSION_TRAILER = "DazedTL-Version"
 _TOOL_NAME = "DazedMTLTool"
 _TOOL_EMAIL = "local@dazedmtl.invalid"
@@ -61,6 +64,20 @@ _VIDEO_EXTENSIONS = frozenset(
 )
 _FONT_EXTENSIONS = frozenset({".eot", ".otf", ".ttf", ".woff", ".woff2"})
 _ASSET_MANIFEST_FORMAT = 1
+_TOOL_RESOURCE_DIRECTORIES = frozenset(
+    {
+        ".agents",
+        ".codex",
+        ".dazedtl",
+        "dazedtl_images",
+        "dictionaries",
+        "docs",
+        "documentation",
+        "gameupdate",
+        "prompts",
+        "skills",
+    }
+)
 _LOCAL_ONLY_DIRECTORIES = frozenset(
     {
         ".dazedtl",
@@ -77,6 +94,9 @@ _LOCAL_ONLY_DIRECTORIES = frozenset(
         "tmp",
     }
 )
+_NON_GAME_RESOURCE_EXTENSIONS = frozenset(
+    {".adoc", ".bdic", ".markdown", ".md", ".rst"}
+)
 _LOCAL_ONLY_FILENAMES = frozenset(
     {
         "cg.dat",
@@ -85,6 +105,19 @@ _LOCAL_ONLY_FILENAMES = frozenset(
         "previous_patch_sha.txt",
         "psbpack.dat",
         "scene.dat",
+    }
+)
+_TOOL_OWNED_ROOT_FILES = frozenset(
+    {
+        ".gitattributes",
+        ".gitignore",
+        "gameupdate.bat",
+        "gameupdate_linux.sh",
+        "patch-config.example.txt",
+        "patch-config.txt",
+        "readme.md",
+        "uberwolfcli.exe",
+        "uberwolfcli.license.txt",
     }
 )
 
@@ -110,6 +143,7 @@ class RepositoryStatus:
     git_available: bool = True
     asset_sync_pending: bool = False
     asset_manifest_available: bool = False
+    translation_branch: str | None = None
 
     @property
     def ready(self) -> bool:
@@ -117,7 +151,7 @@ class RepositoryStatus:
             self.repo_root
             and self.original_exists
             and self.translation_exists
-            and self.current_branch == TRANSLATION_BRANCH
+            and self.current_branch == self.translation_branch
             and self.worktree_clean
             and not self.pending_cherry_pick
             and not self.asset_sync_pending
@@ -208,6 +242,7 @@ class UpdatePreview:
     baseline_asset_manifest: str = ""
     asset_manifest_available: bool = True
     baseline_source_root: Path | None = None
+    preserved_translation_asset_paths: tuple[str, ...] = ()
 
     @property
     def changed_paths(self) -> tuple[str, ...]:
@@ -296,6 +331,33 @@ def _ref_commit(repo: Path, ref: str) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def _validate_branch_name(repo: Path, branch: str) -> str:
+    value = branch.strip()
+    valid = _run_git(repo, "check-ref-format", "--branch", value, check=False)
+    if not value or valid.returncode != 0:
+        raise GitWorkflowError(f"The configured translated branch is invalid: {branch!r}")
+    if value == ORIGINAL_BRANCH:
+        raise GitWorkflowError("The original branch cannot also be the translated branch")
+    return value
+
+
+def _configured_translation_branch(repo: Path) -> str | None:
+    configured = _run_git(
+        repo, "config", "--local", "--get", _TRANSLATION_BRANCH_CONFIG, check=False
+    )
+    if configured.returncode == 0 and configured.stdout.strip():
+        return _validate_branch_name(repo, configured.stdout.strip())
+    if _ref_commit(repo, _LEGACY_TRANSLATION_BRANCH):
+        return _LEGACY_TRANSLATION_BRANCH
+    return None
+
+
+def _set_translation_branch(repo: Path, branch: str) -> str:
+    value = _validate_branch_name(repo, branch)
+    _run_git(repo, "config", "--local", _TRANSLATION_BRANCH_CONFIG, value)
+    return value
+
+
 def _version_from_history(repo: Path, ref: str, commit: str | None) -> str | None:
     if not commit:
         return None
@@ -351,7 +413,10 @@ def inspect_repository(game_root: str | Path) -> RepositoryStatus:
     branch_result = _run_git(repo, "symbolic-ref", "--short", "-q", "HEAD", check=False)
     current_branch = branch_result.stdout.strip() or None
     original_commit = _ref_commit(repo, ORIGINAL_BRANCH)
-    translation_commit = _ref_commit(repo, TRANSLATION_BRANCH)
+    translation_branch = _configured_translation_branch(repo)
+    translation_commit = (
+        _ref_commit(repo, translation_branch) if translation_branch else None
+    )
     status = _run_git(repo, "status", "--porcelain=v1", "-z").stdout
     return RepositoryStatus(
         selected_root=selected,
@@ -364,7 +429,7 @@ def inspect_repository(game_root: str | Path) -> RepositoryStatus:
         translation_exists=translation_commit is not None,
         translation_commit=translation_commit,
         translation_version=_version_from_history(
-            repo, TRANSLATION_BRANCH, translation_commit
+            repo, translation_branch or TRANSLATION_BRANCH, translation_commit
         ),
         worktree_clean=not bool(status),
         pending_cherry_pick=_cherry_pick_path(repo).exists(),
@@ -374,6 +439,7 @@ def inspect_repository(game_root: str | Path) -> RepositoryStatus:
         asset_manifest_available=_asset_state_path(
             repo, prefix, "official-assets"
         ).exists(),
+        translation_branch=translation_branch,
     )
 
 
@@ -769,7 +835,11 @@ def _build_ignored_asset_manifest(
     ignored = set(ignored_paths)
     manifest = {}
     for entry in _source_files(source, format_json=False):
-        if entry.relative not in ignored or _is_local_only_asset(entry.relative):
+        if (
+            entry.relative not in ignored
+            or _is_local_only_asset(entry.relative)
+            or _is_tool_owned_path(entry.relative)
+        ):
             continue
         file_stat = entry.path.stat()
         manifest[entry.relative] = _AssetManifestEntry(
@@ -788,7 +858,9 @@ def _asset_manifest_for_source(
             _hash_file(entry.path), entry.path.stat().st_size, entry.mode
         )
         for entry in files
-        if entry.relative in ignored and not _is_local_only_asset(entry.relative)
+        if entry.relative in ignored
+        and not _is_local_only_asset(entry.relative)
+        and not _is_tool_owned_path(entry.relative)
     }
 
 
@@ -798,7 +870,7 @@ def _validate_official_asset_baseline(
     source_value: str | Path,
     game_prefix: str,
     original_commit: str,
-) -> tuple[Path, dict[str, _AssetManifestEntry]]:
+) -> tuple[Path, dict[str, _AssetManifestEntry], str]:
     source = _validate_source(source_value, game)
     build = _write_tree_from_folder(
         repo,
@@ -806,21 +878,72 @@ def _validate_official_asset_baseline(
         game_prefix=game_prefix,
         base_commit=original_commit,
     )
-    differences = set(
-        _diff_status(repo, original_commit, build.tree, game_prefix)
+    build = _preserve_tool_owned_paths(
+        repo, build, original_commit, game_prefix
     )
-    differences.discard(_prefixed(game_prefix, ".gitignore"))
-    if differences:
+    differences = _diff_status(repo, original_commit, build.tree, game_prefix)
+    differences.pop(_prefixed(game_prefix, ".gitignore"), None)
+    significant = {
+        path: change
+        for path, change in differences.items()
+        if not _is_legacy_baseline_migration(path, change, game_prefix)
+    }
+    if significant:
+        examples = ", ".join(
+            f"{change} {_display_path(path, game_prefix)}"
+            for path, change in sorted(significant.items())[:5]
+        )
+        if len(significant) > 5:
+            examples += f", and {len(significant) - 5} more"
         raise GitWorkflowError(
             "The previous official folder does not match the registered original "
-            "branch. Select the clean game folder for the currently registered version."
+            "branch. Select the clean game folder for the currently registered version. "
+            f"Mismatched tracked game files: {examples}."
         )
-    return source, _build_ignored_asset_manifest(source, build.ignored_paths)
+    return (
+        source,
+        _build_ignored_asset_manifest(source, build.ignored_paths),
+        build.tree,
+    )
+
+
+def _is_legacy_baseline_migration(
+    path: str, change: str, game_prefix: str
+) -> bool:
+    """Identify differences caused by old updater and ignore-rule layouts.
+
+    Older projects sometimes committed the GameUpdate bundle on ``original``
+    and added selected translated binary paths only after that branch was
+    created.  A clean baseline legitimately removes the former and introduces
+    pristine copies for the latter.  Modified or removed game assets are never
+    accepted here because they can indicate a different official version.
+    """
+    relative = _display_path(path, game_prefix)
+    if _is_tool_owned_path(relative):
+        return True
+    return change == "A" and _asset_category(relative) != "Other asset"
+
+
+def _is_tool_owned_path(relative: str) -> bool:
+    pure = PurePosixPath(relative)
+    lowered = tuple(part.casefold() for part in pure.parts)
+    return bool(
+        (
+            len(lowered) == 1
+            and lowered[0] in _TOOL_OWNED_ROOT_FILES
+        )
+        or (
+            lowered
+            and lowered[0] in _TOOL_RESOURCE_DIRECTORIES
+        )
+    )
 
 
 def _is_local_only_asset(path: str) -> bool:
     pure = PurePosixPath(path)
     lowered_parts = tuple(part.casefold() for part in pure.parts)
+    if lowered_parts and lowered_parts[0] in _TOOL_RESOURCE_DIRECTORIES:
+        return True
     if any(part in _LOCAL_ONLY_DIRECTORIES for part in lowered_parts[:-1]):
         return True
     if lowered_parts[:2] == ("wolf_json", "originals"):
@@ -830,7 +953,7 @@ def _is_local_only_asset(path: str) -> bool:
         name in _LOCAL_ONLY_FILENAMES
         or name.startswith("save")
         or name.startswith("bsxscript_")
-        or Path(name).suffix in {".log", ".tmp"}
+        or Path(name).suffix in _NON_GAME_RESOURCE_EXTENSIONS | {".log", ".tmp"}
     )
 
 
@@ -1169,17 +1292,17 @@ def _message(subject: str, version: str) -> str:
     return f"{subject}\n\n{VERSION_TRAILER}: {version}"
 
 
-def _ensure_translation_branch(repo: Path, head: str) -> None:
-    translation = _ref_commit(repo, TRANSLATION_BRANCH)
+def _ensure_translation_branch(repo: Path, head: str, branch: str) -> None:
+    translation = _ref_commit(repo, branch)
     current = _run_git(repo, "symbolic-ref", "--short", "-q", "HEAD", check=False)
     current_name = current.stdout.strip()
-    if translation and current_name != TRANSLATION_BRANCH:
+    if translation and current_name != branch:
         raise GitWorkflowError(
-            "The translation branch exists but is not checked out. Switch to translation first."
+            f"The translated branch {branch!r} exists but is not checked out. Switch to it first."
         )
     if not translation:
-        _run_git(repo, "update-ref", f"refs/heads/{TRANSLATION_BRANCH}", head)
-        _run_git(repo, "symbolic-ref", "HEAD", f"refs/heads/{TRANSLATION_BRANCH}")
+        _run_git(repo, "update-ref", f"refs/heads/{branch}", head)
+        _run_git(repo, "symbolic-ref", "HEAD", f"refs/heads/{branch}")
 
 
 def bootstrap_repository(
@@ -1203,6 +1326,7 @@ def bootstrap_repository(
         gitignore_installed = _install_gameupdate_gitignore(translated)
         _run_git(translated, "init", "-b", TRANSLATION_BRANCH)
         repo, prefix = translated, ""
+        translation_branch = TRANSLATION_BRANCH
         _ensure_local_excludes(repo)
         original_tree = _write_tree_from_folder(
             repo, original, game_prefix=prefix, base_commit=None
@@ -1250,8 +1374,13 @@ def bootstrap_repository(
                 "Existing repositories must have at least one commit before reconciliation"
             )
         head_commit = head.stdout.strip()
+        translation_branch = status.translation_branch or status.current_branch
+        if not translation_branch or translation_branch == ORIGINAL_BRANCH:
+            raise GitWorkflowError(
+                "Check out the branch containing the translated game before reconciliation"
+            )
         gitignore_installed = _install_gameupdate_gitignore(translated)
-        _ensure_translation_branch(repo, head_commit)
+        _ensure_translation_branch(repo, head_commit, translation_branch)
         original_tree = _write_tree_from_folder(
             repo, original, game_prefix=prefix, base_commit=head_commit
         )
@@ -1285,10 +1414,10 @@ def bootstrap_repository(
     _run_git(
         repo,
         "update-ref",
-        f"refs/heads/{TRANSLATION_BRANCH}",
+        f"refs/heads/{translation_branch}",
         translation_commit,
     )
-    _run_git(repo, "symbolic-ref", "HEAD", f"refs/heads/{TRANSLATION_BRANCH}")
+    _run_git(repo, "symbolic-ref", "HEAD", f"refs/heads/{translation_branch}")
     _run_git(repo, "read-tree", translation_commit)
     if _run_git(repo, "status", "--porcelain=v1", "-z").stdout:
         raise GitWorkflowError(
@@ -1300,6 +1429,7 @@ def bootstrap_repository(
     _save_asset_manifest(
         repo, prefix, version, original_commit, official_assets
     )
+    _set_translation_branch(repo, translation_branch)
     return BootstrapResult(
         repo,
         original_commit,
@@ -1313,19 +1443,30 @@ def bootstrap_repository(
 
 
 def register_translation_branch(
-    translated_game: str | Path, version: str | None = None
+    translated_game: str | Path,
+    version: str | None = None,
+    *,
+    branch: str | None = None,
+    replace: bool = False,
 ) -> BootstrapResult:
-    """Attach a clean current translated tree to an existing original branch."""
+    """Register an existing local branch as the translated game branch."""
     game = Path(translated_game).expanduser().resolve()
     status = inspect_repository(game)
     if not status.repo_root or not status.original_commit:
         raise GitWorkflowError("The original branch must exist first")
-    if status.translation_exists:
-        raise GitWorkflowError("The translation branch already exists")
+    if status.translation_exists and not replace:
+        raise GitWorkflowError("The translated branch is already registered")
     if status.pending_cherry_pick:
         raise GitWorkflowError("Finish or abort the pending cherry-pick first")
     if not status.worktree_clean:
         raise GitWorkflowError("Commit current translation changes before reconciliation")
+    translation_branch = _validate_branch_name(
+        status.repo_root, branch or status.current_branch or ""
+    )
+    if branch and _ref_commit(status.repo_root, translation_branch) is None:
+        raise GitWorkflowError(f"The translated branch does not exist: {translation_branch}")
+    if status.current_branch != translation_branch:
+        _run_git(status.repo_root, "checkout", translation_branch)
     head = _run_git(status.repo_root, "rev-parse", "HEAD", check=False)
     if head.returncode != 0:
         raise GitWorkflowError("The current translated branch has no commit to register")
@@ -1345,28 +1486,36 @@ def register_translation_branch(
         format_json=True,
         materialize_json=True,
     )
-    translation_commit = _commit_tree(
-        status.repo_root,
-        translation_tree.tree,
-        _message(
-            f"translation: register translated game {resolved_version}",
-            resolved_version,
-        ),
-        (head_commit, status.original_commit),
+    current_tree = _run_git(
+        status.repo_root, "rev-parse", f"{head_commit}^{{tree}}"
+    ).stdout.strip()
+    current_version = _version_from_history(
+        status.repo_root, translation_branch, head_commit
     )
+    if translation_tree.tree == current_tree and current_version == resolved_version:
+        translation_commit = head_commit
+    else:
+        translation_commit = _commit_tree(
+            status.repo_root,
+            translation_tree.tree,
+            _message(
+                f"translation: register translated game {resolved_version}",
+                resolved_version,
+            ),
+            (head_commit, status.original_commit),
+        )
     _run_git(
         status.repo_root,
         "update-ref",
-        f"refs/heads/{TRANSLATION_BRANCH}",
+        f"refs/heads/{translation_branch}",
         translation_commit,
     )
     _run_git(
         status.repo_root,
-        "symbolic-ref",
-        "HEAD",
-        f"refs/heads/{TRANSLATION_BRANCH}",
+        "symbolic-ref", "HEAD", f"refs/heads/{translation_branch}",
     )
     _run_git(status.repo_root, "read-tree", translation_commit)
+    _set_translation_branch(status.repo_root, translation_branch)
     return BootstrapResult(
         status.repo_root,
         status.original_commit,
@@ -1379,16 +1528,103 @@ def register_translation_branch(
     )
 
 
+def local_branch_names(game_root: str | Path) -> tuple[str, ...]:
+    """Return safe local branch choices for translated-branch registration."""
+    status = inspect_repository(game_root)
+    if not status.repo_root:
+        return ()
+    output = _run_git(
+        status.repo_root,
+        "for-each-ref",
+        "--format=%(refname:short)",
+        "refs/heads",
+    ).stdout
+    branches = []
+    for raw in output.splitlines():
+        branch = raw.strip()
+        if not branch or branch == ORIGINAL_BRANCH:
+            continue
+        branches.append(_validate_branch_name(status.repo_root, branch))
+    return tuple(sorted(set(branches)))
+
+
+def record_version_metadata(
+    translated_game: str | Path, version: str
+) -> BootstrapResult:
+    """Repair a complete legacy branch layout that lacks version trailers.
+
+    The file trees are reused exactly.  Only no-content commits are added to
+    the two branch tips so subsequent repository inspection can identify the
+    registered baseline version.
+    """
+    game = Path(translated_game).expanduser().resolve()
+    status = inspect_repository(game)
+    if not status.repo_root or not status.original_commit or not status.translation_commit:
+        raise GitWorkflowError("Both original and translated branches must exist")
+    if status.pending_cherry_pick:
+        raise GitWorkflowError("Finish or abort the pending cherry-pick first")
+    if not status.worktree_clean:
+        raise GitWorkflowError("Commit current translation changes before reconciliation")
+    resolved_version = _validate_version(version)
+    repo = status.repo_root
+
+    if status.current_branch != status.translation_branch:
+        _run_git(repo, "checkout", status.translation_branch)
+    _reject_original_checked_out_elsewhere(repo)
+
+    original_commit = status.original_commit
+    if not status.original_version:
+        original_tree = _run_git(
+            repo, "rev-parse", f"{original_commit}^{{tree}}"
+        ).stdout.strip()
+        original_commit = _commit_tree(
+            repo,
+            original_tree,
+            _message(f"original: record version metadata {resolved_version}", resolved_version),
+            (original_commit,),
+        )
+        _run_git(repo, "update-ref", f"refs/heads/{ORIGINAL_BRANCH}", original_commit)
+
+    translation_commit = status.translation_commit
+    if not status.translation_version:
+        translation_tree = _run_git(
+            repo, "rev-parse", f"{translation_commit}^{{tree}}"
+        ).stdout.strip()
+        translation_commit = _commit_tree(
+            repo,
+            translation_tree,
+            _message(
+                f"translation: record version metadata {resolved_version}",
+                resolved_version,
+            ),
+            (translation_commit,),
+        )
+        _run_git(
+            repo,
+            "update-ref",
+            f"refs/heads/{status.translation_branch}",
+            translation_commit,
+        )
+        _run_git(repo, "reset", "--soft", translation_commit)
+
+    return BootstrapResult(
+        repo,
+        original_commit,
+        translation_commit,
+        resolved_version,
+    )
+
+
 def checkout_translation_branch(translated_game: str | Path) -> RepositoryStatus:
     game = Path(translated_game).expanduser().resolve()
     status = inspect_repository(game)
     if not status.repo_root or not status.translation_exists:
-        raise GitWorkflowError("The translation branch does not exist")
+        raise GitWorkflowError("The translated branch is not registered")
     if status.pending_cherry_pick:
         raise GitWorkflowError("Finish or abort the pending cherry-pick first")
     if not status.worktree_clean:
         raise GitWorkflowError("Commit current changes before switching branches")
-    _run_git(status.repo_root, "checkout", TRANSLATION_BRANCH)
+    _run_git(status.repo_root, "checkout", status.translation_branch)
     return inspect_repository(game)
 
 
@@ -1538,6 +1774,7 @@ def _already_present_patch_paths(
 
 def _record_already_present_version(
     repo: Path,
+    translation_branch: str,
     translation_commit: str,
     original_commit: str,
     version: str,
@@ -1552,7 +1789,7 @@ def _record_already_present_version(
     _run_git(
         repo,
         "update-ref",
-        f"refs/heads/{TRANSLATION_BRANCH}",
+        f"refs/heads/{translation_branch}",
         marker,
         translation_commit,
     )
@@ -1580,7 +1817,7 @@ def _cherry_pick(
         raise GitWorkflowError("The translated game is not in a Git repository")
     repo = status.repo_root
     if not status.translation_commit:
-        raise GitWorkflowError("The translation branch has no commit to update")
+        raise GitWorkflowError("The translated branch has no commit to update")
     parent = _run_git(repo, "rev-parse", f"{original_commit}^").stdout.strip()
     changed, already_present = _already_present_patch_paths(
         repo,
@@ -1592,6 +1829,7 @@ def _cherry_pick(
     if len(already_present) == len(changed):
         return _record_already_present_version(
             repo,
+            status.translation_branch,
             status.translation_commit,
             original_commit,
             version,
@@ -1686,6 +1924,104 @@ def _tree_files(
     return files
 
 
+def _preserve_tool_owned_paths(
+    repo: Path,
+    build: _TreeBuild,
+    base_ref: str,
+    game_prefix: str,
+) -> _TreeBuild:
+    """Keep updater infrastructure out of official game patches."""
+    base_files = _tree_files(repo, base_ref, game_prefix)
+    proposed_files = _tree_files(repo, build.tree, game_prefix)
+    index_lines = []
+    for path in sorted(set(base_files) | set(proposed_files)):
+        if not _is_tool_owned_path(_display_path(path, game_prefix)):
+            continue
+        base = base_files.get(path)
+        proposed = proposed_files.get(path)
+        if base == proposed:
+            continue
+        if base is None:
+            index_lines.append(f"0 {_ZERO_OID}\t{path}")
+        else:
+            mode, object_id = base
+            index_lines.append(f"{mode} {object_id}\t{path}")
+
+    if not index_lines:
+        return build
+
+    index_name, index_env = _temporary_index()
+    try:
+        _run_git(repo, "read-tree", build.tree, env=index_env)
+        _run_git(
+            repo,
+            "update-index",
+            "--index-info",
+            input_text="\n".join(index_lines) + "\n",
+            env=index_env,
+        )
+        tree = _run_git(repo, "write-tree", env=index_env).stdout.strip()
+        return replace(build, tree=tree)
+    finally:
+        try:
+            Path(index_name).unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _preserve_unbased_translation_assets(
+    repo: Path,
+    build: _TreeBuild,
+    original_commit: str,
+    translation_commit: str,
+    game_prefix: str,
+) -> tuple[_TreeBuild, tuple[str, ...]]:
+    """Exclude translated assets that have no authoritative original blob.
+
+    Without a previous clean folder, comparing a translated image to the new
+    official image cannot prove that the official asset changed. Keeping the
+    path absent from both the original baseline and proposed official tree
+    preserves the translated worktree copy instead of overwriting it on an
+    unsupported guess.
+    """
+    original_files = _tree_files(repo, original_commit, game_prefix)
+    translated_files = _tree_files(repo, translation_commit, game_prefix)
+    proposed_files = _tree_files(repo, build.tree, game_prefix)
+    index_lines = []
+    preserved = []
+    for path in translated_files:
+        relative = _display_path(path, game_prefix)
+        if (
+            path not in original_files
+            and path in proposed_files
+            and not _is_tool_owned_path(relative)
+            and _asset_category(relative) != "Other asset"
+        ):
+            index_lines.append(f"0 {_ZERO_OID}\t{path}")
+            preserved.append(relative)
+
+    if not index_lines:
+        return build, ()
+
+    index_name, index_env = _temporary_index()
+    try:
+        _run_git(repo, "read-tree", build.tree, env=index_env)
+        _run_git(
+            repo,
+            "update-index",
+            "--index-info",
+            input_text="\n".join(index_lines) + "\n",
+            env=index_env,
+        )
+        tree = _run_git(repo, "write-tree", env=index_env).stdout.strip()
+        return replace(build, tree=tree), tuple(sorted(preserved))
+    finally:
+        try:
+            Path(index_name).unlink()
+        except FileNotFoundError:
+            pass
+
+
 def _replacement_outcome(
     repo: Path,
     official_change: str,
@@ -1752,8 +2088,10 @@ def preview_official_update(
     status = inspect_repository(game)
     if not status.repo_root or not status.original_commit or not status.translation_commit:
         raise GitWorkflowError("Register both branches before previewing an update")
-    if status.current_branch != TRANSLATION_BRANCH:
-        raise GitWorkflowError("Switch to the translation branch before previewing")
+    if status.current_branch != status.translation_branch:
+        raise GitWorkflowError(
+            f"Switch to the translated branch {status.translation_branch!r} before previewing"
+        )
     if status.pending_cherry_pick:
         raise GitWorkflowError("Finish or abort the pending cherry-pick first")
     if not status.worktree_clean:
@@ -1765,37 +2103,59 @@ def preview_official_update(
         game_prefix=status.game_prefix,
         base_commit=status.original_commit,
     )
+    build = _preserve_tool_owned_paths(
+        status.repo_root,
+        build,
+        status.original_commit,
+        status.game_prefix,
+    )
+    preserved_translation_assets = ()
+    if previous_official_game is None:
+        build, preserved_translation_assets = _preserve_unbased_translation_assets(
+            status.repo_root,
+            build,
+            status.original_commit,
+            status.translation_commit,
+            status.game_prefix,
+        )
     baseline_assets = _load_asset_manifest(status.repo_root, status.game_prefix)
     stored_asset_baseline = baseline_assets is not None
     baseline_source = None
+    baseline_tree = _run_git(
+        status.repo_root, "rev-parse", f"{status.original_commit}^{{tree}}"
+    ).stdout.strip()
     if baseline_assets is None:
-        if previous_official_game is None:
-            raise GitWorkflowError(
-                "Select the previous clean official game folder once so ignored "
-                "assets can be compared safely."
+        if previous_official_game is not None:
+            baseline_source, baseline_assets, baseline_tree = (
+                _validate_official_asset_baseline(
+                    status.repo_root,
+                    game,
+                    previous_official_game,
+                    status.game_prefix,
+                    status.original_commit,
+                )
             )
-        baseline_source, baseline_assets = _validate_official_asset_baseline(
-            status.repo_root,
-            game,
-            previous_official_game,
-            status.game_prefix,
-            status.original_commit,
-        )
+        else:
+            baseline_assets = _asset_manifest_for_source(
+                status.repo_root,
+                game,
+                status.game_prefix,
+            )
     proposed_assets = _build_ignored_asset_manifest(official, build.ignored_paths)
     external_changes = _external_asset_changes(
         game, baseline_assets, proposed_assets
     )
     official_changes = _diff_status(
-        status.repo_root, status.original_commit, build.tree, status.game_prefix
+        status.repo_root, baseline_tree, build.tree, status.game_prefix
     )
     translation_changes = _diff_status(
         status.repo_root,
-        status.original_commit,
+        baseline_tree,
         status.translation_commit,
         status.game_prefix,
     )
     original_files = _tree_files(
-        status.repo_root, status.original_commit, status.game_prefix
+        status.repo_root, baseline_tree, status.game_prefix
     )
     translated_files = _tree_files(
         status.repo_root, status.translation_commit, status.game_prefix
@@ -1810,7 +2170,7 @@ def preview_official_update(
         )
     )
     line_stats = _diff_numstat(
-        status.repo_root, status.original_commit, build.tree, status.game_prefix
+        status.repo_root, baseline_tree, build.tree, status.game_prefix
     )
     file_changes = []
     for path in sorted(official_changes):
@@ -1920,6 +2280,7 @@ def preview_official_update(
         baseline_asset_manifest=_manifest_digest(baseline_assets),
         asset_manifest_available=stored_asset_baseline,
         baseline_source_root=baseline_source,
+        preserved_translation_asset_paths=preserved_translation_assets,
     )
 
 
@@ -1990,10 +2351,12 @@ def apply_official_update(
     game = Path(translated_game).expanduser().resolve()
     version = _validate_version(version)
     status = inspect_repository(game)
-    if not status.repo_root or not status.original_commit:
-        raise GitWorkflowError("Register the original game before applying an update")
-    if status.current_branch != TRANSLATION_BRANCH:
-        raise GitWorkflowError("Switch to the translation branch before updating")
+    if not status.repo_root or not status.original_commit or not status.translation_commit:
+        raise GitWorkflowError("Register both branches before applying an update")
+    if status.current_branch != status.translation_branch:
+        raise GitWorkflowError(
+            f"Switch to the translated branch {status.translation_branch!r} before updating"
+        )
     if status.pending_cherry_pick:
         raise GitWorkflowError("Finish or abort the pending cherry-pick first")
     if not status.worktree_clean:
@@ -2004,7 +2367,7 @@ def apply_official_update(
         )
     if expected_translation_commit and status.translation_commit != expected_translation_commit:
         raise GitWorkflowError(
-            "The translation branch changed after preview. Run the preview again before applying."
+            "The translated branch changed after preview. Run the preview again before applying."
         )
     official = _validate_source(new_official_game, game)
     repo = status.repo_root
@@ -2015,25 +2378,49 @@ def apply_official_update(
         game_prefix=status.game_prefix,
         base_commit=status.original_commit,
     )
+    new_tree = _preserve_tool_owned_paths(
+        repo,
+        new_tree,
+        status.original_commit,
+        status.game_prefix,
+    )
+    if previous_official_game is None:
+        new_tree, _preserved_translation_assets = (
+            _preserve_unbased_translation_assets(
+                repo,
+                new_tree,
+                status.original_commit,
+                status.translation_commit,
+                status.game_prefix,
+            )
+        )
     proposed_assets = _build_ignored_asset_manifest(
         official, new_tree.ignored_paths
     )
     proposed_asset_digest = _manifest_digest(proposed_assets)
     baseline_assets = _load_asset_manifest(repo, status.game_prefix)
     baseline_was_missing = baseline_assets is None
+    registered_tree = _run_git(
+        repo, "rev-parse", f"{status.original_commit}^{{tree}}"
+    ).stdout.strip()
+    baseline_tree = registered_tree
     if baseline_assets is None:
-        if previous_official_game is None:
-            raise GitWorkflowError(
-                "Select the previous clean official game folder once so ignored "
-                "assets can be compared safely."
+        if previous_official_game is not None:
+            _baseline_source, baseline_assets, baseline_tree = (
+                _validate_official_asset_baseline(
+                    repo,
+                    game,
+                    previous_official_game,
+                    status.game_prefix,
+                    status.original_commit,
+                )
             )
-        _baseline_source, baseline_assets = _validate_official_asset_baseline(
-            repo,
-            game,
-            previous_official_game,
-            status.game_prefix,
-            status.original_commit,
-        )
+        else:
+            baseline_assets = _asset_manifest_for_source(
+                repo,
+                game,
+                status.game_prefix,
+            )
     baseline_asset_digest = _manifest_digest(baseline_assets)
     if expected_tree is not None and new_tree.tree != expected_tree:
         raise GitWorkflowError(
@@ -2054,10 +2441,19 @@ def apply_official_update(
             "The previous official assets changed after preview. Run the preview again "
             "before applying."
         )
-    old_tree = _run_git(
-        repo, "rev-parse", f"{status.original_commit}^{{tree}}"
-    ).stdout.strip()
-    if new_tree.tree == old_tree:
+    baseline_parent = status.original_commit
+    if baseline_tree != registered_tree:
+        baseline_version = status.original_version or "unknown"
+        baseline_parent = _commit_tree(
+            repo,
+            baseline_tree,
+            _message(
+                f"original: normalize legacy baseline {baseline_version}",
+                baseline_version,
+            ),
+            (status.original_commit,),
+        )
+    if new_tree.tree == baseline_tree:
         if status.original_version == version:
             raise GitWorkflowError("That official game version is already registered")
         subject = f"patch: record original game version {version}"
@@ -2067,14 +2463,14 @@ def apply_official_update(
         repo,
         new_tree.tree,
         _message(subject, version),
-        (status.original_commit,),
+        (baseline_parent,),
     )
     if baseline_was_missing:
         _save_asset_manifest(
             repo,
             status.game_prefix,
             status.original_version or "unknown",
-            status.original_commit,
+            baseline_parent,
             baseline_assets,
         )
     _save_pending_asset_plan(
@@ -2107,15 +2503,17 @@ def apply_registered_original(
     status = inspect_repository(game)
     if not status.original_commit or not status.original_version:
         raise GitWorkflowError("The original branch has no recorded version to apply")
-    if status.current_branch != TRANSLATION_BRANCH:
-        raise GitWorkflowError("Switch to the translation branch before updating")
+    if status.current_branch != status.translation_branch:
+        raise GitWorkflowError(
+            f"Switch to the translated branch {status.translation_branch!r} before updating"
+        )
     if status.pending_cherry_pick:
         raise GitWorkflowError("Finish or abort the pending cherry-pick first")
     if not status.worktree_clean:
         raise GitWorkflowError("Commit current translation changes before updating")
     if status.translation_version == status.original_version:
         if not status.asset_sync_pending:
-            raise GitWorkflowError("The translation branch already has this original version")
+            raise GitWorkflowError("The translated branch already has this original version")
         result = UpdateResult(
             status.repo_root,
             status.original_commit,

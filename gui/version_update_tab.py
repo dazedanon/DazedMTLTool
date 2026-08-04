@@ -104,7 +104,7 @@ class VersionUpdateTab(QWidget):
         layout.addWidget(
             PageHeader(
                 "Version Update",
-                "Keep official releases on the original branch and apply their exact Git commits to translation.",
+                "Keep official releases on original and apply their exact Git commits to the translated branch.",
             )
         )
 
@@ -135,7 +135,7 @@ class VersionUpdateTab(QWidget):
         configure_action_button(self.refresh_btn, variant="quiet")
         self.refresh_btn.clicked.connect(self.refresh_status)
         refresh_row.addWidget(self.refresh_btn)
-        self.switch_translation_btn = QPushButton("Switch to translation")
+        self.switch_translation_btn = QPushButton("Switch translated branch")
         configure_action_button(self.switch_translation_btn, variant="secondary")
         self.switch_translation_btn.clicked.connect(self._switch_translation)
         self.switch_translation_btn.setVisible(False)
@@ -160,7 +160,7 @@ class VersionUpdateTab(QWidget):
 
         bootstrap_card = SectionCard(
             "2. Set up version tracking",
-            "This one-time setup creates the original and translation branches used for future game updates.",
+            "This one-time setup creates the original baseline and registers the branch containing your translation.",
         )
         self.bootstrap_explanation = QLabel(
             "Version tracking has not been configured for this game."
@@ -177,6 +177,7 @@ class VersionUpdateTab(QWidget):
         bootstrap_card.add_layout(setup_row)
 
         self.bootstrap_fields = QWidget()
+        self.bootstrap_fields.setObjectName("transparentCardPanel")
         bootstrap_fields_layout = QVBoxLayout(self.bootstrap_fields)
         bootstrap_fields_layout.setContentsMargins(0, 0, 0, 0)
         bootstrap_fields_layout.setSpacing(Spacing.MD)
@@ -205,25 +206,28 @@ class VersionUpdateTab(QWidget):
         self.bootstrap_card = bootstrap_card
 
         update_card = SectionCard(
-            "2. Apply an official update",
+            "3. Apply an official update",
             "Choose the clean folder for the new official release, preview its impact, then apply it to the translated game.",
         )
         self.baseline_panel = QWidget()
+        self.baseline_panel.setObjectName("transparentCardPanel")
         baseline_layout = QVBoxLayout(self.baseline_panel)
         baseline_layout.setContentsMargins(0, 0, 0, 0)
         baseline_layout.setSpacing(Spacing.SM)
         self.baseline_explanation = QLabel(
-            "One-time asset baseline required: choose the previous clean official game."
+            "Optional: choose the previous clean official game for the most exact "
+            "asset comparison. Otherwise, the current game's images and sounds are "
+            "used as the starting baseline."
         )
         self.baseline_explanation.setWordWrap(True)
-        self.baseline_explanation.setStyleSheet(f"color:{COLORS.warning};")
+        self.baseline_explanation.setStyleSheet(f"color:{COLORS.text_muted};")
         baseline_layout.addWidget(self.baseline_explanation)
         baseline_form = QFormLayout()
         baseline_form.setContentsMargins(0, 0, 0, 0)
         self.baseline_edit = self._folder_row(
             baseline_form,
-            "Previous official game:",
-            "Clean official folder for the currently registered version",
+            "Previous official game (optional):",
+            "Leave blank to use the current game's existing assets",
         )
         self.baseline_edit.textChanged.connect(lambda _text: self._invalidate_preview())
         baseline_layout.addLayout(baseline_form)
@@ -256,6 +260,7 @@ class VersionUpdateTab(QWidget):
         update_card.add_widget(self.preview_empty)
 
         self.preview_panel = QWidget()
+        self.preview_panel.setObjectName("transparentCardPanel")
         preview_layout = QVBoxLayout(self.preview_panel)
         preview_layout.setContentsMargins(0, 0, 0, 0)
         preview_layout.setSpacing(Spacing.MD)
@@ -417,10 +422,16 @@ class VersionUpdateTab(QWidget):
             self.original_version_edit.setFocus()
 
     def _folder_row(self, form: QFormLayout, label: str, placeholder: str) -> QLineEdit:
+        from gui.ui_components import configure_action_button
+
         row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(Spacing.SM)
         edit = QLineEdit()
         edit.setPlaceholderText(placeholder)
         browse = QPushButton("Browse…")
+        configure_action_button(browse, variant="quiet")
+        browse.setMinimumWidth(112)
         browse.clicked.connect(lambda: self._choose_folder(edit))
         row.addWidget(edit, 1)
         row.addWidget(browse)
@@ -508,7 +519,7 @@ class VersionUpdateTab(QWidget):
             self.repository_status.setText("Version tracking is not set up yet.")
             self.repository_status.setStyleSheet(f"color:{COLORS.warning};")
             self.version_status.setText(
-                "No Git repository or original/translation branches were detected."
+                "No Git repository or registered version-tracking branches were detected."
             )
         elif status.pending_cherry_pick:
             self.repository_status.setText(
@@ -533,16 +544,17 @@ class VersionUpdateTab(QWidget):
         elif needs_bootstrap:
             self.repository_status.setText("Version tracking setup is required.")
             self.repository_status.setStyleSheet(f"color:{COLORS.warning};")
-        elif status.current_branch != "translation":
+        elif status.current_branch != status.translation_branch:
             self.repository_status.setText(
-                "Switch to the translation branch before applying an official update."
+                f"Switch to {status.translation_branch} before applying an official update."
             )
             self.repository_status.setStyleSheet(f"color:{COLORS.warning};")
         elif not status.asset_manifest_available:
             self.repository_status.setText(
-                "Ready for updates after a one-time clean official asset baseline is selected."
+                "Ready for official game updates. The first preview will remember the "
+                "current images and sounds unless a clean previous folder is selected."
             )
-            self.repository_status.setStyleSheet(f"color:{COLORS.warning};")
+            self.repository_status.setStyleSheet(f"color:{COLORS.success};")
         else:
             self.repository_status.setText("Ready for official game updates.")
             self.repository_status.setStyleSheet(f"color:{COLORS.success};")
@@ -555,7 +567,7 @@ class VersionUpdateTab(QWidget):
                 "unknown" if status.translation_exists else "missing"
             )
             self.version_status.setText(
-                f"Original {original} · Translation {translated} · "
+                f"Original {original} · Translated {status.translation_branch or 'not registered'} {translated} · "
                 f"Branch {status.current_branch or 'detached HEAD'}"
             )
 
@@ -565,9 +577,9 @@ class VersionUpdateTab(QWidget):
         self.bootstrap_fields.setVisible(can_bootstrap and self._bootstrap_expanded)
         if status.original_exists and not status.translation_exists:
             self.bootstrap_explanation.setText(
-                "The original branch already exists. Register this clean translated game as its translation branch."
+                f"The original branch already exists. Register {status.current_branch or 'the current branch'} as the translated branch."
             )
-            self.bootstrap_btn.setText("Register translation branch")
+            self.bootstrap_btn.setText("Register current branch")
             self.original_edit.setEnabled(False)
             if status.original_version and not self.original_version_edit.text().strip():
                 self.original_version_edit.setText(status.original_version)
@@ -580,7 +592,7 @@ class VersionUpdateTab(QWidget):
         self.switch_translation_btn.setVisible(
             bool(
                 status.translation_exists
-                and status.current_branch != "translation"
+                and status.current_branch != status.translation_branch
                 and status.worktree_clean
                 and not status.pending_cherry_pick
             )
@@ -588,7 +600,7 @@ class VersionUpdateTab(QWidget):
         self.finish_assets_btn.setVisible(
             bool(
                 status.asset_sync_pending
-                and status.current_branch == "translation"
+                and status.current_branch == status.translation_branch
                 and status.worktree_clean
                 and not status.pending_cherry_pick
             )
@@ -596,15 +608,20 @@ class VersionUpdateTab(QWidget):
         self.finish_assets_btn.setText(
             "Apply registered update" if behind else "Finish asset sync"
         )
+        if status.translation_branch:
+            self.switch_translation_btn.setText(
+                f"Switch to {status.translation_branch}"
+            )
         self.update_card.setVisible(branch_ready)
         self.update_card.setEnabled(branch_ready)
         self.baseline_panel.setVisible(
             branch_ready and not status.asset_manifest_available
         )
         self.baseline_explanation.setText(
-            "One-time asset baseline required: choose the clean official game for "
-            f"version {status.original_version or 'currently registered'}. This prevents "
-            "translation-only images and sounds from being mistaken for update changes."
+            "Optional: select the clean official game for "
+            f"version {status.original_version or 'the registered baseline'} for the "
+            "most exact comparison. Leave this blank to use the current game's existing "
+            "images, audio, video, and fonts as the starting asset baseline."
         )
         self.apply_registered_btn.setVisible(branch_ready and behind)
         self.recovery_card.setVisible(status.pending_cherry_pick)
@@ -659,6 +676,29 @@ class VersionUpdateTab(QWidget):
         current = self.current_edit.text().strip()
         original = self.original_edit.text().strip()
         version = self.original_version_edit.text().strip()
+        if (
+            self._status
+            and self._status.repo_root
+            and not self._status.translation_exists
+        ):
+            branch = self._status.current_branch
+            if not branch or branch == "original":
+                QMessageBox.warning(
+                    self,
+                    "Translated branch required",
+                    "Check out the branch containing the translated game, then rescan.",
+                )
+                return
+            answer = QMessageBox.question(
+                self,
+                "Use current branch?",
+                f"Use {branch!r} as this game's translated branch?\n\n"
+                "DazedTL will keep that branch name and apply future official updates to it.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if answer != QMessageBox.Yes:
+                return
         if self._status and self._status.original_exists and not self._status.translation_exists:
             if not current or not version:
                 QMessageBox.warning(
@@ -710,7 +750,7 @@ class VersionUpdateTab(QWidget):
         self._run(
             lambda: checkout_translation_branch(current),
             lambda _result: self._set_activity(
-                "Switched the selected repository to the translation branch."
+                "Switched the selected repository to its registered translated branch."
             ),
         )
 
@@ -726,18 +766,8 @@ class VersionUpdateTab(QWidget):
                 "Select the new official game and enter its version.",
             )
             return
-        baseline_required = bool(
-            self._status and not self._status.asset_manifest_available
-        )
-        if baseline_required and not baseline:
-            QMessageBox.warning(
-                self,
-                "Previous official game required",
-                "Select the clean official game matching the currently registered version.",
-            )
-            return
         resolved_baseline = (
-            Path(baseline).expanduser().resolve() if baseline_required else None
+            Path(baseline).expanduser().resolve() if baseline else None
         )
         if (
             self._preview is None
@@ -760,7 +790,7 @@ class VersionUpdateTab(QWidget):
                 expected_original_commit=self._preview.original_commit,
                 expected_translation_commit=self._preview.translation_commit,
                 expected_asset_manifest=self._preview.proposed_asset_manifest,
-                previous_official_game=baseline if baseline_required else None,
+                previous_official_game=baseline or None,
                 expected_baseline_asset_manifest=(
                     self._preview.baseline_asset_manifest
                 ),
@@ -778,13 +808,6 @@ class VersionUpdateTab(QWidget):
                 self,
                 "Missing update information",
                 "Select the new official game and enter its version.",
-            )
-            return
-        if self._status and not self._status.asset_manifest_available and not baseline:
-            QMessageBox.warning(
-                self,
-                "Previous official game required",
-                "Select the clean official game matching the currently registered version.",
             )
             return
         self._run(
@@ -859,11 +882,22 @@ class VersionUpdateTab(QWidget):
             expected += (
                 f" · {len(preview.already_present_paths)} already present"
             )
-        if not preview.asset_manifest_available:
+        if preview.preserved_translation_asset_paths:
             expected += (
-                " The selected previous official folder supplied the one-time asset "
-                "baseline; it will be remembered after this update."
+                f" {len(preview.preserved_translation_asset_paths)} tracked translation "
+                "asset(s) have no official baseline copy and will be preserved."
             )
+        if not preview.asset_manifest_available:
+            if preview.baseline_source_root is not None:
+                expected += (
+                    " The selected previous official folder supplied the one-time asset "
+                    "baseline; it will be remembered after this update."
+                )
+            else:
+                expected += (
+                    " The current game's existing external assets supplied the one-time "
+                    "baseline; it will be remembered after this update."
+                )
         self.preview_expected.setText(expected)
 
         if warning_count:
@@ -882,6 +916,13 @@ class VersionUpdateTab(QWidget):
                 )
             self.preview_notice.setText("Attention: " + " · ".join(notices))
             notice_color = COLORS.warning
+        elif preview.preserved_translation_asset_paths:
+            self.preview_notice.setText(
+                f"Protected: {len(preview.preserved_translation_asset_paths)} tracked "
+                "translation asset(s) were excluded from this update because no clean "
+                "official baseline is available."
+            )
+            notice_color = COLORS.success
         else:
             self.preview_notice.setText(
                 "No full-file translation replacements or processing warnings."
@@ -935,6 +976,32 @@ class VersionUpdateTab(QWidget):
         self.preview_changes.clear()
         self._add_change_group("Warnings — entire file replaced", replacements)
         self._add_image_group("⚠ Warnings — tracked images", image_warnings)
+        if preview.preserved_translation_asset_paths:
+            preserved_group = QTreeWidgetItem(
+                [
+                    "Preserved tracked translation assets "
+                    f"({len(preview.preserved_translation_asset_paths)})",
+                    "",
+                    "",
+                    "",
+                ]
+            )
+            preserved_group.setFlags(
+                preserved_group.flags() & ~Qt.ItemIsSelectable
+            )
+            self.preview_changes.addTopLevelItem(preserved_group)
+            for path in preview.preserved_translation_asset_paths:
+                preserved_group.addChild(
+                    QTreeWidgetItem(
+                        [
+                            path,
+                            "Preserved",
+                            "Tracked asset",
+                            "No official baseline; excluded from update",
+                        ]
+                    )
+                )
+            preserved_group.setExpanded(True)
         if preview.json_warnings:
             warning_group = QTreeWidgetItem(
                 [f"Warnings — structured files ({len(preview.json_warnings)})", "", "", ""]
@@ -970,6 +1037,7 @@ class VersionUpdateTab(QWidget):
                 or preview.image_changes
                 or preview.external_changes
                 or preview.json_warnings
+                or preview.preserved_translation_asset_paths
             )
         )
         self.preview_empty.setVisible(False)
@@ -1081,7 +1149,7 @@ class VersionUpdateTab(QWidget):
         else:
             lines = [
                 f"Official version {result.version} registered; no game files changed.",
-                "The translation branch already contained every file change in the official patch.",
+                "The translated branch already contained every file change in the official patch.",
             ]
         lines.extend(
             [

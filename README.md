@@ -62,9 +62,10 @@ Advanced users may configure the same settings in a private `.env` copied from
 | **Configuration** | Provider, model, engine, wrapping, and workflow defaults |
 
 The Version Update feature uses two Git branches for every engine and file
-format. `original` records official releases and `translation` receives
-each release commit by cherry-pick. If those branches do not exist, the GUI can
-create them from a translated game and its matching clean original. Conflicting
+format. `original` records official releases, while the repository's registered
+translated branch (such as an existing `main`) receives each release commit by
+cherry-pick. If version tracking is not configured, the GUI can create or
+register it from a translated game and its matching clean original. Conflicting
 files default to the new official copy and are listed for translation review.
 Before approval, the GUI shows a file-change overview and normalizes valid
 UTF-8 `.json` files with the same four-space formatter used by translation

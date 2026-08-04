@@ -395,6 +395,9 @@ def application_stylesheet() -> str:
             border: 1px solid {c.border};
             border-radius: {Geometry.RADIUS_CARD}px;
         }}
+        QWidget#transparentCardPanel {{
+            background: transparent;
+        }}
         QLabel#appSectionTitle {{
             color: {c.text_primary};
             font-size: {Typography.SECTION_TITLE}px;

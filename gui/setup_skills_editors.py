@@ -283,7 +283,7 @@ class SetupSkillsEditors(QWidget):
             self.vocab_editor.setPlainText("")
             return
         try:
-            self.vocab_editor.setPlainText(read_game_vocab(root))
+            self.vocab_editor.setPlainText(read_game_vocab(root, create=False))
         except Exception as exc:
             self._log(f"❌ Could not load the game glossary: {exc}")
 

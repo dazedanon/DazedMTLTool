@@ -28,6 +28,7 @@ from util.paths import (
     active_glossary_path,
     ensure_game_glossary,
     glossary_base_path,
+    read_game_glossary,
 )
 
 BASE_SEPARATOR = GLOSSARY_BASE_SEPARATOR
@@ -58,10 +59,17 @@ def _split_base(text: str) -> tuple[str, str]:
     return text[:idx], text[idx:]
 
 
-def read_game_vocab(game_root=None) -> str:
-    """Return the game-specific portion of ``glossary.txt`` (base stripped)."""
-    path = _path(game_root)
-    text = path.read_text(encoding="utf-8")
+def read_game_vocab(game_root=None, *, create: bool = True) -> str:
+    """Return the game section, optionally previewing a missing glossary read-only."""
+    if create:
+        text = _path(game_root).read_text(encoding="utf-8")
+    elif game_root is not None:
+        text = read_game_glossary(game_root, create=False)
+    else:
+        path = active_glossary_path(create=False)
+        if path is None:
+            return _EMPTY_PLACEHOLDER
+        text = read_game_glossary(path.parent, create=False)
     game_part, _base_part = _split_base(text)
     return game_part.rstrip("\n") or _EMPTY_PLACEHOLDER
 

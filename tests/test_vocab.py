@@ -54,6 +54,11 @@ class TestGameGlossaryPaths(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            preview = vocab.read_game_vocab(game, create=False)
+
+            self.assertIn("ユウ (Yuu)", preview)
+            self.assertFalse(game.joinpath("glossary.txt").exists())
+
             glossary = paths.ensure_game_glossary(game)
 
             self.assertTrue(legacy.exists())

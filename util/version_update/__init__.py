@@ -19,7 +19,9 @@ from .git_workflow import (
     conflict_paths,
     continue_with_official,
     inspect_repository,
+    local_branch_names,
     preview_official_update,
+    record_version_metadata,
     register_translation_branch,
 )
 
@@ -42,6 +44,8 @@ __all__ = [
     "conflict_paths",
     "continue_with_official",
     "inspect_repository",
+    "local_branch_names",
     "preview_official_update",
+    "record_version_metadata",
     "register_translation_branch",
 ]

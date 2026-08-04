@@ -61,7 +61,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (1, "run_prettier", {"text": "Format plugins.js"}),
             (1, "browse_gameupdate", {"tooltip": "Choose the GameUpdate source folder"}),
             (1, "run_gameupdate", {"text": "Install GameUpdate"}),
-            (1, "run_all_preprocess", {"text": "Run available tasks"}),
+            (1, "run_all_preprocess", {"text": "Run optional tasks"}),
             (2, "import_files", {"text": "Import files"}),
             (2, "clear_translated", {"text": "Clear translated"}),
             (2, "run_parse_speakers", {"text": "1  Collect names"}),

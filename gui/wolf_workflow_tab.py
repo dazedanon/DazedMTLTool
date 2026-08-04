@@ -102,6 +102,7 @@ from util.wolfdawn import wrap_search as wolf_ws
 import util.dazedwrap as dazedwrap
 
 from gui.setup_skills_editors import SetupSkillsEditors
+from gui.git_prepare import GitPreparationCard
 from gui.theme import COLORS, Geometry, Spacing
 from gui.workflow_components import (
     DisclosureSection,
@@ -850,11 +851,14 @@ class WolfWorkflowTab(QWidget):
 
     def _build_step1_preprocess(self, layout: QVBoxLayout):
         layout.addWidget(self._page_header(
-            1, "Prepare Project", "Optionally format extracted data and install GameUpdate.",
-            optional=True,
+            1, "Prepare Project", "Set up version tracking, then optionally format data and install GameUpdate.",
         ))
+        self.git_prepare = GitPreparationCard(1)
+        self.git_prepare.activity.connect(self._log)
+        layout.addWidget(self.git_prepare)
+
         format_card = WorkflowStageCard(
-            1,
+            2,
             "Format extracted game data",
             "Makes the prepared text files easier to review and track. This does not change the game itself.",
         )
@@ -870,7 +874,7 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(format_card)
 
         update_card = WorkflowStageCard(
-            2,
+            3,
             "Install the GameUpdate helper",
             "Optional. Adds the bundled update files to the game folder so future translation updates are easier to share.",
         )
@@ -897,11 +901,11 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(update_card)
 
         run_card = WorkflowStageCard(
-            3,
-            "Run all available preparation tasks",
+            4,
+            "Run optional preparation tasks",
             "Runs the two tasks above in order. Missing optional items are skipped.",
         )
-        run_all_btn = _make_btn("Run available tasks", "#007acc")
+        run_all_btn = _make_btn("Run optional tasks", "#007acc")
         run_all_btn.setToolTip("Format the extracted data, then install GameUpdate if it is available")
         run_all_btn.clicked.connect(self._run_all_preprocess)
         equalize_button_widths(
@@ -1247,6 +1251,8 @@ class WolfWorkflowTab(QWidget):
     def _populate_preprocess_paths(self):
         game_root = self.folder_edit.text().strip()
         work_dir = str(self._work_dir()) if self._game_root else ""
+        if hasattr(self, "git_prepare"):
+            self.git_prepare.set_game_root(game_root)
         if hasattr(self, "pp_wolf_json_label"):
             self.pp_wolf_json_label.setText(work_dir or "(choose a project in Step 1 first)")
         self._gameupdate_path = str(PROJECT_ROOT / "gameupdate")

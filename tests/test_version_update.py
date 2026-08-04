@@ -7,8 +7,9 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
-from PyQt5.QtWidgets import QApplication, QLineEdit, QWidget
+from PyQt5.QtWidgets import QApplication, QLineEdit, QMessageBox, QWidget
 
 from util.version_update import (
     GitWorkflowError,
@@ -19,6 +20,7 @@ from util.version_update import (
     checkout_translation_branch,
     inspect_repository,
     preview_official_update,
+    record_version_metadata,
     register_translation_branch,
 )
 
@@ -63,8 +65,9 @@ class GitVersionUpdateTests(unittest.TestCase):
 
         self.assertEqual(self.translated.joinpath("game.txt").read_bytes(), translated_before)
         self.assertEqual(self.git(self.translated, "show", "original:game.txt"), "Japanese")
-        self.assertEqual(self.git(self.translated, "show", "translation:game.txt"), "English")
-        self.assertEqual(status.current_branch, "translation")
+        self.assertEqual(self.git(self.translated, "show", "main:game.txt"), "English")
+        self.assertEqual(status.current_branch, "main")
+        self.assertEqual(status.translation_branch, "main")
         self.assertEqual(status.original_version, "1.00")
         self.assertEqual(status.translation_version, "1.00")
         self.assertTrue(status.worktree_clean)
@@ -86,7 +89,7 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertIn("# Ignore all files", ignore)
         self.assertIn("!*.json", ignore)
         self.assertTrue(result.gitignore_installed)
-        for ref in ("original", "translation"):
+        for ref in ("original", "main"):
             tracked = self.git(self.translated, "ls-tree", "-r", "--name-only", ref)
             self.assertIn(".gitignore", tracked)
             self.assertIn("data.json", tracked)
@@ -105,7 +108,7 @@ class GitVersionUpdateTests(unittest.TestCase):
 
         self.assertTrue(legacy.joinpath("project.json").exists())
         self.assertTrue(inspect_repository(self.translated).worktree_clean)
-        tracked = self.git(self.translated, "ls-tree", "-r", "--name-only", "translation")
+        tracked = self.git(self.translated, "ls-tree", "-r", "--name-only", "main")
         self.assertNotIn(".dazedtl/version_update", tracked)
 
     def test_bootstrap_formats_both_json_baselines_and_respects_gitignore(self):
@@ -133,10 +136,10 @@ class GitVersionUpdateTests(unittest.TestCase):
             self.translated.joinpath("data.json").read_text(), expected_translation
         )
         self.assertEqual(
-            self.git(self.translated, "show", "translation:data.json"),
+            self.git(self.translated, "show", "main:data.json"),
             expected_translation,
         )
-        tracked = self.git(self.translated, "ls-tree", "-r", "--name-only", "translation")
+        tracked = self.git(self.translated, "ls-tree", "-r", "--name-only", "main")
         self.assertNotIn("save/slot.dat", tracked)
         self.assertNotIn("debug.log", tracked)
         self.assertTrue(self.translated.joinpath("save/slot.dat").exists())
@@ -147,7 +150,7 @@ class GitVersionUpdateTests(unittest.TestCase):
         combined_ignore = self.translated.joinpath(".gitignore").read_text()
         self.assertIn("# Ignore all files", combined_ignore)
         self.assertTrue(combined_ignore.endswith("save/\n*.log\n"))
-        diff = self.git(self.translated, "diff", "original", "translation", "--", "data.json")
+        diff = self.git(self.translated, "diff", "original", "main", "--", "data.json")
         self.assertIn('"name": "Japanese"', diff)
         self.assertIn('"name": "English"', diff)
         self.assertNotIn('{"name":', diff)
@@ -256,7 +259,7 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertIn('"version": "2"', merged)
         self.assertIn('"name": "TLInspector"', merged)
         self.assertNotEqual(
-            self.git(self.translated, "rev-parse", "translation:plugins.js"),
+            self.git(self.translated, "rev-parse", "main:plugins.js"),
             self.git(self.translated, "rev-parse", "original:plugins.js"),
         )
         self.assertTrue(result.complete)
@@ -438,7 +441,7 @@ class GitVersionUpdateTests(unittest.TestCase):
     def test_update_explicitly_records_when_official_patch_is_already_present(self):
         self.write_versions("old official\n", "new official\n", "new official\n")
         bootstrap_repository(self.translated, self.old, "1.00")
-        translation_before = self.git(self.translated, "rev-parse", "translation")
+        translation_before = self.git(self.translated, "rev-parse", "main")
 
         preview = preview_official_update(self.translated, self.new, "1.03")
 
@@ -519,9 +522,11 @@ class GitVersionUpdateTests(unittest.TestCase):
         bootstrap_repository(self.translated, self.old, "1.00")
         status = inspect_repository(self.translated)
 
-        self.assertEqual(status.current_branch, "translation")
+        self.assertEqual(status.current_branch, "main")
+        self.assertEqual(status.translation_branch, "main")
         self.assertTrue(status.original_exists)
         self.assertTrue(status.translation_exists)
+        self.assertFalse(self.git(self.translated, "branch", "--list", "translation"))
         self.assertEqual(self.translated.joinpath("game.txt").read_text(), "English\n")
         self.assertTrue(status.worktree_clean)
 
@@ -551,18 +556,50 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.git(self.translated, "branch", "original", original_commit)
 
         registered = register_translation_branch(self.translated, "1.00")
-        self.assertEqual(self.git(self.translated, "rev-parse", "translation^1"), translated_head)
+        self.assertEqual(self.git(self.translated, "rev-parse", "main^1"), translated_head)
         self.assertEqual(registered.version, "1.00")
-        self.git(self.translated, "checkout", "main")
+        self.assertEqual(
+            self.git(self.translated, "config", "--local", "dazedtl.translationBranch"),
+            "main",
+        )
+        self.assertFalse(self.git(self.translated, "branch", "--list", "translation"))
+        self.git(self.translated, "checkout", "original")
         switched = checkout_translation_branch(self.translated)
-        self.assertEqual(switched.current_branch, "translation")
+        self.assertEqual(switched.current_branch, "main")
+        self.assertEqual(switched.translation_branch, "main")
         self.assertFalse(switched.asset_manifest_available)
+
+        self.git(self.translated, "branch", "translation", "main")
+        self.git(
+            self.translated,
+            "config",
+            "--local",
+            "dazedtl.translationBranch",
+            "translation",
+        )
+        self.git(self.translated, "checkout", "translation")
+        register_translation_branch(
+            self.translated,
+            "1.00",
+            branch="main",
+            replace=True,
+        )
+        reselected = inspect_repository(self.translated)
+        self.assertEqual(reselected.current_branch, "main")
+        self.assertEqual(reselected.translation_branch, "main")
+        self.assertEqual(
+            self.git(self.translated, "config", "--local", "dazedtl.translationBranch"),
+            "main",
+        )
+        self.assertTrue(self.git(self.translated, "branch", "--list", "translation"))
 
         self.old.joinpath("unchanged.png").write_bytes(b"official image")
         self.translated.joinpath("unchanged.png").write_bytes(b"translated image")
         self.new.joinpath("unchanged.png").write_bytes(b"official image")
         self.new.joinpath("theme.ogg").write_bytes(b"new audio")
-        with self.assertRaisesRegex(GitWorkflowError, "does not match"):
+        with self.assertRaisesRegex(
+            GitWorkflowError, r"does not match.*M game\.txt"
+        ):
             preview_official_update(
                 self.translated,
                 self.new,
@@ -595,6 +632,283 @@ class GitVersionUpdateTests(unittest.TestCase):
         )
         self.assertTrue(inspect_repository(self.translated).asset_manifest_available)
 
+    def test_legacy_baseline_preserves_updater_files_and_normalizes_asset_exceptions(self):
+        self.write_versions("old official\n", "translated\n", "new official\n")
+        ignore = "*.png_\n!translated-image.png_\n"
+        self.translated.joinpath(".gitignore").write_text(ignore, encoding="utf-8")
+        self.translated.joinpath("translated-image.png_").write_bytes(b"translated image")
+        self.old.joinpath("translated-image.png_").write_bytes(b"official image")
+        self.new.joinpath("translated-image.png_").write_bytes(b"official image")
+        updater = self.root / "GameUpdate.bat"
+        updater.write_text("legacy updater\n", encoding="utf-8")
+
+        self.git(self.translated, "init", "-b", "main")
+        self.git(self.translated, "config", "user.name", "Test")
+        self.git(self.translated, "config", "user.email", "test@example.invalid")
+        self.git(self.translated, "add", ".")
+        self.git(self.translated, "commit", "-m", "translated game")
+
+        tree_lines = []
+        for name, source in (
+            (".gitignore", self.translated / ".gitignore"),
+            ("GameUpdate.bat", updater),
+            ("game.txt", self.old / "game.txt"),
+        ):
+            blob = self.git(self.translated, "hash-object", "-w", str(source))
+            tree_lines.append(f"100644 blob {blob}\t{name}")
+        original_tree = subprocess.run(
+            ["git", "-C", str(self.translated), "mktree"],
+            input="\n".join(tree_lines) + "\n",
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        original_commit = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(self.translated),
+                "commit-tree",
+                original_tree,
+                "-m",
+                "legacy original",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.git(self.translated, "branch", "original", original_commit)
+        register_translation_branch(self.translated, "1.00")
+
+        self.new.joinpath("translated-image.png_").write_bytes(
+            b"changed official image"
+        )
+        changed_image_preview = preview_official_update(
+            self.translated,
+            self.new,
+            "1.10",
+            previous_official_game=self.old,
+        )
+        self.assertEqual(
+            [
+                (change.path, change.change, change.warning)
+                for change in changed_image_preview.image_changes
+            ],
+            [("translated-image.png_", "Replaced", True)],
+        )
+        self.new.joinpath("translated-image.png_").write_bytes(b"official image")
+        preview = preview_official_update(
+            self.translated,
+            self.new,
+            "1.10",
+            previous_official_game=self.old,
+        )
+
+        self.assertEqual(preview.changed_paths, ("game.txt",))
+        self.assertEqual(preview.image_changes, ())
+
+        apply_official_update(
+            self.translated,
+            self.new,
+            "1.10",
+            expected_tree=preview.proposed_tree,
+            expected_original_commit=preview.original_commit,
+            expected_translation_commit=preview.translation_commit,
+            expected_asset_manifest=preview.proposed_asset_manifest,
+            previous_official_game=self.old,
+            expected_baseline_asset_manifest=preview.baseline_asset_manifest,
+        )
+
+        self.assertEqual(
+            self.translated.joinpath("translated-image.png_").read_bytes(),
+            b"translated image",
+        )
+        self.assertEqual(
+            self.git(self.translated, "show", "original:translated-image.png_"),
+            "official image",
+        )
+        normalized_paths = self.git(
+            self.translated, "ls-tree", "-r", "--name-only", "original^"
+        ).splitlines()
+        self.assertIn("translated-image.png_", normalized_paths)
+        self.assertIn("GameUpdate.bat", normalized_paths)
+
+    def test_stored_baseline_excludes_tool_owned_files_from_official_patch(self):
+        self.write_versions("old official\n", "translated\n", "new official\n")
+        tool_files = {
+            "GameUpdate.bat": b"registered launcher",
+            "GameUpdate_linux.sh": b"registered launcher",
+            "README.md": b"registered updater readme",
+            "UberWolfCli.exe": b"registered helper",
+            "UberWolfCli.LICENSE.txt": b"registered license",
+            "gameupdate/patch-config.example.txt": b"registered example",
+            "gameupdate/patch-config.txt": b"registered config",
+            "gameupdate/patch.ps1": b"registered powershell",
+            "gameupdate/patch.sh": b"registered shell",
+            "gameupdate/helper.bin": b"registered ignored helper",
+        }
+        for relative, contents in tool_files.items():
+            for folder in (self.old, self.translated):
+                destination = folder / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(contents)
+
+        self.new.joinpath("GameUpdate.bat").write_bytes(b"official collision")
+        new_config = self.new / "gameupdate" / "patch-config.txt"
+        new_config.parent.mkdir(parents=True)
+        new_config.write_bytes(b"official collision")
+        self.new.joinpath("gameupdate/new-tool.txt").write_bytes(b"new collision")
+        self.new.joinpath("gameupdate/new-helper.bin").write_bytes(
+            b"new ignored collision"
+        )
+
+        bootstrap_repository(self.translated, self.old, "1.00")
+        self.assertTrue(inspect_repository(self.translated).asset_manifest_available)
+
+        preview = preview_official_update(self.translated, self.new, "1.10")
+
+        self.assertEqual(preview.changed_paths, ("game.txt",))
+        self.assertEqual(preview.external_changes, ())
+        preview_paths = {change.path for change in preview.file_changes}
+        self.assertFalse(
+            preview_paths
+            & {
+                ".gitignore",
+                "GameUpdate.bat",
+                "GameUpdate_linux.sh",
+                "README.md",
+                "UberWolfCli.exe",
+                "UberWolfCli.LICENSE.txt",
+                "gameupdate/patch-config.example.txt",
+                "gameupdate/patch-config.txt",
+                "gameupdate/patch.ps1",
+                "gameupdate/patch.sh",
+                "gameupdate/new-tool.txt",
+                "gameupdate/new-helper.bin",
+            }
+        )
+
+        apply_official_update(
+            self.translated,
+            self.new,
+            "1.10",
+            expected_tree=preview.proposed_tree,
+            expected_original_commit=preview.original_commit,
+            expected_translation_commit=preview.translation_commit,
+            expected_asset_manifest=preview.proposed_asset_manifest,
+        )
+
+        for relative, contents in tool_files.items():
+            self.assertEqual(self.translated.joinpath(relative).read_bytes(), contents)
+        self.assertFalse(self.translated.joinpath("gameupdate/new-tool.txt").exists())
+        self.assertFalse(
+            self.translated.joinpath("gameupdate/new-helper.bin").exists()
+        )
+        self.assertEqual(
+            self.git(self.translated, "show", "original:GameUpdate.bat"),
+            "registered launcher",
+        )
+
+    def test_existing_original_uses_current_ignored_assets_without_clean_folder(self):
+        self.write_versions("old official\n", "translated\n", "new official\n")
+        self.translated.joinpath(".gitignore").write_text(
+            "*.*\n!*.txt\n!.gitignore\n!tracked.png_\n", encoding="utf-8"
+        )
+        self.translated.joinpath("theme.ogg").write_bytes(b"current audio")
+        self.translated.joinpath("tracked.png_").write_bytes(b"current image")
+        self.translated.joinpath("PROJECT_PLAN.md").write_text(
+            "translation workspace plan\n", encoding="utf-8"
+        )
+        for relative in ("Dictionaries/en-US.bdic", "skills/game.md"):
+            resource = self.translated / relative
+            resource.parent.mkdir(parents=True, exist_ok=True)
+            resource.write_text("translation tool resource\n", encoding="utf-8")
+        self.new.joinpath("theme.ogg").write_bytes(b"new official audio")
+        self.new.joinpath("tracked.png_").write_bytes(b"new official image")
+
+        self.git(self.translated, "init", "-b", "main")
+        self.git(self.translated, "config", "user.name", "Test")
+        self.git(self.translated, "config", "user.email", "test@example.invalid")
+        self.git(self.translated, "add", ".")
+        self.git(self.translated, "commit", "-m", "translated game")
+        original_blob = self.git(
+            self.translated, "hash-object", "-w", str(self.old / "game.txt")
+        )
+        ignore_blob = self.git(
+            self.translated,
+            "rev-parse",
+            "HEAD:.gitignore",
+        )
+        original_tree = subprocess.run(
+            ["git", "-C", str(self.translated), "mktree"],
+            input=(
+                f"100644 blob {ignore_blob}\t.gitignore\n"
+                f"100644 blob {original_blob}\tgame.txt\n"
+            ),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        original_commit = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(self.translated),
+                "commit-tree",
+                original_tree,
+                "-m",
+                "legacy original",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.git(self.translated, "branch", "original", original_commit)
+        register_translation_branch(self.translated, "1.00")
+
+        preview = preview_official_update(self.translated, self.new, "1.10")
+
+        self.assertIsNone(preview.baseline_source_root)
+        self.assertEqual(
+            [(change.path, change.change) for change in preview.external_changes],
+            [("theme.ogg", "Replaced")],
+        )
+        self.assertEqual(
+            preview.preserved_translation_asset_paths,
+            ("tracked.png_",),
+        )
+        self.assertEqual(preview.image_changes, ())
+
+        apply_official_update(
+            self.translated,
+            self.new,
+            "1.10",
+            expected_tree=preview.proposed_tree,
+            expected_original_commit=preview.original_commit,
+            expected_translation_commit=preview.translation_commit,
+            expected_asset_manifest=preview.proposed_asset_manifest,
+            expected_baseline_asset_manifest=preview.baseline_asset_manifest,
+        )
+
+        self.assertEqual(
+            self.translated.joinpath("theme.ogg").read_bytes(),
+            b"new official audio",
+        )
+        self.assertEqual(
+            self.translated.joinpath("tracked.png_").read_bytes(),
+            b"current image",
+        )
+        self.assertNotIn(
+            "tracked.png_",
+            self.git(
+                self.translated, "ls-tree", "-r", "--name-only", "original"
+            ).splitlines(),
+        )
+        self.assertTrue(self.translated.joinpath("PROJECT_PLAN.md").is_file())
+        self.assertTrue(self.translated.joinpath("Dictionaries/en-US.bdic").is_file())
+        self.assertTrue(self.translated.joinpath("skills/game.md").is_file())
+        self.assertTrue(inspect_repository(self.translated).asset_manifest_available)
+
     def test_nested_game_folder_updates_only_its_repository_prefix(self):
         repo = self.translated
         game = repo / "game"
@@ -620,6 +934,56 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertEqual(game.joinpath("dialogue.txt").read_text(), "New Japanese\n")
         self.assertEqual(game.joinpath("theme.ogg").read_bytes(), b"new audio")
 
+    def test_complete_legacy_branches_can_record_missing_version_metadata(self):
+        self.write_versions("Japanese\n", "English\n", "New\n")
+        self.git(self.translated, "init", "-b", "translation")
+        self.git(self.translated, "config", "user.name", "Test")
+        self.git(self.translated, "config", "user.email", "test@example.invalid")
+        self.git(self.translated, "add", ".")
+        self.git(self.translated, "commit", "-m", "legacy translated game")
+        translation_tree = self.git(self.translated, "rev-parse", "HEAD^{tree}")
+        original_blob = self.git(
+            self.translated, "hash-object", "-w", str(self.old / "game.txt")
+        )
+        original_tree = subprocess.run(
+            ["git", "-C", str(self.translated), "mktree"],
+            input=f"100644 blob {original_blob}\tgame.txt\n",
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        original_commit = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(self.translated),
+                "commit-tree",
+                original_tree,
+                "-m",
+                "legacy original",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.git(self.translated, "branch", "original", original_commit)
+
+        result = record_version_metadata(self.translated, "1.00")
+        status = inspect_repository(self.translated)
+
+        self.assertEqual(status.original_version, "1.00")
+        self.assertEqual(status.translation_version, "1.00")
+        self.assertEqual(
+            self.git(self.translated, "rev-parse", "translation^{tree}"),
+            translation_tree,
+        )
+        self.assertEqual(
+            self.git(self.translated, "rev-parse", "original^{tree}"),
+            original_tree,
+        )
+        self.assertEqual(result.version, "1.00")
+        self.assertTrue(status.worktree_clean)
+
     @unittest.skipUnless(hasattr(os, "symlink"), "symbolic links unavailable")
     def test_bootstrap_rejects_symbolic_links_in_official_tree(self):
         self.write_versions("old\n", "translated\n", "new\n")
@@ -632,6 +996,104 @@ class VersionUpdateUITests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+
+    def test_prepare_card_recognizes_a_legacy_main_and_original_layout(self):
+        from gui.git_prepare import GitPreparationCard
+
+        with tempfile.TemporaryDirectory() as temporary:
+            game = Path(temporary)
+            game.joinpath("game.txt").write_text("English\n")
+            subprocess.run(
+                ["git", "-C", str(game), "init", "-b", "main"], check=True,
+                capture_output=True,
+            )
+            for key, value in (
+                ("user.name", "Test"),
+                ("user.email", "test@example.invalid"),
+            ):
+                subprocess.run(
+                    ["git", "-C", str(game), "config", key, value], check=True
+                )
+            subprocess.run(["git", "-C", str(game), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(game), "commit", "-m", "translated game"],
+                check=True,
+                capture_output=True,
+            )
+            original_file = game / "original.txt"
+            original_file.write_text("Japanese\n")
+            original_blob = subprocess.run(
+                ["git", "-C", str(game), "hash-object", "-w", str(original_file)],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            original_file.unlink()
+            original_tree = subprocess.run(
+                ["git", "-C", str(game), "mktree"],
+                input=f"100644 blob {original_blob}\tgame.txt\n",
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            original_commit = subprocess.run(
+                [
+                    "git", "-C", str(game), "commit-tree", original_tree,
+                    "-m", "original v1.00",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            subprocess.run(
+                ["git", "-C", str(game), "branch", "original", original_commit],
+                check=True,
+            )
+            card = GitPreparationCard()
+            try:
+                card.set_game_root(game)
+                self.assertEqual(card._action_kind, "register")
+                self.assertEqual(card.action_btn.text(), "Register translated game")
+                self.assertIn("Register main as the translated branch", card.status_label.text())
+                self.assertTrue(card.original_row.isHidden())
+
+                card.version_edit.setText("1.00")
+                with (
+                    patch(
+                        "gui.git_prepare.QMessageBox.question",
+                        return_value=QMessageBox.No,
+                    ),
+                    patch.object(card, "_run") as run,
+                ):
+                    card._start_action()
+                    run.assert_not_called()
+
+                with (
+                    patch(
+                        "gui.git_prepare.QMessageBox.question",
+                        return_value=QMessageBox.Yes,
+                    ),
+                    patch.object(card, "_run") as run,
+                ):
+                    card._start_action()
+                    operation = run.call_args.args[0]
+                operation()
+                card.refresh_status()
+                self.assertEqual(card._action_kind, "")
+                self.assertIn("Ready", card.status_label.text())
+                status = inspect_repository(game)
+                self.assertEqual(status.current_branch, "main")
+                self.assertEqual(status.translation_branch, "main")
+                self.assertFalse(
+                    subprocess.run(
+                        ["git", "-C", str(game), "branch", "--list", "translation"],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    ).stdout.strip()
+                )
+            finally:
+                card.close()
 
     def test_sidebar_page_exposes_git_bootstrap_and_update_actions(self):
         from gui.version_update_tab import VersionUpdateTab
@@ -702,15 +1164,27 @@ class VersionUpdateUITests(unittest.TestCase):
                 tab.current_edit.setText(str(translated))
                 tab.refresh_status()
                 self.assertIn("Original 1.00", tab.version_status.text())
-                self.assertIn("Translation 1.00", tab.version_status.text())
+                self.assertIn("Translated main 1.00", tab.version_status.text())
                 self.assertTrue(tab.bootstrap_card.isHidden())
                 self.assertFalse(tab.update_card.isHidden())
                 self.assertTrue(tab.update_card.isEnabled())
                 self.assertTrue(tab.baseline_panel.isHidden())
-                tab._render_status(
-                    replace(tab._status, asset_manifest_available=False)
+                registered_status = tab._status
+                tab._status = replace(
+                    registered_status, asset_manifest_available=False
                 )
+                tab._render_status(tab._status)
                 self.assertFalse(tab.baseline_panel.isHidden())
+                tab.new_edit.setText(str(new))
+                tab.new_version_edit.setText("1.03")
+                with (
+                    patch.object(tab, "_run") as run,
+                    patch("gui.version_update_tab.QMessageBox.warning") as warning,
+                ):
+                    tab._preview_update()
+                    run.assert_called_once()
+                    warning.assert_not_called()
+                tab._status = registered_status
                 tab._render_status(tab._status)
                 preview = preview_official_update(translated, new, "1.03")
                 tab._show_preview(preview)
@@ -753,6 +1227,41 @@ class VersionUpdateUITests(unittest.TestCase):
                 self.assertEqual(audio_group.child(0).text(2), "Audio")
                 self.assertIn("outside Git", audio_group.child(0).text(3))
                 self.assertTrue(tab.update_btn.isEnabled())
+
+                protected_preview = replace(
+                    preview,
+                    added_paths=(),
+                    modified_paths=(),
+                    deleted_paths=(),
+                    overlapping_paths=(),
+                    already_present_paths=(),
+                    file_changes=(),
+                    image_changes=(),
+                    external_changes=(),
+                    preserved_translation_asset_paths=("img/translated.png_",),
+                )
+                tab._show_preview(protected_preview)
+                self.assertIn("Protected: 1 tracked", tab.preview_notice.text())
+                self.assertTrue(
+                    tab.preview_changes.topLevelItem(0)
+                    .text(0)
+                    .startswith("Preserved tracked translation assets")
+                )
+                self.assertEqual(
+                    tab.preview_changes.topLevelItem(0).child(0).text(1),
+                    "Preserved",
+                )
+                tab._status = replace(
+                    registered_status, asset_manifest_available=False
+                )
+                with (
+                    patch.object(tab, "_run") as run,
+                    patch("gui.version_update_tab.QMessageBox.warning") as warning,
+                ):
+                    tab._apply_update()
+                    run.assert_called_once()
+                    warning.assert_not_called()
+                tab._status = registered_status
 
                 new.joinpath("game.txt").write_text("English\n")
                 new.joinpath("portrait.png").write_bytes(

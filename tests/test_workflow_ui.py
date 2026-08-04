@@ -20,6 +20,7 @@ from gui.workflow_components import (
     DisclosureSection,
     WorkflowActivityPanel,
 )
+from util.paths import LEGACY_GLOSSARY_BASE_SEPARATOR
 
 
 class ThemeContractTests(unittest.TestCase):
@@ -59,9 +60,18 @@ class WorkflowShellTests(unittest.TestCase):
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        self.saved_game = Path(self.temp.name) / "Saved Game"
+        self.saved_game.mkdir()
+        self.saved_game.joinpath("vocab.txt").write_text(
+            "# Game Characters\nユウ (Yuu)\n\n"
+            + LEGACY_GLOSSARY_BASE_SEPARATOR
+            + "old base\n",
+            encoding="utf-8",
+        )
         self.settings = QSettings(
             str(Path(self.temp.name) / "workflow.ini"), QSettings.IniFormat
         )
+        self.settings.setValue("workflow/last_game_folder", str(self.saved_game))
         with patch("gui.workflow_tab.QSettings", return_value=self.settings):
             from gui.workflow_tab import WorkflowTab
 
@@ -78,6 +88,13 @@ class WorkflowShellTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_vertical_step_rail_drives_existing_page_stack(self):
+        glossary = self.saved_game / "glossary.txt"
+        self.assertFalse(glossary.exists())
+        self.assertIn("ユウ (Yuu)", self.workflow.setup_editors.vocab_editor.toPlainText())
+
+        self.workflow.setup_editors._save_vocab()
+        self.assertTrue(glossary.is_file())
+
         self.assertEqual(self.workflow._step_tabs.count(), 9)
         self.assertEqual(len(self.workflow._step_rail.buttons), 9)
 

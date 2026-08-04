@@ -9,9 +9,11 @@ RPG Maker `plugins.js` wrappers are formatted with the same JavaScript formatter
 as Prepare so plugin configuration does not collapse into a whole-file conflict.
 
 - `original` contains official release trees with deterministic JSON formatting.
-- `translation` contains the translated working tree.
+- A repository-configured translated branch contains the working translation.
+  Existing repositories keep their current branch name (for example `main`);
+  repositories created by DazedTL default to `main`.
 - Every official release is one reviewed commit with a `DazedTL-Version` trailer.
-- The official release commit is cherry-picked into `translation`.
+- The official release commit is cherry-picked into the configured translated branch.
 - A conflicting file uses the new official copy and is reported for translation
   review.
 - An interrupted cherry-pick can be continued official-first or aborted.
@@ -26,7 +28,9 @@ as Prepare so plugin configuration does not collapse into a whole-file conflict.
 
 ## First-time reconciliation
 
-The GUI inspects the selected translated game immediately. If `original` is
+Both engine workflows expose version tracking as the first task in Prepare, and
+the Version Update page retains the same setup path. The GUI inspects the
+selected translated game immediately. If `original` is
 missing, the user supplies the matching clean original folder and its version.
 The tool writes the original Git tree directly into repository objects and
 records the current translated tree separately, so bootstrap never swaps or
@@ -45,6 +49,16 @@ ignore rules. Ignored files stay on disk and are omitted from both branches.
 This supports a new repository, an existing translation repository, and a game
 stored below a repository subdirectory. Symbolic links are rejected because an
 exact, portable tree cannot safely infer their intended target.
+
+Legacy repositories are reconciled in place. A checked-out translated branch
+such as `main` is registered by name when `original` already exists;
+complete branch pairs that predate `DazedTL-Version` trailers receive no-content
+metadata commits. If both expected branches already exist on another checked-out
+branch, Prepare offers to switch to the registered translated branch.
+The selection is stored as the repository-local Git setting
+`dazedtl.translationBranch`. Prepare asks for confirmation before adopting an
+existing branch and can change the registration later without deleting either
+branch.
 
 ## Updating
 
