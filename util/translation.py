@@ -556,6 +556,16 @@ def validate_translation_content(
     return is_valid, invalid_indices, reasons
 
 
+def _is_map_name_batch(request_instructions) -> bool:
+    """Return True when this request appears to be map-location name translation."""
+    if not request_instructions:
+        return False
+    if isinstance(request_instructions, (list, tuple)):
+        return any(_is_map_name_batch(item) for item in request_instructions)
+    lowered = str(request_instructions).casefold()
+    return "rpg location name" in lowered
+
+
 def translation_content_warnings(original_items, translated_items, langRegex):
     """Return non-blocking content concerns that should remain reviewable."""
     if not isinstance(original_items, list):
@@ -3995,6 +4005,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
         request_context = _typed_request_context(
             request_history, persistent_instructions
         )
+        is_map_name_batch = _is_map_name_batch(persistent_instructions)
         # Check if text contains target language
         if not re.search(config.langRegex, str(tItem)):
             if pbar is not None:
@@ -4156,12 +4167,26 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                 _reprotect_cached_codes(value, all_replacements.get(line, {}))
                 for line, value in enumerate(cached_values)
             ]
-            content_ok, _invalid_indices, _content_reasons = validate_translation_content(
-                protected_source_values,
-                cached_content_values,
-                config.langRegex,
-                config.language,
-            )
+            if is_map_name_batch:
+                content_ok = True
+                for orig, trans in zip(protected_source_values, cached_content_values):
+                    orig_str = str(orig).strip()
+                    trans_str = str(trans).strip()
+                    if (
+                        orig_str
+                        and orig_str != "Placeholder Text"
+                        and re.search(config.langRegex, orig_str)
+                        and not trans_str
+                    ):
+                        content_ok = False
+                        break
+            else:
+                content_ok, _invalid_indices, _content_reasons = validate_translation_content(
+                    protected_source_values,
+                    cached_content_values,
+                    config.langRegex,
+                    config.language,
+                )
             if len(source_values) != len(cached_values) or not controls_ok or not content_ok:
                 # Ignore stale/corrupt cache entries. A successful live result
                 # below overwrites the same key.
@@ -4454,14 +4479,24 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                     if extracted is None or len(clean_tItem) != len(extracted):
                         is_valid = False
                         if pbar:
-                            pbar.write(f"Length mismatch: expected {len(clean_tItem)}, got {len(extracted) if extracted else 0}")
+                            pbar.write(
+                                f"Length mismatch: expected {len(clean_tItem)}, "
+                                f"got {len(extracted) if extracted else 0}"
+                            )
                     else:
                         # Check 2: Validate placeholders are preserved
                         # Flatten all_replacements for batch validation
-                        all_protected_text = protected_items  # The list we sent
-                        placeholder_valid, missing, extra = validate_placeholders(all_protected_text, extracted, 
-                                                                                  {k: v for replacements in all_replacements.values() for k, v in replacements.items()})
-                        
+                        all_protected_text = protected_items
+                        placeholder_valid, missing, extra = validate_placeholders(
+                            all_protected_text,
+                            extracted,
+                            {
+                                k: v
+                                for replacements in all_replacements.values()
+                                for k, v in replacements.items()
+                            },
+                        )
+
                         if not placeholder_valid:
                             is_valid = False
                             if pbar:
@@ -4485,12 +4520,35 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                                         pbar.write(f"  - {reason}")
                             else:
                                 # Check 3: Validate that translations are not empty or nearly empty
-                                content_valid, invalid_indices, content_reasons = validate_translation_content(
-                                    clean_tItem,
-                                    extracted,
-                                    config.langRegex,
-                                    config.language,
-                                )
+                                if is_map_name_batch:
+                                    content_valid = True
+                                    invalid_indices = []
+                                    content_reasons = []
+                                    for idx, (orig, trans) in enumerate(
+                                        zip(clean_tItem, extracted), start=1
+                                    ):
+                                        orig_str = str(orig).strip()
+                                        trans_str = str(trans).strip()
+                                        if (
+                                            not orig_str
+                                            or orig_str == "Placeholder Text"
+                                            or not re.search(config.langRegex, orig_str)
+                                        ):
+                                            continue
+                                        if not trans_str:
+                                            content_valid = False
+                                            invalid_indices.append(idx - 1)
+                                            content_reasons.append(
+                                                f"Line{idx}: Empty translation for "
+                                                f"'{orig_str[:50]}...'"
+                                            )
+                                else:
+                                    content_valid, invalid_indices, content_reasons = validate_translation_content(
+                                        clean_tItem,
+                                        extracted,
+                                        config.langRegex,
+                                        config.language,
+                                    )
 
                                 if not content_valid:
                                     is_valid = False
@@ -4499,7 +4557,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                                         for reason in content_reasons[:5]:  # Show first 5 issues
                                             pbar.write(f"  - {reason}")
                                         if len(content_reasons) > 5:
-                                            pbar.write(f"  ... and {len(content_reasons) - 5} more issues")
+                                            pbar.write(
+                                                f"  ... and {len(content_reasons) - 5} more issues"
+                                            )
                                 else:
                                     _, content_warnings = translation_content_warnings(
                                         clean_tItem, extracted, config.langRegex
@@ -4516,18 +4576,25 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                                             return line
                                         line = line.replace("Placeholder Text", "").strip()
                                         return convert_corner_brackets(line, config.convertQuotes)
-                                    final_translations = [_clean_extracted_line(line) for line in extracted]
+
+                                    final_translations = [
+                                        _clean_extracted_line(line) for line in extracted
+                                    ]
                 else:
                     # Single string: extract from JSON schema response
                     extracted = extractTranslation(cleaned_text, False, pbar)
                     if extracted is None:
                         is_valid = False
                         if pbar:
-                            pbar.write(f"Failed to extract translation from response: {cleaned_text[:100]}")
+                            pbar.write(
+                                f"Failed to extract translation from response: {cleaned_text[:100]}"
+                            )
                     else:
                         # Validate placeholders against extracted value
-                        placeholder_valid, missing, extra = validate_placeholders(protected_items, extracted, all_replacements[0])
-                        
+                        placeholder_valid, missing, extra = validate_placeholders(
+                            protected_items, extracted, all_replacements[0]
+                        )
+
                         if not placeholder_valid:
                             is_valid = False
                             if pbar:
@@ -4579,7 +4646,8 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                                     final_translations = final_cleaned
             else:
                 is_valid = False
-                if pbar: pbar.write(f"AI Refused: {tItem}\n")
+                if pbar:
+                    pbar.write(f"AI Refused: {tItem}\n")
 
             # If translation is valid, break the retry loop
             if is_valid:
