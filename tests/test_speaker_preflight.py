@@ -223,6 +223,13 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
     def test_automatic_speaker_preflight_cases(self):
         cases = (
             ("RPG Maker workflow already collected", "RPG Maker MV/MZ", {}, False),
+            ("RPG Maker fresh batch", "RPG Maker MV/MZ", {"batch_mode": True}, True),
+            (
+                "RPG Maker batch resume",
+                "RPG Maker MV/MZ",
+                {"batch_mode": True, "batch_resume_state": "fetched"},
+                False,
+            ),
             ("WolfDawn normal translation", "Wolf RPG (WolfDawn)", {}, True),
             (
                 "WolfDawn fetched batch",

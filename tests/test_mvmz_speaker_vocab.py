@@ -79,6 +79,45 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         self.assertEqual(result, ["騎士", [0, 0]])
         translate.assert_not_called()
 
+    def test_batch_collect_reuses_glossary_for_firstline_speaker(self):
+        """FIRSTLINESPEAKERS nameplates must resolve from glossary during batch."""
+        with (
+            patch.dict(os.environ, {"BATCH_PHASE": "collect"}),
+            patch.object(mvmz, "translateAI") as translate,
+        ):
+            result = mvmz.getSpeaker("ニーナ")
+
+        # Empty vocab in setUp - unresolved names stay source during batch.
+        self.assertEqual(result, ["ニーナ", [0, 0]])
+        translate.assert_not_called()
+
+        mvmz.VOCAB = "# Game Characters\nニーナ (Nina)\n"
+        mvmz._speakerVocabSource = None
+        with mvmz._speakerCacheLock:
+            mvmz._speakerCache.clear()
+        with (
+            patch.dict(os.environ, {"BATCH_PHASE": "collect"}),
+            patch.object(mvmz, "translateAI") as translate,
+        ):
+            result = mvmz.getSpeaker("ニーナ")
+
+        self.assertEqual(result, ["Nina", [0, 0]])
+        translate.assert_not_called()
+
+    def test_invalid_live_speaker_translation_is_not_cached(self):
+        def echo_japanese(text, _context, _batch=False):
+            return [text if isinstance(text, str) else text[0], [2, 1]]
+
+        with patch.object(mvmz, "translateAI", side_effect=echo_japanese) as translate:
+            first = mvmz.getSpeaker("ニーナ")
+            second = mvmz.getSpeaker("ニーナ")
+
+        self.assertEqual(first, ["ニーナ", [2, 1]])
+        self.assertEqual(second, ["ニーナ", [2, 1]])
+        self.assertEqual(translate.call_count, 4)  # two attempts per call, no cache
+        with mvmz._speakerCacheLock:
+            self.assertNotIn("ニーナ", mvmz._speakerCache)
+
     def test_batch_consume_defers_unresolved_legacy_speaker(self):
         with (
             patch.dict(os.environ, {"BATCH_PHASE": "consume"}),

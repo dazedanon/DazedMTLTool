@@ -5157,36 +5157,35 @@ def getSpeaker(speaker: str):
     # also avoids reusing a stale cache entry keyed to the all-Japanese label.
     translation_source = _substitute_vocab_character_names(speaker)
 
-    try:
-        THREAD_CTX.in_speaker = True
-    except Exception:
-        pass
-    response = translateAI(
-        translation_source,
-        ctx("names.speaker"),
-        False,
-    )
-    try:
-        THREAD_CTX.in_speaker = False
-    except Exception:
-        pass
-    translated = _normalize_speaker_nameplate(response[0])
-
-    if re.search(r"([a-zA-Z？?])", translated) is None:
+    def _translate_nameplate_once():
         try:
             THREAD_CTX.in_speaker = True
         except Exception:
             pass
-        response = translateAI(
-            translation_source,
-            ctx("names.speaker"),
-            False,
-        )
         try:
-            THREAD_CTX.in_speaker = False
-        except Exception:
-            pass
+            return translateAI(
+                translation_source,
+                ctx("names.speaker"),
+                False,
+            )
+        finally:
+            try:
+                THREAD_CTX.in_speaker = False
+            except Exception:
+                pass
+
+    response = _translate_nameplate_once()
+    translated = _normalize_speaker_nameplate(response[0])
+
+    # Retry once when the model echoes source or leaves the wrong script.
+    # Do not cache failures: a poisoned Japanese nameplate would stick for the
+    # rest of the run (common for FIRSTLINESPEAKERS short katakana names).
+    if not _speaker_translation_valid(speaker, translated):
+        response = _translate_nameplate_once()
         translated = _normalize_speaker_nameplate(response[0])
+
+    if not _speaker_translation_valid(speaker, translated):
+        return [speaker, response[1]]
 
     with _speakerCacheLock:
         if speaker not in _speakerCache:

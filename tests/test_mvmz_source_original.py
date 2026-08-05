@@ -532,6 +532,45 @@ class TestMVMZSourceOriginal(unittest.TestCase):
         self.assertEqual(speaker_cmd["_original"], "\\C[2]エルーシャ\\C[0]")
         self.assertIn("エルーシャ", speakers_seen)
 
+    def test_firstline_speaker_batch_uses_glossary_nameplate(self):
+        """Unresolved batch speakers stay Japanese; glossary hits become English nameplates."""
+        page = {
+            "list": [
+                {"code": 401, "indent": 0, "parameters": ["ニーナ"]},
+                {
+                    "code": 401,
+                    "indent": 0,
+                    "parameters": ["「ギルドに貼ってあった野犬の討伐の依頼」"],
+                },
+            ]
+        }
+        orig_first = mvmz.FIRSTLINESPEAKERS
+        orig_vocab = mvmz.VOCAB
+        orig_names = list(mvmz.NAMESLIST)
+        mvmz.FIRSTLINESPEAKERS = True
+        mvmz.VOCAB = "# Game Characters\nニーナ (Nina)\n"
+        mvmz._speakerVocabSource = None
+        mvmz.NAMESLIST = []
+        with mvmz._speakerCacheLock:
+            mvmz._speakerCache.clear()
+        try:
+            with patch.dict(os.environ, {"BATCH_PHASE": "collect"}):
+                # Use real getSpeaker so glossary / batch deferral is exercised.
+                page_out, _ = _run_search_codes(page, speaker_fn=mvmz.getSpeaker)
+        finally:
+            mvmz.FIRSTLINESPEAKERS = orig_first
+            mvmz.VOCAB = orig_vocab
+            mvmz._speakerVocabSource = None
+            mvmz.NAMESLIST = orig_names
+            with mvmz._speakerCacheLock:
+                mvmz._speakerCache.clear()
+            os.environ.pop("BATCH_PHASE", None)
+
+        speaker_cmd = page_out["list"][0]
+        self.assertEqual(speaker_cmd.get("_original"), "ニーナ")
+        self.assertEqual(speaker_cmd["parameters"][0], "Nina")
+        self.assertNotEqual(page_out["list"][1]["parameters"][0], page_out["list"][1]["_original"])
+
     def test_405_split_rerun_uses_anchor_original_only(self):
         """English 405 siblings after a split must not pollute re-run source."""
         page = {

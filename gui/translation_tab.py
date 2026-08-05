@@ -94,8 +94,9 @@ BATCH_MODE_BENEFIT_NOTE = (
     "Provider Batch API — typically 50% cheaper than live translation (Claude, GPT, or Gemini)."
 )
 BATCH_COLLECT_LIVE_CHARGE_NOTE = (
-    "For RPG Maker, collect speaker names from the Workflow before starting a batch. "
-    "WolfDawn scans unresolved speakers and asks for approval before collecting the main batch."
+    "Before a fresh batch, unresolved RPG Maker and WolfDawn speaker names are scanned "
+    "and translated into the game glossary (with approval) so nameplates are not left "
+    "in Japanese while dialogue is batched."
 )
 
 _CONFIG_UNSET = object()
@@ -135,14 +136,22 @@ def _should_prepare_speakers_automatically(
     batch_mode=False,
     batch_resume_state=None,
 ) -> bool:
-    """Only engines without an explicit workflow collection step use auto-preflight."""
+    """Decide whether translation should resolve speakers before file work.
+
+    WolfDawn always auto-preflights on a fresh run. RPG Maker normally relies on
+    Workflow "Collect names", but batch collect/consume cannot live-translate
+    speakers - unresolved FIRSTLINESPEAKERS (and other nameplates) would stay
+    Japanese while dialogue is batched. Fresh RPG Maker batches therefore run
+    the same unresolved-speaker preflight.
+    """
     name = str(module_name or "").casefold()
-    return bool(
-        "wolfdawn" in name
-        and not estimate_only
-        and not parse_speakers
-        and not (batch_mode and batch_resume_state)
-    )
+    if estimate_only or parse_speakers or (batch_mode and batch_resume_state):
+        return False
+    if "wolfdawn" in name:
+        return True
+    if batch_mode and ("mv/mz" in name or "rpg maker" in name):
+        return True
+    return False
 
 
 TRANSLATION_MODULE_SPECS = (
@@ -1083,7 +1092,11 @@ class TranslationWorker(QThread):
                     batch_resume_state=self.batch_resume_state,
                 )
                 if should_prepare_speakers:
-                    prepared = self._prepare_wolf_speakers(matching_files)
+                    module_name_lower = str(self.module_info[0] or "").casefold()
+                    if "wolfdawn" in module_name_lower:
+                        prepared = self._prepare_wolf_speakers(matching_files)
+                    else:
+                        prepared = self._prepare_mvmz_speakers(matching_files)
                     if not prepared:
                         self.finished_signal.emit(False, "Speaker translation canceled")
                         return
@@ -1131,8 +1144,9 @@ class TranslationWorker(QThread):
                         self._emit_batch_phase("collect")
                         self.emit_log("[BATCH] Pass 1/2: collecting requests...")
                         self.emit_log(
-                            "[BATCH] Speaker names already in the game glossary are reused; "
-                            "Pass 1 queues the main translation requests without per-speaker API calls."
+                            "[BATCH] Pass 1 queues the main translation requests without "
+                            "per-speaker API calls; unresolved speakers were resolved in "
+                            "the preflight glossary step when needed."
                         )
                         total_cost = self._run_files(matching_files, False, batch_phase="collect")
                         if self.should_stop:
