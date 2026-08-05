@@ -572,6 +572,34 @@ class CharacterCompoundMatchingTests(unittest.TestCase):
                 mvmz.SPEAKER_COLLECTED = ["おじさん", "ニーナ様"]
                 self.assertEqual(mvmz.pendingSpeakerNames(), ["おじさん"])
 
+    def test_lexicalized_shi_and_dono_nameplates_are_not_honorific_coverage(self):
+        """``源氏`` / ``御殿`` must not collapse to ``源`` / ``御``."""
+        vocab = (
+            "# Game Characters\n"
+            "源 (Minamoto)\n"
+            "御 (Go)\n"
+            "源氏 (Genji)\n"
+        )
+        with TemporaryDirectory() as tmp:
+            glossary_path = Path(tmp) / "glossary.txt"
+            glossary_path.write_text(vocab, encoding="utf-8")
+            with (
+                patch.object(mvmz, "VOCAB_PATH", glossary_path),
+                patch.object(mvmz, "active_glossary_path", return_value=glossary_path),
+            ):
+                mvmz._reload_vocab()
+                with mvmz._speakerCacheLock:
+                    mvmz._speakerCache.clear()
+
+                self.assertEqual(mvmz._vocab_speaker_lookup("源"), "Minamoto")
+                self.assertEqual(mvmz._vocab_speaker_lookup("源氏"), "Genji")
+                self.assertEqual(mvmz._vocab_speaker_lookup("御"), "Go")
+                self.assertIsNone(mvmz._vocab_speaker_lookup("御殿"))
+
+                mvmz.SPEAKER_PARSE_MODE = True
+                mvmz.SPEAKER_COLLECTED = ["源氏", "御殿"]
+                self.assertEqual(mvmz.pendingSpeakerNames(), ["御殿"])
+
     def test_terms_slash_row_does_not_match_half_term(self):
         pairs = parseVocabWithCategories(
             "# Terms\n"

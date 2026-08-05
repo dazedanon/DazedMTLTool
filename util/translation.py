@@ -2998,7 +2998,7 @@ def normalize_vocab_source_key(source: str) -> str:
     return unicodedata.normalize("NFKC", str(source or "")).strip()
 
 
-_JP_HONORIFIC_SUFFIX_RE = re.compile(r"(様|殿|氏|先生|博士|君)+$")
+_JP_HONORIFIC_SUFFIX_RE = re.compile(r"(様|先生|博士|君)+$")
 
 
 def honorific_stripped_speaker_forms(source: str) -> list[str]:
@@ -3008,8 +3008,8 @@ def honorific_stripped_speaker_forms(source: str) -> list[str]:
     preflight does not create a duplicate glossary entry and prompt context still
     receives the full character line.
 
-    Do not strip ``さん`` / ``ちゃん`` - those appear in lexicalized nameplates
-    such as ``おじさん`` that must not collapse to ``おじ``.
+    Do not strip ``さん`` / ``ちゃん`` (lexicalized ``おじさん``), or ``氏`` / ``殿``
+    (``源氏``, ``御殿``), which are often part of the name itself.
     """
     text = str(source or "").strip()
     if not text:
