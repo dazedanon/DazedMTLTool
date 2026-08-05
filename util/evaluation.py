@@ -609,11 +609,22 @@ def _capture_page_data(
         original_vocab_source = rpgmaker._speakerVocabSource
         original_vocab_exact = dict(rpgmaker._speakerVocabExact)
         original_vocab_pairs = list(rpgmaker._speakerVocabCharacterPairs)
+        original_code_flags = {
+            "CODE101": rpgmaker.CODE101,
+            "CODE401": rpgmaker.CODE401,
+            "CODE405": rpgmaker.CODE405,
+            "CODE102": rpgmaker.CODE102,
+        }
         with rpgmaker._speakerCacheLock:
             original_speaker_cache = dict(rpgmaker._speakerCache)
         rpgmaker.translateAI = capture
         rpgmaker.SPEAKER_PARSE_MODE = False
         rpgmaker.PREFLIGHT_COUNT_MODE = False
+        # Capture must see dialogue regardless of the caller's live code profile.
+        rpgmaker.CODE101 = True
+        rpgmaker.CODE401 = True
+        rpgmaker.CODE405 = True
+        rpgmaker.CODE102 = True
         rpgmaker.NAMESLIST[:] = []
         rpgmaker.SPEAKER_COLLECTED[:] = []
         with rpgmaker._speakerCacheLock:
@@ -639,6 +650,8 @@ def _capture_page_data(
             rpgmaker._speakerVocabSource = original_vocab_source
             rpgmaker._speakerVocabExact = original_vocab_exact
             rpgmaker._speakerVocabCharacterPairs = original_vocab_pairs
+            for name, value in original_code_flags.items():
+                setattr(rpgmaker, name, value)
             with rpgmaker._speakerCacheLock:
                 rpgmaker._speakerCache.clear()
                 rpgmaker._speakerCache.update(original_speaker_cache)

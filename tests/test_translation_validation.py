@@ -119,6 +119,22 @@ class TranslationContentValidationTests(unittest.TestCase):
                 False,
                 "Source-language text remains",
             ),
+            (
+                "gloss leaves source word",
+                "鉱山って、英語でMineって 言うらしいわよ",
+                'Apparently, 鉱山 is called "Mine" in English.',
+                None,
+                False,
+                "Source-language text remains",
+            ),
+            (
+                "gloss translates the explained word",
+                "鉱山って、英語でMineって 言うらしいわよ",
+                'Apparently, a mine is called "Mine" in English.',
+                None,
+                True,
+                None,
+            ),
             ("Chinese CJK", "騎士", "骑士", "Chinese", True, None),
             (
                 "Japanese kana in Chinese",

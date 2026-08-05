@@ -267,6 +267,8 @@ class TranslationWorker(QThread):
     progress_signal = pyqtSignal(int, int, str)  # current_file, total_files, filename
     item_progress_signal = pyqtSignal(str, int, int)  # filename, current_item, total_items (for tqdm within file)
     file_error_signal = pyqtSignal(str, str)  # filename, error_message
+    # Soft validation failure: original kept for bad chunks; run can still succeed.
+    file_mismatch_signal = pyqtSignal(str, str)  # filename, message
     status_signal = pyqtSignal(str)  # updates the top translating_label from the worker
     finished_signal = pyqtSignal(bool, str)
     batch_phase_signal = pyqtSignal(str, object)  # phase name, optional payload
@@ -624,32 +626,38 @@ class TranslationWorker(QThread):
             if self.should_stop:
                 return "Stopped"
             
+            stdout_lines_clean = stdout.strip().split('\n')
             mismatch_detected = any(
                 line.startswith("MISMATCH_EVENT:")
-                for line in stdout.strip().split('\n')
+                for line in stdout_lines_clean
             )
 
             # Forward all stdout output to log (this includes cost information)
-            for line in stdout.strip().split('\n'):
+            for line in stdout_lines_clean:
                 if line.strip() and not line.startswith('RESULT:'):
                     self.emit_log(line)
             
             # Parse result
             if process.returncode == 0:
-                if mismatch_detected:
-                    return (
-                        "SUBPROCESS_ERROR",
-                        "Translation validation failed after all retries; original text was preserved",
-                    )
-                for line in stdout.strip().split('\n'):
+                result_text = "Success"
+                for line in stdout_lines_clean:
                     if line.startswith('RESULT:'):
-                        result_text = line[7:]  # Remove 'RESULT:' prefix
-                        # Clean up any Unicode issues in the result
+                        parsed = line[7:]  # Remove 'RESULT:' prefix
                         try:
-                            return result_text
+                            result_text = parsed
                         except UnicodeError:
-                            return result_text.encode('ascii', 'ignore').decode('ascii')
-                return "Success"
+                            result_text = parsed.encode('ascii', 'ignore').decode('ascii')
+                        break
+                if mismatch_detected:
+                    # Soft failure: bad chunks keep source text, valid chunks are
+                    # written. Do not fail the whole multi-file run for this.
+                    return (
+                        "VALIDATION_MISMATCH",
+                        "Translation validation failed after all retries; "
+                        "original text was preserved for failed chunks",
+                        result_text,
+                    )
+                return result_text
             else:
                 # Extract error message from stderr
                 error_msg = stderr.strip() if stderr.strip() else "Unknown error"
@@ -895,12 +903,30 @@ class TranslationWorker(QThread):
 
         completed_count = 0
         total_files = len(matching_files)
+        self._run_had_mismatch = False
 
         def _handle_file_result(filename, result):
             nonlocal total_cost, had_failure, completed_count
             stopped = False
             try:
-                if isinstance(result, tuple) and len(result) == 2 and result[0] == "SUBPROCESS_ERROR":
+                if (
+                    isinstance(result, tuple)
+                    and len(result) >= 2
+                    and result[0] == "VALIDATION_MISMATCH"
+                ):
+                    message = result[1]
+                    cost = result[2] if len(result) > 2 else None
+                    self._run_had_mismatch = True
+                    self.emit_log(
+                        f"⚠ {filename}: validation mismatch - original text kept "
+                        "for failed chunks; continuing."
+                    )
+                    self.file_mismatch_signal.emit(filename, message)
+                    if cost and cost not in ("Fail", "Stopped"):
+                        total_cost = cost
+                    elif total_cost == "Fail":
+                        total_cost = "Success"
+                elif isinstance(result, tuple) and len(result) == 2 and result[0] == "SUBPROCESS_ERROR":
                     had_failure = True
                     self.file_error_signal.emit(filename, result[1])
                 elif result and result not in ("Fail", "Stopped"):
@@ -1287,6 +1313,11 @@ class TranslationWorker(QThread):
                         clear_estimate_written_sizes()
                     except Exception:
                         pass
+                if getattr(self, "_run_had_mismatch", False):
+                    self.emit_log(
+                        "⚠ Some chunks failed validation; original text was kept "
+                        "for those lines. Review the mismatch log."
+                    )
                 self.finished_signal.emit(True, str(total_cost))
             else:
                 if not self.should_stop:
@@ -3349,28 +3380,35 @@ class TranslationTab(QWidget):
         )
 
     def _apply_success_status_icon(self, item, completion_kind="normal"):
-        """Mark a successful row; tooltips explain skip / idle when relevant."""
+        """Mark a successful row; tooltips explain skip / idle / mismatch when relevant."""
         try:
-            item["status_label"].setText("✓")
-            item["status_label"].setStyleSheet(
-                "color: #4ec9b0; font-weight: bold; font-size: 11px;"
-            )
             if completion_kind == "skip":
                 reason = (item.get("_skip_reason") or "").strip()
                 tip = f"Skipped: {reason}" if reason else "Whole file skipped (paths/fonts only)."
-                status, color = "Skipped", "#dcdcaa"
+                status, color, glyph = "Skipped", "#dcdcaa", "✓"
             elif completion_kind == "idle":
                 tip = "No translatable lines (non-dialogue content only)."
-                status, color = "Done", "#4ec9b0"
+                status, color, glyph = "Done", "#4ec9b0", "✓"
+            elif completion_kind == "mismatch":
+                tip = (item.get("_mismatch_reason") or "").strip() or (
+                    "Validation mismatch - original text kept for failed chunks."
+                )
+                status, color, glyph = "Mismatch", "#d4a017", "⚠"
             else:
                 tip = ""
-                status, color = "Done", "#4ec9b0"
+                status, color, glyph = "Done", "#4ec9b0", "✓"
+            item["status_label"].setText(glyph)
+            item["status_label"].setStyleSheet(
+                f"color: {color}; font-weight: bold; font-size: "
+                f"{'13px' if glyph == '⚠' else '11px'};"
+            )
             item["status_label"].setToolTip(tip)
             item["status_label"].setVisible(True)
-            # Mirror into the table when we know the filename
             for fname, meta in (getattr(self, "file_progress_items", {}) or {}).items():
                 if meta is item:
-                    self._set_progress_row(fname, status=status, status_color=color, progress="✓")
+                    self._set_progress_row(
+                        fname, status=status, status_color=color, progress=glyph
+                    )
                     break
         except Exception:
             pass
@@ -3383,6 +3421,9 @@ class TranslationTab(QWidget):
             # show them and hide the progress bar to make room.
             if success:
                 item['checkbox'].setChecked(True)
+                if completion_kind == "mismatch" and error_message:
+                    item["_mismatch_reason"] = error_message
+                    item["_completion_kind"] = "mismatch"
                 if item.get('tokens_label') and item['tokens_label'].text():
                     item['tokens_label'].setVisible(True)
                     item['cost_label'].setVisible(True)
@@ -3785,6 +3826,7 @@ class TranslationTab(QWidget):
             self.translation_worker.item_progress_signal.connect(self.update_item_progress)
             self.translation_worker.status_signal.connect(self.translating_label.setText)
             self.translation_worker.file_error_signal.connect(self.on_file_error)
+            self.translation_worker.file_mismatch_signal.connect(self.on_file_mismatch)
             self.translation_worker.finished_signal.connect(self.on_translation_finished)
             self.translation_worker.batch_phase_signal.connect(self._on_batch_phase)
             self.translation_worker.speaker_confirmation_signal.connect(
@@ -3910,6 +3952,11 @@ class TranslationTab(QWidget):
                 completion_kind = "idle"
             else:
                 completion_kind = "normal"
+            existing = (self.file_progress_items.get(filename) or {}).get(
+                "_completion_kind"
+            )
+            if existing == "mismatch" and completion_kind == "normal":
+                completion_kind = "mismatch"
             self._apply_file_result(
                 filename,
                 input_tokens,
@@ -4127,6 +4174,15 @@ class TranslationTab(QWidget):
         """Handle a file translation error."""
         # Mark the file as failed with the error message
         self.mark_file_complete(filename, success=False, error_message=error_message)
+
+    def on_file_mismatch(self, filename, error_message):
+        """Soft validation failure: keep written output, mark the file for review."""
+        self.mark_file_complete(
+            filename,
+            success=True,
+            error_message=error_message,
+            completion_kind="mismatch",
+        )
 
     def on_mismatch_detected(self):
         """Increment the mismatch counter and update the totals label."""

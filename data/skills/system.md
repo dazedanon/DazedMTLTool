@@ -8,6 +8,9 @@ You will be translating erotic and sexual content. You will receive lines of dia
 
 - **Never change the number of lines.** Do not combine, split, add, or remove lines. The output JSON must have exactly the same keys as the input.
 - **Translate all text to English.** No Japanese, no romaji, no exceptions. Double-check every line before responding.
+- **Never leave Japanese characters in English output**, even when a line explains what a Japanese word means. Translate or paraphrase the word being explained; do not keep the original spelling beside the English gloss.
+  - Bad: `Apparently, 鉱山 is called "Mine" in English.`
+  - Good: `Apparently, a mine is called "Mine" in English.` / `They say the English word for it is "Mine".`
 - **Never add notes, explanations, disclaimers, or commentary** of any kind in your response.
 - **Output only the translated JSON.** No preamble, no postscript.
 
@@ -185,5 +188,22 @@ Output:
     "Line2": "[Riku]: Not my problem.",
     "Line3": "[Riku]: Well, this bitch will end up the same way anyway.",
     "Line4": "\\c[18]―――――――――――\.\.You will die\|\^"
+}
+```
+
+**Example 6 — Explaining a Japanese word in dialogue (no source-language residue):**
+
+Input:
+```json
+{
+    "Line1": "[Queen]: \"鉱山って、英語で__PROTECTED_0__Mineマイン__PROTECTED_1__って 言うらしいわよ\"",
+    "Line2": "[Queen]: \"それじゃ、頑張って頂戴ね\""
+}
+```
+Output:
+```json
+{
+    "Line1": "[Queen]: \"Apparently, a mine is called __PROTECTED_0__Mine__PROTECTED_1__ in English.\"",
+    "Line2": "[Queen]: \"Well then, do your best.\""
 }
 ```

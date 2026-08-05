@@ -73,7 +73,8 @@ class TranslationWorkerTests(unittest.TestCase):
         self.assertEqual(started, ["a.json", "b.json", "c.json"])
         self.assertEqual(active["max"], 1)
 
-    def test_validation_marker_becomes_a_file_failure(self) -> None:
+    def test_validation_marker_is_a_soft_mismatch(self) -> None:
+        """Paid/validated chunks stay written; mismatch does not hard-fail the file."""
         worker = TranslationWorker(
             Path(__file__).resolve().parents[1], ("JSON", (".json",), None)
         )
@@ -91,8 +92,41 @@ class TranslationWorkerTests(unittest.TestCase):
                 "Map001.json", False, batch_phase="consume"
             )
 
-        self.assertEqual(result[0], "SUBPROCESS_ERROR")
+        self.assertEqual(result[0], "VALIDATION_MISMATCH")
         self.assertIn("validation failed", result[1].lower())
+        self.assertEqual(result[2], "TOTAL: success")
+
+    def test_batch_consume_continues_after_soft_mismatch(self) -> None:
+        worker = TranslationWorker(Path.cwd(), ("JSON", (".json",), None))
+        mismatches = []
+        worker.file_mismatch_signal.connect(
+            lambda filename, message: mismatches.append((filename, message))
+        )
+        errors = []
+        worker.file_error_signal.connect(
+            lambda filename, message: errors.append((filename, message))
+        )
+
+        def run_one(filename, *_args):
+            if filename == "bad.json":
+                return (
+                    "VALIDATION_MISMATCH",
+                    "original text was preserved for failed chunks",
+                    "TOTAL: partial",
+                )
+            return "TOTAL: success"
+
+        worker.run_module_in_process = run_one
+        with mock.patch.dict(os.environ, {"fileThreads": "1"}):
+            result = worker._run_files(
+                ["bad.json", "good.json"], False, batch_phase="consume"
+            )
+
+        self.assertEqual(result, "TOTAL: success")
+        self.assertTrue(worker._run_had_mismatch)
+        self.assertEqual(len(mismatches), 1)
+        self.assertEqual(mismatches[0][0], "bad.json")
+        self.assertEqual(errors, [])
 
 
 class TranslationCostFormattingTests(unittest.TestCase):
