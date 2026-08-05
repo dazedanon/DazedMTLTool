@@ -131,7 +131,8 @@ class BatchRunStateTests(BatchHistoryTestBase):
         )
         self.assertEqual(T.batchRunState(), "fetched")
 
-    def test_queued_glossary_context_change_is_detected(self):
+    def test_queued_glossary_context_change_is_ignored_for_v5(self):
+        """Glossary harvests must not invalidate an unsubmitted v5 queue."""
         payload = '{"Line1": "カイン"}'
         old_vocab = "# Game Characters\nカイン (Kain)\n"
         old_context = T.buildMatchedVocabText(
@@ -149,7 +150,7 @@ class BatchRunStateTests(BatchHistoryTestBase):
             "# Game Characters\nカイン (Cain)\n"
         )
 
-        self.assertEqual((stale, total), (1, 1))
+        self.assertEqual((stale, total), (0, 1))
 
     def test_queued_unrelated_glossary_change_stays_current(self):
         payload = '{"Line1": "カイン"}'
@@ -349,7 +350,8 @@ class BatchRunStateTests(BatchHistoryTestBase):
             payload, "English", "", request_context=["She disagreed."],
         ))
 
-    def test_queued_sfx_context_becomes_stale_when_reference_is_disabled(self):
+    def test_queued_sfx_context_is_ignored_for_v5(self):
+        """SFX reference toggles must not invalidate an unsubmitted v5 queue."""
         payload = '{"Line1": "ドキドキ"}'
         config = T.TranslationConfig(
             model="test", prompt="Translate English.", vocab="",
@@ -370,7 +372,7 @@ class BatchRunStateTests(BatchHistoryTestBase):
             "", use_sfx_reference=False
         )
 
-        self.assertEqual((stale, total), (1, 1))
+        self.assertEqual((stale, total), (0, 1))
 
     def test_fetched_result_requires_same_glossary_context(self):
         payload = '{"Line1": "カイン"}'
@@ -390,6 +392,42 @@ class BatchRunStateTests(BatchHistoryTestBase):
             T.BatchResultUnavailableError, "full-price live request"
         ):
             T.require_batch_result(payload, "English", "カイン (Cain)")
+
+    def test_v5_batch_queue_ignores_glossary_context(self):
+        """Paid batch identity must not drift when glossary harvests land."""
+        payload = '{"Line1": "カイン"}'
+        request_context = T._typed_request_context(
+            [], ["Keep names consistent."]
+        )
+        T.queue_batch_request(
+            payload,
+            "English",
+            {"model": "gpt-test"},
+            cache_context="カイン (Kain)",
+            provider="openai",
+            request_context=request_context,
+        )
+        T.queue_batch_request(
+            payload,
+            "English",
+            {"model": "gpt-test"},
+            cache_context="カイン (Cain)\n帽子 (Hat)",
+            provider="openai",
+            request_context=request_context,
+        )
+        T.flush_batch_queue()
+        queue = T._read_batch_file(T.BATCH_QUEUE_FILE)
+        self.assertEqual(len(queue), 1)
+        key = next(iter(queue))
+        self.assertEqual(
+            key,
+            T.get_cache_key(
+                payload,
+                "English",
+                None,
+                queue[key]["request_context"],
+            ),
+        )
 
     def test_queued_batch_metadata_preserves_resume_file_scope(self):
         T.saveQueuedBatchMetadata(["Map001.json", "Map002.json"])
@@ -618,6 +656,55 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
         self.assertEqual(entry["provider"], "openai")
         self.assertEqual(entry["endpoint"], "https://submitted.example/v1")
         self.assertTrue(entry["custom_ids"])
+
+    def test_submit_and_fetch_preserve_glossary_freeze(self):
+        freeze_text = "# Game Characters\nカイン (Cain)\n"
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {"status": "queued", "glossary_freeze": freeze_text},
+        )
+        T.queue_batch_request(
+            '{"Line1":"猫"}',
+            "English",
+            {"model": "gpt-5.6-terra", "messages": []},
+            provider="openai",
+        )
+        T.flush_batch_queue()
+
+        with (
+            mock.patch.dict(
+                "os.environ", {"api": "https://submitted.example/v1"}
+            ),
+            mock.patch(
+                "util.batch_providers.submit_batch",
+                return_value={"id": "batch_openai_freeze", "input_file_id": "file_1"},
+            ),
+        ):
+            T.submitTranslationBatches(file_set=["Map001.json"])
+
+        submitted = T._read_batch_file(T.BATCH_STATE_FILE)
+        self.assertEqual(submitted.get("glossary_freeze"), freeze_text)
+        history_entry = BH.read_history()["batches"][0]
+        self.assertEqual(history_entry.get("glossary_freeze"), freeze_text)
+
+        T._write_batch_file(
+            T.BATCH_RESULTS_FILE,
+            {"stale-key": {"text": "old"}},
+        )
+
+        def download(_batch_id, _custom_ids, **_kwargs):
+            return ({"k1": {"text": "ok"}}, [], {"input_tokens": 1})
+
+        with (
+            mock.patch.object(BH, "_client_for_entry", return_value=object()),
+            mock.patch.object(BH, "download_batch_results", side_effect=download),
+            mock.patch.object(BH, "_price_usage", return_value=0.0),
+        ):
+            T.fetchTranslationBatches()
+
+        fetched = T._read_batch_file(T.BATCH_STATE_FILE)
+        self.assertEqual(fetched.get("status"), "fetched")
+        self.assertEqual(fetched.get("glossary_freeze"), freeze_text)
 
     def test_split_submission_checkpoints_and_retry_skips_paid_work(self):
         for payload in ('{"Line1":"猫"}', '{"Line1":"犬"}'):

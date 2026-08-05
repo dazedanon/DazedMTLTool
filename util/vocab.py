@@ -28,6 +28,7 @@ from util.paths import (
     active_glossary_path,
     ensure_game_glossary,
     glossary_base_path,
+    read_active_glossary,
     read_game_glossary,
 )
 
@@ -40,6 +41,10 @@ _EMPTY_PLACEHOLDER = "# Add character glossary entries here\n"
 # translation file-threads clobbering each other's sections.
 _VOCAB_LOCK = threading.Lock()
 
+# Collect freezes the glossary for collect-time prompts and for rematching
+# legacy (pre-v5) paid batch results after Pass 2 harvests names.
+BATCH_GLOSSARY_FREEZE_FILE = Path("log/batch_glossary_freeze.txt")
+
 
 def _path(game_root) -> "Path":
     if game_root is not None:
@@ -48,6 +53,98 @@ def _path(game_root) -> "Path":
     if path is None:
         raise RuntimeError("No active game folder is available for glossary access.")
     return path
+
+
+def batch_glossary_phase() -> str:
+    """Return the active batch phase, or ``\"\"`` when batch translation is off."""
+    return (os.getenv("BATCH_PHASE") or "").strip().lower()
+
+
+def freeze_batch_glossary(*, game_root=None) -> Path:
+    """Snapshot the live glossary for the current batch collect/consume cycle."""
+    text = read_active_glossary() if game_root is None else _path(game_root).read_text(
+        encoding="utf-8"
+    )
+    return write_batch_glossary_freeze(text)
+
+
+def write_batch_glossary_freeze(text: str) -> Path:
+    """Write an explicit freeze snapshot (used when restoring from history)."""
+    text = text if isinstance(text, str) else ""
+    BATCH_GLOSSARY_FREEZE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = BATCH_GLOSSARY_FREEZE_FILE.with_suffix(
+        BATCH_GLOSSARY_FREEZE_FILE.suffix
+        + f".{os.getpid()}.{threading.get_ident()}.tmp"
+    )
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, BATCH_GLOSSARY_FREEZE_FILE)
+    return BATCH_GLOSSARY_FREEZE_FILE
+
+
+def persist_batch_glossary_freeze_to_state() -> None:
+    """Copy the freeze file into active batch_state for redownload/resume."""
+    if not BATCH_GLOSSARY_FREEZE_FILE.is_file():
+        return
+    try:
+        text = BATCH_GLOSSARY_FREEZE_FILE.read_text(encoding="utf-8")
+        import util.translation as T
+
+        with T.BATCH_LOCK:
+            with T._batch_file_lock():
+                state = T._read_batch_file(T.BATCH_STATE_FILE)
+                state["glossary_freeze"] = text
+                T._write_batch_file(T.BATCH_STATE_FILE, state)
+    except Exception:
+        pass
+
+
+def restore_batch_glossary_freeze_from_state() -> bool:
+    """Restore the freeze file from active batch_state when missing."""
+    if BATCH_GLOSSARY_FREEZE_FILE.is_file():
+        return True
+    try:
+        import util.translation as T
+
+        with T._batch_file_lock():
+            state = T._read_batch_file(T.BATCH_STATE_FILE)
+        text = state.get("glossary_freeze")
+        if not isinstance(text, str) or not text:
+            return False
+        write_batch_glossary_freeze(text)
+        return True
+    except Exception:
+        return False
+
+
+def clear_batch_glossary_freeze() -> None:
+    """Drop the collect-time glossary freeze, if present."""
+    try:
+        if BATCH_GLOSSARY_FREEZE_FILE.exists():
+            BATCH_GLOSSARY_FREEZE_FILE.unlink()
+    except Exception:
+        pass
+
+
+def read_translation_glossary() -> str:
+    """Glossary text preferred during batch collect (freeze) or otherwise live.
+
+    During collect, prefer the freeze taken at collect start. During consume,
+    callers that need live harvests should read the live glossary; batch result
+    keys use the freeze only for legacy (pre-v5) rematching.
+    """
+    if batch_glossary_phase() == "collect":
+        if BATCH_GLOSSARY_FREEZE_FILE.is_file():
+            try:
+                return BATCH_GLOSSARY_FREEZE_FILE.read_text(encoding="utf-8")
+            except OSError:
+                pass
+        restore_batch_glossary_freeze_from_state()
+        if BATCH_GLOSSARY_FREEZE_FILE.is_file():
+            try:
+                return BATCH_GLOSSARY_FREEZE_FILE.read_text(encoding="utf-8")
+            except OSError:
+                pass
+    return read_active_glossary()
 
 
 def _split_base(text: str) -> tuple[str, str]:
@@ -111,7 +208,9 @@ def _parse_section_pairs(section_body: str) -> dict[str, str]:
     return pairs
 
 
-def update_vocab_section(category: str, pairs, *, merge: bool = False, game_root=None) -> None:
+def update_vocab_section(
+    category: str, pairs, *, merge: bool = False, game_root=None
+) -> None:
     """Insert or replace a ``# {category}`` section in the game-specific vocab.
 
     Mirrors the RPGMaker auto-glossary behaviour (translated DB names feed
@@ -125,6 +224,9 @@ def update_vocab_section(category: str, pairs, *, merge: bool = False, game_root
       dropped. When nothing survives filtering the file is left untouched.
     - ``merge``: when True, keep existing entries for this category and only add
       sources that are not already present (names.json stays authoritative).
+
+    Collect skips writes (source text is still untranslated). Consume writes
+    immediately so sequential Pass 2 files can load harvested names.
     """
     dedup: dict[str, str] = {}
     for src, dst in pairs:
@@ -134,6 +236,10 @@ def update_vocab_section(category: str, pairs, *, merge: bool = False, game_root
             continue
         dedup[str(src)] = str(dst)
     if not dedup:
+        return
+
+    if batch_glossary_phase() == "collect":
+        # Collect leaves source text untranslated; nothing useful to harvest.
         return
 
     with _VOCAB_LOCK:

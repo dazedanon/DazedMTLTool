@@ -276,13 +276,26 @@ def record_submit(
 ) -> None:
     """Record newly submitted provider batches into durable history."""
     file_set = list(file_set or [])
+    glossary_freeze = None
+    try:
+        with _batch_file_lock():
+            state = _read_batch_file(BATCH_STATE_FILE)
+        freeze_text = state.get("glossary_freeze")
+        if isinstance(freeze_text, str) and freeze_text:
+            glossary_freeze = freeze_text
+        else:
+            from util.vocab import BATCH_GLOSSARY_FREEZE_FILE
+
+            if BATCH_GLOSSARY_FREEZE_FILE.is_file():
+                glossary_freeze = BATCH_GLOSSARY_FREEZE_FILE.read_text(encoding="utf-8")
+    except Exception:
+        glossary_freeze = None
     for info in batches:
         bid = info.get("id")
         if not bid:
             continue
         custom_ids = dict(info.get("custom_ids") or {})
-        upsert_history_entry(
-            bid,
+        fields = dict(
             status=STATUS_SUBMITTED,
             model=model or (cost_estimate or {}).get("model") or "",
             provider=info.get("provider") or provider,
@@ -301,6 +314,9 @@ def record_submit(
             api_status="in_progress",
             notes="",
         )
+        if glossary_freeze is not None:
+            fields["glossary_freeze"] = glossary_freeze
+        upsert_history_entry(bid, **fields)
 
 
 def record_fetch(
@@ -784,18 +800,32 @@ def redownload_batch(batch_id: str) -> dict:
         with _batch_file_lock():
             _assert_recovery_target_unlocked(entries)
             _write_batch_file(BATCH_RESULTS_FILE, results)
-            _write_batch_file(
-                BATCH_STATE_FILE,
-                {
-                    "status": "fetched", "batch_ids": batch_ids, "batches": [],
-                    "run_id": entry.get("run_id"),
-                    "provider": provider, "model": model,
-                    "endpoint": entry.get("endpoint") or "",
-                    "cache_key_version": cache_key_version,
-                    "file_set": entry.get("file_set") or [],
-                    "result_keys": sorted(results),
-                },
-            )
+            state_payload = {
+                "status": "fetched", "batch_ids": batch_ids, "batches": [],
+                "run_id": entry.get("run_id"),
+                "provider": provider, "model": model,
+                "endpoint": entry.get("endpoint") or "",
+                "cache_key_version": cache_key_version,
+                "file_set": entry.get("file_set") or [],
+                "result_keys": sorted(results),
+            }
+            freeze_text = entry.get("glossary_freeze")
+            if not isinstance(freeze_text, str) or not freeze_text:
+                for row in entries:
+                    candidate = row.get("glossary_freeze")
+                    if isinstance(candidate, str) and candidate:
+                        freeze_text = candidate
+                        break
+            if isinstance(freeze_text, str) and freeze_text:
+                state_payload["glossary_freeze"] = freeze_text
+            _write_batch_file(BATCH_STATE_FILE, state_payload)
+            if isinstance(freeze_text, str) and freeze_text:
+                try:
+                    from util.vocab import write_batch_glossary_freeze
+
+                    write_batch_glossary_freeze(freeze_text)
+                except Exception:
+                    pass
             if BATCH_QUEUE_FILE.exists():
                 BATCH_QUEUE_FILE.unlink()
         T._batch_results = None

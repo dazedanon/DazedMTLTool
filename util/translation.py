@@ -27,6 +27,63 @@ from util.provider_costs import cache_write_multiplier, has_billed_cache_writes
 from util import request_debug
 from util.sfx_reference import build_sfx_reference_text
 
+
+def _batch_freeze_glossary_text(fallback=""):
+    """Collect-time glossary freeze used for legacy (v4) batch key recovery."""
+    try:
+        from util.vocab import (
+            BATCH_GLOSSARY_FREEZE_FILE,
+            batch_glossary_phase,
+            restore_batch_glossary_freeze_from_state,
+        )
+
+        if batch_glossary_phase() in {"collect", "consume"}:
+            if not BATCH_GLOSSARY_FREEZE_FILE.is_file():
+                restore_batch_glossary_freeze_from_state()
+            if BATCH_GLOSSARY_FREEZE_FILE.is_file():
+                return BATCH_GLOSSARY_FREEZE_FILE.read_text(encoding="utf-8")
+    except Exception:
+        pass
+    if fallback is not None and fallback != "":
+        return fallback
+    try:
+        return read_active_glossary()
+    except OSError:
+        return ""
+
+
+def _active_batch_cache_key_version() -> int:
+    """Return the key version for the active batch run, else the current default."""
+    try:
+        with _batch_file_lock():
+            state = _read_batch_file(BATCH_STATE_FILE)
+        if state:
+            return int(state.get("cache_key_version", BATCH_CACHE_KEY_VERSION) or BATCH_CACHE_KEY_VERSION)
+    except Exception:
+        pass
+    return BATCH_CACHE_KEY_VERSION
+
+
+def _batch_stable_cache_context(subbed_text, history, sfx_text, live_vocab_text):
+    """Glossary+SFX fingerprint for batch queue/result keys.
+
+    v5+ batch identity ignores glossary/SFX: the paid provider result already
+    baked collect-time context into the model output. Older runs still need the
+    collect-time freeze so redownload/consume can rematch existing keys.
+    """
+    if _active_batch_cache_key_version() >= 5:
+        return None
+    freeze_text = _batch_freeze_glossary_text("")
+    if not freeze_text:
+        return live_vocab_text
+    matched = buildMatchedVocabText(
+        parseVocabWithCategories(freeze_text),
+        subbed_text,
+        history,
+    )
+    return matched + (sfx_text or "")
+
+
 # Request logging includes complete prompt payloads and is therefore opt-in.
 # The legacy module flag remains available for maintainers and tests, while
 # normal users enable it with ``debugRequestLogs=true`` in their environment.
@@ -644,7 +701,11 @@ CACHE_LOCK = threading.RLock()
 CACHE_PENDING_MARKER = "__translation_pending__"
 CACHE_PENDING_TTL = 600
 CACHE_WAIT_INTERVAL = 0.25
-BATCH_CACHE_KEY_VERSION = 4
+BATCH_CACHE_KEY_VERSION = 5
+# v5+: batch queue/result identity is payload + language + request_context only.
+# Glossary/SFX still go into the provider prompt at collect time, and still
+# fingerprint the live translation cache, but they must not block consume after
+# Pass 2 harvests names into glossary.txt.
 
 # Request context has two independent parts: preceding Japanese source and
 # per-call instructions. Keeping both in the provider payload and cache key
@@ -1300,6 +1361,30 @@ def _write_batch_file(path, data):
     tmp_file.replace(path)
 
 
+def _attach_glossary_freeze(state_doc: dict, source_state: dict | None = None) -> dict:
+    """Keep collect-time glossary freeze across batch_state rewrites."""
+    text = None
+    if isinstance(source_state, dict):
+        candidate = source_state.get("glossary_freeze")
+        if isinstance(candidate, str) and candidate:
+            text = candidate
+    if text is None and isinstance(state_doc, dict):
+        candidate = state_doc.get("glossary_freeze")
+        if isinstance(candidate, str) and candidate:
+            text = candidate
+    if text is None:
+        try:
+            from util.vocab import BATCH_GLOSSARY_FREEZE_FILE
+
+            if BATCH_GLOSSARY_FREEZE_FILE.is_file():
+                text = BATCH_GLOSSARY_FREEZE_FILE.read_text(encoding="utf-8")
+        except Exception:
+            text = None
+    if text is not None:
+        state_doc["glossary_freeze"] = text
+    return state_doc
+
+
 def peek_cached_translation(
     payload, language, cache_context=None, request_context=None
 ):
@@ -1336,8 +1421,11 @@ def queue_batch_request(
     normalized_request_context = _normalize_cache_request_context(
         typed_request_context
     )
+    # v5+: glossary/SFX fingerprint the live cache and the collect-time prompt,
+    # but must not identify paid batch results (Pass 2 harvests change them).
+    batch_cache_context = None if BATCH_CACHE_KEY_VERSION >= 5 else cache_context
     key = get_cache_key(
-        payload, language, cache_context, normalized_request_context
+        payload, language, batch_cache_context, normalized_request_context
     )
     with BATCH_LOCK:
         _batch_queue_pending[key] = {
@@ -1380,10 +1468,7 @@ def batchQueueStaleContextCount(vocab_text=None, use_sfx_reference=None):
     """
     flush_batch_queue()
     if vocab_text is None:
-        try:
-            vocab_text = read_active_glossary()
-        except OSError:
-            vocab_text = ""
+        vocab_text = _batch_freeze_glossary_text()
     vocab_pairs = parseVocabWithCategories(vocab_text or "")
     if use_sfx_reference is None:
         use_sfx_reference = os.getenv("useSfxReference", "true").strip().lower() in (
@@ -1402,19 +1487,32 @@ def batchQueueStaleContextCount(vocab_text=None, use_sfx_reference=None):
             continue
         payload = entry.get("payload", "")
         language = entry.get("language", "")
-        matched_glossary = buildMatchedVocabText(
-            vocab_pairs, payload, entry.get("request_context")
-        )
-        matched_sfx = build_sfx_reference_text(
-            payload, enabled=bool(use_sfx_reference)
-        )
-        matched_context = matched_glossary + matched_sfx
-        current_key = get_cache_key(
-            payload,
-            language,
-            matched_context,
-            entry.get("request_context"),
-        )
+        try:
+            entry_version = int(entry.get("cache_key_version", 1) or 1)
+        except (TypeError, ValueError):
+            entry_version = 1
+        if entry_version >= 5:
+            # v5+ batch identity ignores glossary/SFX drift.
+            current_key = get_cache_key(
+                payload,
+                language,
+                None,
+                entry.get("request_context"),
+            )
+        else:
+            matched_glossary = buildMatchedVocabText(
+                vocab_pairs, payload, entry.get("request_context")
+            )
+            matched_sfx = build_sfx_reference_text(
+                payload, enabled=bool(use_sfx_reference)
+            )
+            matched_context = matched_glossary + matched_sfx
+            current_key = get_cache_key(
+                payload,
+                language,
+                matched_context,
+                entry.get("request_context"),
+            )
         if current_key != recorded_key:
             stale += 1
     return stale, len(queue)
@@ -1465,10 +1563,10 @@ def require_batch_result(
     )
     if result is None:
         raise BatchResultUnavailableError(
-            "[BATCH] No fetched result matches this request and its current "
-            "glossary/SFX context. The consume pass was stopped without making "
-            "a full-price live request. Re-collect the batch, or run normal "
-            "Translate explicitly if live pricing is acceptable."
+            "[BATCH] No fetched result matches this request. The consume pass "
+            "was stopped without making a full-price live request. For older "
+            "batches, restore/re-download with the collect-time glossary freeze, "
+            "or re-collect. For a full-price retry use normal Translate."
         )
     return result
 
@@ -1567,6 +1665,12 @@ def clearBatchFiles(*, strict=False):
                     )
         _batch_results = None
         _batch_queue_pending = {}
+    try:
+        from util.vocab import clear_batch_glossary_freeze
+
+        clear_batch_glossary_freeze()
+    except Exception:
+        pass
     # Only mark history consumed when clearing after a successful fetch/consume,
     # never when discarding a still-submitted or queued run.
     if had_results:
@@ -1942,6 +2046,7 @@ def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
                 len(batch.get("custom_ids") or {}) for batch in batches
             ),
         }
+        _attach_glossary_freeze(state_doc, previous_state)
         with BATCH_LOCK:
             with _batch_file_lock():
                 _write_batch_file(BATCH_STATE_FILE, state_doc)
@@ -2182,27 +2287,26 @@ def fetchTranslationBatches(batches=None):
                     BATCH_QUEUE_FILE.unlink()
             except Exception:
                 pass
-            _write_batch_file(
-                BATCH_STATE_FILE,
-                {
-                    "status": "fetched",
-                    "run_id": state.get("run_id"),
-                    "batch_ids": batch_ids,
-                    "batches": [],
-                    "model": model,
-                    "provider": state.get("provider") or (
-                        batch_list[0].get("provider") if batch_list else None
-                    ),
-                    "endpoint": state.get("endpoint") or (
-                        batch_list[0].get("endpoint") if batch_list else None
-                    ),
-                    "cache_key_version": state.get("cache_key_version", 1),
-                    "result_keys": sorted(results),
-                    "file_set": state.get("file_set") or [],
-                    "cost_estimate": state.get("cost_estimate"),
-                    "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                },
-            )
+            fetched_state = {
+                "status": "fetched",
+                "run_id": state.get("run_id"),
+                "batch_ids": batch_ids,
+                "batches": [],
+                "model": model,
+                "provider": state.get("provider") or (
+                    batch_list[0].get("provider") if batch_list else None
+                ),
+                "endpoint": state.get("endpoint") or (
+                    batch_list[0].get("endpoint") if batch_list else None
+                ),
+                "cache_key_version": state.get("cache_key_version", 1),
+                "result_keys": sorted(results),
+                "file_set": state.get("file_set") or [],
+                "cost_estimate": state.get("cost_estimate"),
+                "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+            _attach_glossary_freeze(fetched_state, state)
+            _write_batch_file(BATCH_STATE_FILE, fetched_state)
         _batch_results = None
 
     if record_fetch is not None:
@@ -3099,7 +3203,7 @@ def createContextParts(config, subbedText, formatType, history=None):
       - only glossary terms found in the current batch text
       - only SFX reference records found in the current batch text
     """
-    vocabPairs = parseVocabWithCategories(config.vocab)
+    vocabPairs = parseVocabWithCategories(getattr(config, "vocab", "") or "")
     matchedVocabText = buildMatchedVocabText(vocabPairs, subbedText, history)
     matchedSfxText = build_sfx_reference_text(
         subbedText,
@@ -4135,6 +4239,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             config, subbedT, formatType, request_history
         )
         vocab_text = glossary_text + sfx_text
+        # Live prompts may use a growing glossary during sequential consume.
+        # Batch/cache keys stay pinned to the collect-time freeze.
+        key_context = _batch_stable_cache_context(
+            subbedT, request_history, sfx_text, vocab_text
+        )
 
         # Batch collect queues list payloads only. Single strings (speaker and
         # variable names) translate live — modules memoize them and embed the
@@ -4148,11 +4257,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
         # consume pass to wait on)
         if queue_for_batch:
             cached_result = peek_cached_translation(
-                subbedT, config.language, vocab_text, request_context
+                subbedT, config.language, key_context, request_context
             )
         else:
             cached_result = get_cached_translation(
-                subbedT, config.language, vocab_text, request_context
+                subbedT, config.language, key_context, request_context
             )
         if cached_result is not None:
             cached_values = cached_result if isinstance(cached_result, list) else [cached_result]
@@ -4262,7 +4371,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                 subbedT,
                 config.language,
                 params,
-                cache_context=vocab_text,
+                cache_context=key_context,
                 provider=batch_provider,
                 request_context=request_context,
             )
@@ -4320,13 +4429,13 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             if isinstance(tItem, list):
                 cache_translation(
                     subbedT, tItem, config.language,
-                    cache_context=vocab_text,
+                    cache_context=key_context,
                     request_context=request_context,
                 )
             else:
                 cache_translation(
                     subbedT, [tItem], config.language,
-                    cache_context=vocab_text,
+                    cache_context=key_context,
                     request_context=request_context,
                 )
             
@@ -4371,7 +4480,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                 batch_result = require_batch_result(
                     subbedT,
                     config.language,
-                    cache_context=vocab_text,
+                    cache_context=key_context,
                     request_context=request_context,
                 )
                 response = _AnthropicCompat(
@@ -4669,7 +4778,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                         subbedT,
                         list(final_translations),
                         config.language,
-                        cache_context=vocab_text,
+                        cache_context=key_context,
                         request_context=request_context,
                     )
 
@@ -4708,7 +4817,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                     subbedT,
                     final_translations,
                     config.language,
-                    cache_context=vocab_text,
+                    cache_context=key_context,
                     request_context=request_context,
                 )
 

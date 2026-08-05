@@ -42,7 +42,6 @@ MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list res
 PBAR = None
 FILENAME = None
 TIMETOTAL = 0  # Total Time Taken for all translations
-VOCAB_LOCK = threading.Lock()
 PREFLIGHT_COUNT_MODE = False  # When True, translateAI wrapper only counts units and never calls API
 
 # Speakers
@@ -102,7 +101,25 @@ def refreshRuntimeConfig():
         pass
     PROMPT = load_system_prompt()
     VOCAB_PATH = active_glossary_path()
-    VOCAB = read_active_glossary()
+    try:
+        from util.vocab import (
+            BATCH_GLOSSARY_FREEZE_FILE,
+            batch_glossary_phase,
+            read_translation_glossary,
+        )
+
+        # Collect pins prompts to the freeze (same as live at collect start).
+        # Consume loads the live glossary so sequential harvests from earlier
+        # files are visible; paid result keys still use the freeze separately.
+        if (
+            batch_glossary_phase() == "collect"
+            and BATCH_GLOSSARY_FREEZE_FILE.is_file()
+        ):
+            VOCAB = read_translation_glossary()
+        else:
+            VOCAB = read_active_glossary()
+    except Exception:
+        VOCAB = read_active_glossary()
     PRICING_CONFIG = getPricingConfig(MODEL)
     INPUTAPICOST = PRICING_CONFIG["inputAPICost"]
     OUTPUTAPICOST = PRICING_CONFIG["outputAPICost"]
@@ -181,10 +198,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = False
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE101 = True
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE408 = False
@@ -311,6 +328,22 @@ def _decode_game_message_show_text(text: str) -> str:
 def _reload_vocab():
     """Reload the active game's glossary so recent edits take effect."""
     global VOCAB
+    try:
+        from util.vocab import (
+            BATCH_GLOSSARY_FREEZE_FILE,
+            batch_glossary_phase,
+            read_translation_glossary,
+        )
+
+        if (
+            batch_glossary_phase() == "collect"
+            and BATCH_GLOSSARY_FREEZE_FILE.is_file()
+        ):
+            VOCAB = read_translation_glossary()
+            TRANSLATION_CONFIG.vocab = VOCAB
+            return
+    except Exception:
+        pass
     vocab_path = active_glossary_path() or VOCAB_PATH
     try:
         VOCAB = vocab_path.read_text(encoding="utf-8") if vocab_path else read_active_glossary()
@@ -1097,108 +1130,11 @@ def checkSave(data, filename, tokens):
 
 
 def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
-    """Update or insert a section in glossary.txt for the given category with provided pairs.
-    Only writes when there's an actual translation (dst is non-empty and differs from src after normalization).
-    - category: e.g., "Items", "Weapons", etc. Section header will be "# {category}".
-    - pairs: list of (source, translated) strings. Duplicates by source are deduped (last wins).
-    The existing section is replaced entirely; other sections are preserved.
-    """
+    """Harvest translated DB names into the shared game glossary helper."""
     try:
-        vocab_path = active_glossary_path() or VOCAB_PATH
-        if vocab_path is None:
-            raise RuntimeError("No active game folder is available for glossary updates.")
+        from util.vocab import update_vocab_section as _shared_update_vocab_section
 
-        # Helper: normalized comparison to detect no-op translations
-        def _norm(s: str) -> str:
-            if s is None:
-                return ""
-            # Collapse whitespace and case-fold; leave punctuation to avoid over-matching
-            return re.sub(r"\s+", " ", str(s)).strip().casefold()
-
-        # Filter and deduplicate by source term (last mapping wins)
-        dedup: dict[str, str] = {}
-        for src, dst in pairs:
-            if not src:
-                continue
-            # Skip when no destination or no actual change
-            if dst is None or _norm(dst) == "" or _norm(dst) == _norm(src):
-                continue
-            dedup[src] = dst
-
-        # If nothing to add after filtering, skip touching the file
-        if not dedup:
-            return
-
-        # Guard the read-modify-write with a dedicated lock to avoid races
-        with VOCAB_LOCK:
-            existing = vocab_path.read_text(encoding="utf-8") if vocab_path.exists() else ""
-
-            lines = [f"{src} ({dst})" for src, dst in dedup.items()]
-            # Always terminate a section with a blank line to separate from next header
-            new_block = f"# {category}\n" + "\n".join(lines)
-            if not new_block.endswith("\n\n"):
-                if not new_block.endswith("\n"):
-                    new_block += "\n"
-                new_block += "\n"
-
-            # Regex to find the specific section starting at the header for this category
-            # and ending right before the next header (any number of '#') or EOF.
-            # - Handles headers like '#Category', '# Category', '## Category', etc.
-            # - Uses non-greedy matching for the body to avoid spanning multiple sections.
-            pattern = re.compile(
-                rf"^[\t ]*#+\s*{re.escape(category)}\s*$\r?\n.*?(?=^[\t ]*#|\Z)",
-                re.MULTILINE | re.DOTALL,
-            )
-            if pattern.search(existing):
-                # Replace only the first matching section for this category.
-                updated = pattern.sub(lambda m: new_block, existing, count=1)
-            else:
-                updated = existing
-                if updated and not updated.endswith("\n\n"):
-                    # Ensure a blank line before appending new section if file not empty
-                    if not updated.endswith("\n"):
-                        updated += "\n"
-                    updated += "\n"
-                updated += new_block
-
-            # Avoid writing if nothing changed
-            if updated == existing:
-                return
-            # Atomic write: write to unique temp and replace with retries on Windows
-            tmp_path = vocab_path.with_suffix(vocab_path.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp")
-            tmp_path.write_text(updated, encoding="utf-8")
-
-            attempts = 6
-            delay = 0.1
-            last_err = None
-            for attempt in range(attempts):
-                try:
-                    os.replace(tmp_path, vocab_path)
-                    last_err = None
-                    break
-                except PermissionError as e:
-                    last_err = e
-                    # Try relaxing permissions then retry
-                    try:
-                        if vocab_path.exists():
-                            os.chmod(vocab_path, 0o666)
-                    except Exception:
-                        pass
-                    time.sleep(delay)
-                    delay = min(1.0, delay * 2)
-                except Exception as e:
-                    last_err = e
-                    break
-            if last_err is not None:
-                try:
-                    shutil.move(str(tmp_path), str(vocab_path))
-                except Exception:
-                    try:
-                        if tmp_path.exists():
-                            tmp_path.unlink(missing_ok=True)
-                    except Exception:
-                        pass
-                    raise last_err
+        _shared_update_vocab_section(category, pairs)
     except Exception:
         traceback.print_exc()
 
@@ -1335,6 +1271,7 @@ def parseMap(data, filename):
 
                 for page in event["pages"]:
                     if page is not None:
+                        totalTokensPage = [0, 0]
                         try:
                             totalTokensPage = searchCodes(page, pbar, [], filename)
                             totalTokens[0] += totalTokensPage[0]
@@ -1506,6 +1443,7 @@ def parseCommonEvents(data, filename):
         PBAR = pbar
         for page in data:
             if page is not None:
+                totalTokensPage = [0, 0]
                 try:
                     totalTokensPage = searchCodes(page, pbar, [], filename)
                     totalTokens[0] += totalTokensPage[0]
@@ -1573,6 +1511,7 @@ def parseTroops(data, filename):
             if troop is not None:
                 for page in troop["pages"]:
                     if page is not None:
+                        totalTokensPage = [0, 0]
                         try:
                             totalTokensPage = searchCodes(page, pbar, [], filename)
                             totalTokens[0] += totalTokensPage[0]
@@ -1892,6 +1831,7 @@ def parseScenario(data, filename):
         PBAR = pbar
         for page in data.items():
             if page[1] is not None:
+                totalTokensPage = [0, 0]
                 try:
                     totalTokensPage = searchCodes(page[1], pbar, [], filename)
                     totalTokens[0] += totalTokensPage[0]

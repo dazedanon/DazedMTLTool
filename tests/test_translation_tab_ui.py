@@ -50,6 +50,29 @@ class TranslationWorkerTests(unittest.TestCase):
         self.assertEqual(result, "Fail")
         self.assertEqual(errors, [("bad.json", "Translation failed")])
 
+    def test_batch_consume_runs_files_sequentially(self) -> None:
+        """Pass 2 must finish one file before starting the next."""
+        worker = TranslationWorker(Path.cwd(), ("JSON", (".json",), None))
+        started = []
+        active = {"count": 0, "max": 0}
+
+        def run_one(filename, *_args):
+            started.append(filename)
+            active["count"] += 1
+            active["max"] = max(active["max"], active["count"])
+            active["count"] -= 1
+            return "TOTAL: success"
+
+        worker.run_module_in_process = run_one
+        with mock.patch.dict(os.environ, {"fileThreads": "4"}):
+            result = worker._run_files(
+                ["a.json", "b.json", "c.json"], False, batch_phase="consume"
+            )
+
+        self.assertEqual(result, "TOTAL: success")
+        self.assertEqual(started, ["a.json", "b.json", "c.json"])
+        self.assertEqual(active["max"], 1)
+
     def test_validation_marker_becomes_a_file_failure(self) -> None:
         worker = TranslationWorker(
             Path(__file__).resolve().parents[1], ("JSON", (".json",), None)

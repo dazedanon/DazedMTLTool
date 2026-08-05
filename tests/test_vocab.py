@@ -1,5 +1,6 @@
 """Tests for util.vocab (game-specific glossary helpers)."""
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -119,6 +120,7 @@ class TestUpdateVocabSection(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.vocab_path = Path(self.tmp.name) / "glossary.txt"
         self.base_path = Path(self.tmp.name) / "glossary_base.txt"
+        self.freeze_path = Path(self.tmp.name) / "batch_glossary_freeze.txt"
         self.base_path.write_text("# Base\nhello (hello)\n", encoding="utf-8")
         self.vocab_path.write_text(
             "# Game Characters\nAlice (Alice)\n\n"
@@ -128,9 +130,14 @@ class TestUpdateVocabSection(unittest.TestCase):
         )
 
         self._p_base = patch.object(vocab, "glossary_base_path", return_value=self.base_path)
+        self._p_freeze = patch.object(
+            vocab, "BATCH_GLOSSARY_FREEZE_FILE", self.freeze_path
+        )
         self._p_base.start()
+        self._p_freeze.start()
 
     def tearDown(self):
+        self._p_freeze.stop()
         self._p_base.stop()
         self.tmp.cleanup()
 
@@ -180,6 +187,57 @@ class TestUpdateVocabSection(unittest.TestCase):
         self.assertNotIn("礼拝堂 (Chapel Hall)", text)
         self.assertIn("大通り (Main Street)", text)
         self.assertEqual(text.count("# Map Setting · マップ設定"), 1)
+
+    def test_batch_consume_writes_glossary_immediately(self):
+        """Sequential Pass 2 writes harvests so later files can load them."""
+        with patch.dict(os.environ, {"BATCH_PHASE": "consume"}):
+            vocab.update_vocab_section(
+                "Armors", [("ミサンガ", "Friendship Bracelet")], game_root=self.tmp.name
+            )
+        after = self.vocab_path.read_text(encoding="utf-8")
+        self.assertIn("# Armors\nミサンガ (Friendship Bracelet)", after)
+
+    def test_batch_collect_skips_glossary_writes(self):
+        before = self.vocab_path.read_text(encoding="utf-8")
+        with patch.dict(os.environ, {"BATCH_PHASE": "collect"}):
+            vocab.update_vocab_section(
+                "Armors", [("ミサンガ", "Friendship Bracelet")], game_root=self.tmp.name
+            )
+        self.assertEqual(before, self.vocab_path.read_text(encoding="utf-8"))
+
+    def test_batch_glossary_freeze_is_used_for_translation_reads(self):
+        """Collect still pins to the freeze; consume reads live harvests."""
+        vocab.clear_batch_glossary_freeze()
+        self.vocab_path.write_text(
+            "# Game Characters\nカイン (Cain)\n",
+            encoding="utf-8",
+        )
+        with patch("util.vocab.read_active_glossary", return_value=self.vocab_path.read_text(encoding="utf-8")):
+            freeze_path = vocab.freeze_batch_glossary()
+        self.assertTrue(freeze_path.is_file())
+        self.assertIn("カイン (Cain)", freeze_path.read_text(encoding="utf-8"))
+
+        self.vocab_path.write_text(
+            "# Game Characters\nカイン (Cain)\n# Armors\n帽子 (Hat)\n",
+            encoding="utf-8",
+        )
+        with patch.dict(os.environ, {"BATCH_PHASE": "collect"}):
+            with patch(
+                "util.vocab.read_active_glossary",
+                return_value=self.vocab_path.read_text(encoding="utf-8"),
+            ):
+                frozen = vocab.read_translation_glossary()
+        self.assertIn("カイン (Cain)", frozen)
+        self.assertNotIn("# Armors", frozen)
+
+        with patch.dict(os.environ, {"BATCH_PHASE": "consume"}):
+            with patch(
+                "util.vocab.read_active_glossary",
+                return_value=self.vocab_path.read_text(encoding="utf-8"),
+            ):
+                live = vocab.read_translation_glossary()
+        self.assertIn("# Armors", live)
+        vocab.clear_batch_glossary_freeze()
 
 
 if __name__ == "__main__":

@@ -26,7 +26,6 @@ PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
 VOCAB_PATH = active_glossary_path()
 VOCAB = read_active_glossary()
 LOCK = threading.Lock()
-VOCAB_LOCK = threading.Lock()  # Dedicated lock for glossary.txt updates
 WIDTH = int(os.getenv("width"))
 LISTWIDTH = int(os.getenv("listWidth"))
 NOTEWIDTH = int(os.getenv("noteWidth"))
@@ -115,108 +114,11 @@ MAP_FILES = [
 
 
 def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
-    """Update or insert a section in glossary.txt for the given category with provided pairs.
-    Only writes when there's an actual translation (dst is non-empty and differs from src after normalization).
-    - category: e.g., "Items", "Weapons", "Game Characters", etc. Section header will be "# {category}".
-    - pairs: list of (source, translated) strings. Duplicates by source are deduped (last wins).
-    The existing section is replaced entirely; other sections are preserved.
-    """
+    """Harvest translated DB names into the shared game glossary helper."""
     try:
-        vocab_path = VOCAB_PATH or active_glossary_path()
-        if vocab_path is None:
-            raise RuntimeError("No active game folder is available for glossary updates.")
+        from util.vocab import update_vocab_section as _shared_update_vocab_section
 
-        # Helper: normalized comparison to detect no-op translations
-        def _norm(s: str) -> str:
-            if s is None:
-                return ""
-            # Collapse whitespace and case-fold; leave punctuation to avoid over-matching
-            return re.sub(r"\s+", " ", str(s)).strip().casefold()
-
-        # Filter and deduplicate by source term (last mapping wins)
-        dedup: dict[str, str] = {}
-        for src, dst in pairs:
-            if not src:
-                continue
-            # Skip when no destination or no actual change
-            if dst is None or _norm(dst) == "" or _norm(dst) == _norm(src):
-                continue
-            dedup[src] = dst
-
-        # If nothing to add after filtering, skip touching the file
-        if not dedup:
-            return
-
-        # Guard the read-modify-write with a dedicated lock to avoid races
-        with VOCAB_LOCK:
-            existing = vocab_path.read_text(encoding="utf-8") if vocab_path.exists() else ""
-
-            lines = [f"{src} ({dst})" for src, dst in dedup.items()]
-            # Always terminate a section with a blank line to separate from next header
-            new_block = f"# {category}\n" + "\n".join(lines)
-            if not new_block.endswith("\n\n"):
-                if not new_block.endswith("\n"):
-                    new_block += "\n"
-                new_block += "\n"
-
-            # Regex to find the specific section starting at the header for this category
-            # and ending right before the next header (any number of '#') or EOF.
-            # - Handles headers like '#Category', '# Category', '## Category', etc.
-            # - Uses non-greedy matching for the body to avoid spanning multiple sections.
-            pattern = re.compile(
-                rf"^[\t ]*#+\s*{re.escape(category)}\s*$\r?\n.*?(?=^[\t ]*#|\Z)",
-                re.MULTILINE | re.DOTALL,
-            )
-            if pattern.search(existing):
-                # Replace only the first matching section for this category.
-                updated = pattern.sub(lambda m: new_block, existing, count=1)
-            else:
-                updated = existing
-                if updated and not updated.endswith("\n\n"):
-                    # Ensure a blank line before appending new section if file not empty
-                    if not updated.endswith("\n"):
-                        updated += "\n"
-                    updated += "\n"
-                updated += new_block
-
-            # Avoid writing if nothing changed
-            if updated == existing:
-                return
-            # Atomic write: write to unique temp and replace with retries on Windows
-            tmp_path = vocab_path.with_suffix(vocab_path.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp")
-            tmp_path.write_text(updated, encoding="utf-8")
-
-            attempts = 6
-            delay = 0.1
-            last_err = None
-            for attempt in range(attempts):
-                try:
-                    os.replace(tmp_path, vocab_path)
-                    last_err = None
-                    break
-                except PermissionError as e:
-                    last_err = e
-                    # Try relaxing permissions then retry
-                    try:
-                        if vocab_path.exists():
-                            os.chmod(vocab_path, 0o666)
-                    except Exception:
-                        pass
-                    time.sleep(delay)
-                    delay = min(1.0, delay * 2)
-                except Exception as e:
-                    last_err = e
-                    break
-            if last_err is not None:
-                try:
-                    shutil.move(str(tmp_path), str(vocab_path))
-                except Exception:
-                    try:
-                        if tmp_path.exists():
-                            tmp_path.unlink(missing_ok=True)
-                    except Exception:
-                        pass
-                    raise last_err
+        _shared_update_vocab_section(category, pairs)
     except Exception:
         traceback.print_exc()
 

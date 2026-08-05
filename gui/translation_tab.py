@@ -893,6 +893,48 @@ class TranslationWorker(QThread):
                 return "Stopped"
             return "Success"
 
+        completed_count = 0
+        total_files = len(matching_files)
+
+        def _handle_file_result(filename, result):
+            nonlocal total_cost, had_failure, completed_count
+            stopped = False
+            try:
+                if isinstance(result, tuple) and len(result) == 2 and result[0] == "SUBPROCESS_ERROR":
+                    had_failure = True
+                    self.file_error_signal.emit(filename, result[1])
+                elif result and result not in ("Fail", "Stopped"):
+                    total_cost = result
+                elif result == "Stopped":
+                    stopped = True
+                else:
+                    had_failure = True
+                    self.emit_log(f"❌ Failed processing {filename}")
+                    self.file_error_signal.emit(filename, "Translation failed")
+            except Exception as e:
+                had_failure = True
+                tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                self.emit_log(f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}")
+                self.file_error_signal.emit(filename, str(e))
+            completed_count += 1
+            self.emit_progress(completed_count, total_files, filename)
+            return stopped
+
+        # Pass 2 is always sequential: each file may harvest names into
+        # glossary.txt, and later files need those entries on disk. Paid batch
+        # keys still use the collect-time freeze, so these writes are safe.
+        if batch_phase == "consume":
+            self.executor = None
+            for filename in matching_files:
+                if self.should_stop:
+                    break
+                result = self.run_module_in_process(
+                    filename, estimate_only, batch_phase
+                )
+                if _handle_file_result(filename, result):
+                    break
+            return "Fail" if had_failure else total_cost
+
         max_workers = 1 if estimate_only else threads
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         future_to_filename = {
@@ -902,8 +944,6 @@ class TranslationWorker(QThread):
             for filename in matching_files
         }
 
-        completed_count = 0
-        total_files = len(matching_files)
         for future in as_completed(future_to_filename):
             if self.should_stop:
                 for remaining_future in future_to_filename:
@@ -916,27 +956,16 @@ class TranslationWorker(QThread):
             # subprocess are queued ahead of the file-complete progress event.
             try:
                 result = future.result()
-                if isinstance(result, tuple) and len(result) == 2 and result[0] == "SUBPROCESS_ERROR":
-                    had_failure = True
-                    self.file_error_signal.emit(filename, result[1])
-                elif result and result not in ("Fail", "Stopped"):
-                    total_cost = result
-                elif result == "Stopped":
-                    completed_count += 1
-                    self.emit_progress(completed_count, total_files, filename)
-                    break
-                else:
-                    had_failure = True
-                    self.emit_log(f"❌ Failed processing {filename}")
-                    self.file_error_signal.emit(filename, "Translation failed")
             except Exception as e:
                 had_failure = True
                 tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                 self.emit_log(f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}")
                 self.file_error_signal.emit(filename, str(e))
-
-            completed_count += 1
-            self.emit_progress(completed_count, total_files, filename)
+                completed_count += 1
+                self.emit_progress(completed_count, total_files, filename)
+                continue
+            if _handle_file_result(filename, result):
+                break
 
         if self.executor:
             try:
@@ -1057,6 +1086,22 @@ class TranslationWorker(QThread):
                     run_consume = True
                     if self.batch_resume_state is None:
                         clearBatchFiles()
+                        try:
+                            from util.vocab import (
+                                freeze_batch_glossary,
+                                persist_batch_glossary_freeze_to_state,
+                            )
+
+                            freeze_batch_glossary()
+                            persist_batch_glossary_freeze_to_state()
+                            self.emit_log(
+                                "[BATCH] Froze glossary for collect prompts "
+                                "(and legacy result rematch if needed)."
+                            )
+                        except Exception as exc:
+                            self.emit_log(
+                                f"[BATCH] Could not freeze glossary context: {exc}"
+                            )
                         self._emit_batch_phase("collect")
                         self.emit_log("[BATCH] Pass 1/2: collecting requests...")
                         self.emit_log(
@@ -1151,6 +1196,17 @@ class TranslationWorker(QThread):
                             return
                     else:
                         self.emit_log("[BATCH] Resuming from fetched results...")
+                        try:
+                            from util.vocab import BATCH_GLOSSARY_FREEZE_FILE
+
+                            if not BATCH_GLOSSARY_FREEZE_FILE.is_file():
+                                self.emit_log(
+                                    "[BATCH] NOTE: no collect-time glossary freeze on disk. "
+                                    "v5+ batch keys ignore glossary/SFX; freeze is only needed "
+                                    "to rematch older (pre-v5) paid results."
+                                )
+                        except Exception:
+                            pass
 
                     if run_consume and not self.should_stop:
                         try:
@@ -1166,6 +1222,19 @@ class TranslationWorker(QThread):
                             pass
                         self._emit_batch_phase("consume")
                         self.emit_log("[BATCH] Pass 2/2: writing translated files...")
+                        self.emit_log(
+                            "[BATCH] Pass 2 runs one file at a time so glossary "
+                            "harvests from earlier files are available to later ones."
+                        )
+                        try:
+                            from util.vocab import restore_batch_glossary_freeze_from_state
+
+                            if restore_batch_glossary_freeze_from_state():
+                                self.emit_log(
+                                    "[BATCH] Restored collect-time glossary freeze."
+                                )
+                        except Exception:
+                            pass
                         total_cost = self._run_files(matching_files, False, batch_phase="consume")
                         if not self.should_stop:
                             self._emit_batch_phase("done")
