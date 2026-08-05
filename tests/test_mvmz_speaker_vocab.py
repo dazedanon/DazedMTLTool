@@ -499,6 +499,34 @@ class CharacterCompoundMatchingTests(unittest.TestCase):
             nameplate_gloss_for_alias("クイーン", ["クイーン", "クィーン"], "Queen"),
             "Queen",
         )
+        self.assertEqual(
+            nameplate_gloss_for_alias("ニーナ", aliases, "Lady Nena"),
+            "Nena",
+        )
+        self.assertEqual(
+            nameplate_gloss_for_alias("ニーナ", aliases, "Dr. Evans"),
+            "Evans",
+        )
+        self.assertEqual(
+            nameplate_gloss_for_alias(
+                "ヴァン", ["ヴァン", "ヴァン・ヘルシング"], "van Helsing"
+            ),
+            "van Helsing",
+        )
+
+    def test_terms_slash_row_does_not_match_half_term(self):
+        pairs = parseVocabWithCategories(
+            "# Terms\n"
+            "攻撃／防御 (Attack/Defense)\n"
+            "# Game Characters\n"
+            "ニーナ / ネーナ・エヴァンス (Nena Evans)\n"
+        )
+
+        terms_only = buildMatchedVocabText(pairs, "攻撃力が上がった")
+        self.assertNotIn("攻撃／防御", terms_only)
+
+        character_hit = buildMatchedVocabText(pairs, 'ニーナ "どうしたの？"')
+        self.assertIn("ニーナ / ネーナ・エヴァンス (Nena Evans)", character_hit)
 
     def test_unique_full_name_component_matches_speaker_tag(self):
         pairs = parseVocabWithCategories(

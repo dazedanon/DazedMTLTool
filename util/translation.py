@@ -3040,13 +3040,66 @@ def _aliases_look_orthographic(aliases: list[str]) -> bool:
     return True
 
 
+_NAMEPLATE_TITLE_PREFIXES = frozenset(
+    {
+        "lady",
+        "lord",
+        "sir",
+        "dame",
+        "dr",
+        "mister",
+        "mr",
+        "mrs",
+        "ms",
+        "miss",
+        "prof",
+        "madame",
+        "madam",
+        "master",
+        "captain",
+        "capt",
+        "saint",
+        "st",
+    }
+)
+_NAMEPLATE_SURNAME_PARTICLES = frozenset(
+    {
+        "van",
+        "von",
+        "de",
+        "del",
+        "della",
+        "di",
+        "da",
+        "du",
+        "des",
+        "la",
+        "le",
+        "af",
+        "al",
+        "bin",
+        "ibn",
+        "mac",
+        "mc",
+    }
+)
+
+
+def _nameplate_token_key(token: str) -> str:
+    return str(token or "").strip(" ,;:.").casefold()
+
+
 def nameplate_gloss_for_alias(alias: str, aliases: list[str], translated: str) -> str:
     """Pick the English nameplate gloss for one JP alias in a slash group.
 
     Orthographic groups (``クイーン / クィーン``) share one gloss.
     Short/full groups (``ニーナ / ネーナ・エヴァンス (Nena Evans)``) keep the full
-    English on the long form, but everyday short nameplates use the leading
-    English token (``Nena``) so dialogue boxes do not show the full name.
+    English on the long form, but everyday short nameplates use the given name
+    (``Nena``) so dialogue boxes do not show the full name.
+
+    Titles (``Lady``, ``Dr.``) are stripped before selecting the given name.
+    Surname particles (``van``, ``de``) keep the full gloss so ``van Helsing``
+    does not collapse to ``van``.
     """
     gloss = str(translated or "").strip()
     if not gloss or len(aliases) <= 1 or _aliases_look_orthographic(aliases):
@@ -3055,8 +3108,17 @@ def nameplate_gloss_for_alias(alias: str, aliases: list[str], translated: str) -
     query = str(alias or "").strip()
     if query == longest or len(query) >= len(longest):
         return gloss
-    leading = gloss.split(None, 1)[0].strip(" ,;:")
-    return leading or gloss
+    tokens = gloss.split()
+    if not tokens:
+        return gloss
+    first_key = _nameplate_token_key(tokens[0])
+    if first_key in _NAMEPLATE_SURNAME_PARTICLES:
+        return gloss
+    while tokens and _nameplate_token_key(tokens[0]) in _NAMEPLATE_TITLE_PREFIXES:
+        tokens = tokens[1:]
+    if not tokens:
+        return gloss
+    return tokens[0].strip(" ,;:") or gloss
 
 
 def _japanese_term_in_text(term, text):
@@ -3083,16 +3145,19 @@ def _japanese_term_in_text(term, text):
 
 
 def _vocab_term_in_text(term, text):
-    """Match any vocab term variant against the current batch text."""
+    """Match any vocab term variant against the current batch text.
+
+    Slash-separated character aliases (``ニーナ / ネーナ・エヴァンス``) are expanded
+    only in speaker/Game Characters matching inside ``buildMatchedVocabText``.
+    Expanding them here would make ordinary Terms rows like ``攻撃／防御`` match
+    on either half.
+    """
     if not term:
         return False
 
     variants = [str(term).strip()]
     if isinstance(term, str):
         variants.extend(part.strip() for part in re.split(r"[,、]", term) if part.strip())
-        for part in split_vocab_source_aliases(term):
-            if part not in variants:
-                variants.append(part)
 
     for variant in variants:
         if not variant:
@@ -3235,11 +3300,24 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
             if authoritative is not None and authoritative[1] != line:
                 continue
             japanese_match = _vocab_term_in_text(japanese_term, textToSearch)
+            source_aliases = split_vocab_source_aliases(japanese_term)
+            if (
+                not japanese_match
+                and category_primary in {"game characters", "speakers"}
+                and len(source_aliases) > 1
+            ):
+                # Slash aliases are speaker/character coverage, not general Terms.
+                japanese_match = any(
+                    _vocab_term_in_text(alias, textToSearch) or alias in textToSearch
+                    for alias in source_aliases
+                )
             if not japanese_match and category_primary == "game characters":
                 components = [
                     item for item in re.split(r"[\s\u3000]+", japanese_term.strip())
-                    if len(item) >= 2
+                    if len(item) >= 2 and item not in {"/", "／"}
                 ]
+                if len(source_aliases) > 1:
+                    components = list(source_aliases)
                 japanese_match = any(
                     character_component_sources.get(component) == {japanese_term}
                     and (
@@ -3257,7 +3335,10 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
             if (
                 not japanese_match
                 and category_primary in {"game characters", "speakers"}
-                and japanese_term in textToSearch
+                and (
+                    japanese_term in textToSearch
+                    or any(alias in textToSearch for alias in source_aliases)
+                )
             ):
                 japanese_match = True
             if japanese_match or _vocab_term_in_text(english_term, textToSearch):
