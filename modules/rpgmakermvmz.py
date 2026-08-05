@@ -13,7 +13,7 @@ from colorama import Fore
 from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
-from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch, convert_corner_brackets, parseVocabWithCategories, last_translation_had_mismatch
+from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch, convert_corner_brackets, parseVocabWithCategories, last_translation_had_mismatch, split_vocab_source_aliases, speaker_source_lookup_keys, nameplate_gloss_for_alias
 from util.speakers import SPEAKER_BRACKET_INNER, strip_speaker_prefix
 from util.skills import ctx, load_system_prompt
 from util.paths import active_glossary_path, read_active_glossary
@@ -2413,7 +2413,15 @@ def searchCodes(page, pbar, jobList, filename):
                 # Grab String
                 if len(codeList[i]["parameters"]) > 0:
                     previewEnd = _text_group_end(codeList, i, (401, 405, -1))
-                    if not _text_needs_translation(_group_current(codeList, i, previewEnd)):
+                    # Speaker parse must inspect source/_original even when live
+                    # parameters are already English, or the unresolved count
+                    # drifts as translation progress lands in files/.
+                    preview_text = (
+                        _group_source(codeList, i, previewEnd)
+                        if SPEAKER_PARSE_MODE
+                        else _group_current(codeList, i, previewEnd)
+                    )
+                    if not _text_needs_translation(preview_text):
                         i = previewEnd + 1
                         continue
                     jaString = codeList[i]["parameters"][0]
@@ -4964,6 +4972,8 @@ def _is_plausible_speaker(name: str) -> bool:
       • No sentence-ending / mid-sentence punctuation (。！？…、)
       • No dialogue-opening quotes (「"（)
       • No newlines, underscores, slashes, or dots
+      • No brace/plugin markup or decorative symbols
+      • No clause-like particle/verb fragments scraped from prose
     """
     clean = _MARKUP_STRIP_RE.sub("", name).strip()
     if not clean:
@@ -4978,6 +4988,13 @@ def _is_plausible_speaker(name: str) -> bool:
         return False
     # Reject dialogue openers / structural characters
     if re.search(r"[「」""\n\r_/\\.]", clean):
+        return False
+    # Reject plugin placeholders and decorative junk ({{name}}, hearts, etc.)
+    if re.search(r"[{}<>=★☆※♥♡\\]", clean):
+        return False
+    # Reject clause fragments that FIRSTLINESPEAKERS sometimes mis-detects.
+    # Do not ban bare は/が/へ/を - those appear inside real names (はるか, かがやき).
+    if re.search(r"しながら|すると|になった|した時|する時", clean):
         return False
     return True
 
@@ -5064,13 +5081,25 @@ def _speaker_vocab_indexes():
             if not source or not _speaker_translation_valid(source, translated):
                 continue
             priority = _vocab_category_priority(category)
-            if priority > exact_priorities.get(source, 0):
-                exact[source] = translated
-                exact_priorities[source] = priority
-            if _is_character_vocab_category(category):
-                previous = characters.get(source)
-                if previous is None or priority > previous[0]:
-                    characters[source] = (priority, translated)
+            aliases = split_vocab_source_aliases(source)
+            # Multi-alias curated rows (ニーナ / ネーナ・エヴァンス) win over later
+            # short generated duplicates at the same category priority.
+            alias_group = len(aliases) > 1
+            for alias in aliases:
+                gloss = nameplate_gloss_for_alias(alias, aliases, translated)
+                for key in speaker_source_lookup_keys(alias):
+                    previous_priority = exact_priorities.get(key, 0)
+                    if priority > previous_priority or (
+                        alias_group and priority == previous_priority and priority > 0
+                    ):
+                        exact[key] = gloss
+                        exact_priorities[key] = priority
+                    if _is_character_vocab_category(category):
+                        previous = characters.get(key)
+                        if previous is None or priority > previous[0] or (
+                            alias_group and priority == previous[0]
+                        ):
+                            characters[key] = (priority, gloss)
 
         _speakerVocabSource = vocab_text
         _speakerVocabExact = exact
@@ -5085,7 +5114,11 @@ def _speaker_vocab_indexes():
 def _vocab_speaker_lookup(speaker: str):
     """Resolve an exact speaker/label from vocab without asking the model."""
     exact, _characters = _speaker_vocab_indexes()
-    return exact.get(speaker)
+    for key in speaker_source_lookup_keys(speaker):
+        hit = exact.get(key)
+        if hit is not None:
+            return hit
+    return None
 
 
 def _substitute_vocab_character_names(text: str) -> str:
@@ -5407,7 +5440,12 @@ def _glossary_section_pattern(title: str):
 
 
 def _merge_speaker_rows_into_game_characters(content: str, generated_pairs):
-    """Migrate legacy speaker rows and new names into Game Characters."""
+    """Append only truly new speaker rows into Game Characters.
+
+    Curated slash-alias rows and NFKC/lookalike variants already cover many
+    collected nameplates. Those must not be rewritten. Legacy ``# Speakers``
+    rows still migrate here, but only when their source is not already covered.
+    """
     newline = "\r\n" if "\r\n" in content else "\n"
     speaker_pattern = _glossary_section_pattern("Speakers")
     legacy_blocks = list(speaker_pattern.finditer(content))
@@ -5420,11 +5458,44 @@ def _merge_speaker_rows_into_game_characters(content: str, generated_pairs):
         existing_lines = game_match.group(0).splitlines()[1:]
 
     pair_pattern = re.compile(r"^(.+?)\s+\(([^()]*)\)(.*)$")
-    existing_sources = set()
+
+    def _row_keys(source: str) -> set[str]:
+        keys = set()
+        for alias in split_vocab_source_aliases(source):
+            keys.update(speaker_source_lookup_keys(alias))
+        return keys
+
+    parsed_existing = []
     for raw in existing_lines:
-        pair = pair_pattern.match(raw.strip())
-        if pair:
-            existing_sources.add(pair.group(1).strip())
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        pair = pair_pattern.match(stripped)
+        if not pair:
+            parsed_existing.append((stripped, None, set(), False))
+            continue
+        source = pair.group(1).strip()
+        aliases = split_vocab_source_aliases(source)
+        parsed_existing.append(
+            (stripped, source, _row_keys(source), len(aliases) > 1)
+        )
+
+    covered_keys: set[str] = set()
+    for _stripped, _source, keys, alias_group in parsed_existing:
+        if alias_group:
+            covered_keys.update(keys)
+
+    kept_existing = []
+    for stripped, source, keys, alias_group in parsed_existing:
+        if alias_group:
+            kept_existing.append(stripped)
+            continue
+        if source and keys and (keys & covered_keys):
+            continue
+        kept_existing.append(stripped)
+        covered_keys.update(keys)
+    existing_lines = kept_existing
+    removed_covered_shorts = len(existing_lines) != len(parsed_existing)
 
     candidates = []
     for block in legacy_blocks:
@@ -5436,24 +5507,23 @@ def _merge_speaker_rows_into_game_characters(content: str, generated_pairs):
     )
 
     appended_lines = []
-    seen_sources = set(existing_sources)
-    seen_raw = {line.strip() for line in existing_lines if line.strip()}
+    seen_raw = set(existing_lines)
     for raw in candidates:
         line = str(raw).strip()
-        if not line:
+        if not line or line in seen_raw:
             continue
         pair = pair_pattern.match(line)
         if pair:
             source = pair.group(1).strip()
-            if source in seen_sources:
+            keys = _row_keys(source)
+            # Already covered by curated Game Characters (slash/NFKC/lookalike).
+            if keys and (keys & covered_keys):
                 continue
-            seen_sources.add(source)
-        elif line in seen_raw:
-            continue
+            covered_keys.update(keys)
         seen_raw.add(line)
         appended_lines.append(line)
 
-    if not legacy_blocks and not appended_lines:
+    if not legacy_blocks and not appended_lines and not removed_covered_shorts:
         return content
 
     merged_lines = [line.rstrip() for line in existing_lines if line.strip()]
@@ -5484,8 +5554,8 @@ def finalizeSpeakerParse():
             return False
 
         # Step 1: seed curated vocab hits, then batch translate only unresolved
-        # speakers. All persisted names are merged into # Game Characters;
-        # legacy # Speakers rows are migrated below.
+        # speakers. Persist only newly translated nameplates; already-covered
+        # sources (slash aliases / NFKC / lookalikes) must not be rewritten.
         _reload_vocab()
         pending = set(pendingSpeakerNames())
         to_translate = []
@@ -5500,6 +5570,7 @@ def finalizeSpeakerParse():
             if vocab_hit is not None:
                 vocab_resolved.append((s, vocab_hit))
 
+        newly_translated = []
         with _speakerCacheLock:
             for source, translated in vocab_resolved:
                 _speakerCache[source] = translated
@@ -5549,6 +5620,7 @@ def finalizeSpeakerParse():
                     if orig not in _speakerCache:
                         _speakerCache[orig] = norm
                         NAMESLIST.append([orig, norm])
+            newly_translated = translated_pairs
             # Emit success only after every returned name passes validation.
             try:
                 cost = calculateCost(resp[1][0], resp[1][1], MODEL)
@@ -5565,7 +5637,7 @@ def finalizeSpeakerParse():
 
         content = vocab_path.read_text(encoding="utf-8")
         new_content = _merge_speaker_rows_into_game_characters(
-            content, NAMESLIST
+            content, newly_translated
         )
 
         tmp_path = vocab_path.with_suffix(vocab_path.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp")

@@ -69,6 +69,138 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
 
         self.assertEqual(result, ["Yuu Event 5", [3, 2]])
 
+    def test_slash_alias_glossary_covers_short_speaker_names(self):
+        """Curated ``JP1 / JP2 (EN)`` rows must resolve each alias without duplicates."""
+        vocab = (
+            "# Game Characters\n"
+            "ニーナ / ネーナ・エヴァンス (Nena Evans) - Female protagonist.\n"
+            "クイーン / クィーン (Queen) - Female slime queen.\n"
+            "コア1A (Core 1A)\n"
+            "ニーナ (Nena)\n"
+        )
+        with TemporaryDirectory() as tmp:
+            glossary_path = Path(tmp) / "glossary.txt"
+            glossary_path.write_text(vocab, encoding="utf-8")
+            with (
+                patch.object(mvmz, "VOCAB_PATH", glossary_path),
+                patch.object(mvmz, "active_glossary_path", return_value=glossary_path),
+            ):
+                mvmz._reload_vocab()
+                with mvmz._speakerCacheLock:
+                    mvmz._speakerCache.clear()
+
+                self.assertEqual(mvmz._vocab_speaker_lookup("ニーナ"), "Nena")
+                self.assertEqual(
+                    mvmz._vocab_speaker_lookup("ネーナ・エヴァンス"), "Nena Evans"
+                )
+                self.assertEqual(mvmz._vocab_speaker_lookup("クイーン"), "Queen")
+                self.assertEqual(mvmz._vocab_speaker_lookup("クィーン"), "Queen")
+                self.assertEqual(mvmz._vocab_speaker_lookup("コア1Ａ"), "Core 1A")
+                self.assertEqual(mvmz._vocab_speaker_lookup("二ーナ"), "Nena")
+
+                mvmz.SPEAKER_PARSE_MODE = True
+                mvmz.SPEAKER_COLLECTED = [
+                    "ニーナ",
+                    "クィーン",
+                    "コア1Ａ",
+                    "二ーナ",
+                    "村人",
+                ]
+                self.assertEqual(mvmz.pendingSpeakerNames(), ["村人"])
+
+                with patch.object(
+                    mvmz,
+                    "translateAI",
+                    return_value=[["Villager"], [3, 1]],
+                ) as translate:
+                    self.assertTrue(mvmz.finalizeSpeakerParse())
+                translate.assert_called_once()
+                written = glossary_path.read_text(encoding="utf-8")
+
+        self.assertIn("ニーナ / ネーナ・エヴァンス (Nena Evans)", written)
+        self.assertIn("村人 (Villager)", written)
+        self.assertNotRegex(written, r"(?m)^ニーナ \(")
+        self.assertNotRegex(written, r"(?m)^クィーン \(")
+        self.assertNotRegex(written, r"(?m)^二ーナ \(")
+        self.assertNotRegex(written, r"(?m)^コア1Ａ \(")
+
+    def test_clause_fragments_are_not_collected_as_speakers(self):
+        self.assertFalse(mvmz._is_plausible_speaker("体の芯を縦断しながら"))
+        self.assertFalse(mvmz._is_plausible_speaker("オンにすると完全に石化になった時"))
+        self.assertFalse(mvmz._is_plausible_speaker("{{ニーナ"))
+        self.assertFalse(mvmz._is_plausible_speaker("ウチの倉庫♥"))
+        self.assertTrue(mvmz._is_plausible_speaker("村長の妻"))
+        self.assertTrue(mvmz._is_plausible_speaker("ニーナ"))
+        self.assertTrue(mvmz._is_plausible_speaker("はるか"))
+        self.assertTrue(mvmz._is_plausible_speaker("かがやき"))
+
+    def test_covered_nameplate_variants_are_not_persisted(self):
+        """Finalize must not write NFKC/lookalike variants of curated names."""
+        mvmz.SPEAKER_PARSE_MODE = True
+        mvmz.SPEAKER_COLLECTED = ["コア1Ａ", "二ーナ", "クィーン"]
+        vocab = (
+            "# Game Characters\n"
+            "ニーナ / ネーナ・エヴァンス (Nena Evans)\n"
+            "クイーン / クィーン (Queen)\n"
+            "コア1A (Core 1A)\n"
+        )
+        with TemporaryDirectory() as tmp:
+            glossary_path = Path(tmp) / "glossary.txt"
+            glossary_path.write_text(vocab, encoding="utf-8")
+            with (
+                patch.object(mvmz, "VOCAB_PATH", glossary_path),
+                patch.object(mvmz, "active_glossary_path", return_value=glossary_path),
+                patch.object(mvmz, "translateAI") as translate,
+            ):
+                self.assertEqual(mvmz.pendingSpeakerNames(), [])
+                self.assertTrue(mvmz.finalizeSpeakerParse())
+            written = glossary_path.read_text(encoding="utf-8")
+
+        translate.assert_not_called()
+        self.assertEqual(written, vocab)
+        self.assertNotIn("# Speakers", written)
+
+    def test_speaker_parse_uses_original_when_live_text_is_english(self):
+        """Preflight must still collect nameplates from _original on translated rows."""
+        page = {
+            "list": [
+                {
+                    "code": 401,
+                    "indent": 0,
+                    "parameters": ["Nina"],
+                    "_original": "ニーナ",
+                },
+                {
+                    "code": 401,
+                    "indent": 0,
+                    "parameters": ['"Hello."'],
+                    "_original": "「こんにちは」",
+                },
+                {"code": 0, "indent": 0, "parameters": []},
+            ]
+        }
+        orig_first = mvmz.FIRSTLINESPEAKERS
+        orig_401 = mvmz.CODE401
+        orig_ignore = mvmz.IGNORETLTEXT
+        orig_parse = mvmz.SPEAKER_PARSE_MODE
+        orig_t = mvmz.translateAI
+        mvmz.FIRSTLINESPEAKERS = True
+        mvmz.CODE401 = True
+        mvmz.IGNORETLTEXT = True
+        mvmz.resetSpeakerState()
+        mvmz.setSpeakerParseMode(True)
+        mvmz.translateAI = lambda text, history, batch=False: [text, [0, 0]]
+        try:
+            mvmz.searchCodes(page, None, [], "Map001.json")
+            self.assertEqual(mvmz.SPEAKER_COLLECTED, ["ニーナ"])
+        finally:
+            mvmz.translateAI = orig_t
+            mvmz.FIRSTLINESPEAKERS = orig_first
+            mvmz.CODE401 = orig_401
+            mvmz.IGNORETLTEXT = orig_ignore
+            mvmz.setSpeakerParseMode(orig_parse)
+            mvmz.resetSpeakerState()
+
     def test_batch_collect_defers_unexpected_speaker_without_live_call(self):
         with (
             patch.dict(os.environ, {"BATCH_PHASE": "collect"}),
@@ -339,6 +471,35 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
 
 
 class CharacterCompoundMatchingTests(unittest.TestCase):
+    def test_slash_alias_row_matches_dialogue_and_suppresses_short_duplicate(self):
+        pairs = parseVocabWithCategories(
+            "# Game Characters\n"
+            "ニーナ / ネーナ・エヴァンス (Nena Evans) - Female protagonist.\n"
+            "ニーナ (Nena)\n"
+        )
+
+        matched = buildMatchedVocabText(pairs, 'ニーナ "どうしたの？"')
+
+        self.assertIn("ニーナ / ネーナ・エヴァンス (Nena Evans)", matched)
+        self.assertNotIn("\nニーナ (Nena)\n", matched)
+
+    def test_short_slash_alias_uses_short_nameplate_gloss(self):
+        from util.translation import nameplate_gloss_for_alias
+
+        aliases = ["ニーナ", "ネーナ・エヴァンス"]
+        self.assertEqual(
+            nameplate_gloss_for_alias("ニーナ", aliases, "Nena Evans"),
+            "Nena",
+        )
+        self.assertEqual(
+            nameplate_gloss_for_alias("ネーナ・エヴァンス", aliases, "Nena Evans"),
+            "Nena Evans",
+        )
+        self.assertEqual(
+            nameplate_gloss_for_alias("クイーン", ["クイーン", "クィーン"], "Queen"),
+            "Queen",
+        )
+
     def test_unique_full_name_component_matches_speaker_tag(self):
         pairs = parseVocabWithCategories(
             "# Game Characters\n"

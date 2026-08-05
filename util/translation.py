@@ -2972,6 +2972,93 @@ def parseVocabWithCategories(vocabText):
     return pairs
 
 
+_VOCAB_SOURCE_ALIAS_SPLIT_RE = re.compile(r"\s*[\/／]\s*")
+
+
+def split_vocab_source_aliases(source: str) -> list[str]:
+    """Expand ``ニーナ / ネーナ・エヴァンス`` into individual source keys.
+
+    Curated Game Characters rows often list orthographic or full-name variants
+    separated by ASCII or fullwidth slashes. Speaker lookup and glossary matching
+    must treat each variant as covered by the same English gloss.
+    """
+    text = str(source or "").strip()
+    if not text:
+        return []
+    parts = [
+        part.strip()
+        for part in _VOCAB_SOURCE_ALIAS_SPLIT_RE.split(text)
+        if part.strip()
+    ]
+    return parts or [text]
+
+
+def normalize_vocab_source_key(source: str) -> str:
+    """NFKC-normalize a glossary/speaker source for coverage checks."""
+    return unicodedata.normalize("NFKC", str(source or "")).strip()
+
+
+def speaker_source_lookup_keys(source: str) -> list[str]:
+    """Return ordered lookup keys for a speaker/glossary source.
+
+    Includes slash aliases, NFKC forms, and a small OCR lookalike map so
+    nameplates like ``コア1Ａ`` and ``二ーナ`` resolve to curated ``コア1A`` /
+    ``ニーナ`` rows instead of being re-translated into the glossary.
+    """
+    keys: list[str] = []
+    seen: set[str] = set()
+
+    def _add(value: str) -> None:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            return
+        seen.add(text)
+        keys.append(text)
+
+    for alias in split_vocab_source_aliases(source):
+        _add(alias)
+        normalized = normalize_vocab_source_key(alias)
+        _add(normalized)
+        # Kanji 二 is a common OCR/font stand-in for katakana ニ on nameplates.
+        if "二" in normalized:
+            _add(normalized.replace("二", "ニ"))
+        if "二" in alias:
+            _add(alias.replace("二", "ニ"))
+    return keys
+
+
+def _aliases_look_orthographic(aliases: list[str]) -> bool:
+    """True when slash parts look like spelling variants, not short vs full name."""
+    if len(aliases) < 2:
+        return True
+    lengths = [len(alias) for alias in aliases]
+    if max(lengths) - min(lengths) > 2:
+        return False
+    # Full-name forms often use an interpunct or space (ネーナ・エヴァンス).
+    if any(re.search(r"[・\s\u3000]", alias) for alias in aliases):
+        return False
+    return True
+
+
+def nameplate_gloss_for_alias(alias: str, aliases: list[str], translated: str) -> str:
+    """Pick the English nameplate gloss for one JP alias in a slash group.
+
+    Orthographic groups (``クイーン / クィーン``) share one gloss.
+    Short/full groups (``ニーナ / ネーナ・エヴァンス (Nena Evans)``) keep the full
+    English on the long form, but everyday short nameplates use the leading
+    English token (``Nena``) so dialogue boxes do not show the full name.
+    """
+    gloss = str(translated or "").strip()
+    if not gloss or len(aliases) <= 1 or _aliases_look_orthographic(aliases):
+        return gloss
+    longest = max(aliases, key=len)
+    query = str(alias or "").strip()
+    if query == longest or len(query) >= len(longest):
+        return gloss
+    leading = gloss.split(None, 1)[0].strip(" ,;:")
+    return leading or gloss
+
+
 def _japanese_term_in_text(term, text):
     """
     Check if a Japanese term appears in text as a standalone word, not as a
@@ -3003,6 +3090,9 @@ def _vocab_term_in_text(term, text):
     variants = [str(term).strip()]
     if isinstance(term, str):
         variants.extend(part.strip() for part in re.split(r"[,、]", term) if part.strip())
+        for part in split_vocab_source_aliases(term):
+            if part not in variants:
+                variants.append(part)
 
     for variant in variants:
         if not variant:
@@ -3085,19 +3175,29 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
             continue
         source = candidate_term[0]
         english_alias = candidate_term[1]
-        previous = character_authority.get(source)
-        if previous is None or priority > previous[0]:
-            character_authority[source] = (priority, candidate_line)
-        if english_alias:
-            character_source_aliases.setdefault(source, set()).add(english_alias)
+        aliases = split_vocab_source_aliases(source)
+        alias_group = len(aliases) > 1
+        authority_keys = list(dict.fromkeys([source, *aliases]))
+        for alias in authority_keys:
+            previous = character_authority.get(alias)
+            if previous is None or priority > previous[0] or (
+                alias_group and priority == previous[0]
+            ):
+                character_authority[alias] = (priority, candidate_line)
+            if english_alias:
+                character_source_aliases.setdefault(alias, set()).add(english_alias)
         if candidate_primary == "game characters":
             components = [
                 item for item in re.split(r"[\s\u3000]+", source.strip())
-                if len(item) >= 2
+                if len(item) >= 2 and item not in {"/", "／"}
             ]
-            if len(components) > 1:
+            # Slash-separated orthographic variants are aliases, not name parts.
+            if alias_group:
+                components = list(aliases)
+            if len(components) > 1 or alias_group:
                 for component in components:
-                    character_component_sources.setdefault(component, set()).add(source)
+                    for alias in split_vocab_source_aliases(component):
+                        character_component_sources.setdefault(alias, set()).add(source)
 
     # Only match against the current request text. History is deliberately not
     # searched so stale terms are not resent in unrelated batches.

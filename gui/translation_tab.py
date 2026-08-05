@@ -745,18 +745,29 @@ class TranslationWorker(QThread):
                 return False
 
             pending = mvmz.pendingSpeakerNames()
+            collected_unique = []
+            seen_collected = set()
+            for name in mvmz.SPEAKER_COLLECTED:
+                if not name or name in seen_collected:
+                    continue
+                seen_collected.add(name)
+                collected_unique.append(name)
+            covered_count = max(0, len(collected_unique) - len(pending))
             if not pending:
                 self.emit_log(
                     f"🔤 Speaker scan complete ({completed}/{total_files}). "
-                    "Every detected speaker is already in the game glossary."
+                    f"Detected {len(collected_unique)} unique nameplate(s); "
+                    f"all {covered_count} are already covered by the game glossary."
                 )
                 return True
 
             self.status_signal.emit(f"Waiting to translate {len(pending)} speakers…")
             self.emit_log(
                 f"🔤 Speaker scan complete ({completed}/{total_files}). "
-                f"Found {len(pending)} unresolved unique speaker(s); no speaker API calls "
-                "have been made."
+                f"Detected {len(collected_unique)} unique nameplate(s); "
+                f"{covered_count} already covered by the glossary; "
+                f"{len(pending)} unresolved unique speaker(s). "
+                "No speaker API calls have been made."
             )
             from util.skills import ctx
             estimate = self._estimate_grouped_speakers(

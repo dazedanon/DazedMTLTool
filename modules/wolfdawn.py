@@ -67,6 +67,9 @@ from util.translation import (
     calculateCost,
     parseVocabWithCategories,
     last_translation_had_mismatch,
+    speaker_source_lookup_keys,
+    split_vocab_source_aliases,
+    nameplate_gloss_for_alias,
 )
 from util import speakers as wolf_speakers
 from util import vocab as wolf_vocab
@@ -368,15 +371,43 @@ def _vocab_speaker_lookup(speaker: str) -> str | None:
     if not speaker or not VOCAB:
         return None
     try:
+        best = None
+        best_priority = -1
         for item in parseVocabWithCategories(VOCAB):
             # parseVocabWithCategories yields ((jp, en), line, category) or (term, ...)
             term = item[0]
+            category = item[2] if len(item) > 2 else ""
             if not isinstance(term, tuple) or len(term) != 2:
                 continue
             jp, en = term
-            if jp == speaker and isinstance(en, str) and en.strip():
-                if _speaker_translation_valid(speaker, en):
-                    return en.strip()
+            query_keys = set(speaker_source_lookup_keys(speaker))
+            source_keys = set(speaker_source_lookup_keys(jp))
+            if not (query_keys & source_keys) and jp != speaker:
+                continue
+            if not isinstance(en, str) or not en.strip():
+                continue
+            if not _speaker_translation_valid(speaker, en):
+                continue
+            category_name = str(category or "").lstrip("#").strip().casefold()
+            primary = re.split(r"\s*[·・|/]\s*", category_name, maxsplit=1)[0]
+            priority = {"game characters": 3, "speakers": 2}.get(primary, 1)
+            aliases = split_vocab_source_aliases(jp)
+            alias_group = len(aliases) > 1
+            # Prefer Game Characters, then multi-alias curated rows.
+            rank = priority * 10 + (1 if alias_group else 0)
+            if rank > best_priority:
+                best_priority = rank
+                # Use the alias form that matched the query when possible.
+                matched_alias = next(
+                    (
+                        alias
+                        for alias in aliases
+                        if set(speaker_source_lookup_keys(alias)) & query_keys
+                    ),
+                    aliases[0] if aliases else jp,
+                )
+                best = nameplate_gloss_for_alias(matched_alias, aliases, en.strip())
+        return best
     except Exception:
         pass
     return None
