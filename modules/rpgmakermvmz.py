@@ -198,10 +198,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = True
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE101 = False
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
 CODE408 = False
@@ -570,6 +570,22 @@ def _text_needs_translation(current) -> bool:
     if current is None or not str(current).strip():
         return False
     return not IGNORETLTEXT or bool(re.search(LANGREGEX, str(current)))
+
+
+_TARO_PLACEHOLDER_RE = re.compile(r"\bTaro(?:['’]s)?\b", re.IGNORECASE)
+
+
+def _strip_taro_placeholder(text: str) -> str:
+    """Remove the dummy player-name placeholder from skill/state action logs.
+
+    RPG Maker battle messages that start with a particle (は/を/…) are sent to the
+    model as ``Taro…`` so English gets a grammatical subject. The placeholder must
+    always be removed afterward - including when the model inserts Taro without a
+    particle prefix (prompt bleed) or varies casing (``taro`` / ``TARO``).
+    """
+    cleaned = _TARO_PLACEHOLDER_RE.sub("", str(text or ""))
+    cleaned = re.sub(r" {2,}", " ", cleaned)
+    return cleaned.strip(" \t\"'")
 
 
 def _param_current(cmd, index: int) -> str:
@@ -2014,11 +2030,9 @@ def searchNames(data, pbar, context, filename):
             totalTokens[1] += response[1][1]
             
             # Apply translations back to data
-            for msg_idx, (entry_idx, msg_field, needs_taro, raw_msg) in enumerate(messages_map):
+            for msg_idx, (entry_idx, msg_field, _needs_taro, raw_msg) in enumerate(messages_map):
                 if msg_idx < len(translated_messages):
-                    translation = translated_messages[msg_idx]
-                    if needs_taro:
-                        translation = translation.replace("Taro", "")
+                    translation = _strip_taro_placeholder(translated_messages[msg_idx])
                     data[entry_idx][msg_field] = translation
                     _apply_entry_field_original(data[entry_idx], msg_field, raw_msg)
             
@@ -4669,13 +4683,13 @@ def searchSS(state, pbar):
         translatedText = dazedwrap.wrapText(translatedText, width=LISTWIDTH)
         state["description"] = translatedText.replace('"', "")
     if "message1" in state and message1Response != "":
-        state["message1"] = message1Response[0].replace('"', "").replace("Taro", "")
+        state["message1"] = _strip_taro_placeholder(message1Response[0].replace('"', ""))
     if "message2" in state and message2Response != "":
-        state["message2"] = message2Response[0].replace('"', "").replace("Taro", "")
+        state["message2"] = _strip_taro_placeholder(message2Response[0].replace('"', ""))
     if "message3" in state and message3Response != "":
-        state["message3"] = message3Response[0].replace('"', "").replace("Taro", "")
+        state["message3"] = _strip_taro_placeholder(message3Response[0].replace('"', ""))
     if "message4" in state and message4Response != "":
-        state["message4"] = message4Response[0].replace('"', "").replace("Taro", "")
+        state["message4"] = _strip_taro_placeholder(message4Response[0].replace('"', ""))
 
     return totalTokens
 
