@@ -237,6 +237,78 @@ class GitVersionUpdateTests(unittest.TestCase):
             expected_translation.encode("utf-8"),
         )
 
+    def test_run_git_sends_stdin_as_lf_bytes(self):
+        """Windows text-mode pipes must not rewrite LF before Git sees stdin."""
+        self.write_versions("Japanese\n", "English\n", "New Japanese\n")
+        bootstrap_repository(self.translated, self.old, "1.00")
+        captured: list[bytes | None] = []
+        real_run = subprocess.run
+
+        def capture_run(*args, **kwargs):
+            captured.append(kwargs.get("input"))
+            return real_run(*args, **kwargs)
+
+        with patch("util.version_update.git_workflow.subprocess.run", side_effect=capture_run):
+            from util.version_update.git_workflow import _run_git
+
+            _run_git(
+                self.translated,
+                "hash-object",
+                "-w",
+                "--no-filters",
+                "--stdin",
+                input_text="line-one\nline-two\n",
+            )
+
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0], b"line-one\nline-two\n")
+
+    def test_bootstrap_survives_windows_text_mode_stdin_translation(self):
+        """Normalize JSON/text even when a host would CRLF-translate text pipes."""
+        self.old.joinpath("data.json").write_text('{"name":"Jp","v":1}', encoding="utf-8")
+        self.translated.joinpath("data.json").write_text(
+            '{"name":"En","v":1}', encoding="utf-8"
+        )
+        self.old.joinpath("note.txt").write_bytes(b"hello\r\nworld\r\n")
+        self.translated.joinpath("note.txt").write_bytes(b"hello\r\nworld\r\n")
+        self.old.joinpath("GameUpdate.bat").write_bytes(b"@echo off\r\n")
+        self.translated.joinpath("GameUpdate.bat").write_bytes(b"@echo off\r\n")
+
+        real_run = subprocess.run
+
+        def windows_text_pipe_run(*args, **kwargs):
+            inp = kwargs.get("input")
+            # Only text-mode string input is rewritten on Windows. Binary stdin
+            # from _run_git must stay byte-exact.
+            if isinstance(inp, str) and kwargs.get("text"):
+                kwargs = dict(kwargs)
+                kwargs["input"] = inp.replace("\n", "\r\n")
+            return real_run(*args, **kwargs)
+
+        with patch(
+            "util.version_update.git_workflow.subprocess.run",
+            side_effect=windows_text_pipe_run,
+        ):
+            result = bootstrap_repository(self.translated, self.old, "1.00")
+
+        status = inspect_repository(self.translated)
+        self.assertTrue(status.worktree_clean)
+        self.assertEqual(
+            self.translated.joinpath("data.json").read_bytes(),
+            b'{\n    "name": "En",\n    "v": 1\n}',
+        )
+        self.assertEqual(
+            self.translated.joinpath("note.txt").read_bytes(),
+            b"hello\nworld\n",
+        )
+        bat = subprocess.run(
+            ["git", "-C", str(self.translated), "show", "main:GameUpdate.bat"],
+            check=True,
+            capture_output=True,
+        ).stdout
+        self.assertEqual(bat, b"@echo off\r\n")
+        self.assertIn("data.json", result.formatted_json_paths)
+
     def test_update_preserves_nonconflicting_translation_and_applies_official_patch(self):
         self.write_versions("Japanese\n", "English\n", "Japanese\n", "dialogue.txt")
         self.old.joinpath("engine.txt").write_text("engine=1\n")

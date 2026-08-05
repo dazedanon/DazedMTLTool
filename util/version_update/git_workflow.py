@@ -303,15 +303,16 @@ def _run_git(
     process_env = os.environ.copy()
     if env:
         process_env.update(env)
+    # Feed Git stdin as raw UTF-8 bytes. On Windows, text-mode subprocess pipes
+    # translate LF to CRLF, which corrupts hash-object --stdin blobs and can
+    # embed trailing CR into update-index --index-info paths.
+    input_bytes = None if input_text is None else input_text.encode("utf-8")
     try:
-        result = subprocess.run(
+        raw = subprocess.run(
             command,
             check=False,
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            input=input_text,
+            input=input_bytes,
             env=process_env,
             timeout=timeout,
         )
@@ -319,10 +320,35 @@ def _run_git(
         raise GitWorkflowError("Git is not installed or is not available on PATH") from exc
     except (OSError, subprocess.SubprocessError) as exc:
         raise GitWorkflowError(f"Git operation failed: {exc}") from exc
+    result = subprocess.CompletedProcess(
+        raw.args,
+        raw.returncode,
+        raw.stdout.decode("utf-8", errors="replace"),
+        raw.stderr.decode("utf-8", errors="replace"),
+    )
     if check and result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "unknown Git error"
         raise GitWorkflowError(detail)
     return result
+
+
+def _require_matching_worktree(repo: Path, *, action: str) -> None:
+    status = _run_git(repo, "status", "--porcelain=v1", "-z").stdout
+    if not status:
+        return
+    entries = [entry for entry in status.split("\x00") if entry]
+    preview = ", ".join(entries[:8])
+    if len(entries) > 8:
+        preview = f"{preview}, ... ({len(entries)} paths)"
+    raise GitWorkflowError(
+        f"{action}, but the translated worktree does not match it: {preview}"
+    )
+
+
+def _configure_exact_tree_repo(repo: Path) -> None:
+    """Disable platform line-ending rewrites for exact game tree transport."""
+    _run_git(repo, "config", "core.autocrlf", "false")
+    _run_git(repo, "config", "core.eol", "lf")
 
 
 def _ref_commit(repo: Path, ref: str) -> str | None:
@@ -1424,6 +1450,7 @@ def bootstrap_repository(
         _run_git(translated, "init", "-b", TRANSLATION_BRANCH)
         repo, prefix = translated, ""
         translation_branch = TRANSLATION_BRANCH
+        _configure_exact_tree_repo(repo)
         _ensure_local_excludes(repo)
         original_tree = _write_tree_from_folder(
             repo, original, game_prefix=prefix, base_commit=None
@@ -1455,6 +1482,7 @@ def bootstrap_repository(
         )
     else:
         repo, prefix = found
+        _configure_exact_tree_repo(repo)
         _ensure_local_excludes(repo)
         status = inspect_repository(translated)
         if status.pending_cherry_pick:
@@ -1516,10 +1544,7 @@ def bootstrap_repository(
     )
     _run_git(repo, "symbolic-ref", "HEAD", f"refs/heads/{translation_branch}")
     _run_git(repo, "read-tree", translation_commit)
-    if _run_git(repo, "status", "--porcelain=v1", "-z").stdout:
-        raise GitWorkflowError(
-            "Git baseline was created, but the translated worktree does not match it"
-        )
+    _require_matching_worktree(repo, action="Git baseline was created")
     official_assets = _build_ignored_asset_manifest(
         original, original_tree.ignored_paths
     )
@@ -1579,6 +1604,7 @@ def register_translation_branch(
             "The original branch itself is checked out. Select or commit the translated game state first."
         )
     resolved_version = _validate_version(version or status.original_version or "")
+    _configure_exact_tree_repo(status.repo_root)
     _ensure_local_excludes(status.repo_root)
     gitignore_installed = _install_gameupdate_gitignore(game)
     translation_tree = _write_tree_from_folder(

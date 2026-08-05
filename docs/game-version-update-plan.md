@@ -5,6 +5,8 @@
 Version Update transports official game releases through Git. It never performs
 an engine-aware or semantic merge. Tracked UTF-8 text is normalized to LF line endings, except Windows
 CRLF-sensitive scripts such as `.bat`, `.cmd`, and `.reg`.
+Git stdin used while hashing and indexing those trees is always sent as raw
+UTF-8 bytes so Windows text-mode pipe translation cannot rewrite LF into CRLF.
 Valid UTF-8 JSON is reformatted for stable textual diffs, using DazedTL's
 existing four-space JSON representation.
 RPG Maker `plugins.js` wrappers are formatted with the same JavaScript formatter
