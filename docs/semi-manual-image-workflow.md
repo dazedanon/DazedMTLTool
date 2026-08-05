@@ -48,12 +48,23 @@ dark until the work that justifies them exists.
    they do on the Translation page. One request per image, deliberately:
    batching across pictures let one image's tone and vocabulary bleed into
    another's.
-3. **Render** — the erase strategy, colour, outline, size, alignment and font
+3. **Render** — the inpainting method, colour, outline, size, alignment and font
    are measured from the image and pre-filled, each labelled *Measured from the
-   image · N% confident* until touched. A pencil and eraser handle whatever
-   measurement will never get right; strokes land **under** the English, so a
-   touch-up can repair background but never cover the translation. The preview
-   renders through the same code path that writes the file.
+   image · N% confident* until touched. Tracking, horizontal and vertical scale,
+   bold and italic sit beside them, neutral until asked for, in Photoshop's
+   units so a number copied off that panel means the same thing here. Boxes can
+   be added, merged, split and deleted from this step too, because a box that is
+   a line too short is something you find out by looking at the render. A pencil
+   and eraser handle whatever measurement will never get right; strokes land
+   **under** the English, so a touch-up can repair background but never cover the
+   translation. The preview renders through the same code path that writes the
+   file.
+
+   The eraser has three behaviours, after Photoshop: on its own it removes your
+   own marks, **Ctrl** erases the picture itself to transparency, and **Shift**
+   paints the block's measured background over it. The cut is a layer of its own
+   under `.dazedtl/cut/` — an RGBA image has nowhere to put "take this away",
+   since alpha 0 already means "I did not touch this".
 
 Only `target` is ever written back into the exchange file. Boxes and source text
 belong to the toolkit and pass through untouched, so a translation run can never
@@ -79,6 +90,12 @@ The two classical fills diffuse surrounding colour inwards, which is honest on a
 flat background and a smear on a patterned one. Asking for a method that is not
 installed reconstructs the fast way **and says so in the block's note**, rather
 than failing.
+
+A block that has never been touched gets `aot` where the model is installed and
+`telea` where it is not — `inpaint.preferred()`, probed once per session and
+re-probed after a download. Naming a model as *the* default outright would put
+every untouched block onto something that may not be there, and the complaint
+would arrive at render time on somebody who chose nothing.
 
 Two things about the models were settled by measurement rather than by reading
 reference code, and both are pinned as tests rather than left as comments.
@@ -144,8 +161,8 @@ util/imagetools/            the toolkit, free of PyQt so it stays testable headl
   exchange.py               image_text.json in and out
   ocr/                      Google Lens (default) and RapidOCR (offline)
   style.py                  measuring background, colour, outline, size
-  render.py                 erase -> paint -> draw, and the fit ladder
-  paint.py                  the manual touch-up layer
+  render.py                 erase -> cut -> paint -> draw, and the fit ladder
+  paint.py                  the manual touch-up layers
   inpaint.py                the six reconstruction backends
   fonts.py                  font discovery and cap-height fitting
   resources.py              the on-demand downloader (standard library only)
@@ -167,6 +184,7 @@ changes nothing about it. Its own state sits beside the editable images:
 - Review state: `.dazedtl/images/.dazedtl/image_job.json`
 - Pristine originals: `.dazedtl/images/.dazedtl/original/<relpath>`
 - Paint layers: `.dazedtl/images/.dazedtl/paint/<relpath>.png`
+- Eraser cuts: `.dazedtl/images/.dazedtl/cut/<relpath>.png`
 - Exchange file: `.dazedtl/images/.dazedtl/image_text.json`, mirrored into
   DazedTL's `files/` for the translation engine to read
 

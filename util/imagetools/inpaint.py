@@ -57,7 +57,7 @@ LAMA_MANGA = "lama_manga"
 AOT = "aot"
 
 # Ordered cheapest-first, which is also least-surprising-first: this is the
-# order they appear in the "Reconstruct with" list.
+# order they appear in the "Inpainting model" list.
 METHODS = (TELEA, NS, PATCHMATCH, LAMA, LAMA_MANGA, AOT)
 
 #: The two that need nothing installed.
@@ -72,7 +72,16 @@ METHOD_LABELS = {
     AOT: "AOT — a lighter model, tuned for speech bubbles",
 }
 
+#: The one that always works. Nothing to install, nothing to download.
 DEFAULT = TELEA
+
+#: What to reach for first when it is there. AOT is the lightest of the three
+#: models - a few seconds a block against LaMa's minute, and 23 MB against
+#: 200 - and it is the one the downloader pre-ticks, so on most installs this
+#: is the method the user already paid for. It only wins the default when it is
+#: genuinely ready: ``preferred`` probes before choosing, never after.
+PREFERRED = AOT
+
 RADIUS = 3
 
 # How much of the picture around the block the context-hungry methods are
@@ -310,6 +319,26 @@ def available(method: str) -> bool:
     return _probe(method)[0]
 
 
+#: Memoised because ``preferred`` is asked once per block per render and the
+#: answer costs an ``import onnxruntime``. ``forget`` clears it, which is what
+#: makes a download inside a running session take effect.
+_PREFERRED: dict[str, str] = {}
+
+
+def preferred() -> str:
+    """Which reconstruction a block gets when nobody has chosen one.
+
+    ``DEFAULT`` for a fresh checkout, ``PREFERRED`` once the model is on disk
+    and onnxruntime will load it. Deliberately a probe rather than a constant:
+    naming a model as *the* default would put every block that never opened the
+    panel onto a method that is not installed, and the complaint would arrive at
+    render time on somebody who chose nothing.
+    """
+    if "method" not in _PREFERRED:
+        _PREFERRED["method"] = PREFERRED if available(PREFERRED) else DEFAULT
+    return _PREFERRED["method"]
+
+
 def status(method: str) -> str:
     return f"{method}: {_probe(method)[1]}"
 
@@ -415,6 +444,7 @@ def _session(method: str):
 def forget() -> None:
     """Drop every loaded graph and library. For tests, and for swapping files."""
     _SESSIONS.clear()
+    _PREFERRED.clear()
     cookie = _LIBRARY.pop("dll_dir", None)
     if cookie is not None:
         # Closed rather than dropped: the search path entry outlives the

@@ -64,6 +64,12 @@ class FittedText:
     reason: str = ""
     stroke: int = 0
     ink_top: int = 0
+    #: Extra space between characters, in pixels at this size. Carried here
+    #: rather than re-derived from the style so the renderer draws the spacing
+    #: the fit was measured against, whatever the ladder did to the size.
+    step: float = 0.0
+    #: Horizontal stretch as a percentage. ``width`` above already includes it.
+    width_scale: int = 100
 
 
 # Where the operating system keeps its own faces. Every one of these is worth
@@ -121,6 +127,15 @@ def available_fonts() -> list[Path]:
 
 
 @lru_cache(maxsize=2048)
+def font_family_style(path: str) -> tuple[str, str]:
+    """``(family, style)`` as the face names itself - ``("Arial", "Bold")``."""
+    try:
+        family, style = ImageFont.truetype(path, 10).getname()
+    except Exception:
+        return Path(path).stem, ""
+    return (family or Path(path).stem).strip(), (style or "").strip()
+
+
 def font_name(path: str) -> str:
     """The face's own name - "Segoe UI Semibold", not "seguisb".
 
@@ -128,15 +143,63 @@ def font_name(path: str) -> str:
     files by an eight-character convention nobody has been able to read since
     1995, and a dropdown of them is a dropdown of nothing.
     """
-    try:
-        family, style = ImageFont.truetype(path, 10).getname()
-    except Exception:
-        return Path(path).stem
-    family = (family or Path(path).stem).strip()
-    style = (style or "").strip()
+    family, style = font_family_style(path)
     if not style or style.lower() == "regular":
         return family
     return f"{family} {style}"
+
+
+# ------------------------------------------------------------------- variants
+
+
+def _flags(style: str) -> tuple[bool, bool]:
+    """``(bold, italic)`` from a style name, by word rather than by substring.
+
+    By word because "Semibold" is not Bold and "Italic" is not "Semibold
+    Italic": treating the name as one string puts a distinct weight under the
+    Bold button, and the letterforms that come back are visibly not the ones
+    the checkbox promised.
+    """
+    words = style.lower().replace("-", " ").split()
+    return "bold" in words, ("italic" in words or "oblique" in words)
+
+
+@lru_cache(maxsize=1)
+def _family_index() -> dict[str, dict[tuple[bool, bool], str]]:
+    """``family -> {(bold, italic): path}`` over every face on the machine.
+
+    Bold and Italic are separate *files*, not a switch on one - PIL draws what
+    the outline says and cannot slant or embolden a face that has no such cut.
+    So the checkboxes are a lookup: either the family ships the cut or the box
+    is not offered, which is the honest version of a control that would
+    otherwise do nothing on half the fonts in the list.
+    """
+    index: dict[str, dict[tuple[bool, bool], str]] = {}
+    for path in available_fonts():
+        family, style = font_family_style(str(path))
+        if not family:
+            continue
+        # First file wins: ``available_fonts`` puts the bundled faces ahead of
+        # the system's, and a project that ships its own Arial means it.
+        index.setdefault(family.casefold(), {}).setdefault(_flags(style), str(path))
+    return index
+
+
+def variant(font_path: str, bold: bool = False, italic: bool = False) -> str:
+    """The same family's bold/italic cut, or *font_path* when there is none."""
+    if not font_path:
+        return font_path
+    family, _ = font_family_style(font_path)
+    cuts = _family_index().get(family.casefold(), {})
+    return cuts.get((bool(bold), bool(italic)), font_path)
+
+
+def has_variant(font_path: str, bold: bool = False, italic: bool = False) -> bool:
+    """Whether this family ships the wanted cut as a file of its own."""
+    if not font_path:
+        return False
+    family, _ = font_family_style(font_path)
+    return (bool(bold), bool(italic)) in _family_index().get(family.casefold(), {})
 
 
 def default_font(bold: bool = False) -> str:
@@ -188,6 +251,62 @@ def measure(text: str, font_path: str, size: int) -> tuple[int, int]:
     return right - left, bottom - top
 
 
+# ------------------------------------------------- tracking and width scaling
+
+
+def tracking_px(size: int, tracking: int) -> float:
+    """*tracking* in Photoshop's units - thousandths of an em - as pixels.
+
+    Relative to the type rather than absolute, so a value set while the block
+    was fitting at 24pt still looks like the same spacing after the fit ladder
+    drops it to 14. An absolute px figure would double its apparent strength on
+    the way down, which is the point at which the knob stops being usable.
+    """
+    return size * tracking / 1000.0
+
+
+def char_offsets(font, line: str, step: float) -> list[float]:
+    """Where each character of *line* starts, *step* pixels apart extra.
+
+    Per character, which is also what loses the face's kerning pairs. That is
+    the trade every application makes for letter spacing and it only applies
+    when spacing is actually asked for - at ``step == 0`` the renderer draws the
+    string in one call and the kerning is the font's own.
+    """
+    offsets: list[float] = []
+    x = 0.0
+    for char in line:
+        offsets.append(x)
+        x += font.getlength(char) + step
+    return offsets
+
+
+def line_ink(font, line: str, step: float = 0.0) -> tuple[float, float, float, float]:
+    """``(left, top, right, bottom)`` of the ink one line covers."""
+    if not line:
+        return 0.0, 0.0, 0.0, 0.0
+    if not step:
+        left, top, right, bottom = font.getbbox(line)
+        return float(left), float(top), float(right), float(bottom)
+
+    bounds: list[float] | None = None
+    for offset, char in zip(char_offsets(font, line, step), line):
+        left, top, right, bottom = font.getbbox(char)
+        if right - left <= 0 or bottom - top <= 0:
+            continue                      # a space has an advance and no ink
+        box = [offset + left, float(top), offset + right, float(bottom)]
+        if bounds is None:
+            bounds = box
+        else:
+            bounds = [
+                min(bounds[0], box[0]), min(bounds[1], box[1]),
+                max(bounds[2], box[2]), max(bounds[3], box[3]),
+            ]
+    if bounds is None:
+        return 0.0, 0.0, 0.0, 0.0
+    return tuple(bounds)                  # type: ignore[return-value]
+
+
 def text_budget(
     *,
     width: int,
@@ -216,13 +335,15 @@ def text_budget(
     return max(4, int((span / per_char) * lines))
 
 
-def _wrap(text: str, font_path: str, size: int, max_width: int) -> list[str]:
+def _wrap(
+    text: str, font_path: str, size: int, max_width: int, step: float = 0.0
+) -> list[str]:
     """Greedy wrap. Breaks on spaces for Latin, per character for CJK runs."""
     font = _load(font_path, size)
 
-    def width_of(candidate: str) -> int:
-        box = font.getbbox(candidate)
-        return box[2] - box[0]
+    def width_of(candidate: str) -> float:
+        left, _, right, _ = line_ink(font, candidate, step)
+        return right - left
 
     words = text.split(" ")
     if len(words) > 1:
@@ -293,7 +414,11 @@ def stroke_at(size: int, stroke_width: int, reference: int) -> int:
 
 
 def _extent(
-    lines: list[str], font_path: str, size: int, line_height: int
+    lines: list[str],
+    font_path: str,
+    size: int,
+    line_height: int,
+    step: float = 0.0,
 ) -> tuple[int, int, int]:
     """``(width, height, ink_top)`` of the ink these lines actually cover.
 
@@ -311,16 +436,16 @@ def _extent(
     font = _load(font_path, size)
     top = None
     bottom = None
-    widest = 0
+    widest = 0.0
     for index, line in enumerate(lines):
-        left, line_top, right, line_bottom = font.getbbox(line)
+        left, line_top, right, line_bottom = line_ink(font, line, step)
         widest = max(widest, right - left)
         origin = index * line_height
         top = origin + line_top if top is None else min(top, origin + line_top)
         bottom = origin + line_bottom if bottom is None else max(bottom, origin + line_bottom)
     if top is None or bottom is None:
         return 0, 0, 0
-    return widest, max(0, bottom - top), top
+    return int(round(widest)), max(0, int(round(bottom - top))), int(round(top))
 
 
 def fit_text(
@@ -334,6 +459,8 @@ def fit_text(
     min_size: int = 7,
     line_spacing: float = 1.15,
     stroke_width: int = 0,
+    tracking: int = 0,
+    width_scale: int = 100,
 ) -> FittedText:
     """Largest size at which *text* fits the box, wrapping only if permitted.
 
@@ -357,30 +484,38 @@ def fit_text(
     start = size_for_cap(font_path, reference) or max(min_size, reference)
     start = max(min_size, start)
 
+    stretch = max(1, int(width_scale)) / 100.0
+
     best_overflow: FittedText | None = None
     for size in range(start, min_size - 1, -1):
         stroke = stroke_at(size, stroke_width, reference)
-        room_width = max(1, max_width - 2 * stroke)
         room_height = max(1, max_height - 2 * stroke)
+        # Everything below measures unstretched ink, so the room it is measured
+        # against is un-stretched too. Doing it the other way - scaling every
+        # measurement - would put the factor in five places instead of one.
+        room_width = max(1, int((max_width - 2 * stroke) / stretch))
+        step = tracking_px(size, tracking)
 
         lines = [text]
-        width, _ = measure(text, font_path, size)
-        if width > room_width and allow_wrap and room_height >= size * 2:
-            lines = _wrap(text, font_path, size, room_width)
+        left, _, right, _ = line_ink(_load(font_path, size), text, step)
+        if right - left > room_width and allow_wrap and room_height >= size * 2:
+            lines = _wrap(text, font_path, size, room_width, step)
 
         line_height = max(1, int(size * line_spacing))
-        widest, ink_height, ink_top = _extent(lines, font_path, size, line_height)
+        widest, ink_height, ink_top = _extent(lines, font_path, size, line_height, step)
 
         candidate = FittedText(
             lines=lines,
             font_path=font_path,
             size=size,
             line_height=line_height,
-            width=widest + 2 * stroke,
+            width=int(round(widest * stretch)) + 2 * stroke,
             height=ink_height + 2 * stroke,
             fits=widest <= room_width and ink_height <= room_height,
             stroke=stroke,
             ink_top=ink_top,
+            step=step,
+            width_scale=max(1, int(width_scale)),
         )
         if candidate.fits:
             return candidate

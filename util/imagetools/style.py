@@ -104,6 +104,17 @@ class Style:
     # The one thing pixels cannot tell us. Empty means "whatever the dialog is
     # set to"; a value here is a per-block override.
     font: str = ""
+    # The typographic knobs, in Photoshop's units and with Photoshop's
+    # defaults, so a number copied off that panel means the same thing here.
+    # None of these is measured - measurement recovers the *size* of the
+    # Japanese, and a face set 90% wide is indistinguishable from a narrower
+    # face at 100%. They start neutral and stay there until somebody says
+    # otherwise, which is why they are absent from ``measure``.
+    scale_x: int = 100          # horizontal stretch, percent
+    scale_y: int = 100          # vertical stretch, percent of the cap height
+    tracking: int = 0           # letter spacing, thousandths of an em
+    bold: bool = False
+    italic: bool = False
     confidence: float = 0.0
     notes: list[str] = field(default_factory=list)
     # Set once the user touches the Style panel. A locked style is never
@@ -122,6 +133,11 @@ class Style:
             "cap_height": self.cap_height,
             "align": self.align,
             "font": self.font,
+            "scale_x": self.scale_x,
+            "scale_y": self.scale_y,
+            "tracking": self.tracking,
+            "bold": self.bold,
+            "italic": self.italic,
             "confidence": round(self.confidence, 3),
             "notes": list(self.notes),
             "locked": self.locked,
@@ -149,6 +165,14 @@ class Style:
             cap_height=int(data.get("cap_height") or 12),
             align=str(data.get("align") or "center"),
             font=str(data.get("font") or ""),
+            # ``or`` rather than a plain get, so a job written before these
+            # existed - or one where a knob was reset to nothing - reads back as
+            # the neutral value rather than as a zero-width, zero-height block.
+            scale_x=int(data.get("scale_x") or 100),
+            scale_y=int(data.get("scale_y") or 100),
+            tracking=int(data.get("tracking") or 0),
+            bold=bool(data.get("bold")),
+            italic=bool(data.get("italic")),
             confidence=float(data.get("confidence") or 0.0),
             notes=[str(note) for note in data.get("notes") or []],
             locked=bool(data.get("locked")),

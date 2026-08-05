@@ -14,6 +14,8 @@ knowledge of what any particular resource is.
 
 from __future__ import annotations
 
+import sys
+
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QCheckBox,
@@ -71,7 +73,22 @@ class ResourceWorker(QThread):
         except Exception as exc:
             self.finished_ok.emit(False, f"{type(exc).__name__}: {exc}")
             return
+        _forget_inpaint_probes()
         self.finished_ok.emit(True, "Everything is ready.")
+
+
+def _forget_inpaint_probes() -> None:
+    """Let a model that just landed count as installed, without a relaunch.
+
+    ``inpaint`` caches which backends it found, including the one that decides
+    the default - and on a second visit within the same session that cache was
+    filled in before the download. Cleared through ``sys.modules`` rather than
+    by importing: on the first visit ``inpaint`` has never been loaded, and
+    importing it here would pull in the very numpy this dialog exists to fetch.
+    """
+    module = sys.modules.get("util.imagetools.inpaint")
+    if module is not None:
+        module.forget()
 
 
 class _Row(QWidget):

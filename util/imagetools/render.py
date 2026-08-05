@@ -35,13 +35,16 @@ from PIL import Image, ImageDraw
 from util.imagetools.fonts import (
     FittedText,
     _load,
+    char_offsets,
     fit_text,
+    line_ink,
     resolve_font,
     size_for_cap,
+    variant,
 )
 from util.imagetools import inpaint as inpaintmod
 from util.imagetools.geometry import Box
-from util.imagetools.paint import composite
+from util.imagetools.paint import apply_cut, composite
 from util.imagetools.style import (
     ALPHA_OPAQUE,
     BG_HGRADIENT,
@@ -285,7 +288,7 @@ def _reconstruct(
     it is a hole it has nothing to say about, so it is handed a frame of context
     and only the masked pixels are taken from what comes back.
     """
-    method = style.inpaint_method or inpaintmod.DEFAULT
+    method = style.inpaint_method or inpaintmod.preferred()
     bounds = Box.from_size(array.shape[1], array.shape[0])
 
     # Fully transparent pixels have no colour to lend - what is stored under
@@ -335,7 +338,7 @@ def _reconstruct(
         return Note("", True, (
             "there was too little clean artwork around this box to rebuild "
             "what the glyphs were sitting on — nothing was erased. Try a "
-            "different “Erase by”, or widen the box"
+            "different “Inpainting method”, or widen the box"
         ), tight=True)
 
     message = "artwork reconstructed under the glyphs"
@@ -346,7 +349,7 @@ def _reconstruct(
 
 _MISSING = {
     BG_SOLID: (
-        "no fill colour was found for this block — pick one under “Erase by”, "
+        "no fill colour was found for this block — pick one under “Inpainting method”, "
         "or use “Reconstruct the artwork”"
     ),
     BG_VGRADIENT: (
@@ -370,7 +373,7 @@ def _unerasable(style: Style) -> str:
         return known
     return (
         f"“{style.background}” is not an erase method this build knows; "
-        "choose another under “Erase by”"
+        "choose another under “Inpainting method”"
     )
 
 
@@ -468,7 +471,11 @@ def plan(
     room: Box | None = None,
 ) -> Layout:
     """The fit ladder. Stops at the first rung that works and says which one."""
-    cap = max(MIN_SIZE, int(style.cap_height))
+    # Vertical scale is folded into the cap height rather than applied to the
+    # drawn pixels: the size *is* the vertical measure, so asking the face for
+    # taller capitals gives real outlines where stretching a bitmap would give
+    # soft ones. Horizontal scale has no such equivalent and is a real stretch.
+    cap = max(MIN_SIZE, int(round(style.cap_height * max(1, style.scale_y) / 100)))
     # The rungs are floors on the *point size*, but the style speaks in pixels of
     # ink. Convert once, here, so "70% of the original" is 70% of what the reader
     # sees rather than 70% of a number the font is free to reinterpret.
@@ -488,6 +495,8 @@ def plan(
             allow_wrap=not vertical,
             min_size=floor,
             stroke_width=stroke_width,
+            tracking=style.tracking,
+            width_scale=style.scale_x,
         )
 
     # 1. its own box, at a size close to the original's
@@ -524,19 +533,84 @@ def plan(
 # -------------------------------------------------------------------- draw
 
 
+#: Alpha at or above which a pixel is a glyph rather than the antialiased rim
+#: around one. Only used to tell one letter from the next - see ``_outside``.
+SOLID_INK = 128
+
+
+def _flood_from_border(barrier: np.ndarray) -> np.ndarray:
+    """The zero region of *barrier* that reaches the edge of the tile."""
+    # One pixel of margin so a glyph flush with the tile edge cannot fence the
+    # exterior off from the corner the flood starts at.
+    padded = cv2.copyMakeBorder(
+        barrier.astype(np.uint8), 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0
+    )
+    _, labels = cv2.connectedComponents((padded == 0).astype(np.uint8), connectivity=4)
+    return (labels == labels[0, 0])[1:-1, 1:-1]
+
+
 def _outside(alpha: np.ndarray) -> np.ndarray:
     """Which pixels are outside the glyphs rather than inside a counter.
 
-    The region of "no ink" that reaches the edge of the tile. What is left over
-    is the enclosed space inside an ``a``, an ``o``, a ``B`` - and that space is
-    background, not somewhere a stroke belongs.
+    Start from the region of "no ink" that reaches the edge of the tile. What is
+    left over is *enclosed* space - but not all of it is a counter, and that
+    distinction is the whole of this function.
+
+    A flood cannot pass a pixel with any ink in it, and between two letters set
+    close together the antialiased rims meet: a 30%-alpha bridge nothing can see
+    walls off the gap. The gap is then "enclosed", the stroke is taken out of
+    it, and on white-on-white type - a stroke's commonest use - the two letters
+    run into the background and into each other. It got worse the smaller the
+    type, because the rim is a constant width and the gap is not.
+
+    So each enclosed pocket is asked which letters wall it in, counting only
+    properly inked pixels so a rim cannot join two letters into one. Walled in
+    by a single letter it is that letter's counter and is left alone; walled in
+    by two, it is the space *between* them and the stroke belongs there.
     """
-    solid = (alpha > 0).astype(np.uint8)
-    # One pixel of margin so a glyph flush with the tile edge cannot fence the
-    # exterior off from the corner the flood starts at.
-    padded = cv2.copyMakeBorder(solid, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
-    _, labels = cv2.connectedComponents((padded == 0).astype(np.uint8), connectivity=4)
-    return (labels == labels[0, 0])[1:-1, 1:-1]
+    inked = alpha > 0
+    outside = _flood_from_border(inked)
+    pocket = ~outside & ~inked
+    if not pocket.any():
+        return outside
+
+    solid = (alpha >= SOLID_INK).astype(np.uint8)
+    _, letters = cv2.connectedComponents(solid, connectivity=8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(
+        pocket.astype(np.uint8), connectivity=4
+    )
+    # Reaching past the rim, which is at most a pixel or two wide, to the ink
+    # the pocket is actually held in by.
+    reach = np.ones((5, 5), np.uint8)
+    for index in range(1, count):
+        x, y, w, h, _ = stats[index]
+        # Each pocket is looked at in its own neighbourhood rather than across
+        # the whole tile: a line of type has one of these per counter, and the
+        # preview re-renders on every turn of every knob.
+        top, left = max(0, y - 3), max(0, x - 3)
+        bottom, right = min(alpha.shape[0], y + h + 3), min(alpha.shape[1], x + w + 3)
+        crop = labels[top:bottom, left:right] == index
+        near = (cv2.dilate(crop.astype(np.uint8), reach) > 0) & (
+            solid[top:bottom, left:right] > 0
+        )
+        if len(np.unique(letters[top:bottom, left:right][near])) > 1:
+            outside[top:bottom, left:right] |= crop
+    return outside
+
+
+def _write(draw, at, line, font, step, **ink) -> None:
+    """One line, in one call unless letter spacing forces the issue.
+
+    At ``step == 0`` this is a plain ``draw.text`` and the face's own kerning
+    pairs apply. Spacing means placing every character by hand, which is the
+    only way PIL will do it and the reason the fast path is kept.
+    """
+    if not step:
+        draw.text(at, line, font=font, **ink)
+        return
+    x, y = at
+    for offset, char in zip(char_offsets(font, line, step), line):
+        draw.text((x + offset, y), char, font=font, **ink)
 
 
 def _stroked(size, fitted, align, text_color, outline) -> Image.Image:
@@ -552,45 +626,61 @@ def _stroked(size, fitted, align, text_color, outline) -> Image.Image:
     Drawn as two layers instead. The stroke is masked down to the pixels the
     fill's own *exterior* reaches, so it grows outwards without ever growing
     inwards, and the counters keep showing whatever is behind the text.
+
+    A horizontal stretch is done last, to the finished tile: the glyphs are
+    drawn at their natural width into a tile scaled to match, and the whole
+    thing is squeezed or pulled to the block's real width at the end. Drawing
+    into a stretched grid instead would ask the rasteriser for a shape it has no
+    outline for.
     """
-    fill_layer = Image.new("RGBA", size, (0, 0, 0, 0))
-    stroke_layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    stretch = max(1, fitted.width_scale) / 100.0
+    # Natural-width working tile. Alignment below is worked out in here and the
+    # mapping onto the real tile is linear, so nothing has to know about it.
+    work = (max(1, int(round(size[0] / stretch))), size[1])
+
+    fill_layer = Image.new("RGBA", work, (0, 0, 0, 0))
+    stroke_layer = Image.new("RGBA", work, (0, 0, 0, 0))
     fill_draw = ImageDraw.Draw(fill_layer)
     stroke_draw = ImageDraw.Draw(stroke_layer)
     font = _load(fitted.font_path, fitted.size)
     stroke = fitted.stroke if outline else 0
+    step = fitted.step
 
     # Put the ink where it was measured: the fitted height is the painted
     # extent, so centring on it lands the glyphs in the middle of the box
     # instead of a line-box's worth of empty space high.
-    top = max(0, (size[1] - fitted.height) // 2) + stroke - fitted.ink_top
+    top = max(0, (work[1] - fitted.height) // 2) + stroke - fitted.ink_top
     for index, line in enumerate(fitted.lines):
-        left, _, right, _ = font.getbbox(line)
+        left, _, right, _ = line_ink(font, line, step)
         width = right - left
         if align == "center":
-            x = (size[0] - width) // 2
+            x = (work[0] - width) / 2
         elif align == "right":
-            x = size[0] - width - stroke
+            x = work[0] - width - stroke
         else:
             x = stroke
         at = (x - left, top + index * fitted.line_height)
         if stroke:
-            stroke_draw.text(
-                at, line, font=font, fill=outline,
-                stroke_width=stroke, stroke_fill=outline,
+            _write(
+                stroke_draw, at, line, font, step,
+                fill=outline, stroke_width=stroke, stroke_fill=outline,
             )
-        fill_draw.text(at, line, font=font, fill=text_color)
+        _write(fill_draw, at, line, font, step, fill=text_color)
 
-    if not stroke:
-        return fill_layer
+    if stroke:
+        fill_array = np.array(fill_layer)
+        stroke_array = np.array(stroke_layer)
+        allowed = _outside(fill_array[:, :, 3]) | (fill_array[:, :, 3] > 0)
+        stroke_array[:, :, 3][~allowed] = 0
+        tile = Image.alpha_composite(
+            Image.fromarray(stroke_array), Image.fromarray(fill_array)
+        )
+    else:
+        tile = fill_layer
 
-    fill_array = np.array(fill_layer)
-    stroke_array = np.array(stroke_layer)
-    allowed = _outside(fill_array[:, :, 3]) | (fill_array[:, :, 3] > 0)
-    stroke_array[:, :, 3][~allowed] = 0
-    return Image.alpha_composite(
-        Image.fromarray(stroke_array), Image.fromarray(fill_array)
-    )
+    if tile.size != tuple(size):
+        tile = tile.resize(tuple(size), Image.LANCZOS)
+    return tile
 
 
 def _tile(size: tuple[int, int], layout: Layout, style: Style) -> Image.Image:
@@ -636,19 +726,21 @@ def render_entry(
     font_name: str | None = None,
     only: str = "",
     paint: np.ndarray | None = None,
+    cut: np.ndarray | None = None,
 ) -> Result:
     """Render one image. *source* is the pristine original and is never mutated.
 
     ``only`` renders a single block, which is what the preview uses while a knob
-    is being dragged. ``paint`` is the user's manual touch-up layer.
+    is being dragged. ``paint`` is the user's manual touch-up layer and ``cut``
+    is what their eraser took out of the picture.
 
-    Three passes, not one, and the order is the point:
+    Four passes, not one, and the order is the point:
 
-        erase every block -> composite the paint -> draw every translation
+        erase every block -> cut -> composite the paint -> draw every translation
 
     Erasing all of them first keeps the old behaviour where a later inpaint can
-    use an earlier block's cleaned pixels as context. Compositing the paint in
-    the middle is what makes it a *background repair* layer - a stroke can fix
+    use an earlier block's cleaned pixels as context. Cutting and painting in
+    the middle is what makes them *background repair* - a stroke can fix
     anything the erase left behind and can never cover the English, whatever the
     fit ladder later does with the type. Drawing last is what that costs.
     """
@@ -701,7 +793,9 @@ def render_entry(
 
         room = growth_room(source, box, style, boxes, vertical=block.vertical)
         try:
-            font_path = resolve_font(style.font or font_name)
+            font_path = variant(
+                resolve_font(style.font or font_name), style.bold, style.italic
+            )
         except Exception as exc:
             notes[block.block_id] = Note(block.block_id, False, f"font: {exc}")
             continue
@@ -714,6 +808,7 @@ def render_entry(
             continue
         planned.append((block, layout, style, erased))
 
+    apply_cut(array, cut)
     composite(array, paint)
     base = array.copy()
 
@@ -741,13 +836,18 @@ def render_entry(
 
 
 def render_job_image(
-    job, entry, *, font_name: str | None = None, paint: np.ndarray | None = None
+    job,
+    entry,
+    *,
+    font_name: str | None = None,
+    paint: np.ndarray | None = None,
+    cut: np.ndarray | None = None,
 ) -> Result:
     """Render one job image from its pristine pixels.
 
-    The paint layer is loaded from the workspace unless the caller passes one -
-    the editor holds a live copy while a stroke is being drawn, and reading the
-    file back mid-stroke would drop it.
+    The brush layers are loaded from the workspace unless the caller passes
+    them - the editor holds live copies while a stroke is being drawn, and
+    reading the files back mid-stroke would drop it.
     """
     source = load_rgba(job.source_path(entry))
     if source is None:
@@ -755,11 +855,14 @@ def render_job_image(
             np.zeros((1, 1, 4), dtype=np.uint8),
             [Note("", False, f"could not read {job.source_path(entry)}")],
         )
-    if paint is None:
-        from util.imagetools.paint import load_layer
+    if paint is None or cut is None:
+        from util.imagetools.paint import load_cut, load_layer
 
-        paint = load_layer(job, entry, source.shape)
-    return render_entry(source, entry, font_name=font_name, paint=paint)
+        if paint is None:
+            paint = load_layer(job, entry, source.shape)
+        if cut is None:
+            cut = load_cut(job, entry, source.shape)
+    return render_entry(source, entry, font_name=font_name, paint=paint, cut=cut)
 
 
 def write_entry(job, entry, array: np.ndarray) -> Path:

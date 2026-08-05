@@ -29,6 +29,12 @@ import numpy as np
 # otherwise import each other.
 
 PAINT_DIRNAME = "paint"
+#: The eraser's own layer. Kept apart from the paint rather than encoded into
+#: it, because the two say opposite things about the same pixel and an RGBA
+#: image has nowhere to put "take this away" - alpha 0 already means "I did not
+#: touch this". One more small PNG beside the first is cheaper than a sentinel
+#: colour everything downstream would have to know about.
+CUT_DIRNAME = "cut"
 
 # Nothing at or below this alpha counts as painted. Matches the renderer's own
 # transparency threshold so a stroke the eye cannot see is not kept on disk.
@@ -52,6 +58,11 @@ def layer_path(job, entry) -> Path:
     return job.work / PAINT_DIRNAME / entry.relpath
 
 
+def cut_path(job, entry) -> Path:
+    """Where this image's erased-to-transparent marks live."""
+    return job.work / CUT_DIRNAME / entry.relpath
+
+
 def blank(shape: tuple[int, ...]) -> np.ndarray:
     height, width = shape[:2]
     return np.zeros((height, width, 4), dtype=np.uint8)
@@ -63,9 +74,17 @@ def is_clear(layer: np.ndarray | None) -> bool:
 
 def load_layer(job, entry, shape: tuple[int, ...]) -> np.ndarray:
     """This image's strokes, or a blank layer. Never None - the caller paints."""
+    return _read(layer_path(job, entry), shape)
+
+
+def load_cut(job, entry, shape: tuple[int, ...]) -> np.ndarray:
+    """This image's erased-to-transparent marks, or a blank layer."""
+    return _read(cut_path(job, entry), shape)
+
+
+def _read(path: Path, shape: tuple[int, ...]) -> np.ndarray:
     from util.imagetools.render import load_rgba
 
-    path = layer_path(job, entry)
     if path.is_file():
         stored = load_rgba(path)
         if stored is not None and stored.shape[:2] == tuple(shape[:2]):
@@ -84,9 +103,17 @@ def save_layer(job, entry, layer: np.ndarray | None) -> Path | None:
     the next session loads a layer, and "is there paint on this image?" stops
     being answerable from the workspace.
     """
+    return _write(layer_path(job, entry), layer)
+
+
+def save_cut(job, entry, cut: np.ndarray | None) -> Path | None:
+    """Write the erased-to-transparent marks, or delete the file once empty."""
+    return _write(cut_path(job, entry), cut)
+
+
+def _write(path: Path, layer: np.ndarray | None) -> Path | None:
     from util.imagetools.render import save_rgba
 
-    path = layer_path(job, entry)
     if is_clear(layer):
         try:
             path.unlink()
@@ -165,6 +192,41 @@ def wipe(layer: np.ndarray, a, b, size: int) -> None:
     mask = _segment(layer, a, b, size)
     if mask.any():
         layer[mask] = 0
+
+
+def apply_cut(array: np.ndarray, cut: np.ndarray | None) -> None:
+    """Take the marked pixels out of *array* altogether. In place.
+
+    Alpha to zero rather than to any colour, which is the difference between
+    this and the pencil: what is underneath the image in the game shows through,
+    whatever that turns out to be. The colour channels go with it, because the
+    RGB left under alpha 0 is what a later reconstruction would try to read as
+    context and it should not find the old artwork there.
+
+    Runs *before* the paint layer, so the pencil can put something back into a
+    hole this made. Two brushes that can only fight each other would be a worse
+    tool than one.
+    """
+    if array is None or cut is None or cut.shape[:2] != array.shape[:2]:
+        return
+    hit = cut[:, :, 3] > PAINT_OPAQUE
+    if not hit.any():
+        return
+    array[hit] = 0
+
+
+def apply_cut_segment(array: np.ndarray | None, a, b, size: int) -> None:
+    """Take one brush segment straight out of *array*. In place.
+
+    The live half of ``apply_cut``: the editor shows a cut by punching it into
+    the pieces of the last render, because nothing else makes transparency
+    appear under the mouse while the button is still down.
+    """
+    if array is None:
+        return
+    mask = _segment(array, a, b, size)
+    if mask.any():
+        array[mask] = 0
 
 
 def composite(array: np.ndarray, layer: np.ndarray | None) -> None:

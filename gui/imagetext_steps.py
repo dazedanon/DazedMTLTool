@@ -21,10 +21,11 @@ import re
 from pathlib import Path
 
 import numpy as np
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import QSize, Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFormLayout,
@@ -40,6 +41,7 @@ from PyQt5.QtWidgets import (
     QProgressBar,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QSlider,
     QSpinBox,
     QSplitter,
@@ -58,6 +60,8 @@ from gui.imagetext_canvas import (
     font_choices,
     text_font,
 )
+from gui.qt_icons import get_icon
+from util.imagetools import fonts as fontsmod
 from util.imagetools import inpaint as inpaintmod
 from util.imagetools import job as jobmod
 from util.imagetools import paint as paintmod
@@ -104,6 +108,82 @@ NEXT_BUTTON = (
 DIM = QColor(110, 110, 118)
 GREEN = QColor(120, 200, 130)
 RED = QColor(230, 80, 80)
+
+# An icon-only tool needs its selected state drawn explicitly. Qt's own
+# ``:checked`` look on a flat dark theme is a barely-visible shade change, and
+# what the eye was actually reading as "this one is active" was the focus ring -
+# which the canvas takes away the moment it is clicked.
+TOOL_BUTTON = (
+    "QPushButton{border:1px solid #3a4150;border-radius:3px;padding:5px 9px;}"
+    "QPushButton:hover{background:#232a36;}"
+    "QPushButton:checked{border:1px solid #4f8ef7;background:#1d2c47;}"
+    "QPushButton:disabled{border-color:#2b303a;}"
+)
+
+
+def _tool_button(icon: str, tooltip: str) -> QPushButton:
+    """One canvas tool: an icon, a tooltip that names it, and a lit state."""
+    button = QPushButton()
+    button.setIcon(get_icon(icon))
+    button.setIconSize(QSize(18, 18))
+    button.setCheckable(True)
+    button.setToolTip(tooltip)
+    button.setStyleSheet(TOOL_BUTTON)
+    # Named for the accessibility tree and for tests, since there is no label
+    # on screen to find it by any more.
+    button.setAccessibleName(tooltip.splitlines()[0])
+    return button
+
+
+def _icon_toggle(icon: str, name: str) -> QPushButton:
+    """A checkable icon button that reads as pressed - Bold, Italic."""
+    button = QPushButton()
+    button.setIcon(get_icon(icon))
+    button.setIconSize(QSize(16, 16))
+    button.setCheckable(True)
+    button.setFixedWidth(30)
+    button.setStyleSheet(TOOL_BUTTON)
+    button.setAccessibleName(name)
+    return button
+
+
+#: How many characters wide a dropdown may *insist* on being. The lists here
+#: hold whole sentences ("LaMa - a model that invents the missing texture") and
+#: a combo demands its longest item by default, which leaves the label column
+#: with whatever is left and clips the label instead of the sentence. This is a
+#: floor, not a width: the fields still grow to fill the panel.
+COMBO_CHARS = 8
+
+
+def _wide_combo() -> QComboBox:
+    # The policy has to be set before the items go in - Qt works the hint out
+    # once, and a combo filled first keeps the width of its longest entry.
+    combo = QComboBox()
+    combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLength)
+    combo.setMinimumContentsLength(COMBO_CHARS)
+    return combo
+
+
+def _small_spin(low: int, high: int, suffix: str) -> QSpinBox:
+    """A number box the width of the numbers it holds, and no wider."""
+    spin = QSpinBox()
+    spin.setRange(low, high)
+    spin.setSuffix(suffix)
+    spin.setMaximumWidth(84)
+    return spin
+
+
+def _row(*widgets, stretch: bool = False) -> QWidget:
+    """Several small controls on one line of a form."""
+    holder = QWidget()
+    layout = QHBoxLayout(holder)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(6)
+    for widget in widgets:
+        layout.addWidget(widget)
+    if stretch:
+        layout.addStretch(1)
+    return holder
 
 IMAGE_TEXT_ENGINE = "Image Text"
 
@@ -239,6 +319,94 @@ class ImageStep(QWidget):
 
     def open_current(self) -> None:
         raise NotImplementedError
+
+    # ------------------------------------------------------------- blocks
+    # Shared rather than owned by the review step, because the render step
+    # needs the same four operations on the same objects: a box that turns out
+    # to be wrong is nearly always noticed while looking at the render, and
+    # sending the user back a tab to fix it is what made them stop fixing it.
+    # Everything here goes through ``_after_block_change`` so the flags, the
+    # lists, the canvas and the autosave stay in step whichever tab called.
+
+    def _add_box(self, box: Box) -> None:
+        entry = self.current_entry()
+        if entry is None:
+            return
+        block = TextBlock(jobmod._new_id(), box, "", "", 0.0, [])
+        entry.blocks.append(block)
+        self._after_block_change(entry, [block.block_id])
+        # One box per press, and the button says so. A button still lit for a
+        # mode nothing is in is the same bug as the tool row's.
+        self.canvas.set_adding(False)
+        button = getattr(self, "add_button", None)
+        if button is not None:
+            button.setChecked(False)
+
+    def _merge(self) -> None:
+        entry = self.current_entry()
+        ids = self.canvas.selected_ids()
+        if entry is None or len(ids) < 2:
+            return
+        chosen = [b for b in entry.blocks if b.block_id in set(ids)]
+        # Reading order, so the joined text comes out in the order it is read.
+        chosen.sort(key=lambda b: (b.box.y, b.box.x))
+        box = chosen[0].box
+        lines: list[Line] = []
+        for block in chosen:
+            box = box.union(block.box)
+            lines.extend(block.lines or [Line(block.source_text, block.box, block.angle)])
+        merged = TextBlock(
+            jobmod._new_id(),
+            box,
+            "\n".join(b.source_text for b in chosen if b.source_text.strip()),
+            # The translations go with the text they belong to. Dropping them
+            # would mean re-running the translator over a paragraph whose words
+            # have all already been through it.
+            "\n".join(b.target_text for b in chosen if b.target_text.strip()),
+            chosen[0].angle,
+            lines,
+        )
+        first = entry.blocks.index(chosen[0])
+        for block in chosen:
+            entry.blocks.remove(block)
+        entry.blocks.insert(first, merged)
+        self._after_block_change(entry, [merged.block_id])
+
+    def _split(self) -> None:
+        entry = self.current_entry()
+        block = self.current_block()
+        if entry is None or block is None or block.line_count < 2:
+            return
+        index = entry.blocks.index(block)
+        entry.blocks.remove(block)
+        fresh = []
+        for line in block.lines:
+            fresh.append(
+                TextBlock(jobmod._new_id(), line.box, line.text, "", line.angle, [line])
+            )
+        for offset, item in enumerate(fresh):
+            entry.blocks.insert(index + offset, item)
+        self._after_block_change(entry, [b.block_id for b in fresh])
+
+    def _delete(self) -> None:
+        entry = self.current_entry()
+        ids = set(self.canvas.selected_ids())
+        if entry is None or not ids:
+            return
+        entry.blocks = [b for b in entry.blocks if b.block_id not in ids]
+        self._after_block_change(entry, [])
+
+    def _after_block_change(self, entry: ImageEntry, select: list[str]) -> None:
+        apply_flags(entry)
+        if entry.status in jobmod.REVIEWED:
+            # Editing after confirming un-confirms: the export must never
+            # contain blocks nobody has looked at in their current shape.
+            entry.status = NEEDS_REVIEW
+        self.canvas.rebuild_boxes()
+        self.canvas.select(select)
+        self.editor.reload_lists()
+        self._sync_panel()
+        self.editor.schedule_save()
 
     def advance(self, wanted) -> bool:
         """Move to the next row after this one for which *wanted* is true.
@@ -557,76 +725,10 @@ class OcrStep(ImageStep):
 
     # ------------------------------------------------------------- editing
     def _add_box(self, box: Box) -> None:
-        entry = self.current_entry()
-        if entry is None:
-            return
-        block = TextBlock(jobmod._new_id(), box, "", "", 0.0, [])
-        entry.blocks.append(block)
-        self._after_block_change(entry, [block.block_id])
+        # Everything the base class does, then straight into the text field:
+        # a box drawn here exists to have what the OCR missed typed into it.
+        super()._add_box(box)
         self.source_edit.setFocus()
-
-    def _merge(self) -> None:
-        entry = self.current_entry()
-        ids = self.canvas.selected_ids()
-        if entry is None or len(ids) < 2:
-            return
-        chosen = [b for b in entry.blocks if b.block_id in set(ids)]
-        # Reading order, so the joined text comes out in the order it is read.
-        chosen.sort(key=lambda b: (b.box.y, b.box.x))
-        box = chosen[0].box
-        lines: list[Line] = []
-        for block in chosen:
-            box = box.union(block.box)
-            lines.extend(block.lines or [Line(block.source_text, block.box, block.angle)])
-        merged = TextBlock(
-            jobmod._new_id(),
-            box,
-            "\n".join(b.source_text for b in chosen if b.source_text.strip()),
-            "",
-            chosen[0].angle,
-            lines,
-        )
-        first = entry.blocks.index(chosen[0])
-        for block in chosen:
-            entry.blocks.remove(block)
-        entry.blocks.insert(first, merged)
-        self._after_block_change(entry, [merged.block_id])
-
-    def _split(self) -> None:
-        entry = self.current_entry()
-        block = self.current_block()
-        if entry is None or block is None or block.line_count < 2:
-            return
-        index = entry.blocks.index(block)
-        entry.blocks.remove(block)
-        fresh = []
-        for line in block.lines:
-            fresh.append(
-                TextBlock(jobmod._new_id(), line.box, line.text, "", line.angle, [line])
-            )
-        for offset, item in enumerate(fresh):
-            entry.blocks.insert(index + offset, item)
-        self._after_block_change(entry, [b.block_id for b in fresh])
-
-    def _delete(self) -> None:
-        entry = self.current_entry()
-        ids = set(self.canvas.selected_ids())
-        if entry is None or not ids:
-            return
-        entry.blocks = [b for b in entry.blocks if b.block_id not in ids]
-        self._after_block_change(entry, [])
-
-    def _after_block_change(self, entry: ImageEntry, select: list[str]) -> None:
-        apply_flags(entry)
-        if entry.status in jobmod.REVIEWED:
-            # Editing after confirming un-confirms: the export must never
-            # contain blocks nobody has looked at in their current shape.
-            entry.status = NEEDS_REVIEW
-        self.canvas.rebuild_boxes()
-        self.canvas.select(select)
-        self.editor.reload_lists()
-        self._sync_panel()
-        self.editor.schedule_save()
 
     # ------------------------------------------------------------- reading
     def _read_selected(self) -> None:
@@ -1386,6 +1488,9 @@ class RenderStep(ImageStep):
         super().__init__(editor, parent)
         self.array: np.ndarray | None = None
         self.layer: np.ndarray | None = None
+        # What the eraser took out of the picture, kept beside the paint rather
+        # than in it - see ``util.imagetools.paint``.
+        self.cut: np.ndarray | None = None
         # Which image the layer in hand belongs to. Without it, moving to the
         # next image saved the outgoing strokes against the incoming entry - or,
         # once ``confirm`` started advancing on its own, dropped them entirely.
@@ -1425,6 +1530,7 @@ class RenderStep(ImageStep):
         self.canvas = PaintCanvas()
         self.canvas.selection_changed.connect(self._sync_panel)
         self.canvas.geometry_changed.connect(self._geometry_changed)
+        self.canvas.box_added.connect(self._add_box)
         self.canvas.painted.connect(self._painted)
         self.canvas.stroking.connect(self._stroking)
         self.canvas.probed.connect(self._probed)
@@ -1434,6 +1540,7 @@ class RenderStep(ImageStep):
         centre_layout.addLayout(self._build_view_row())
         centre_layout.addWidget(self.canvas, 1)
         centre_layout.addLayout(self._build_tools())
+        centre_layout.addLayout(self._build_box_row())
         splitter.addWidget(centre)
 
         splitter.addWidget(self._build_panel())
@@ -1498,30 +1605,42 @@ class RenderStep(ImageStep):
 
     def _build_tools(self) -> QHBoxLayout:
         tools = QHBoxLayout()
-        self.select_tool = QPushButton("Select")
-        self.pencil_tool = QPushButton("Pencil")
-        self.eraser_tool = QPushButton("Eraser")
+        self.select_tool = _tool_button(
+            "mdi6.cursor-default-outline",
+            "Select  (V)\nMove and resize the boxes.",
+        )
+        self.pencil_tool = _tool_button(
+            "mdi6.pencil",
+            "Pencil  (B)\n"
+            "Paint under the English — repair a background the erase step got "
+            "wrong.\n"
+            "Alt-click to pick a colour off the picture.  Alt + right-drag to "
+            "resize.\nHold space or the wheel button to pan without changing tool.",
+        )
+        self.eraser_tool = _tool_button(
+            "mdi6.eraser",
+            "Eraser  (E)\n"
+            "On its own: rub out your own paint and cuts.\n"
+            "Ctrl: erase the picture itself to transparency, the way Photoshop's "
+            "eraser does.\n"
+            "Shift: paint the block's measured background, for a glyph on a "
+            "surface that has to stay opaque.",
+        )
+        # An exclusive group, so the one in use stays lit. Three independent
+        # checkable buttons let a second click on the active tool un-check it -
+        # the tool did not change, so nothing put the highlight back, and the
+        # row then showed no tool selected while a tool was plainly selected.
+        self.tool_group = QButtonGroup(self)
+        self.tool_group.setExclusive(True)
         for button, tool in (
             (self.select_tool, TOOL_SELECT),
             (self.pencil_tool, TOOL_PENCIL),
             (self.eraser_tool, TOOL_ERASER),
         ):
-            button.setCheckable(True)
+            self.tool_group.addButton(button)
             button.clicked.connect(lambda _c=False, t=tool: self.canvas.set_tool(t))
             tools.addWidget(button)
         self.select_tool.setChecked(True)
-        self.select_tool.setToolTip("Move and resize the boxes.  (V)")
-        self.pencil_tool.setToolTip(
-            "Paint under the English — repair a background the erase step got "
-            "wrong.  (B)\n"
-            "Alt-click to pick a colour off the picture.  Alt + right-drag to "
-            "resize.\nHold space or the wheel button to pan without changing tool."
-        )
-        self.eraser_tool.setToolTip(
-            "Rub out your own strokes.  (E)   Hold Ctrl to paint the block's "
-            "measured background instead, which is what covers a glyph the "
-            "erase step missed."
-        )
 
         tools.addSpacing(10)
         tools.addWidget(QLabel("Size"))
@@ -1555,6 +1674,49 @@ class RenderStep(ImageStep):
         tools.addWidget(self.undo_button)
         return tools
 
+    def _build_box_row(self) -> QHBoxLayout:
+        """Create and rearrange blocks without going back to the review tab.
+
+        The same four operations that step offers, on the same objects. A box
+        that is a line too short is something you find out by looking at the
+        render, and the fix belongs where the problem is visible.
+        """
+        row = QHBoxLayout()
+        self.add_button = QPushButton("Add box")
+        self.add_button.setIcon(get_icon("mdi6.vector-square"))
+        self.add_button.setCheckable(True)
+        self.add_button.setToolTip(
+            "Drag a new block onto the picture — for text the reader never "
+            "found, or a caption being written from scratch."
+        )
+        self.add_button.clicked.connect(
+            lambda: self.canvas.set_adding(self.add_button.isChecked())
+        )
+        self.merge_button = QPushButton("Merge")
+        self.merge_button.setIcon(get_icon("mdi6.call-merge"))
+        self.merge_button.setToolTip(
+            "Join the highlighted blocks into one, keeping both the source "
+            "lines and the translations."
+        )
+        self.merge_button.clicked.connect(self._merge)
+        self.split_button = QPushButton("Split")
+        self.split_button.setIcon(get_icon("mdi6.call-split"))
+        self.split_button.setToolTip("Break this block back into its separate lines.")
+        self.split_button.clicked.connect(self._split)
+        self.delete_button = QPushButton("Delete")
+        self.delete_button.setIcon(get_icon("mdi6.delete-outline"))
+        self.delete_button.setToolTip(
+            "Remove the highlighted blocks. The picture under them is left "
+            "exactly as it is."
+        )
+        self.delete_button.clicked.connect(self._delete)
+        for button in (
+            self.add_button, self.merge_button, self.split_button, self.delete_button
+        ):
+            row.addWidget(button)
+        row.addStretch(1)
+        return row
+
     def _brush_size_chosen(self, size: int) -> None:
         """One brush width, shown in three places that must not fight."""
         size = paintmod.clamp_size(size)
@@ -1585,7 +1747,24 @@ class RenderStep(ImageStep):
             self.editor.status(f"{entry.name}. " + self.editor.counts_text())
 
     def _build_panel(self) -> QWidget:
-        panel = QWidget()
+        """The block panel, inside something that can scroll.
+
+        There are eleven rows of controls here and a 1080p screen has a fixed
+        amount of room for them. Without the scroll area the rows past the
+        bottom are not merely cut off - Qt compresses every row to fit and they
+        draw over each other, which is the same panel reported as overflowing
+        with three rows fewer.
+        """
+        scroller = QScrollArea()
+        scroller.setWidgetResizable(True)
+        scroller.setFrameShape(QScrollArea.NoFrame)
+        # Never sideways: the fields grow and shrink with the panel, so a
+        # horizontal bar would only ever mean something is demanding more width
+        # than it should, and hiding that is how the labels got clipped.
+        scroller.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroller.setMinimumWidth(360)
+
+        panel = self.param_panel = QWidget()
         panel.setMinimumWidth(340)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1617,10 +1796,21 @@ class RenderStep(ImageStep):
         self.style_summary.setWordWrap(True)
         layout.addWidget(self.style_summary)
 
-        form = QFormLayout()
+        form = self.param_form = QFormLayout()
         form.setLabelAlignment(Qt.AlignRight)
+        # A QFormLayout gives the field column whatever its widgets ask for and
+        # the label column what is left. A combo asks for its longest item, and
+        # its longest item here is a sentence - so at 1080p the labels were
+        # squeezed until "Reconstruct with" ran off its own cell. Capping what
+        # the fields demand is what gives the labels their width back.
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        # And when the two together still will not fit - a long label beside a
+        # dropdown, on a panel the user has dragged narrow - the field drops to
+        # its own line rather than the label losing its last few characters.
+        form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        form.setHorizontalSpacing(8)
 
-        self.bg_combo = QComboBox()
+        self.bg_combo = _wide_combo()
         for name in BACKGROUNDS:
             self.bg_combo.addItem(BACKGROUND_LABELS[name], name)
         self.bg_combo.setToolTip(
@@ -1629,9 +1819,9 @@ class RenderStep(ImageStep):
             "where it is not."
         )
         self.bg_combo.currentIndexChanged.connect(self._style_edited)
-        form.addRow("Erase by", self.bg_combo)
+        form.addRow("Inpainting method", self.bg_combo)
 
-        self.inpaint_combo = QComboBox()
+        self.inpaint_combo = _wide_combo()
         for name in inpaintmod.METHODS:
             self.inpaint_combo.addItem(inpaintmod.METHOD_LABELS[name], name)
         self.inpaint_combo.setToolTip(
@@ -1643,16 +1833,14 @@ class RenderStep(ImageStep):
             "missing says so here rather than failing at render time."
         )
         self.inpaint_combo.currentIndexChanged.connect(self._style_edited)
-        form.addRow("Reconstruct with", self.inpaint_combo)
+        form.addRow("Inpainting model", self.inpaint_combo)
 
         colour_row = QWidget()
         colour_layout = QHBoxLayout(colour_row)
         colour_layout.setContentsMargins(0, 0, 0, 0)
         self.colour_button = ColourButton()
         self.colour_button.picked.connect(lambda _c: self._style_edited())
-        self.opacity_spin = QSpinBox()
-        self.opacity_spin.setRange(1, 100)
-        self.opacity_spin.setSuffix(" %")
+        self.opacity_spin = _small_spin(1, 100, " %")
         self.opacity_spin.setToolTip(
             "How opaque the type is. Measured from the original glyphs, which "
             "matters on artwork that is itself part-transparent — type cut into "
@@ -1671,8 +1859,7 @@ class RenderStep(ImageStep):
         self.outline_box.stateChanged.connect(self._style_edited)
         self.outline_button = ColourButton()
         self.outline_button.picked.connect(lambda _c: self._style_edited())
-        self.outline_width = QSpinBox()
-        self.outline_width.setRange(1, stylemod.MAX_OUTLINE)
+        self.outline_width = _small_spin(1, stylemod.MAX_OUTLINE, " px")
         self.outline_width.valueChanged.connect(self._style_edited)
         outline_layout.addWidget(self.outline_box)
         outline_layout.addWidget(self.outline_button, 1)
@@ -1681,28 +1868,11 @@ class RenderStep(ImageStep):
             "The stroke around the glyphs. Measured from inside the ink, since "
             "a stroke contrasts with the background by definition. It grows "
             "outwards only — the counters of an “a” or a “B” stay open at any "
-            "width."
+            "width, while the space between two letters keeps its stroke."
         )
         form.addRow("Stroke", outline_row)
 
-        self.cap_spin = QSpinBox()
-        self.cap_spin.setRange(5, 400)
-        self.cap_spin.setSuffix(" px")
-        self.cap_spin.setToolTip(
-            "How tall the capitals stand, in pixels — measured off the original "
-            "glyphs. Raise it and the type grows until it reaches the edges of "
-            "the block, then stops."
-        )
-        self.cap_spin.valueChanged.connect(self._style_edited)
-        form.addRow("Font size", self.cap_spin)
-
-        self.align_combo = QComboBox()
-        for name in stylemod.ALIGNMENTS:
-            self.align_combo.addItem(name.capitalize(), name)
-        self.align_combo.currentIndexChanged.connect(self._style_edited)
-        form.addRow("Align", self.align_combo)
-
-        self.font_combo = QComboBox()
+        self.font_combo = _wide_combo()
         for label, path in font_choices():
             self.font_combo.addItem(label, path)
         self.font_combo.setToolTip(
@@ -1714,6 +1884,61 @@ class RenderStep(ImageStep):
         self.font_combo.setMaxVisibleItems(24)
         self.font_combo.currentIndexChanged.connect(self._style_edited)
         form.addRow("Font family", self.font_combo)
+
+        # Two knobs to a row from here down. Each of these is three or four
+        # characters wide and each used to be given the whole panel to hold
+        # them, which pushed the rest of the form off the bottom of a 1080p
+        # screen for no gain at all.
+        self.bold_box = _icon_toggle("mdi6.format-bold", "Bold")
+        self.italic_box = _icon_toggle("mdi6.format-italic", "Italic")
+        for box in (self.bold_box, self.italic_box):
+            box.setToolTip(
+                "Bold and Italic are separate files, not a switch — a face is "
+                "offered here only when this machine has that cut of it."
+            )
+            box.clicked.connect(self._style_edited)
+        self.align_combo = QComboBox()
+        for name in stylemod.ALIGNMENTS:
+            self.align_combo.addItem(name.capitalize(), name)
+        self.align_combo.setMaximumWidth(110)
+        self.align_combo.currentIndexChanged.connect(self._style_edited)
+        form.addRow("Style", _row(self.bold_box, self.italic_box,
+                                  QLabel("Align"), self.align_combo, stretch=True))
+
+        self.cap_spin = _small_spin(5, 400, " px")
+        self.cap_spin.setToolTip(
+            "How tall the capitals stand, in pixels — measured off the original "
+            "glyphs. Raise it and the type grows until it reaches the edges of "
+            "the block, then stops."
+        )
+        self.cap_spin.valueChanged.connect(self._style_edited)
+        self.tracking_spin = _small_spin(-200, 1000, "")
+        self.tracking_spin.setSingleStep(10)
+        self.tracking_spin.setToolTip(
+            "Letter spacing, in thousandths of an em — Photoshop's units, so a "
+            "number copied off that panel means the same thing here. Relative "
+            "to the type, so it survives the fit ladder shrinking the block."
+        )
+        self.tracking_spin.valueChanged.connect(self._style_edited)
+        form.addRow("Size", _row(self.cap_spin,
+                                 QLabel("Tracking"), self.tracking_spin, stretch=True))
+
+        self.width_spin = _small_spin(10, 400, " %")
+        self.width_spin.setToolTip(
+            "Horizontal scale. A real stretch of the drawn glyphs, which is "
+            "what fits a long translation into a narrow plate without dropping "
+            "the type below the size of every other label in the game."
+        )
+        self.width_spin.valueChanged.connect(self._style_edited)
+        self.height_spin = _small_spin(10, 400, " %")
+        self.height_spin.setToolTip(
+            "Vertical scale, as a percentage of the size above. Applied by "
+            "asking the face for taller capitals rather than by stretching "
+            "pixels, so the outlines stay sharp."
+        )
+        self.height_spin.valueChanged.connect(self._style_edited)
+        form.addRow("Width", _row(self.width_spin,
+                                  QLabel("Height"), self.height_spin, stretch=True))
         layout.addLayout(form)
 
         self.style_notes = QLabel("")
@@ -1740,7 +1965,8 @@ class RenderStep(ImageStep):
         self.render_notes.setWordWrap(True)
         layout.addWidget(self.render_notes)
         layout.addStretch(1)
-        return panel
+        scroller.setWidget(panel)
+        return scroller
 
     # ------------------------------------------------------------- list
     def _ordered_entries(self) -> list[ImageEntry]:
@@ -1813,6 +2039,8 @@ class RenderStep(ImageStep):
             self.bg_combo, self.inpaint_combo, self.colour_button, self.opacity_spin,
             self.outline_box, self.outline_button,
             self.outline_width, self.cap_spin, self.align_combo, self.font_combo,
+            self.tracking_spin, self.width_spin, self.height_spin,
+            self.bold_box, self.italic_box,
             self.remeasure_button, self.target_edit,
             self.render_selected_button, self.render_all_button, self.confirm_button,
         ):
@@ -1829,18 +2057,19 @@ class RenderStep(ImageStep):
         entry = self.current_entry()
         if entry is None:
             self.canvas.show_image(None, None)
-            self.array = self.layer = None
+            self.array = self.layer = self.cut = None
             self._layer_of = None
-            self.canvas.set_layer(None)
+            self.canvas.set_layer(None, None)
             return
         self.array = load_array(self.job.source_path(entry))
         if self.array is None:
             self.canvas.show_image(None, None)
             return
         self.layer = paintmod.load_layer(self.job, entry, self.array.shape)
+        self.cut = paintmod.load_cut(self.job, entry, self.array.shape)
         self._layer_of = entry.relpath
         self._layer_dirty = False
-        self.canvas.set_layer(self.layer)
+        self.canvas.set_layer(self.layer, self.cut)
         # No pieces from the sweep - it renders on a worker thread and keeping
         # two extra full-size arrays per image would cost more memory than the
         # previews themselves. The first refresh on this image supplies them.
@@ -1859,7 +2088,9 @@ class RenderStep(ImageStep):
         if entry is None or self.array is None:
             return
         try:
-            result = rendermod.render_entry(self.array, entry, paint=self.layer)
+            result = rendermod.render_entry(
+                self.array, entry, paint=self.layer, cut=self.cut
+            )
         except Exception as exc:
             self.render_notes.setText(f"Preview failed: {exc}")
             return
@@ -1918,6 +2149,8 @@ class RenderStep(ImageStep):
             self.bg_combo, self.inpaint_combo, self.colour_button, self.opacity_spin,
             self.outline_box, self.outline_button,
             self.outline_width, self.cap_spin, self.align_combo, self.font_combo,
+            self.tracking_spin, self.width_spin, self.height_spin,
+            self.bold_box, self.italic_box,
             self.remeasure_button, self.target_edit,
         )
         if block is None:
@@ -1937,8 +2170,14 @@ class RenderStep(ImageStep):
             widget.setEnabled(True)
         style = self._style_for(block)
         orientation = "vertical" if block.vertical else "horizontal"
+        # The number on the box, its size, and which way it runs. Deliberately
+        # not the source text: that is in full, selectable, two lines below, and
+        # a truncated unselectable copy of it above only asked to be read twice.
+        ordinal = 1 + next(
+            (i for i, b in enumerate(entry.blocks) if b.block_id == block.block_id), 0
+        )
         self.block_title.setText(
-            f"{block.box.w}×{block.box.h} px · {orientation} · {block.source_text[:28]}"
+            f"Block {ordinal} · {block.box.w}×{block.box.h} px · {orientation}"
         )
 
         self._syncing = True
@@ -1963,6 +2202,12 @@ class RenderStep(ImageStep):
             self.cap_spin.setValue(max(self.cap_spin.minimum(), style.cap_height))
             self.align_combo.setCurrentIndex(max(0, self.align_combo.findData(style.align)))
             self.font_combo.setCurrentIndex(max(0, self.font_combo.findData(style.font)))
+            self.tracking_spin.setValue(style.tracking)
+            self.width_spin.setValue(max(self.width_spin.minimum(), style.scale_x))
+            self.height_spin.setValue(max(self.height_spin.minimum(), style.scale_y))
+            self.bold_box.setChecked(style.bold)
+            self.italic_box.setChecked(style.italic)
+            self._sync_cuts(style.font)
         finally:
             self._syncing = False
 
@@ -1974,6 +2219,30 @@ class RenderStep(ImageStep):
         self.style_notes.setText("\n".join(style.notes))
         if entry is not None:
             self.render_notes.setText(self._note_text(entry))
+
+    def _sync_cuts(self, font: str) -> None:
+        """Offer Bold and Italic only where the family has that file.
+
+        Left enabled they would be two buttons that visibly do nothing on
+        roughly half the faces on the machine, which is worse than not being
+        offered - a control that fails silently teaches the user to distrust
+        the whole panel. Each is asked about the combination it would produce,
+        so on a family with no Bold Italic the second one goes out once the
+        first is pressed.
+        """
+        try:
+            path = fontsmod.resolve_font(font or None)
+        except Exception:
+            path = ""
+        bold, italic = self.bold_box.isChecked(), self.italic_box.isChecked()
+        for box, wanted in (
+            (self.bold_box, (True, italic)),
+            (self.italic_box, (bold, True)),
+        ):
+            has = bool(path) and fontsmod.has_variant(path, *wanted)
+            box.setEnabled(has)
+            if not has and box.isChecked():
+                box.setChecked(False)
 
     def _target_edited(self) -> None:
         """The translation is editable here too.
@@ -2038,6 +2307,15 @@ class RenderStep(ImageStep):
         style.cap_height = self.cap_spin.value()
         style.align = self.align_combo.currentData()
         style.font = self.font_combo.currentData()
+        style.tracking = self.tracking_spin.value()
+        style.scale_x = self.width_spin.value()
+        style.scale_y = self.height_spin.value()
+        # Before the two cuts are read, not after: whether Bold is on offer at
+        # all is a property of the family just chosen, not of the one before
+        # it, and a box this turns off must not still reach the style.
+        self._sync_cuts(style.font)
+        style.bold = self.bold_box.isChecked()
+        style.italic = self.italic_box.isChecked()
         style.locked = True
         self.style_summary.setText("Set by you.")
         self.editor.schedule_save()
@@ -2116,7 +2394,7 @@ class RenderStep(ImageStep):
         return None
 
     def save_layer(self) -> None:
-        """Write the layer against the image it was painted on, if it changed."""
+        """Write both brush layers against the image they were drawn on."""
         if self.layer is None or not self._layer_of or not self._layer_dirty:
             return
         try:
@@ -2125,6 +2403,7 @@ class RenderStep(ImageStep):
             return
         try:
             paintmod.save_layer(self.job, entry, self.layer)
+            paintmod.save_cut(self.job, entry, self.cut)
             self._layer_dirty = False
         except Exception as exc:
             self.editor.status(f"Could not save the paint layer: {exc}")

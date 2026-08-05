@@ -50,6 +50,7 @@ from gui.image_text_editor import (  # noqa: E402
     ImageTextEditor,
 )
 from gui.imagetext_canvas import TOOL_ERASER, TOOL_PENCIL, TOOL_SELECT  # noqa: E402
+from util.imagetools import fonts as fontsmod  # noqa: E402
 from util.imagetools import inpaint as inpaintmod  # noqa: E402
 from util.imagetools import paint, render  # noqa: E402
 from util.imagetools import style as stylemod  # noqa: E402
@@ -433,6 +434,22 @@ class BrushTests(EditorTestCase):
             ).sum()
         )
 
+    def opaque_under_cut(self, step, array):
+        """Opaque pixels the eraser marked, ignoring the type drawn over them.
+
+        The translation is composited last and is entitled to sit on top of a
+        hole. What a cut promises is that nothing of the *picture* survives
+        under it, so the blocks are taken out of the mask before counting -
+        and what is left is asserted to be non-empty, or the count would pass
+        by measuring nothing at all.
+        """
+        mask = step.cut[:, :, 3] > paint.PAINT_OPAQUE
+        for block in step.current_entry().blocks:
+            rows, cols = block.box.slices()
+            mask[rows, cols] = False
+        self.assertTrue(mask.any(), "the cut fell entirely inside a block")
+        return int((mask & (array[:, :, 3] > 0)).sum())
+
     def paint_on(self, step, relpath="one.png"):
         step.select_relpath(relpath)
         step.canvas.set_tool(TOOL_PENCIL)
@@ -491,17 +508,78 @@ class BrushTests(EditorTestCase):
         self.drag(step.canvas, (0, 70), (240, 70))
         self.assertTrue(paint.is_clear(step.layer))
 
-    def test_ctrl_with_the_eraser_paints_instead_of_clearing(self):
+    def test_shift_with_the_eraser_paints_instead_of_clearing(self):
         step = self.open_render()
         step.select_relpath("one.png")
         step.canvas.set_tool(TOOL_ERASER)
         step.canvas.set_brush_size(8)
         step.canvas.set_brush_colour(self.MAGENTA)
-        self.drag(step.canvas, (60, 40), (180, 40), Qt.ControlModifier)
+        self.drag(step.canvas, (60, 40), (180, 40), Qt.ShiftModifier)
         self.assertFalse(
             paint.is_clear(step.layer),
-            "Ctrl+eraser cleared instead of painting the background",
+            "Shift+eraser cleared instead of painting the background",
         )
+
+    def test_ctrl_with_the_eraser_cuts_the_picture_to_transparent(self):
+        """Photoshop's default eraser: the pixels go, nothing replaces them."""
+        step = self.open_render()
+        step.select_relpath("one.png")
+        step.canvas.set_tool(TOOL_ERASER)
+        step.canvas.set_brush_size(12)
+        # Below the block, so the cut is judged against picture rather than type.
+        self.drag(step.canvas, (60, 68), (180, 68), Qt.ControlModifier)
+        # The mark lands on the cut layer, not on the paint layer.
+        self.assertFalse(paint.is_clear(step.cut))
+        self.assertTrue(paint.is_clear(step.layer))
+        step.refresh_preview()
+        self.assertEqual(self.opaque_under_cut(step, step.previews["one.png"]), 0)
+
+    def test_a_cut_reaches_the_written_png(self):
+        step = self.open_render()
+        step.select_relpath("one.png")
+        step.canvas.set_tool(TOOL_ERASER)
+        step.canvas.set_brush_size(12)
+        # Below the block, so the cut is judged against picture rather than type.
+        self.drag(step.canvas, (60, 68), (180, 68), Qt.ControlModifier)
+        step._render_all()
+        written = render.load_rgba(self.workspace / "one.png")
+        self.assertEqual(self.opaque_under_cut(step, written), 0)
+
+    def test_the_cut_layer_is_written_beside_the_job(self):
+        step = self.open_render()
+        step.select_relpath("one.png")
+        step.canvas.set_tool(TOOL_ERASER)
+        step.canvas.set_brush_size(12)
+        # Below the block, so the cut is judged against picture rather than type.
+        self.drag(step.canvas, (60, 68), (180, 68), Qt.ControlModifier)
+        self.dialog.save_now()
+        self.assertTrue(
+            paint.cut_path(self.dialog.job, self.dialog.job.find("one.png")).is_file()
+        )
+
+    def test_the_plain_eraser_takes_a_cut_back_too(self):
+        """One eraser, both kinds of mark - or it looks like it did nothing."""
+        step = self.open_render()
+        step.select_relpath("one.png")
+        step.canvas.set_tool(TOOL_ERASER)
+        step.canvas.set_brush_size(12)
+        # Below the block, so the cut is judged against picture rather than type.
+        self.drag(step.canvas, (60, 68), (180, 68), Qt.ControlModifier)
+        self.assertFalse(paint.is_clear(step.cut))
+        step.canvas.set_brush_size(60)
+        self.drag(step.canvas, (0, 68), (240, 68))
+        self.assertTrue(paint.is_clear(step.cut))
+
+    def test_undo_puts_a_cut_back(self):
+        step = self.open_render()
+        step.select_relpath("one.png")
+        step.canvas.set_tool(TOOL_ERASER)
+        step.canvas.set_brush_size(12)
+        # Below the block, so the cut is judged against picture rather than type.
+        self.drag(step.canvas, (60, 68), (180, 68), Qt.ControlModifier)
+        self.assertFalse(paint.is_clear(step.cut))
+        step.canvas.undo()
+        self.assertTrue(paint.is_clear(step.cut))
 
     def test_the_background_probe_knows_the_local_colour(self):
         step = self.open_render()
@@ -665,6 +743,295 @@ class ViewTests(EditorTestCase):
             any(" " in label for label in labels[1:]),
             "no font reported a real family name",
         )
+
+
+class ToolRowTests(EditorTestCase):
+    """The three canvas tools: icons, and a highlight that stays put."""
+
+    def open_render(self):
+        self.translate_everything()
+        self.dialog.goto_step(STEP_RENDER)
+        return self.dialog.render_step
+
+    def tools(self, step):
+        return (step.select_tool, step.pencil_tool, step.eraser_tool)
+
+    def test_they_are_icons_with_the_name_in_the_tooltip(self):
+        step = self.open_render()
+        for button, name in zip(self.tools(step), ("Select", "Pencil", "Eraser")):
+            with self.subTest(name):
+                self.assertEqual(button.text(), "", "the label is still a label")
+                self.assertFalse(button.icon().isNull(), "no icon was set")
+                self.assertTrue(button.toolTip().startswith(name))
+
+    def test_exactly_one_is_lit_at_a_time(self):
+        step = self.open_render()
+        for tool, expected in (
+            (TOOL_PENCIL, step.pencil_tool),
+            (TOOL_ERASER, step.eraser_tool),
+            (TOOL_SELECT, step.select_tool),
+        ):
+            with self.subTest(tool):
+                step.canvas.set_tool(tool)
+                lit = [b for b in self.tools(step) if b.isChecked()]
+                self.assertEqual(lit, [expected])
+
+    def test_pressing_the_tool_already_in_use_leaves_it_lit(self):
+        """It used to un-check itself: the tool did not change, so nothing put
+        the highlight back, and the row then showed no tool at all."""
+        step = self.open_render()
+        step.pencil_tool.click()
+        self.assertTrue(step.pencil_tool.isChecked())
+        step.pencil_tool.click()
+        self.assertTrue(step.pencil_tool.isChecked())
+        self.assertEqual(step.canvas.tool, TOOL_PENCIL)
+
+    def test_the_checked_state_is_styled_rather_than_left_to_the_theme(self):
+        step = self.open_render()
+        for button in self.tools(step):
+            self.assertIn(":checked", button.styleSheet())
+
+
+class RenderBoxTests(EditorTestCase):
+    """Creating and rearranging blocks from the render step.
+
+    The same four operations the review step has. A box that is a line too
+    short is something you find out by looking at the render, and sending the
+    user back a tab to fix it is what made them stop fixing it.
+    """
+
+    def open_render(self):
+        self.translate_everything()
+        self.dialog.goto_step(STEP_RENDER)
+        step = self.dialog.render_step
+        if step.worker is not None:
+            step.worker.wait(30_000)
+        self.app.processEvents()
+        step.select_relpath("one.png")
+        return step
+
+    def test_a_new_box_lands_on_the_entry_and_the_canvas(self):
+        step = self.open_render()
+        entry = step.current_entry()
+        before = len(entry.blocks)
+        step._add_box(Box(4, 60, 60, 76))
+        self.assertEqual(len(entry.blocks), before + 1)
+        self.assertIn(entry.blocks[-1].block_id, step.canvas.items_by_id)
+        self.assertEqual(step.canvas.selected_ids(), [entry.blocks[-1].block_id])
+
+    def test_adding_stops_after_one_box(self):
+        step = self.open_render()
+        step.add_button.setChecked(True)
+        step.canvas.set_adding(True)
+        step._add_box(Box(4, 60, 60, 76))
+        self.assertFalse(step.add_button.isChecked())
+        self.assertFalse(step.canvas.adding)
+
+    def test_a_box_added_here_can_be_given_a_translation_and_rendered(self):
+        step = self.open_render()
+        step._add_box(Box(4, 58, 90, 78))
+        step.target_edit.setPlainText("Extra")
+        step.refresh_preview()
+        entry = step.current_entry()
+        self.assertEqual(entry.blocks[-1].target_text, "Extra")
+        ids = {note.block_id for note in step.notes["one.png"]}
+        self.assertIn(entry.blocks[-1].block_id, ids)
+
+    def test_merging_keeps_both_translations(self):
+        """Dropping them would mean re-running the translator over words that
+        have all already been through it."""
+        step = self.open_render()
+        entry = step.current_entry()
+        step._add_box(Box(4, 58, 90, 78))
+        entry.blocks[-1].target_text = "World"
+        entry.blocks[0].target_text = "Hello"
+        step.canvas.select([b.block_id for b in entry.blocks])
+        step._merge()
+        self.assertEqual(len(entry.blocks), 1)
+        self.assertEqual(entry.blocks[0].target_text, "Hello\nWorld")
+
+    def test_deleting_takes_the_block_and_leaves_the_picture(self):
+        step = self.open_render()
+        entry = step.current_entry()
+        before = render.load_rgba(self.workspace / "one.png")
+        step.canvas.select([entry.blocks[0].block_id])
+        step._delete()
+        self.assertEqual(entry.blocks, [])
+        after = render.load_rgba(self.workspace / "one.png")
+        self.assertTrue((before == after).all(), "deleting a box touched the file")
+
+    def test_editing_a_box_here_un_confirms_the_image(self):
+        step = self.open_render()
+        entry = step.current_entry()
+        entry.status = CONFIRMED
+        step._add_box(Box(4, 60, 60, 76))
+        self.assertEqual(entry.status, NEEDS_REVIEW)
+
+
+class ParameterPanelTests(EditorTestCase):
+    """The right-hand panel: what it is called and how much room it takes."""
+
+    def open_render(self):
+        self.translate_everything()
+        self.dialog.goto_step(STEP_RENDER)
+        step = self.dialog.render_step
+        step.select_relpath("one.png")
+        step.canvas.select([step.current_entry().blocks[0].block_id])
+        return step
+
+    def labels(self, step):
+        from PyQt5.QtWidgets import QFormLayout
+
+        out = []
+        for form in step.findChildren(QFormLayout):
+            for row in range(form.rowCount()):
+                item = form.itemAt(row, QFormLayout.LabelRole)
+                if item is not None and item.widget() is not None:
+                    out.append(item.widget().text())
+        return out
+
+    def test_the_two_inpainting_rows_are_named_for_what_they_choose(self):
+        step = self.open_render()
+        names = self.labels(step)
+        self.assertIn("Inpainting method", names)
+        self.assertIn("Inpainting model", names)
+        self.assertNotIn("Erase by", names)
+        self.assertNotIn("Reconstruct with", names)
+
+    def test_no_row_asks_for_more_width_than_the_panel_has(self):
+        """The reported overflow, stated as the thing that causes it.
+
+        A QFormLayout gives the field column whatever its widgets demand and
+        the label column what is left. A combo demands the width of its longest
+        item, and the longest item in these lists is a sentence - so at 1080p
+        the labels were squeezed and "Reconstruct with" ran off its own cell.
+        """
+        from PyQt5.QtWidgets import QFormLayout
+
+        step = self.open_render()
+        form = step.param_form
+        room = step.param_panel.minimumWidth()
+        self.assertGreater(form.rowCount(), 4, "the form was not found")
+        self.assertLessEqual(
+            form.minimumSize().width(), room,
+            f"the parameter form cannot be drawn in the {room}px the panel "
+            "reserves for it, so something on every row gets clipped",
+        )
+
+    def test_a_long_label_gets_its_own_line_rather_than_being_clipped(self):
+        from PyQt5.QtWidgets import QFormLayout
+
+        step = self.open_render()
+        self.assertEqual(
+            step.param_form.rowWrapPolicy(), QFormLayout.WrapLongRows
+        )
+
+    def test_each_label_asks_for_room_for_all_of_its_own_text(self):
+        from PyQt5.QtWidgets import QFormLayout
+
+        step = self.open_render()
+        form = step.param_form
+        for row in range(form.rowCount()):
+            item = form.itemAt(row, QFormLayout.LabelRole)
+            widget = item.widget() if item is not None else None
+            if widget is None or not widget.text():
+                continue
+            with self.subTest(widget.text()):
+                self.assertGreaterEqual(
+                    widget.sizeHint().width(),
+                    widget.fontMetrics().horizontalAdvance(widget.text()),
+                )
+
+    def test_the_panel_scrolls_rather_than_crushing_its_own_rows(self):
+        """Eleven rows of controls against a fixed amount of screen.
+
+        Without somewhere to scroll, Qt does not cut the surplus rows off - it
+        compresses every row to fit and they draw over one another, which is
+        this panel with three rows fewer and is what was reported.
+        """
+        from PyQt5.QtWidgets import QScrollArea
+
+        step = self.open_render()
+        scroller = step.param_panel.parentWidget()
+        while scroller is not None and not isinstance(scroller, QScrollArea):
+            scroller = scroller.parentWidget()
+        self.assertIsNotNone(scroller, "the parameter panel cannot scroll")
+        self.assertTrue(scroller.widgetResizable())
+        self.assertEqual(
+            scroller.horizontalScrollBarPolicy(), Qt.ScrollBarAlwaysOff,
+            "a sideways bar would hide a field demanding more width than it has",
+        )
+
+    def test_the_number_boxes_do_not_take_the_whole_row(self):
+        for spin in ("cap_spin", "tracking_spin", "width_spin",
+                     "height_spin", "opacity_spin", "outline_width"):
+            with self.subTest(spin):
+                step = self.dialog.render_step
+                self.assertLessEqual(getattr(step, spin).maximumWidth(), 90)
+
+    def test_the_block_header_no_longer_repeats_the_source_text(self):
+        """It sat directly above a selectable copy of the same words."""
+        step = self.open_render()
+        block = step.current_entry().blocks[0]
+        title = step.block_title.text()
+        self.assertNotIn(block.source_text[:8], title)
+        self.assertIn("Block 1", title)
+        self.assertIn(f"{block.box.w}×{block.box.h}", title)
+
+
+class TypeControlTests(EditorTestCase):
+    """Tracking, width, height, bold and italic reaching the style."""
+
+    def open_render(self):
+        self.translate_everything()
+        self.dialog.goto_step(STEP_RENDER)
+        step = self.dialog.render_step
+        step.select_relpath("one.png")
+        step.canvas.select([step.current_entry().blocks[0].block_id])
+        return step
+
+    def test_they_start_neutral(self):
+        step = self.open_render()
+        self.assertEqual(step.width_spin.value(), 100)
+        self.assertEqual(step.height_spin.value(), 100)
+        self.assertEqual(step.tracking_spin.value(), 0)
+
+    def test_turning_them_reaches_the_style_and_the_render(self):
+        step = self.open_render()
+        block = step.current_entry().blocks[0]
+        before = step.previews["one.png"].copy()
+        step.tracking_spin.setValue(120)
+        step.width_spin.setValue(70)
+        step.height_spin.setValue(120)
+        self.assertEqual(block.style.tracking, 120)
+        self.assertEqual(block.style.scale_x, 70)
+        self.assertEqual(block.style.scale_y, 120)
+        step.refresh_preview()
+        self.assertFalse((step.previews["one.png"] == before).all())
+
+    def test_bold_is_offered_only_where_the_family_has_the_file(self):
+        step = self.open_render()
+        block = step.current_entry().blocks[0]
+        with patch.object(fontsmod, "has_variant", lambda *a, **k: False):
+            step._sync_cuts(block.style.font)
+            self.assertFalse(step.bold_box.isEnabled())
+            self.assertFalse(step.italic_box.isEnabled())
+        with patch.object(fontsmod, "has_variant", lambda *a, **k: True):
+            step._sync_cuts(block.style.font)
+            self.assertTrue(step.bold_box.isEnabled())
+
+    def test_a_cut_that_goes_away_is_not_left_switched_on(self):
+        """Otherwise the style asks for a face that is not on this machine."""
+        step = self.open_render()
+        block = step.current_entry().blocks[0]
+        with patch.object(fontsmod, "has_variant", lambda *a, **k: True):
+            step.bold_box.setChecked(True)
+            step._style_edited()
+            self.assertTrue(block.style.bold)
+        with patch.object(fontsmod, "has_variant", lambda *a, **k: False):
+            step._style_edited()
+            self.assertFalse(block.style.bold)
+            self.assertFalse(step.bold_box.isChecked())
 
 
 class ShellTests(EditorTestCase):

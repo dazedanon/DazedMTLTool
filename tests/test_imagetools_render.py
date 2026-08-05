@@ -24,6 +24,7 @@ import tempfile
 import importlib.util
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 # The semi-manual image workflow's dependencies are downloaded on demand
 # (util/imagetools/resources.py), so a checkout that has never opened it does
@@ -37,6 +38,7 @@ if importlib.util.find_spec("cv2") is None:
 
 import cv2
 import numpy as np
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -591,6 +593,28 @@ class StylePersistenceTests(unittest.TestCase):
         job.save()
         self.assertIsNone(Job.load(self.root).images[0].blocks[0].style)
 
+    def test_the_typographic_knobs_survive_a_save_and_load(self):
+        job = Job(self.root)
+        entry = ImageEntry("a.png")
+        item = block(Box(0, 0, 10, 10))
+        item.style = Style(
+            scale_x=140, scale_y=80, tracking=-25, bold=True, italic=True
+        )
+        entry.blocks = [item]
+        job.images = [entry]
+        job.save()
+        back = Job.load(self.root).images[0].blocks[0].style
+        self.assertEqual(
+            (back.scale_x, back.scale_y, back.tracking, back.bold, back.italic),
+            (140, 80, -25, True, True),
+        )
+
+    def test_a_job_written_before_they_existed_reads_back_neutral(self):
+        """Absent means 100%, not 0% - or every old job renders at no size."""
+        back = Style.from_dict({"background": stylemod.BG_KEEP})
+        self.assertEqual((back.scale_x, back.scale_y, back.tracking), (100, 100, 0))
+        self.assertFalse(back.bold or back.italic)
+
 
 # ---------------------------------------------------------------------- paint
 
@@ -742,6 +766,31 @@ class PaintOrderTests(unittest.TestCase):
         )
         self.assertTrue((plain.array == with_empty.array).all())
 
+    def test_a_cut_takes_the_picture_out_altogether(self):
+        """Not a colour over it - alpha to nothing, the way an eraser works."""
+        cut = paint.blank(self.array.shape)
+        paint.stroke(cut, (10, 10), (230, 10), 8, [255, 255, 255, 255])
+        result = render.render_entry(self.array, self.entry, cut=cut)
+        marked = cut[:, :, 3] > 0
+        self.assertGreater(int(marked.sum()), 0)
+        self.assertEqual(int(result.array[marked][:, 3].max()), 0)
+
+    def test_paint_goes_back_over_a_cut(self):
+        """The two brushes have to be usable together, not against each other."""
+        cut = paint.blank(self.array.shape)
+        layer = paint.blank(self.array.shape)
+        paint.stroke(cut, (10, 10), (230, 10), 12, [255, 255, 255, 255])
+        paint.stroke(layer, (10, 10), (230, 10), 6, [255, 0, 255, 255])
+        result = render.render_entry(self.array, self.entry, paint=layer, cut=cut)
+        self.assertGreater(magenta(result.array), 0)
+
+    def test_no_cut_renders_exactly_as_before(self):
+        plain = render.render_entry(self.array, self.entry)
+        with_empty = render.render_entry(
+            self.array, self.entry, cut=paint.blank(self.array.shape)
+        )
+        self.assertTrue((plain.array == with_empty.array).all())
+
     def test_notes_stay_in_reading_order(self):
         """Erase and draw run as separate passes now; the notes must not come
         back as "everything that failed, then everything that worked"."""
@@ -883,6 +932,142 @@ class SizingTests(unittest.TestCase):
 
 
 @needs_font
+class TypographyTests(unittest.TestCase):
+    """Tracking, width and height, in Photoshop's units and with its defaults.
+
+    None of these is measured off the image - measurement recovers the *size*
+    of the Japanese, and a face set 90% wide is indistinguishable from a
+    narrower face at 100%. They start neutral, and what matters is that neutral
+    really is neutral: a job written before they existed has to render exactly
+    as it did, or every image in it comes back changed.
+    """
+
+    def setUp(self):
+        from util.imagetools.fonts import default_font
+
+        self.font = default_font()
+
+    def _fit(self, **extra):
+        from util.imagetools.fonts import fit_text
+
+        return fit_text(
+            "Restore", max_width=400, max_height=60, font_path=self.font,
+            target_cap_height=30, **extra,
+        )
+
+    def test_the_defaults_change_nothing(self):
+        plain = self._fit()
+        neutral = self._fit(tracking=0, width_scale=100)
+        self.assertEqual((plain.size, plain.width, plain.height),
+                         (neutral.size, neutral.width, neutral.height))
+        self.assertEqual(neutral.step, 0.0)
+
+    def test_tracking_widens_the_line_and_narrowing_it_pulls_it_in(self):
+        loose = self._fit(tracking=200)
+        plain = self._fit()
+        tight = self._fit(tracking=-50)
+        self.assertGreater(loose.width, plain.width)
+        self.assertLess(tight.width, plain.width)
+
+    def test_tracking_is_relative_to_the_type_not_absolute(self):
+        """So a setting survives the fit ladder dropping the size."""
+        from util.imagetools.fonts import tracking_px
+
+        self.assertAlmostEqual(tracking_px(20, 100), 2.0)
+        self.assertAlmostEqual(tracking_px(40, 100), 4.0)
+
+    def test_a_width_scale_is_reported_in_the_fitted_width(self):
+        plain = self._fit()
+        wide = self._fit(width_scale=150)
+        self.assertGreater(wide.width, plain.width)
+        self.assertEqual(wide.height, plain.height, "width scaling moved the height")
+
+    def test_a_narrow_scale_fits_text_that_would_not_have(self):
+        """The reason it exists: a long translation in a plate that cannot grow."""
+        from util.imagetools.fonts import fit_text
+
+        wide = fit_text(
+            "Restores a moderate amount of HP", max_width=150, max_height=26,
+            font_path=self.font, target_cap_height=18, allow_wrap=False,
+            min_size=14,
+        )
+        narrow = fit_text(
+            "Restores a moderate amount of HP", max_width=150, max_height=26,
+            font_path=self.font, target_cap_height=18, allow_wrap=False,
+            min_size=14, width_scale=60,
+        )
+        self.assertFalse(wide.fits)
+        self.assertTrue(narrow.fits)
+
+    def test_the_drawn_tile_really_is_stretched(self):
+        """Not merely budgeted for - the pixels have to move too."""
+        def ink(scale):
+            fitted = self._fit(width_scale=scale)
+            layout = render.Layout(fitted, Box(0, 0, 400, 60), "left", True)
+            tile = np.array(render._tile((400, 60), layout, Style(cap_height=30)))
+            columns = np.nonzero((tile[:, :, 3] > 0).any(axis=0))[0]
+            return int(columns.max() - columns.min())
+
+        self.assertGreater(ink(150), int(ink(100) * 1.3))
+        self.assertLess(ink(60), int(ink(100) * 0.8))
+
+    def test_height_is_applied_through_the_size_not_by_stretching(self):
+        """A taller cap means real outlines, not a resampled bitmap."""
+        tall = render.plan(
+            "Restore", Box(0, 0, 400, 90),
+            Style(cap_height=20, scale_y=200), vertical=False, font_path=self.font,
+        )
+        plain = render.plan(
+            "Restore", Box(0, 0, 400, 90),
+            Style(cap_height=20), vertical=False, font_path=self.font,
+        )
+        self.assertGreater(tall.fitted.size, plain.fitted.size)
+        self.assertEqual(tall.fitted.width_scale, 100)
+
+
+class VariantTests(unittest.TestCase):
+    """Bold and Italic are files, not a switch."""
+
+    def setUp(self):
+        from util.imagetools import fonts
+
+        self.fonts = fonts
+
+    def test_a_family_with_a_bold_cut_resolves_to_a_different_file(self):
+        regular = self.fonts.resolve_font(None)
+        if not self.fonts.has_variant(regular, bold=True):
+            self.skipTest(f"no bold cut of {regular} on this machine")
+        bold = self.fonts.variant(regular, bold=True)
+        self.assertNotEqual(Path(bold), Path(regular))
+        self.assertIn("bold", self.fonts.font_family_style(bold)[1].lower())
+
+    def test_asking_for_a_cut_that_does_not_exist_gives_the_face_back(self):
+        regular = self.fonts.resolve_font(None)
+        with patch.object(self.fonts, "_family_index", lambda: {}):
+            self.assertEqual(self.fonts.variant(regular, bold=True), regular)
+            self.assertFalse(self.fonts.has_variant(regular, bold=True))
+
+    def test_semibold_is_not_bold(self):
+        """Matched by word, not by substring - they are different weights."""
+        self.assertEqual(self.fonts._flags("Semibold"), (False, False))
+        self.assertEqual(self.fonts._flags("Bold"), (True, False))
+        self.assertEqual(self.fonts._flags("Bold Italic"), (True, True))
+        self.assertEqual(self.fonts._flags("Oblique"), (False, True))
+        self.assertEqual(self.fonts._flags(""), (False, False))
+
+    def test_the_renderer_asks_for_the_cut_the_style_names(self):
+        seen = []
+        entry = ImageEntry("a.png", 0)
+        entry.blocks = [TextBlock("b1", Box(2, 2, 118, 40), "元", "Hi")]
+        entry.blocks[0].style = Style(
+            background=stylemod.BG_KEEP, cap_height=18, bold=True, italic=True
+        )
+        source = canvas(120, 44, (255, 255, 255, 255))
+        with patch.object(render, "variant", lambda path, b, i: seen.append((b, i)) or path):
+            render.render_entry(source, entry)
+        self.assertEqual(seen, [(True, True)])
+
+
 class StrokeTests(unittest.TestCase):
     """The stroke grows outwards only.
 
@@ -898,17 +1083,18 @@ class StrokeTests(unittest.TestCase):
         self.font = default_font()
         self.fit = fit_text
 
-    def _tile(self, width: int):
+    def _tile(self, width: int, text: str = "oo", cap: int = 52, **extra):
         fitted = self.fit(
-            "oo", max_width=300, max_height=90,
-            font_path=self.font, target_cap_height=52, stroke_width=width,
+            text, max_width=300, max_height=90,
+            font_path=self.font, target_cap_height=cap, stroke_width=width,
+            **extra,
         )
         layout = render.Layout(fitted, Box(0, 0, 300, 90), "center", True)
         style = Style(
             text_color=[255, 255, 255, 255],
             outline_color=[0, 0, 0, 255],
             outline_width=width,
-            cap_height=52,
+            cap_height=cap,
         )
         return np.array(render._tile((300, 90), layout, style))
 
@@ -938,6 +1124,63 @@ class StrokeTests(unittest.TestCase):
         )
         dark = (heavy[:, :, 0] < 60) & (heavy[:, :, 3] > 128)
         self.assertGreater(int(dark.sum()), 0, "no stroke was drawn at all")
+
+    @staticmethod
+    def _components(mask: np.ndarray) -> np.ndarray:
+        count, labels = cv2.connectedComponents(
+            mask.astype(np.uint8), connectivity=4
+        )
+        return labels
+
+    def _run_together(self, text: str, cap: int) -> int:
+        """How many letters lost the stroke that separated them from the next.
+
+        White type over a white ground, which is what a stroke is most often
+        for: the stroke is the only thing between one letter and the next, so
+        two letters sharing a patch of white are two letters the reader sees
+        run together.
+
+        Counted by comparing against the same layout drawn with no stroke at
+        all. Letters that already touch in the outline are one shape in both,
+        so the measure adjusts itself to the face and the size rather than
+        assuming a letter count.
+        """
+        stroked = self._tile(2, text, cap)
+        fill = self._components(self._tile(0, text, cap)[:, :, 3] > 200)
+
+        ground = np.zeros(stroked.shape, dtype=np.uint8)
+        ground[:, :] = (255, 255, 255, 255)
+        flat = np.array(
+            Image.alpha_composite(Image.fromarray(ground), Image.fromarray(stroked))
+        )
+        # A white fill's antialiasing over a white ground is white, so "light"
+        # is exactly the region the eye reads as not-stroke.
+        light = self._components(flat[:, :, :3].min(axis=2) > 200)
+
+        shapes = set(np.unique(fill)) - {0}
+        # One light region per shape, or two shapes are sharing one.
+        return len(shapes) - len({int(light[fill == shape][0]) for shape in shapes})
+
+    def test_the_stroke_keeps_one_letter_off_the_next(self):
+        """The bug this class was extended for: gaps between letters lost it.
+
+        Two letters set close together have their antialiased rims touch, and a
+        flood over "no ink" cannot pass a 30%-alpha bridge. The gap between them
+        counted as enclosed - as a counter - so the stroke was taken out of it,
+        and white-on-white type ran into itself.
+
+        Small sizes especially, because the rim is a constant width and the gap
+        is not: this never showed at display sizes and was at its worst at the
+        ones game UI is actually set in.
+        """
+        for cap in (8, 9, 10, 12, 16, 24, 40):
+            for text in ("hits", "its", "tsu", "Miss!", "mix", "x2", "1 turn"):
+                with self.subTest(cap=cap, text=text):
+                    self.assertEqual(
+                        self._run_together(text, cap), 0,
+                        "letters are sharing a patch of background because the "
+                        "stroke between them was dropped",
+                    )
 
 
 class PiecesTests(unittest.TestCase):
@@ -1288,7 +1531,14 @@ class SilentNoOpTests(unittest.TestCase):
         array = canvas(120, 60, (0, 0, 0, 0))
         array[:, :, 3] = 0                      # nothing known anywhere to read
         glyphs(array, Box(20, 15, 100, 45), (255, 255, 255, 255))
-        style = Style(background=stylemod.BG_INPAINT, fill=[0, 0, 0, 0])
+        # Named rather than left to ``preferred``: a model invents something
+        # plausible out of an empty crop and is right to, so the no-op this
+        # exists to catch is a property of the diffusion fills.
+        style = Style(
+            background=stylemod.BG_INPAINT,
+            fill=[0, 0, 0, 0],
+            inpaint_method=inpaintmod.TELEA,
+        )
         note = render.erase(array, Box(18, 13, 102, 47), style)
         self.assertTrue(note.tight)
         self.assertTrue(
@@ -1396,6 +1646,54 @@ class InpaintBackendTests(unittest.TestCase):
                 self.assertEqual(
                     Style.from_dict(style.to_dict()).inpaint_method, method
                 )
+
+    def test_the_default_is_the_one_that_always_works(self):
+        """With nothing installed, nothing is preferred over what ships."""
+        self.assertEqual(inpaintmod.preferred(), inpaintmod.DEFAULT)
+        self.assertIn(inpaintmod.DEFAULT, inpaintmod.CLASSICAL)
+
+    def test_aot_becomes_the_default_once_it_is_installed(self):
+        """What the model download buys: the good backend, without asking."""
+        with patch.object(inpaintmod, "available", lambda m: m == inpaintmod.AOT):
+            inpaintmod.forget()
+            self.assertEqual(inpaintmod.preferred(), inpaintmod.AOT)
+        inpaintmod.forget()
+
+    def test_a_block_that_chose_nothing_gets_the_preferred_one(self):
+        """An empty ``inpaint_method`` means "whatever is best here", not Telea."""
+        seen = []
+        array = plate(panel_alpha=255)
+        style = Style(background=stylemod.BG_INPAINT, fill=[0, 0, 0, 255])
+        self.assertEqual(style.inpaint_method, "")
+        with patch.object(inpaintmod, "preferred", lambda: inpaintmod.NS):
+            with patch.object(
+                inpaintmod, "fill",
+                lambda rgb, mask, method, *a, **k: (seen.append(method) or (rgb, "")),
+            ):
+                render.erase(array, Box(28, 26, 172, 54), style)
+        self.assertEqual(seen, [inpaintmod.NS])
+
+    def test_the_probe_is_only_paid_for_once(self):
+        """It costs an ``import onnxruntime``, and it is asked per block."""
+        calls = []
+        inpaintmod.forget()
+        with patch.object(inpaintmod, "available", lambda m: calls.append(m) or False):
+            for _ in range(5):
+                inpaintmod.preferred()
+        self.assertEqual(len(calls), 1)
+        inpaintmod.forget()
+
+    def test_a_download_inside_the_session_is_noticed(self):
+        """``forget`` is what the resource dialog calls; without it the answer
+        is the one from before the model landed."""
+        inpaintmod.forget()
+        with patch.object(inpaintmod, "available", lambda m: False):
+            self.assertEqual(inpaintmod.preferred(), inpaintmod.DEFAULT)
+        with patch.object(inpaintmod, "available", lambda m: m == inpaintmod.AOT):
+            self.assertEqual(inpaintmod.preferred(), inpaintmod.DEFAULT)  # cached
+            inpaintmod.forget()
+            self.assertEqual(inpaintmod.preferred(), inpaintmod.AOT)
+        inpaintmod.forget()
 
     def test_asking_for_a_model_that_is_not_here_still_erases(self):
         """What matters is that it neither raises nor leaves the block alone."""

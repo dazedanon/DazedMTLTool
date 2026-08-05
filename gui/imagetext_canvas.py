@@ -482,10 +482,19 @@ class PaintCanvas(Canvas):
 
     Photoshop's muscle memory where it costs nothing: ``B``/``E``/``V`` pick the
     tool, ``[`` and ``]`` size the brush, holding Alt turns whatever is selected
-    into an eyedropper, and Ctrl+Z steps back. Holding Ctrl with the eraser
-    turns it into a pencil loaded with the block's own background colour, which
-    is what actually removes a stubborn glyph - the plain eraser only removes
-    your own paint.
+    into an eyedropper, and Ctrl+Z steps back.
+
+    The eraser has the three behaviours the job needs, in the order of how often
+    they are wanted:
+
+    * on its own it removes *your own* marks - paint and cuts alike - and puts
+      back whatever the renderer had there;
+    * with **Ctrl** it erases the picture itself to transparency, which is what
+      Photoshop's eraser does by default and the only way to take out something
+      that should not be replaced by anything;
+    * with **Shift** it paints the block's own measured background over the
+      pixels, which is what covers a stubborn glyph on a surface that has to
+      stay opaque.
     """
 
     painted = pyqtSignal()               # a stroke finished; re-render and save
@@ -502,6 +511,9 @@ class PaintCanvas(Canvas):
         self.brush_size = paintmod.DEFAULT_SIZE
         self.brush_colour: list[int] = [255, 255, 255, 255]
         self.layer: np.ndarray | None = None
+        # Where Ctrl+eraser records what it took out of the picture. Its own
+        # layer because it says the opposite of what ``layer`` says.
+        self.cut: np.ndarray | None = None
         # The render taken apart, so a stroke can be shown under the English
         # without re-rendering. Set by the step after every real render.
         self.base: np.ndarray | None = None
@@ -509,7 +521,7 @@ class PaintCanvas(Canvas):
         # Set by the render step: given a scene point, the measured background
         # of whichever block is under it. Ctrl+eraser paints with it.
         self.background_at = None
-        self._undo: list[np.ndarray] = []
+        self._undo: list[tuple[np.ndarray, np.ndarray | None]] = []
         self._last: QPointF | None = None
         self._hover: QPointF | None = None
         self._space = False
@@ -517,8 +529,9 @@ class PaintCanvas(Canvas):
         self._sizing: tuple[float, int] | None = None
 
     # ------------------------------------------------------------- state
-    def set_layer(self, layer: np.ndarray | None) -> None:
+    def set_layer(self, layer: np.ndarray | None, cut: np.ndarray | None = None) -> None:
         self.layer = layer
+        self.cut = cut
         self._undo.clear()
 
     def show_image(self, entry, array) -> None:
@@ -531,8 +544,13 @@ class PaintCanvas(Canvas):
         super().set_pixels(None if array is None else np.array(array, copy=True))
 
     def set_render(self, base, overlay) -> None:
-        """Hand over the pieces of the last real render, for live strokes."""
-        self.base = base
+        """Hand over the pieces of the last real render, for live strokes.
+
+        ``base`` is copied because a cut is shown by punching the hole straight
+        into it - the only way the transparency appears under the mouse rather
+        than a debounce later - and the array handed over is the step's own.
+        """
+        self.base = None if base is None else np.array(base, copy=True)
         self.overlay = overlay
 
     def set_tool(self, tool: str) -> None:
@@ -578,7 +596,10 @@ class PaintCanvas(Canvas):
     def undo(self) -> bool:
         if not self._undo or self.layer is None:
             return False
-        self.layer[:, :] = self._undo.pop()
+        paint, cut = self._undo.pop()
+        self.layer[:, :] = paint
+        if self.cut is not None and cut is not None:
+            self.cut[:, :] = cut
         self.painted.emit()
         return True
 
@@ -587,30 +608,45 @@ class PaintCanvas(Canvas):
         return bool(modifiers & Qt.AltModifier)
 
     def _stroke_colour(self, point: QPointF, modifiers) -> list[int] | None:
-        """What this segment paints, or None to clear instead."""
+        """What a painting segment lays down, or None when it only clears."""
         if self.tool == TOOL_PENCIL:
             return list(self.brush_colour)
-        # Eraser. On its own it removes the user's own strokes; with Ctrl it
-        # becomes a pencil loaded with the local background, which is the thing
-        # that actually covers a glyph the erase step missed.
-        if not (modifiers & Qt.ControlModifier):
+        # Eraser with Shift: a pencil loaded with the local background, which is
+        # the thing that covers a glyph on a surface that has to stay opaque.
+        if not (modifiers & Qt.ShiftModifier):
             return None
         colour = None
         if callable(self.background_at):
             colour = self.background_at((point.x(), point.y()))
         return list(colour) if colour else list(self.brush_colour)
 
+    def _cutting(self, modifiers) -> bool:
+        return self.tool == TOOL_ERASER and bool(modifiers & Qt.ControlModifier)
+
     def _apply(self, a: QPointF, b: QPointF, modifiers) -> None:
         """Lay one segment down and show it immediately."""
         if self.layer is None:
             return
-        colour = self._stroke_colour(b, modifiers)
-        if colour is None:
-            paintmod.wipe(self.layer, (a.x(), a.y()), (b.x(), b.y()), self.brush_size)
+        start, end = (a.x(), a.y()), (b.x(), b.y())
+        if self._cutting(modifiers):
+            if self.cut is None:
+                return
+            paintmod.stroke(self.cut, start, end, self.brush_size, [255, 255, 255, 255])
+            # Punched into the render's own pieces as well, so the hole is under
+            # the mouse now instead of after the next full render. The next
+            # render overwrites these anyway - this is a preview, not a result.
+            paintmod.apply_cut_segment(self.base, start, end, self.brush_size)
         else:
-            paintmod.stroke(
-                self.layer, (a.x(), a.y()), (b.x(), b.y()), self.brush_size, colour
-            )
+            colour = self._stroke_colour(b, modifiers)
+            if colour is None:
+                # The plain eraser undoes the user's own marks, both kinds. An
+                # eraser that removed paint but left a cut behind would look
+                # like it had done nothing on exactly the pixels it cleared.
+                paintmod.wipe(self.layer, start, end, self.brush_size)
+                if self.cut is not None:
+                    paintmod.wipe(self.cut, start, end, self.brush_size)
+            else:
+                paintmod.stroke(self.layer, start, end, self.brush_size, colour)
         self._show_segment(a, b)
         self.stroking.emit()
 
@@ -638,9 +674,12 @@ class PaintCanvas(Canvas):
         self.pixmap_item.setPixmap(to_pixmap(self.pixels))
 
     def _snapshot(self) -> None:
+        """Both layers together: one stroke is one step back, whichever it hit."""
         if self.layer is None:
             return
-        self._undo.append(self.layer.copy())
+        self._undo.append(
+            (self.layer.copy(), None if self.cut is None else self.cut.copy())
+        )
         if len(self._undo) > UNDO_DEPTH:
             self._undo.pop(0)
 
