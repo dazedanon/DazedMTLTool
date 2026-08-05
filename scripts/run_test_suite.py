@@ -17,6 +17,14 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
+# Before PyQt5, exactly as the launchers do - see util/msvc_runtime.py. It is
+# repeated here rather than left to tests/__init__.py because discovery below
+# passes no top_level_dir, so test modules are imported as top-level names and
+# the tests package itself is never imported. A no-op off Windows.
+from util.msvc_runtime import prepare as _prepare_msvc_runtime  # noqa: E402
+
+_prepare_msvc_runtime()
+
 
 # Full widget/workflow construction belongs here. New tests are core by default,
 # so accidentally expensive additions fail the tighter core budget.

@@ -603,6 +603,13 @@ class ImageManager(QWidget):
             "image folder. Paste it into Codex, Cursor, Copilot, or a similar coding agent."
         )
         self.copy_translation_button.clicked.connect(self._copy_translation_skill)
+        self.edit_text_button = QPushButton("Edit text…")
+        self.edit_text_button.setToolTip(
+            "Semi-manual workflow: read every editable PNG with OCR, confirm the boxes and "
+            "the text, translate through DazedTL's own engine, then erase the original "
+            "glyphs and draw the translation in their place. No coding agent involved."
+        )
+        self.edit_text_button.clicked.connect(self._open_text_editor)
         self.decrypt_selected_button = QPushButton("Make selected")
         self.decrypt_selected_button.clicked.connect(self._decrypt_checked)
         self.decrypt_all_button = QPushButton("Make all")
@@ -622,6 +629,7 @@ class ImageManager(QWidget):
         action_buttons = (
             self.open_workspace_button,
             self.copy_translation_button,
+            self.edit_text_button,
             self.decrypt_selected_button,
             self.decrypt_all_button,
             self.remove_button,
@@ -1153,11 +1161,12 @@ class ImageManager(QWidget):
         full_labels = (
             "Open folder",
             "Copy skill",
+            "Edit text…",
             "Make selected",
             "Make all",
             "Remove copies",
         )
-        compact_labels = ("Open", "Copy", "Make", "Make all", "Remove")
+        compact_labels = ("Open", "Copy", "Text", "Make", "Make all", "Remove")
         for button in self.action_buttons:
             button.setMinimumWidth(0)
             button.setMaximumWidth(16777215)
@@ -1347,6 +1356,85 @@ class ImageManager(QWidget):
         except Exception as exc:
             QMessageBox.warning(self, "Copy Image Translation Skill", str(exc))
 
+    # ------------------------------------------------ semi-manual image text
+    # The other way to translate the pictures on this page. "Copy skill" hands
+    # the bitmaps to a coding agent and gets bitmaps back; this reads the text
+    # out with OCR, translates it through the tool's own engine, and redraws
+    # it. Everything below it lives in gui/image_text_editor.py and
+    # util/imagetools/, imported only when asked for - that subsystem needs
+    # numpy and OpenCV, which are not installed until somebody wants them.
+
+    def _text_editor_targets(self) -> tuple[Path, list[str]]:
+        """``(workspace, relpaths)`` for the images the editor should open.
+
+        Highlighting rows narrows it to those; with nothing highlighted the
+        whole editable set is offered, which is the usual case.
+        """
+        if self.game_root is None:
+            raise ValueError("Select a game folder first.")
+        game_root = Path(self.game_root).expanduser().resolve()
+        workspace = editable_workspace_root(game_root)
+        chosen = [
+            asset for asset in self._selected_assets() if asset.has_plain
+        ] or self._editable_assets()
+
+        relpaths = []
+        for asset in chosen:
+            try:
+                relpaths.append(
+                    str(Path(asset.plain_path).resolve().relative_to(workspace))
+                )
+            except ValueError:
+                # An editable copy outside the workspace cannot be addressed
+                # relative to it; skipping beats writing a job file whose paths
+                # do not resolve.
+                continue
+        if not relpaths:
+            raise ValueError(
+                f"None of the editable images sit under {workspace} - nothing to edit."
+            )
+        return workspace, relpaths
+
+    def build_text_editor(self):
+        """Construct the review editor without showing it.
+
+        Separate from ``_open_text_editor`` so the wiring can be tested: the
+        dialog is modal, and a test that clicked the button would block on
+        ``exec_()`` forever.
+        """
+        from gui.image_text_editor import ImageTextEditor
+
+        workspace, relpaths = self._text_editor_targets()
+        game_root = Path(self.game_root).expanduser().resolve()
+        return ImageTextEditor(game_root, workspace, relpaths, self)
+
+    def _open_text_editor(self) -> None:
+        if not self._editable_assets():
+            QMessageBox.information(
+                self,
+                "No Editable Images",
+                "Make one or more images editable before editing their text.",
+            )
+            return
+        # Imports PyQt and the standard library only, so this is safe to reach
+        # before anything the workflow needs has been downloaded.
+        from gui.imagetext_resources import ensure_resources
+
+        if not ensure_resources(self):
+            return
+        try:
+            dialog = self.build_text_editor()
+        except Exception as exc:
+            QMessageBox.warning(self, "Edit Image Text", str(exc))
+            return
+        count = len(dialog.job.images)
+        dialog.exec_()
+        set_status_text(
+            self.status_label,
+            f"Image text editor closed - {count:,} image(s) in the job.",
+            "info",
+        )
+
     def _selected_assets(self) -> list[ImageAsset]:
         return [self.assets_by_id[key] for key in self.selected_ids if key in self.assets_by_id]
 
@@ -1535,13 +1623,16 @@ class ImageManager(QWidget):
         for button in (
             self.open_workspace_button,
             self.copy_translation_button,
+            self.edit_text_button,
             self.decrypt_selected_button,
             self.decrypt_all_button,
             self.remove_button,
             self.prepare_button,
         ):
             button.setEnabled(enabled)
-        self.copy_translation_button.setEnabled(enabled and bool(self._editable_assets()))
+        has_editable = bool(self._editable_assets())
+        self.copy_translation_button.setEnabled(enabled and has_editable)
+        self.edit_text_button.setEnabled(enabled and has_editable)
 
     def closeEvent(self, event) -> None:
         running = [

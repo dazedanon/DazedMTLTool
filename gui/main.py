@@ -20,6 +20,13 @@ if sys.platform.startswith("linux"):
 
     configure_qt_platform()
 
+# Must run before PyQt5 loads - see the note in scripts/start_gui.py. Repeated
+# here because this module is also imported directly, and prepare() is a no-op
+# on the second call.
+from util.msvc_runtime import prepare as _prepare_msvc_runtime  # noqa: E402
+
+_prepare_msvc_runtime()
+
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QVBoxLayout, QHBoxLayout,
     QWidget, QPushButton, QLabel, QFileDialog, QMessageBox, QProgressBar,
