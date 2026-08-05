@@ -614,6 +614,17 @@ class StylePersistenceTests(unittest.TestCase):
         back = Style.from_dict({"background": stylemod.BG_KEEP})
         self.assertEqual((back.scale_x, back.scale_y, back.tracking), (100, 100, 0))
         self.assertFalse(back.bold or back.italic)
+        self.assertFalse(back.overflow)
+
+    def test_overflow_survives_a_save_and_load(self):
+        job = Job(self.root)
+        entry = ImageEntry("a.png")
+        item = block(Box(0, 0, 10, 10))
+        item.style = Style(overflow=True)
+        entry.blocks = [item]
+        job.images = [entry]
+        job.save()
+        self.assertTrue(Job.load(self.root).images[0].blocks[0].style.overflow)
 
 
 # ---------------------------------------------------------------------- paint
@@ -932,6 +943,117 @@ class SizingTests(unittest.TestCase):
 
 
 @needs_font
+class OverflowTests(unittest.TestCase):
+    """"Make it bigger" meaning it, rather than stopping at the block.
+
+    The fit ladder shrinks the translation until the plate holds it, which is
+    right by default and is not an answer to somebody deliberately raising the
+    size: past the point where the block filled up, the control did nothing at
+    all and said nothing about why.
+    """
+
+    def setUp(self):
+        from util.imagetools.fonts import default_font, size_for_cap
+
+        self.font = default_font()
+        self.size_for_cap = size_for_cap
+        # Room on every side, so growing is never the same thing as clamping.
+        self.box = Box(400, 200, 620, 240)
+        self.bounds = Box(0, 0, 1000, 500)
+
+    def _plan(self, cap, **extra):
+        style = Style(cap_height=cap, **extra)
+        return render.plan(
+            "Attack up", self.box, style, vertical=False,
+            font_path=self.font, bounds=self.bounds,
+        )
+
+    def test_without_it_the_ladder_still_shrinks_to_the_block(self):
+        laid = self._plan(60)
+        self.assertTrue(laid.fits)
+        self.assertLess(laid.fitted.size, self.size_for_cap(self.font, 60))
+        self.assertEqual(laid.box.as_tuple(), self.box.as_tuple())
+
+    def test_with_it_the_size_asked_for_is_the_size_drawn(self):
+        laid = self._plan(60, overflow=True)
+        self.assertTrue(laid.fits)
+        self.assertEqual(laid.fitted.size, self.size_for_cap(self.font, 60))
+
+    def test_the_block_grows_around_its_own_centre_to_hold_the_ink(self):
+        laid = self._plan(60, overflow=True)
+        self.assertGreater(laid.box.w, self.box.w)
+        self.assertGreater(laid.box.h, self.box.h)
+        self.assertGreaterEqual(laid.box.w, laid.fitted.width)
+        self.assertGreaterEqual(laid.box.h, laid.fitted.height)
+        # Still where the artist put the label, to within the rounding.
+        for grown, original in (
+            ((laid.box.x + laid.box.x2), (self.box.x + self.box.x2)),
+            ((laid.box.y + laid.box.y2), (self.box.y + self.box.y2)),
+        ):
+            self.assertLessEqual(abs(grown - original), 2)
+
+    def test_type_that_already_fits_leaves_its_block_alone(self):
+        laid = self._plan(14, overflow=True)
+        self.assertEqual(laid.box.as_tuple(), self.box.as_tuple())
+        self.assertEqual(laid.note, "")
+
+    def test_the_note_says_by_how_much_it_spilled(self):
+        self.assertIn("wider", self._plan(60, overflow=True).note)
+
+    def _rendered(self, background):
+        array = canvas(600, 300, (255, 255, 255, 255))
+        item = block(Box(200, 130, 400, 170), target="Attack up")
+        item.style = Style(
+            background=background, cap_height=70,
+            text_color=[0, 0, 0, 255], overflow=True, locked=True,
+        )
+        result = render.render_entry(array, entry_of([item]))
+        self.assertTrue(all(note.ok for note in result.notes), result.notes)
+        return array, item, result
+
+    def test_it_really_draws_outside_the_block(self):
+        """The plan is only worth anything if the pixels follow it."""
+        array, item, result = self._rendered(stylemod.BG_KEEP)
+        changed = (result.array != array).any(axis=2)
+        columns = np.nonzero(changed.any(axis=0))[0]
+        self.assertLess(columns.min(), item.box.x)
+        self.assertGreater(columns.max(), item.box.x2)
+
+    def test_the_erase_is_not_widened_with_it(self):
+        """Growth decides where glyphs may be drawn, never what gets rubbed out.
+
+        Otherwise turning the size up quietly takes a bite out of the artwork
+        either side of the label, which is unrecoverable and invisible until
+        somebody looks at the finished PNG.
+
+        Black artwork inside the block and more of it outside, with the
+        translation set in red: afterwards, a black pixel is artwork that
+        survived, and there has to be none of it left inside and all of it left
+        outside.
+        """
+        array = canvas(600, 300, (255, 255, 255, 255))
+        glyphs(array, Box(210, 140, 390, 160), (0, 0, 0, 255))
+        outside = Box(60, 140, 180, 160)
+        glyphs(array, outside, (0, 0, 0, 255))
+        item = block(Box(200, 130, 400, 170), target="Attack up")
+        item.style = stylemod.measure(array, item, [item.box])
+        item.style.text_color = [255, 0, 0, 255]
+        item.style.cap_height = 70
+        item.style.overflow = True
+        item.style.locked = True
+
+        result = render.render_entry(array, entry_of([item]))
+        self.assertTrue(all(note.ok for note in result.notes), result.notes)
+        black = (result.array[:, :, :3] < 60).all(axis=2)
+        rows, columns = outside.slices()
+        self.assertTrue(black[rows, columns].any(), "the artwork beside it went too")
+        inside_rows, inside_columns = item.box.slices()
+        self.assertFalse(
+            black[inside_rows, inside_columns].any(), "the source text is still there"
+        )
+
+
+@needs_font
 class TypographyTests(unittest.TestCase):
     """Tracking, width and height, in Photoshop's units and with its defaults.
 
@@ -1011,18 +1133,46 @@ class TypographyTests(unittest.TestCase):
         self.assertGreater(ink(150), int(ink(100) * 1.3))
         self.assertLess(ink(60), int(ink(100) * 0.8))
 
-    def test_height_is_applied_through_the_size_not_by_stretching(self):
-        """A taller cap means real outlines, not a resampled bitmap."""
-        tall = render.plan(
-            "Restore", Box(0, 0, 400, 90),
-            Style(cap_height=20, scale_y=200), vertical=False, font_path=self.font,
+    def _drawn(self, **style_kw) -> tuple[int, int]:
+        """``(width, height)`` of the ink one setting actually puts on the tile."""
+        style = Style(cap_height=20, **style_kw)
+        layout = render.plan(
+            "Restore", Box(0, 0, 400, 200), style,
+            vertical=False, font_path=self.font,
         )
-        plain = render.plan(
-            "Restore", Box(0, 0, 400, 90),
-            Style(cap_height=20), vertical=False, font_path=self.font,
+        tile = np.array(render._tile((400, 200), layout, style))
+        # The ink, not the resampler's tails: a stretch is a resample, and
+        # LANCZOS leaves a couple of pixels of near-nothing past the letter at
+        # either end. Two of those on a twenty-pixel cap is a fifth of the
+        # measurement and none of the picture.
+        solid = tile[:, :, 3] > 128
+        rows = np.nonzero(solid.any(axis=1))[0]
+        columns = np.nonzero(solid.any(axis=0))[0]
+        return (
+            int(columns.max() - columns.min()), int(rows.max() - rows.min()),
         )
-        self.assertGreater(tall.fitted.size, plain.fitted.size)
-        self.assertEqual(tall.fitted.width_scale, 100)
+
+    def test_height_changes_the_height_and_nothing_else(self):
+        """Photoshop's Vertical Scale, which is the point of having it.
+
+        It used to be folded into the point size, so the letters came back
+        taller *and* wider - which is what the size control above it already
+        does, leaving this one with no job of its own.
+        """
+        width, height = self._drawn()
+        for percent, factor in ((50, 0.5), (200, 2.0)):
+            with self.subTest(percent=percent):
+                scaled_w, scaled_h = self._drawn(scale_y=percent)
+                self.assertAlmostEqual(scaled_h / height, factor, delta=0.12)
+                self.assertAlmostEqual(scaled_w / width, 1.0, delta=0.05)
+
+    def test_width_changes_the_width_and_nothing_else(self):
+        width, height = self._drawn()
+        for percent, factor in ((50, 0.5), (200, 2.0)):
+            with self.subTest(percent=percent):
+                scaled_w, scaled_h = self._drawn(scale_x=percent)
+                self.assertAlmostEqual(scaled_w / width, factor, delta=0.12)
+                self.assertAlmostEqual(scaled_h / height, 1.0, delta=0.05)
 
 
 class VariantTests(unittest.TestCase):
@@ -1069,12 +1219,12 @@ class VariantTests(unittest.TestCase):
 
 
 class StrokeTests(unittest.TestCase):
-    """The stroke grows outwards only.
+    """The stroke grows outwards from every edge, and from nothing else.
 
-    PIL's own ``stroke_width`` dilates the whole glyph, so past about half a
-    counter's width the hole in an "o" or a "B" meets itself in the middle and
-    fills solid. It looked like the letter losing its shape, and it got worse
-    exactly as the setting got more useful.
+    A dilation of the fill, which is how BallonsTranslator draws one and what
+    Photoshop's "Stroke: Outside" means. Every edge gets a stroke because there
+    is no test deciding which edges deserve one; a counter stays open until the
+    stroke is wide enough to meet itself across it, and then closes.
     """
 
     def setUp(self):
@@ -1126,61 +1276,62 @@ class StrokeTests(unittest.TestCase):
         self.assertGreater(int(dark.sum()), 0, "no stroke was drawn at all")
 
     @staticmethod
-    def _components(mask: np.ndarray) -> np.ndarray:
-        count, labels = cv2.connectedComponents(
-            mask.astype(np.uint8), connectivity=4
-        )
-        return labels
+    def _bare_edges(tile: np.ndarray) -> int:
+        """Pixels beside the fill that no stroke ever reached.
 
-    def _run_together(self, text: str, cap: int) -> int:
-        """How many letters lost the stroke that separated them from the next.
+        The whole of what a stroke promises, as one number: step one pixel out
+        from any solid part of a letter, in any of the eight directions, and
+        there has to be ink there. Where there is not, that edge of that letter
+        is sitting directly on the background - which on white-on-white type,
+        what a stroke is mostly for, means it has vanished into it.
 
-        White type over a white ground, which is what a stroke is most often
-        for: the stroke is the only thing between one letter and the next, so
-        two letters sharing a patch of white are two letters the reader sees
-        run together.
-
-        Counted by comparing against the same layout drawn with no stroke at
-        all. Letters that already touch in the outline are one shape in both,
-        so the measure adjusts itself to the face and the size rather than
-        assuming a letter count.
+        Deliberately not counted by connected components. A thin antialiased
+        curve breaks into a dozen fragments at any threshold, so "how many
+        letters are there" is not a question the pixels can answer, and the
+        earlier version of this test asked it and got a number that had nothing
+        to do with the bug.
         """
-        stroked = self._tile(2, text, cap)
-        fill = self._components(self._tile(0, text, cap)[:, :, 3] > 200)
+        fill = ((tile[:, :, 3] > 128) & (tile[:, :, 0] > 200)).astype(np.uint8)
+        reached = cv2.dilate(fill, np.ones((3, 3), np.uint8)) > 0
+        return int((reached & (tile[:, :, 3] <= 32)).sum())
 
-        ground = np.zeros(stroked.shape, dtype=np.uint8)
-        ground[:, :] = (255, 255, 255, 255)
-        flat = np.array(
-            Image.alpha_composite(Image.fromarray(ground), Image.fromarray(stroked))
-        )
-        # A white fill's antialiasing over a white ground is white, so "light"
-        # is exactly the region the eye reads as not-stroke.
-        light = self._components(flat[:, :, :3].min(axis=2) > 200)
+    def test_the_stroke_reaches_every_edge_of_every_letter(self):
+        """The bug this class was extended for: some edges lost it.
 
-        shapes = set(np.unique(fill)) - {0}
-        # One light region per shape, or two shapes are sharing one.
-        return len(shapes) - len({int(light[fill == shape][0]) for shape in shapes})
+        The version this replaced tried to work out which enclosed pockets were
+        counters and which were the gap between two letters, and took the stroke
+        out of the first kind. It got that wrong in both directions - a flood
+        over "no ink" cannot pass the 30%-alpha bridge where two antialiased
+        rims meet, so gaps read as counters and lost their stroke, and letters
+        ran into each other and into the page.
 
-    def test_the_stroke_keeps_one_letter_off_the_next(self):
-        """The bug this class was extended for: gaps between letters lost it.
-
-        Two letters set close together have their antialiased rims touch, and a
-        flood over "no ink" cannot pass a 30%-alpha bridge. The gap between them
-        counted as enclosed - as a counter - so the stroke was taken out of it,
-        and white-on-white type ran into itself.
-
-        Small sizes especially, because the rim is a constant width and the gap
-        is not: this never showed at display sizes and was at its worst at the
-        ones game UI is actually set in.
+        There is now no such judgement to get wrong: the stroke is a dilation of
+        the fill, so every edge has one by construction. This is that property,
+        across the sizes game UI is actually set in.
         """
         for cap in (8, 9, 10, 12, 16, 24, 40):
             for text in ("hits", "its", "tsu", "Miss!", "mix", "x2", "1 turn"):
-                with self.subTest(cap=cap, text=text):
-                    self.assertEqual(
-                        self._run_together(text, cap), 0,
-                        "letters are sharing a patch of background because the "
-                        "stroke between them was dropped",
-                    )
+                for width in (1, 2, 3):
+                    with self.subTest(cap=cap, text=text, width=width):
+                        self.assertEqual(
+                            self._bare_edges(self._tile(width, text, cap)), 0,
+                            "an edge of a letter has no stroke on it",
+                        )
+
+    def test_a_counter_closes_only_once_the_stroke_is_wider_than_it(self):
+        """Which is what Photoshop's "Stroke: Outside" does, and correct.
+
+        A stroke growing outwards from both sides of a counter meets itself in
+        the middle when it is half as wide as the counter. That is a reason to
+        turn the width down, not something for the renderer to detect and work
+        around - and the detection is what was breaking the rest of the stroke.
+        """
+        wide_open = self._counter_pixels(self._tile(1, "oooo", 40))
+        self.assertGreater(wide_open, 20, "a 1px stroke closed a 40px counter")
+        self.assertEqual(
+            self._counter_pixels(self._tile(5, "oooo", 12)), 0,
+            "a 5px stroke left a 12px counter open, so it did not meet itself",
+        )
 
 
 class PiecesTests(unittest.TestCase):

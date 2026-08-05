@@ -1867,8 +1867,9 @@ class RenderStep(ImageStep):
         self.outline_box.setToolTip(
             "The stroke around the glyphs. Measured from inside the ink, since "
             "a stroke contrasts with the background by definition. It grows "
-            "outwards only — the counters of an “a” or a “B” stay open at any "
-            "width, while the space between two letters keeps its stroke."
+            "outwards from every edge, like Photoshop's “Stroke: Outside” — so "
+            "the counter of an “a” stays open until the stroke is wider than "
+            "half of it, and then closes."
         )
         form.addRow("Stroke", outline_row)
 
@@ -1909,9 +1910,18 @@ class RenderStep(ImageStep):
         self.cap_spin.setToolTip(
             "How tall the capitals stand, in pixels — measured off the original "
             "glyphs. Raise it and the type grows until it reaches the edges of "
-            "the block, then stops."
+            "the block, then stops, unless “Overflow” beside it is on."
         )
         self.cap_spin.valueChanged.connect(self._style_edited)
+        self.overflow_box = _icon_toggle("mdi6.arrow-expand-all", "Overflow")
+        self.overflow_box.setToolTip(
+            "Draw the type at the size asked for even where the block cannot "
+            "hold it, letting it spill outside. Off, a translation longer than "
+            "the Japanese is shrunk until it fits — which is right for a label "
+            "on a fixed plate and wrong when you have decided you want it "
+            "bigger. What gets erased does not change either way."
+        )
+        self.overflow_box.clicked.connect(self._style_edited)
         self.tracking_spin = _small_spin(-200, 1000, "")
         self.tracking_spin.setSingleStep(10)
         self.tracking_spin.setToolTip(
@@ -1920,7 +1930,7 @@ class RenderStep(ImageStep):
             "to the type, so it survives the fit ladder shrinking the block."
         )
         self.tracking_spin.valueChanged.connect(self._style_edited)
-        form.addRow("Size", _row(self.cap_spin,
+        form.addRow("Size", _row(self.cap_spin, self.overflow_box,
                                  QLabel("Tracking"), self.tracking_spin, stretch=True))
 
         self.width_spin = _small_spin(10, 400, " %")
@@ -1932,9 +1942,9 @@ class RenderStep(ImageStep):
         self.width_spin.valueChanged.connect(self._style_edited)
         self.height_spin = _small_spin(10, 400, " %")
         self.height_spin.setToolTip(
-            "Vertical scale, as a percentage of the size above. Applied by "
-            "asking the face for taller capitals rather than by stretching "
-            "pixels, so the outlines stay sharp."
+            "Vertical scale. Height only — the letters get taller or shorter "
+            "and stay exactly as wide, which is the whole point of having it "
+            "separate from the size above."
         )
         self.height_spin.valueChanged.connect(self._style_edited)
         form.addRow("Width", _row(self.width_spin,
@@ -2040,7 +2050,7 @@ class RenderStep(ImageStep):
             self.outline_box, self.outline_button,
             self.outline_width, self.cap_spin, self.align_combo, self.font_combo,
             self.tracking_spin, self.width_spin, self.height_spin,
-            self.bold_box, self.italic_box,
+            self.bold_box, self.italic_box, self.overflow_box,
             self.remeasure_button, self.target_edit,
             self.render_selected_button, self.render_all_button, self.confirm_button,
         ):
@@ -2150,7 +2160,7 @@ class RenderStep(ImageStep):
             self.outline_box, self.outline_button,
             self.outline_width, self.cap_spin, self.align_combo, self.font_combo,
             self.tracking_spin, self.width_spin, self.height_spin,
-            self.bold_box, self.italic_box,
+            self.bold_box, self.italic_box, self.overflow_box,
             self.remeasure_button, self.target_edit,
         )
         if block is None:
@@ -2207,6 +2217,7 @@ class RenderStep(ImageStep):
             self.height_spin.setValue(max(self.height_spin.minimum(), style.scale_y))
             self.bold_box.setChecked(style.bold)
             self.italic_box.setChecked(style.italic)
+            self.overflow_box.setChecked(style.overflow)
             self._sync_cuts(style.font)
         finally:
             self._syncing = False
@@ -2310,6 +2321,7 @@ class RenderStep(ImageStep):
         style.tracking = self.tracking_spin.value()
         style.scale_x = self.width_spin.value()
         style.scale_y = self.height_spin.value()
+        style.overflow = self.overflow_box.isChecked()
         # Before the two cuts are read, not after: whether Bold is on offer at
         # all is a property of the family just chosen, not of the one before
         # it, and a box this turns off must not still reach the style.

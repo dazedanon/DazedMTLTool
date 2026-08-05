@@ -111,10 +111,15 @@ class Style:
     # face at 100%. They start neutral and stay there until somebody says
     # otherwise, which is why they are absent from ``measure``.
     scale_x: int = 100          # horizontal stretch, percent
-    scale_y: int = 100          # vertical stretch, percent of the cap height
+    scale_y: int = 100          # vertical stretch, percent
     tracking: int = 0           # letter spacing, thousandths of an em
     bold: bool = False
     italic: bool = False
+    # Draw the type at the size asked for even where the block cannot hold it.
+    # Off by default: the whole point of the fit ladder is that a translation is
+    # longer than the Japanese it replaces and the plate it sits on is a fixed
+    # size. On, it is the user saying they would rather have the size.
+    overflow: bool = False
     confidence: float = 0.0
     notes: list[str] = field(default_factory=list)
     # Set once the user touches the Style panel. A locked style is never
@@ -138,6 +143,7 @@ class Style:
             "tracking": self.tracking,
             "bold": self.bold,
             "italic": self.italic,
+            "overflow": self.overflow,
             "confidence": round(self.confidence, 3),
             "notes": list(self.notes),
             "locked": self.locked,
@@ -173,6 +179,7 @@ class Style:
             tracking=int(data.get("tracking") or 0),
             bold=bool(data.get("bold")),
             italic=bool(data.get("italic")),
+            overflow=bool(data.get("overflow")),
             confidence=float(data.get("confidence") or 0.0),
             notes=[str(note) for note in data.get("notes") or []],
             locked=bool(data.get("locked")),

@@ -52,13 +52,31 @@ dark until the work that justifies them exists.
    are measured from the image and pre-filled, each labelled *Measured from the
    image · N% confident* until touched. Tracking, horizontal and vertical scale,
    bold and italic sit beside them, neutral until asked for, in Photoshop's
-   units so a number copied off that panel means the same thing here. Boxes can
+   units so a number copied off that panel means the same thing here — width and
+   height are independent, so 50% height gives letters half as tall and exactly
+   as wide. Boxes can
    be added, merged, split and deleted from this step too, because a box that is
    a line too short is something you find out by looking at the render. A pencil
    and eraser handle whatever measurement will never get right; strokes land
    **under** the English, so a touch-up can repair background but never cover the
    translation. The preview renders through the same code path that writes the
    file.
+
+   Where the translation is longer than the Japanese, the fit ladder shrinks it
+   until the block holds it. **Overflow**, beside the size, turns that off: the
+   size asked for is the size drawn, and the type is allowed to spill outside
+   the block, which grows around its own centre so nothing is clipped. What gets
+   erased never changes with it — growth decides where glyphs may be *drawn*.
+
+   The stroke is a dilation of the glyph coverage, the same way BallonsTranslator
+   draws one and what Photoshop means by *Stroke: Outside*. Every edge gets a
+   stroke because nothing decides which edges deserve one, and a counter stays
+   open until the stroke is wide enough to meet itself across it. The version
+   before it tried to tell a counter from the gap between two letters by
+   flooding the tile, and a flood cannot pass a pixel with *any* ink in it:
+   where two antialiased rims met, an invisible 30%-alpha bridge fenced the gap
+   off and the stroke was dropped from it, so white-on-white type ran into
+   itself.
 
    The eraser has three behaviours, after Photoshop: on its own it removes your
    own marks, **Ctrl** erases the picture itself to transparency, and **Shift**

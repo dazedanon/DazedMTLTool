@@ -469,13 +469,10 @@ def plan(
     vertical: bool,
     font_path: str,
     room: Box | None = None,
+    bounds: Box | None = None,
 ) -> Layout:
     """The fit ladder. Stops at the first rung that works and says which one."""
-    # Vertical scale is folded into the cap height rather than applied to the
-    # drawn pixels: the size *is* the vertical measure, so asking the face for
-    # taller capitals gives real outlines where stretching a bitmap would give
-    # soft ones. Horizontal scale has no such equivalent and is a real stretch.
-    cap = max(MIN_SIZE, int(round(style.cap_height * max(1, style.scale_y) / 100)))
+    cap = max(MIN_SIZE, style.cap_height)
     # The rungs are floors on the *point size*, but the style speaks in pixels of
     # ink. Convert once, here, so "70% of the original" is 70% of what the reader
     # sees rather than 70% of a number the font is free to reinterpret.
@@ -497,7 +494,11 @@ def plan(
             stroke_width=stroke_width,
             tracking=style.tracking,
             width_scale=style.scale_x,
+            height_scale=style.scale_y,
         )
+
+    if style.overflow:
+        return _unbounded(attempt(box, ceiling), box, style, vertical, bounds)
 
     # 1. its own box, at a size close to the original's
     first = attempt(box, comfortable)
@@ -530,72 +531,100 @@ def plan(
     )
 
 
+def _unbounded(
+    fitted: FittedText,
+    box: Box,
+    style: Style,
+    vertical: bool,
+    bounds: Box | None,
+) -> Layout:
+    """The size that was asked for, and a box grown to hold it.
+
+    The ladder above exists because the translation is longer than the Japanese
+    and the plate it sits on is a fixed size. That is the right default and it
+    is the wrong answer to "make this bigger": the type grew until it touched
+    the edges of the block and then quietly stopped, so past a certain value the
+    size control did nothing at all and gave no sign of why.
+
+    With overflow on, the requested size is simply drawn. The block keeps its
+    centre - it is still where the artist put the label - and grows around it
+    to whatever the ink needs, so nothing is clipped by the tile it is drawn on.
+    The erase is untouched: this decides where glyphs may be *drawn*, never what
+    gets rubbed out, which is the same rule ``growth_room`` follows.
+    """
+    fitted.fits = True
+    fitted.reason = ""
+    need_w, need_h = fitted.width, fitted.height
+    if vertical:
+        need_w, need_h = need_h, need_w
+    # A pixel each side: the ink extent is measured off glyph bounding boxes,
+    # and an antialiased edge lands fractionally outside its own.
+    need_w += 2
+    need_h += 2
+    if need_w <= box.w and need_h <= box.h:
+        return Layout(fitted, box, style.align, True)
+
+    middle_x, middle_y = (box.x + box.x2) // 2, (box.y + box.y2) // 2
+    half_w, half_h = max(box.w, need_w) // 2 + 1, max(box.h, need_h) // 2 + 1
+    grown = Box(
+        middle_x - half_w, middle_y - half_h, middle_x + half_w, middle_y + half_h
+    )
+    if bounds is not None:
+        grown = grown.clamp(bounds)
+    over = []
+    if need_w > box.w:
+        over.append(f"{need_w - box.w}px wider")
+    if need_h > box.h:
+        over.append(f"{need_h - box.h}px taller")
+    note = f"set at {fitted.size}pt, {' and '.join(over)} than the block"
+    if grown.w < need_w or grown.h < need_h:
+        note += " — and clipped by the edge of the image"
+    return Layout(fitted, grown, style.align, True, note, tight=True)
+
+
 # -------------------------------------------------------------------- draw
 
 
-#: Alpha at or above which a pixel is a glyph rather than the antialiased rim
-#: around one. Only used to tell one letter from the next - see ``_outside``.
-SOLID_INK = 128
+#: A stretched tile is drawn at the face's own proportions and squeezed at the
+#: end, so a 10% scale asks for a working tile ten times the size. Capped
+#: because the preview re-renders on every turn of every knob, and a block a
+#: thousand pixels wide would otherwise ask for ten thousand.
+MAX_WORK = 4096
 
 
-def _flood_from_border(barrier: np.ndarray) -> np.ndarray:
-    """The zero region of *barrier* that reaches the edge of the tile."""
-    # One pixel of margin so a glyph flush with the tile edge cannot fence the
-    # exterior off from the corner the flood starts at.
-    padded = cv2.copyMakeBorder(
-        barrier.astype(np.uint8), 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0
-    )
-    _, labels = cv2.connectedComponents((padded == 0).astype(np.uint8), connectivity=4)
-    return (labels == labels[0, 0])[1:-1, 1:-1]
+def _disc(radius: int) -> np.ndarray:
+    """A round brush *radius* pixels out from the centre, corners included.
 
-
-def _outside(alpha: np.ndarray) -> np.ndarray:
-    """Which pixels are outside the glyphs rather than inside a counter.
-
-    Start from the region of "no ink" that reaches the edge of the tile. What is
-    left over is *enclosed* space - but not all of it is a counter, and that
-    distinction is the whole of this function.
-
-    A flood cannot pass a pixel with any ink in it, and between two letters set
-    close together the antialiased rims meet: a 30%-alpha bridge nothing can see
-    walls off the gap. The gap is then "enclosed", the stroke is taken out of
-    it, and on white-on-white type - a stroke's commonest use - the two letters
-    run into the background and into each other. It got worse the smaller the
-    type, because the rim is a constant width and the gap is not.
-
-    So each enclosed pocket is asked which letters wall it in, counting only
-    properly inked pixels so a rim cannot join two letters into one. Walled in
-    by a single letter it is that letter's counter and is left alone; walled in
-    by two, it is the space *between* them and the stroke belongs there.
+    Built from the distance to the centre rather than taken from
+    ``getStructuringElement``, whose ``MORPH_ELLIPSE`` at 3x3 is a plus sign
+    rather than a disc. The four diagonal neighbours it leaves out are exactly
+    the corners of a stem, so a one-pixel stroke - the commonest width there is
+    - came out with four bare specks on every upright in the line.
     """
-    inked = alpha > 0
-    outside = _flood_from_border(inked)
-    pocket = ~outside & ~inked
-    if not pocket.any():
-        return outside
+    span = np.arange(-radius, radius + 1, dtype=np.float32)
+    grid = np.hypot(*np.meshgrid(span, span))
+    return (grid <= radius + 0.5).astype(np.uint8)
 
-    solid = (alpha >= SOLID_INK).astype(np.uint8)
-    _, letters = cv2.connectedComponents(solid, connectivity=8)
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(
-        pocket.astype(np.uint8), connectivity=4
+
+def _layer(mask: np.ndarray, colour) -> Image.Image:
+    """One flat colour, opaque exactly as far as *mask* says.
+
+    Everything drawn here is a single colour behind a coverage mask - the fill
+    is, and so is the stroke - so the colour never has to be interpolated,
+    stretched or averaged with anything. Which is the whole reason the tile is
+    built this way round: resizing an RGBA image mixes the colour channels as
+    they are *stored*, and what is stored under alpha 0 is black, so a white
+    letter stretched as RGBA picks up a grey fringe out of the emptiness around
+    it. Carrying one channel and stamping the colour on at the end cannot.
+    """
+    array = np.zeros(mask.shape + (4,), dtype=np.uint8)
+    array[:, :, 0], array[:, :, 1], array[:, :, 2] = colour[:3]
+    opacity = colour[3] if len(colour) > 3 else 255
+    array[:, :, 3] = (
+        mask if opacity >= 255
+        else (mask.astype(np.uint16) * opacity // 255).astype(np.uint8)
     )
-    # Reaching past the rim, which is at most a pixel or two wide, to the ink
-    # the pocket is actually held in by.
-    reach = np.ones((5, 5), np.uint8)
-    for index in range(1, count):
-        x, y, w, h, _ = stats[index]
-        # Each pocket is looked at in its own neighbourhood rather than across
-        # the whole tile: a line of type has one of these per counter, and the
-        # preview re-renders on every turn of every knob.
-        top, left = max(0, y - 3), max(0, x - 3)
-        bottom, right = min(alpha.shape[0], y + h + 3), min(alpha.shape[1], x + w + 3)
-        crop = labels[top:bottom, left:right] == index
-        near = (cv2.dilate(crop.astype(np.uint8), reach) > 0) & (
-            solid[top:bottom, left:right] > 0
-        )
-        if len(np.unique(letters[top:bottom, left:right][near])) > 1:
-            outside[top:bottom, left:right] |= crop
-    return outside
+    return Image.fromarray(array, mode="RGBA")
 
 
 def _write(draw, at, line, font, step, **ink) -> None:
@@ -614,73 +643,90 @@ def _write(draw, at, line, font, step, **ink) -> None:
 
 
 def _stroked(size, fitted, align, text_color, outline) -> Image.Image:
-    """Glyphs with a stroke that stays out of their counters.
+    """One block's lines, stretched to the block, with the stroke around them.
 
-    PIL's ``stroke_width`` dilates the glyph and paints the fill back over it,
-    which is right everywhere except inside a closed letter: past about half the
-    counter's width the stroke meets itself in the middle and the hole in an
-    ``a`` or a ``B`` fills solid. It reads as the letter losing its shape, and
-    it gets worse the heavier the stroke - so the setting could not be used at
-    the strengths it exists for.
+    Three steps, in this order, and the order is what makes each of them right:
 
-    Drawn as two layers instead. The stroke is masked down to the pixels the
-    fill's own *exterior* reaches, so it grows outwards without ever growing
-    inwards, and the counters keep showing whatever is behind the text.
+    **Draw at the face's own proportions.** The glyphs go onto a working tile
+    scaled to undo both stretches, so the rasteriser is always asked for a shape
+    the outline actually has. Drawing into a stretched grid instead asks it to
+    invent one.
 
-    A horizontal stretch is done last, to the finished tile: the glyphs are
-    drawn at their natural width into a tile scaled to match, and the whole
-    thing is squeezed or pulled to the block's real width at the end. Drawing
-    into a stretched grid instead would ask the rasteriser for a shape it has no
-    outline for.
+    **Stretch the finished fill.** Width and height are independent, which is
+    what they are on Photoshop's Character panel: 50% height makes the letters
+    half as tall and leaves them exactly as wide. Folding height into the point
+    size instead - which is what this used to do - scales both, so the one
+    control that exists to change the proportions could not change them.
+
+    **Then stroke it.** After the stretch, so a 2px stroke is 2px on all four
+    sides of a letter squeezed to 50%, rather than 1px at the sides and 2px top
+    and bottom. The stroke is why the tile is drawn ``stroke`` pixels in from
+    each edge: it needs somewhere to grow into that is still inside the block.
+
+    The whole of it is carried as a single coverage channel and coloured at the
+    end - see ``_layer`` for why - and the stroke is a dilation of that channel,
+    which is how BallonsTranslator draws one and what Photoshop's "Stroke:
+    Outside" means. Every edge gets a stroke because nothing decides which edges
+    deserve one; a counter stays open until the stroke is wide enough to meet
+    itself across it, and then closes, which is a reason to turn the width down
+    rather than something to detect. The version this replaced did try to
+    detect it - to tell a letter's counter from the gap between two letters by
+    flooding the tile - and a flood cannot pass a pixel with *any* ink in it.
+    Between letters set close together the antialiased rims meet, and that
+    invisible 30%-alpha bridge fenced the gap off, so the stroke was taken out
+    of it and white-on-white type ran into itself.
     """
-    stretch = max(1, fitted.width_scale) / 100.0
-    # Natural-width working tile. Alignment below is worked out in here and the
-    # mapping onto the real tile is linear, so nothing has to know about it.
-    work = (max(1, int(round(size[0] / stretch))), size[1])
-
-    fill_layer = Image.new("RGBA", work, (0, 0, 0, 0))
-    stroke_layer = Image.new("RGBA", work, (0, 0, 0, 0))
-    fill_draw = ImageDraw.Draw(fill_layer)
-    stroke_draw = ImageDraw.Draw(stroke_layer)
-    font = _load(fitted.font_path, fitted.size)
     stroke = fitted.stroke if outline else 0
+    stretch = max(1, fitted.width_scale) / 100.0
+    rise = max(1, fitted.height_scale) / 100.0
+    # What is left of the block once the stroke has its margin. The fit measured
+    # against the same figure, so the ink is known to sit inside it.
+    inner = (max(1, size[0] - 2 * stroke), max(1, size[1] - 2 * stroke))
+    work = (
+        max(1, min(MAX_WORK, int(round(inner[0] / stretch)))),
+        max(1, min(MAX_WORK, int(round(inner[1] / rise)))),
+    )
+
+    coverage = Image.new("L", work, 0)
+    draw = ImageDraw.Draw(coverage)
+    font = _load(fitted.font_path, fitted.size)
     step = fitted.step
 
-    # Put the ink where it was measured: the fitted height is the painted
-    # extent, so centring on it lands the glyphs in the middle of the box
-    # instead of a line-box's worth of empty space high.
-    top = max(0, (work[1] - fitted.height) // 2) + stroke - fitted.ink_top
+    # Put the ink where it was measured: ``ink_height`` is the painted extent at
+    # these proportions, so centring on it lands the glyphs in the middle of the
+    # block instead of a line-box's worth of empty space high.
+    top = max(0, (work[1] - fitted.ink_height) // 2) - fitted.ink_top
     for index, line in enumerate(fitted.lines):
         left, _, right, _ = line_ink(font, line, step)
         width = right - left
         if align == "center":
             x = (work[0] - width) / 2
         elif align == "right":
-            x = work[0] - width - stroke
+            x = work[0] - width
         else:
-            x = stroke
-        at = (x - left, top + index * fitted.line_height)
-        if stroke:
-            _write(
-                stroke_draw, at, line, font, step,
-                fill=outline, stroke_width=stroke, stroke_fill=outline,
-            )
-        _write(fill_draw, at, line, font, step, fill=text_color)
-
-    if stroke:
-        fill_array = np.array(fill_layer)
-        stroke_array = np.array(stroke_layer)
-        allowed = _outside(fill_array[:, :, 3]) | (fill_array[:, :, 3] > 0)
-        stroke_array[:, :, 3][~allowed] = 0
-        tile = Image.alpha_composite(
-            Image.fromarray(stroke_array), Image.fromarray(fill_array)
+            x = 0.0
+        _write(
+            draw, (x - left, top + index * fitted.line_height),
+            line, font, step, fill=255,
         )
-    else:
-        tile = fill_layer
 
-    if tile.size != tuple(size):
-        tile = tile.resize(tuple(size), Image.LANCZOS)
-    return tile
+    if work != inner:
+        coverage = coverage.resize(inner, Image.LANCZOS)
+    if stroke:
+        # ``paste`` rather than a slice assignment: it clips, and a block only
+        # two pixels tall with a five-pixel stroke would otherwise be an error
+        # about array shapes rather than a very heavily stroked full stop.
+        framed = Image.new("L", (int(size[0]), int(size[1])), 0)
+        framed.paste(coverage, (stroke, stroke))
+        coverage = framed
+
+    mask = np.array(coverage)
+    fill = _layer(mask, text_color)
+    if not stroke:
+        return fill
+    return Image.alpha_composite(
+        _layer(cv2.dilate(mask, _disc(stroke)), outline), fill
+    )
 
 
 def _tile(size: tuple[int, int], layout: Layout, style: Style) -> Image.Image:
@@ -801,7 +847,7 @@ def render_entry(
             continue
         layout = plan(
             text, box, style,
-            vertical=block.vertical, font_path=font_path, room=room,
+            vertical=block.vertical, font_path=font_path, room=room, bounds=bounds,
         )
         if not layout.fits:
             notes[block.block_id] = Note(block.block_id, False, layout.note)

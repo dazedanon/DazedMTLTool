@@ -68,8 +68,14 @@ class FittedText:
     #: rather than re-derived from the style so the renderer draws the spacing
     #: the fit was measured against, whatever the ladder did to the size.
     step: float = 0.0
-    #: Horizontal stretch as a percentage. ``width`` above already includes it.
+    #: The stretches, as percentages. ``width`` and ``height`` above already
+    #: include them; ``ink_height`` below does not.
     width_scale: int = 100
+    height_scale: int = 100
+    #: The height of the ink as the face draws it, before either stretch and
+    #: without the stroke. The renderer draws at these proportions and stretches
+    #: the finished tile, so this is the number it centres against.
+    ink_height: int = 0
 
 
 # Where the operating system keeps its own faces. Every one of these is worth
@@ -461,6 +467,7 @@ def fit_text(
     stroke_width: int = 0,
     tracking: int = 0,
     width_scale: int = 100,
+    height_scale: int = 100,
 ) -> FittedText:
     """Largest size at which *text* fits the box, wrapping only if permitted.
 
@@ -484,15 +491,20 @@ def fit_text(
     start = size_for_cap(font_path, reference) or max(min_size, reference)
     start = max(min_size, start)
 
+    # Both stretches are applied to the finished tile, so the ink is measured at
+    # the face's own proportions throughout and only the *room* it is measured
+    # against is adjusted. Doing it the other way - scaling every measurement -
+    # would put the two factors in ten places instead of two.
     stretch = max(1, int(width_scale)) / 100.0
+    rise = max(1, int(height_scale)) / 100.0
 
     best_overflow: FittedText | None = None
     for size in range(start, min_size - 1, -1):
         stroke = stroke_at(size, stroke_width, reference)
-        room_height = max(1, max_height - 2 * stroke)
-        # Everything below measures unstretched ink, so the room it is measured
-        # against is un-stretched too. Doing it the other way - scaling every
-        # measurement - would put the factor in five places instead of one.
+        # The stroke is drawn around the stretched tile rather than stretched
+        # with it - a 2px stroke is 2px whatever the type is doing - so it comes
+        # off the room before the stretch is divided out, never after.
+        room_height = max(1, int((max_height - 2 * stroke) / rise))
         room_width = max(1, int((max_width - 2 * stroke) / stretch))
         step = tracking_px(size, tracking)
 
@@ -510,12 +522,14 @@ def fit_text(
             size=size,
             line_height=line_height,
             width=int(round(widest * stretch)) + 2 * stroke,
-            height=ink_height + 2 * stroke,
+            height=int(round(ink_height * rise)) + 2 * stroke,
             fits=widest <= room_width and ink_height <= room_height,
             stroke=stroke,
             ink_top=ink_top,
             step=step,
             width_scale=max(1, int(width_scale)),
+            height_scale=max(1, int(height_scale)),
+            ink_height=ink_height,
         )
         if candidate.fits:
             return candidate

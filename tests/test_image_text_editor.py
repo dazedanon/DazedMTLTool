@@ -1033,6 +1033,34 @@ class TypeControlTests(EditorTestCase):
             self.assertFalse(block.style.bold)
             self.assertFalse(step.bold_box.isChecked())
 
+    def test_overflow_starts_off_and_reaches_the_style(self):
+        """Off by default: the ladder shrinking to the block is still right."""
+        step = self.open_render()
+        block = step.current_entry().blocks[0]
+        self.assertFalse(step.overflow_box.isChecked())
+        step.overflow_box.setChecked(True)
+        step.overflow_box.clicked.emit(True)
+        self.assertTrue(block.style.overflow)
+
+    def test_overflow_comes_back_from_the_style_on_the_way_in(self):
+        step = self.open_render()
+        block = step.current_entry().blocks[0]
+        block.style.overflow = True
+        step._sync_panel()
+        self.assertTrue(step.overflow_box.isChecked())
+
+    def test_raising_the_size_past_the_block_now_changes_the_render(self):
+        """The complaint behind the switch: it used to stop and say nothing."""
+        step = self.open_render()
+        block = step.current_entry().blocks[0]
+        step.cap_spin.setValue(min(step.cap_spin.maximum(), block.box.h * 4))
+        step.refresh_preview()
+        capped = step.previews["one.png"].copy()
+        step.overflow_box.setChecked(True)
+        step.overflow_box.clicked.emit(True)
+        step.refresh_preview()
+        self.assertFalse((step.previews["one.png"] == capped).all())
+
 
 class ShellTests(EditorTestCase):
     def test_the_editor_opens_on_the_image_it_was_given(self):
