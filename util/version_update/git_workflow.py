@@ -346,7 +346,12 @@ def _require_matching_worktree(repo: Path, *, action: str) -> None:
 
 
 def _configure_exact_tree_repo(repo: Path) -> None:
-    """Disable platform line-ending rewrites for exact game tree transport."""
+    """Disable platform line-ending rewrites for exact game tree transport.
+
+    Local Git config is not pushed, so clones and other machines may still have
+    global ``core.autocrlf=true``. Re-apply on every workflow entry that touches
+    the repository so later updates and conflict checkouts keep LF blobs exact.
+    """
     _run_git(repo, "config", "core.autocrlf", "false")
     _run_git(repo, "config", "core.eol", "lf")
 
@@ -1690,6 +1695,7 @@ def record_version_metadata(
     status = inspect_repository(game)
     if not status.repo_root or not status.original_commit or not status.translation_commit:
         raise GitWorkflowError("Both original and translated branches must exist")
+    _configure_exact_tree_repo(status.repo_root)
     if status.pending_cherry_pick:
         raise GitWorkflowError("Finish or abort the pending cherry-pick first")
     if not status.worktree_clean:
@@ -1749,6 +1755,7 @@ def checkout_translation_branch(translated_game: str | Path) -> RepositoryStatus
     status = inspect_repository(game)
     if not status.repo_root or not status.translation_exists:
         raise GitWorkflowError("The translated branch is not registered")
+    _configure_exact_tree_repo(status.repo_root)
     if status.pending_cherry_pick:
         raise GitWorkflowError("Finish or abort the pending cherry-pick first")
     if not status.worktree_clean:
@@ -2217,6 +2224,7 @@ def preview_official_update(
     status = inspect_repository(game)
     if not status.repo_root or not status.original_commit or not status.translation_commit:
         raise GitWorkflowError("Register both branches before previewing an update")
+    _configure_exact_tree_repo(status.repo_root)
     if status.current_branch != status.translation_branch:
         raise GitWorkflowError(
             f"Switch to the translated branch {status.translation_branch!r} before previewing"
@@ -2496,6 +2504,7 @@ def apply_official_update(
     status = inspect_repository(game)
     if not status.repo_root or not status.original_commit or not status.translation_commit:
         raise GitWorkflowError("Register both branches before applying an update")
+    _configure_exact_tree_repo(status.repo_root)
     if status.current_branch != status.translation_branch:
         raise GitWorkflowError(
             f"Switch to the translated branch {status.translation_branch!r} before updating"
@@ -2685,8 +2694,9 @@ def apply_registered_original(
 ) -> UpdateResult:
     game = Path(translated_game).expanduser().resolve()
     status = inspect_repository(game)
-    if not status.original_commit or not status.original_version:
+    if not status.repo_root or not status.original_commit or not status.original_version:
         raise GitWorkflowError("The original branch has no recorded version to apply")
+    _configure_exact_tree_repo(status.repo_root)
     if status.current_branch != status.translation_branch:
         raise GitWorkflowError(
             f"Switch to the translated branch {status.translation_branch!r} before updating"
@@ -2720,6 +2730,7 @@ def continue_with_official(translated_game: str | Path) -> UpdateResult:
     status = inspect_repository(game)
     if not status.repo_root or not status.pending_cherry_pick:
         raise GitWorkflowError("There is no pending cherry-pick to continue")
+    _configure_exact_tree_repo(status.repo_root)
     original_commit = _run_git(
         status.repo_root, "rev-parse", "CHERRY_PICK_HEAD"
     ).stdout.strip()
@@ -2737,5 +2748,6 @@ def abort_update(translated_game: str | Path) -> RepositoryStatus:
     status = inspect_repository(game)
     if not status.repo_root or not status.pending_cherry_pick:
         raise GitWorkflowError("There is no pending cherry-pick to abort")
+    _configure_exact_tree_repo(status.repo_root)
     _run_git(status.repo_root, "cherry-pick", "--abort")
     return inspect_repository(game)

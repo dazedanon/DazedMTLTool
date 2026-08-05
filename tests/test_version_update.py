@@ -309,6 +309,24 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertEqual(bat, b"@echo off\r\n")
         self.assertIn("data.json", result.formatted_json_paths)
 
+    def test_preview_reapplies_exact_eol_config_on_existing_repo(self):
+        """Clones do not inherit local autocrlf=false; preview must restore it."""
+        self.write_versions("Japanese\n", "English\n", "Japanese\nnew line\n")
+        bootstrap_repository(self.translated, self.old, "1.00")
+        self.git(self.translated, "config", "core.autocrlf", "true")
+        self.git(self.translated, "config", "core.eol", "crlf")
+
+        preview_official_update(self.translated, self.new, "1.02")
+
+        self.assertEqual(
+            self.git(self.translated, "config", "--local", "--get", "core.autocrlf"),
+            "false",
+        )
+        self.assertEqual(
+            self.git(self.translated, "config", "--local", "--get", "core.eol"),
+            "lf",
+        )
+
     def test_update_preserves_nonconflicting_translation_and_applies_official_patch(self):
         self.write_versions("Japanese\n", "English\n", "Japanese\n", "dialogue.txt")
         self.old.joinpath("engine.txt").write_text("engine=1\n")
