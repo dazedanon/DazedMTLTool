@@ -75,8 +75,9 @@ def glyphs(
     stroke: int = 5,
     pitch: int = 14,
     soft: bool = True,
+    vertical: bool = False,
 ) -> None:
-    """Vertical strokes across *box*: the shape of text, not a slab.
+    """Strokes across *box*: the shape of text, not a slab.
 
     A filled rectangle is not a stand-in for glyphs, and testing against one is
     misleading in both directions. The toolkit deliberately excludes shapes that
@@ -84,17 +85,32 @@ def glyphs(
     slab fixture therefore measures as an icon, and a test built on one quietly
     asserts that text is left alone.
 
+    Horizontal text is a row of vertical strokes; a vertical strip is a column
+    of horizontal strokes. Mixing those up leaves one tall bar whose measured
+    cap height collapses to the stroke width and whose antialiased edge reads
+    as mid-grey ink.
+
     ``soft`` blurs the result, because real glyphs have an antialiased edge and
     that edge is exactly where the erase went wrong.
     """
-    count = max(1, (box.w + pitch - 1) // pitch)
-    for index in range(count):
-        centre = box.x + index * pitch + pitch // 2
-        left = max(box.x, centre - stroke // 2)
-        right = min(box.x2, left + stroke)
-        if right <= left:
-            continue
-        array[box.y : box.y2, left:right] = colour
+    if vertical:
+        count = max(1, (box.h + pitch - 1) // pitch)
+        for index in range(count):
+            centre = box.y + index * pitch + pitch // 2
+            top = max(box.y, centre - stroke // 2)
+            bottom = min(box.y2, top + stroke)
+            if bottom <= top:
+                continue
+            array[top:bottom, box.x : box.x2] = colour
+    else:
+        count = max(1, (box.w + pitch - 1) // pitch)
+        for index in range(count):
+            centre = box.x + index * pitch + pitch // 2
+            left = max(box.x, centre - stroke // 2)
+            right = min(box.x2, left + stroke)
+            if right <= left:
+                continue
+            array[box.y : box.y2, left:right] = colour
     if soft:
         region = box.expand(3, Box.from_size(array.shape[1], array.shape[0]))
         rows, cols = region.slices()
@@ -486,7 +502,7 @@ class RenderTests(unittest.TestCase):
 
     def test_a_rotated_block_is_drawn_down_the_strip(self):
         array = canvas(80, 240, (255, 255, 255, 255))
-        glyphs(array, Box(30, 40, 50, 200), (0, 0, 0, 255), pitch=40)
+        glyphs(array, Box(30, 40, 50, 200), (0, 0, 0, 255), pitch=40, vertical=True)
         item = block(Box(28, 38, 52, 202), target="Hello", angle=-90.0)
         result = render.render_entry(array, self._entry([item]))
         self.assertTrue(all(note.ok for note in result.notes), result.notes)
