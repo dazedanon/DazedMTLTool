@@ -64,16 +64,17 @@ Advanced users may configure the same settings in a private `.env` copied from
 The Version Update feature uses two Git branches for every engine and file
 format. `original` records official releases, while the repository's registered
 translated branch (such as an existing `main`) receives each release commit by
-cherry-pick. If version tracking is not configured, the GUI can create or
-register it from a translated game and its matching clean original. Conflicting
+cherry-pick. If version tracking is not configured, Prepare can create it from
+the selected pre-translation game folder, and Version Update can still register
+it from a translated game and its matching clean original. Conflicting
 files default to the new official copy and are listed for translation review.
 Before approval, the GUI shows a file-change overview and normalizes valid
 UTF-8 `.json` files with the same four-space formatter used by translation
 workflows. JSON that cannot be safely formatted remains unchanged and is shown
-as a warning. Bootstrap normalizes both branch baselines so initialization does
-not create formatting-only diffs. Existing `.gitignore`, repository exclude,
-and global Git ignore rules are honored for every imported tree. No
-engine-aware or semantic merge is performed.
+as a warning. Bootstrap normalizes the working tree before Git init or baseline
+commits so initialization does not create formatting-only diffs. Existing
+`.gitignore`, repository exclude, and global Git ignore rules are honored for
+every imported tree. No engine-aware or semantic merge is performed.
 
 ## Guides and help
 

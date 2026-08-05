@@ -494,11 +494,28 @@ def _validate_source(source: str | Path, destination: Path) -> Path:
     root = Path(source).expanduser().resolve()
     if not root.is_dir():
         raise GitWorkflowError(f"Official game folder not found: {root}")
-    if root == destination or destination in root.parents or root in destination.parents:
+    # Same-folder bootstrap is allowed: Prepare uses the pre-translation Project
+    # game as both the original baseline and the starting translated branch.
+    if root != destination and (
+        destination in root.parents or root in destination.parents
+    ):
         raise GitWorkflowError(
-            "Official and translated game folders must be separate and cannot be nested"
+            "Official and translated game folders cannot be nested"
         )
     return root
+
+
+def _prepare_worktree_formatting(
+    source: Path,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Normalize JSON/text on disk before any Git init or baseline commit."""
+    files = _source_files(source, format_json=True)
+    _materialize_normalized_text(files)
+    formatted = tuple(
+        entry.relative for entry in files if entry.normalized_text is not None
+    )
+    warnings = tuple(entry.json_warning for entry in files if entry.json_warning)
+    return formatted, warnings
 
 
 def _normalize_newlines(text: str) -> str:
@@ -1448,9 +1465,14 @@ def bootstrap_repository(
     if found is None:
         if translated.joinpath(".git").exists():
             raise GitWorkflowError("The selected folder contains unusable Git metadata")
-        # Validate both trees before creating any repository state.
-        _source_files(original, format_json=True)
-        _source_files(translated, format_json=True)
+        # Format and validate on disk before creating any repository state.
+        # The clean official folder is left untouched when it is a separate path;
+        # same-folder Prepare bootstrap normalizes the single selected game once.
+        if original == translated:
+            preformatted, prewarnings = _prepare_worktree_formatting(translated)
+        else:
+            _source_files(original, format_json=True)
+            preformatted, prewarnings = _prepare_worktree_formatting(translated)
         gitignore_installed = _install_gameupdate_gitignore(translated)
         _run_git(translated, "init", "-b", TRANSLATION_BRANCH)
         repo, prefix = translated, ""
@@ -1477,13 +1499,19 @@ def bootstrap_repository(
             game_prefix=prefix,
             base_commit=original_commit,
             format_json=True,
-            materialize_json=True,
+            materialize_json=False,
         )
         translation_commit = _commit_tree(
             repo,
             translation_tree.tree,
             _message(f"translation: record translated game {version}", version),
             (original_commit,),
+        )
+        translation_tree = _TreeBuild(
+            translation_tree.tree,
+            tuple(dict.fromkeys((*preformatted, *translation_tree.formatted_json_paths))),
+            tuple(dict.fromkeys((*prewarnings, *translation_tree.json_warnings))),
+            translation_tree.ignored_paths,
         )
     else:
         repo, prefix = found
@@ -1509,6 +1537,8 @@ def bootstrap_repository(
             raise GitWorkflowError(
                 "Check out the branch containing the translated game before reconciliation"
             )
+        # Normalize the working translation tree before baseline commits.
+        preformatted, prewarnings = _prepare_worktree_formatting(translated)
         gitignore_installed = _install_gameupdate_gitignore(translated)
         _ensure_translation_branch(repo, head_commit, translation_branch)
         original_tree = _write_tree_from_folder(
@@ -1532,13 +1562,19 @@ def bootstrap_repository(
             game_prefix=prefix,
             base_commit=head_commit,
             format_json=True,
-            materialize_json=True,
+            materialize_json=False,
         )
         translation_commit = _commit_tree(
             repo,
             translation_tree.tree,
             _message(f"translation: register original baseline {version}", version),
             (head_commit, original_commit),
+        )
+        translation_tree = _TreeBuild(
+            translation_tree.tree,
+            tuple(dict.fromkeys((*preformatted, *translation_tree.formatted_json_paths))),
+            tuple(dict.fromkeys((*prewarnings, *translation_tree.json_warnings))),
+            translation_tree.ignored_paths,
         )
 
     _run_git(

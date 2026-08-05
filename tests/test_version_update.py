@@ -76,6 +76,69 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertTrue(result.gitignore_installed)
         self.assertTrue(self.translated.joinpath(".gitignore").is_file())
 
+    def test_bootstrap_same_folder_creates_identical_baselines(self):
+        """Prepare uses one pre-translation game as both original and translation."""
+        game = self.translated
+        game.joinpath("game.txt").write_text("Japanese\n", encoding="utf-8")
+        game.joinpath("data.json").write_text('{"name":"Hero","v":1}')
+
+        result = bootstrap_repository(game, game, "1.00")
+        status = inspect_repository(game)
+
+        expected_json = json.dumps(
+            {"name": "Hero", "v": 1}, indent=4, ensure_ascii=False
+        )
+        self.assertEqual(self.git(game, "show", "original:game.txt"), "Japanese")
+        self.assertEqual(self.git(game, "show", "main:game.txt"), "Japanese")
+        self.assertEqual(self.git(game, "show", "original:data.json"), expected_json)
+        self.assertEqual(self.git(game, "show", "main:data.json"), expected_json)
+        self.assertEqual(game.joinpath("data.json").read_text(encoding="utf-8"), expected_json)
+        self.assertEqual(status.current_branch, "main")
+        self.assertEqual(status.translation_branch, "main")
+        self.assertEqual(status.original_version, "1.00")
+        self.assertEqual(status.translation_version, "1.00")
+        self.assertTrue(status.worktree_clean)
+        self.assertIn("data.json", result.formatted_json_paths)
+
+    def test_bootstrap_formats_worktree_before_git_init(self):
+        """Formatting must hit disk before repository creation."""
+        game = self.translated
+        game.joinpath("data.json").write_text('{"name":"Hero","v":1}')
+        events: list[str] = []
+        real_prepare = __import__(
+            "util.version_update.git_workflow", fromlist=["_prepare_worktree_formatting"]
+        )._prepare_worktree_formatting
+        real_run_git = __import__(
+            "util.version_update.git_workflow", fromlist=["_run_git"]
+        )._run_git
+
+        def tracking_prepare(source):
+            events.append("format")
+            self.assertFalse((Path(source) / ".git").exists())
+            return real_prepare(source)
+
+        def tracking_run_git(cwd, *args, **kwargs):
+            if args and args[0] == "init":
+                events.append("init")
+                self.assertIn("format", events)
+            return real_run_git(cwd, *args, **kwargs)
+
+        with (
+            patch(
+                "util.version_update.git_workflow._prepare_worktree_formatting",
+                side_effect=tracking_prepare,
+            ),
+            patch(
+                "util.version_update.git_workflow._run_git",
+                side_effect=tracking_run_git,
+            ),
+        ):
+            bootstrap_repository(game, game, "1.00")
+
+        self.assertEqual(events[0], "format")
+        self.assertIn("init", events)
+        self.assertLess(events.index("format"), events.index("init"))
+
     def test_bootstrap_installs_bundled_gitignore_before_building_branches(self):
         self.write_versions("Japanese\n", "English\n", "New Japanese\n")
         for folder in (self.old, self.translated):
@@ -1337,6 +1400,44 @@ class VersionUpdateUITests(unittest.TestCase):
                         capture_output=True,
                         text=True,
                     ).stdout.strip()
+                )
+            finally:
+                card.close()
+
+    def test_prepare_card_bootstraps_from_selected_game_without_original_browse(self):
+        from gui.git_prepare import GitPreparationCard
+
+        with tempfile.TemporaryDirectory() as temporary:
+            game = Path(temporary)
+            game.joinpath("game.txt").write_text("Japanese\n")
+            card = GitPreparationCard()
+            try:
+                card.set_game_root(game)
+                self.assertEqual(card._action_kind, "bootstrap")
+                self.assertEqual(card.action_btn.text(), "Create version tracking")
+                self.assertTrue(card.original_row.isHidden())
+                self.assertIn("this game folder", card.status_label.text())
+
+                card.version_edit.setText("1.00")
+                with patch.object(card, "_run") as run:
+                    card._start_action()
+                    operation = run.call_args.args[0]
+                operation()
+                card.refresh_status()
+                self.assertEqual(card._action_kind, "")
+                self.assertIn("Ready", card.status_label.text())
+                status = inspect_repository(game)
+                self.assertEqual(status.original_version, "1.00")
+                self.assertEqual(status.translation_version, "1.00")
+                self.assertEqual(status.current_branch, "main")
+                self.assertEqual(
+                    subprocess.run(
+                        ["git", "-C", str(game), "show", "original:game.txt"],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    ).stdout,
+                    "Japanese\n",
                 )
             finally:
                 card.close()

@@ -196,13 +196,20 @@ class GitPreparationCard(WorkflowStageCard):
             return
 
         if not status.original_exists:
-            existing = "an existing Git repository" if status.repo_root else "no Git repository"
-            self._set_status(
-                f"Detected {existing}. Choose the matching clean original to create the required branches.",
-                COLORS.warning,
-            )
+            if status.repo_root:
+                self._set_status(
+                    "Detected an existing Git repository. Enter the current version to "
+                    "create the required branches from this game folder.",
+                    COLORS.warning,
+                )
+            else:
+                self._set_status(
+                    "Detected no Git repository. Enter the current version to create "
+                    "version tracking from this game folder.",
+                    COLORS.warning,
+                )
             self.fields.setVisible(True)
-            self.original_row.setVisible(True)
+            self.original_row.setVisible(False)
             self._set_action("bootstrap", "Create version tracking")
             return
 
@@ -272,17 +279,9 @@ class GitPreparationCard(WorkflowStageCard):
         if not self._game_root or not self._action_kind:
             return
         version = self.version_edit.text().strip()
-        original = self.original_edit.text().strip()
         if self._action_kind in {"bootstrap", "register", "metadata"} and not version:
             QMessageBox.warning(
                 self, "Current version required", "Enter the current game version."
-            )
-            return
-        if self._action_kind == "bootstrap" and not original:
-            QMessageBox.warning(
-                self,
-                "Matching original required",
-                "Choose the clean official game matching this translation.",
             )
             return
         if (
@@ -311,8 +310,10 @@ class GitPreparationCard(WorkflowStageCard):
                 return
 
         if self._action_kind == "bootstrap":
+            # Prepare runs before translation, so the Project folder is the clean
+            # baseline for both original and the starting translated branch.
             operation = lambda: bootstrap_repository(
-                self._game_root, original, version
+                self._game_root, self._game_root, version
             )
         elif self._action_kind == "register":
             operation = lambda: register_translation_branch(self._game_root, version)

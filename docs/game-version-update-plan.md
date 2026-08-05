@@ -35,16 +35,22 @@ as Prepare so plugin configuration does not collapse into a whole-file conflict.
 
 ## First-time reconciliation
 
-Both engine workflows expose version tracking as the first task in Prepare, and
-the Version Update page retains the same setup path. The GUI inspects the
-selected translated game immediately. If `original` is
-missing, the user supplies the matching clean original folder and its version.
+Both engine workflows expose version tracking in Prepare after optional formatting
+and GameUpdate prep, and the Version Update page retains a setup path for games
+that still need baseline branches. Prepare bootstraps from the selected
+pre-translation Project game: that single folder becomes both the `original`
+baseline and the starting translated branch. Enter the current version; no second
+folder is required.
+
+The Version Update page can still reconcile an existing translation by supplying
+a separate matching clean original folder and its version.
 The tool writes the original Git tree directly into repository objects and
 records the current translated tree separately, so bootstrap never swaps or
-replaces translated content. Both baseline trees receive the same deterministic
-JSON formatting and LF line endings, and the translated working files are
-normalized to match their recorded branch. This prevents formatting-only or
-EOL-only whole-file diffs immediately after initialization.
+replaces translated content. Bootstrap normalizes JSON and LF line endings on the
+working translation tree before any Git init or baseline commit, and both
+baseline trees use that same deterministic formatting.
+This prevents formatting-only or EOL-only whole-file diffs immediately after
+initialization.
 
 Before either baseline is committed, bootstrap installs the bundled GameUpdate
 `.gitignore`. Existing project rules are retained after the bundled rules, so

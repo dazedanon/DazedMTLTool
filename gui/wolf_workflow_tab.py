@@ -851,16 +851,13 @@ class WolfWorkflowTab(QWidget):
 
     def _build_step1_preprocess(self, layout: QVBoxLayout):
         layout.addWidget(self._page_header(
-            1, "Prepare Project", "Set up version tracking, then optionally format data and install GameUpdate.",
+            1, "Prepare Project", "Format and prepare the game, then set up Git version tracking.",
         ))
-        self.git_prepare = GitPreparationCard(1)
-        self.git_prepare.activity.connect(self._log)
-        layout.addWidget(self.git_prepare)
 
         format_card = WorkflowStageCard(
-            2,
+            1,
             "Format extracted game data",
-            "Makes the prepared text files easier to review and track. This does not change the game itself.",
+            "Makes the prepared text files easier to review and track. Do this before creating the Git baseline.",
         )
         ta_path_row = QHBoxLayout()
         ta_path_row.addWidget(QLabel("Game data:"))
@@ -874,7 +871,7 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(format_card)
 
         update_card = WorkflowStageCard(
-            3,
+            2,
             "Install the GameUpdate helper",
             "Optional. Adds the bundled update files to the game folder so future translation updates are easier to share.",
         )
@@ -901,9 +898,9 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(update_card)
 
         run_card = WorkflowStageCard(
-            4,
+            3,
             "Run optional preparation tasks",
-            "Runs the two tasks above in order. Missing optional items are skipped.",
+            "Runs the two tasks above in order before Git setup. Missing optional items are skipped.",
         )
         run_all_btn = _make_btn("Run optional tasks", "#007acc")
         run_all_btn.setToolTip("Format the extracted data, then install GameUpdate if it is available")
@@ -915,6 +912,10 @@ class WolfWorkflowTab(QWidget):
         )
         run_card.add_widget(run_all_btn)
         layout.addWidget(run_card)
+
+        self.git_prepare = GitPreparationCard(4)
+        self.git_prepare.activity.connect(self._log)
+        layout.addWidget(self.git_prepare)
 
     def _register_import_button(self, button: QPushButton) -> None:
         self._import_buttons.append(button)

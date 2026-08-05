@@ -92,7 +92,7 @@ WORKFLOW_TL_NORMAL_LABEL = "Normal Translate"
 
 _STEP_PURPOSES = {
     0: "Detect the game and choose which data files enter this translation run.",
-    1: "Set up Git version tracking, then optionally format files and install GameUpdate.",
+    1: "Format and prepare the game, then set up Git version tracking.",
     2: "Configure speaker detection, collect names, and maintain project guidance.",
     3: "Translate database and dialogue text, then build the variable cache.",
     4: "Translate audited variable, plugin, and script text only when required.",
@@ -220,13 +220,13 @@ _STEP_HELP: dict[int, str] = {
     ),
     1: (
         "<b>Step 1 - Prepare the project</b><br><br>"
-        "Set up version tracking before translation changes the game. The remaining tasks are optional.<br><br>"
+        "Format and prepare the clean game first, then set up version tracking before translation changes it.<br><br>"
         "<b>What to do</b><br>"
-        "• In <b>Set up Git version tracking</b>, choose the matching clean original and current version when requested. Existing repositories and legacy branches are detected automatically.<br>"
         "• Use <b>Format game data</b> to make the game's data files easier to inspect.<br>"
         "• Use <b>Format plugins.js</b> to make the MV/MZ plugin list easier to read.<br>"
         "• Use <b>Install GameUpdate</b> only when you want that patch helper in the game.<br>"
-        "• Or click <b>Run optional tasks</b> to run every optional task that is ready.<br><br>"
+        "• Or click <b>Run optional tasks</b> to run every optional prep task that is ready.<br>"
+        "• In <b>Set up Git version tracking</b>, enter the current version. The selected Project game becomes the original and starting translated baseline. Existing repositories and legacy branches are detected automatically.<br><br>"
         "Unavailable optional tasks are skipped."
     ),
     2: (
@@ -1050,7 +1050,7 @@ class WorkflowTab(QWidget):
 
     # Static clipboard prompts are loaded from editable data/skills/*.md files.
 
-    # ── Step 1: Git setup and optional pre-process tasks ──────────────
+    # ── Step 1: format/prep first, then Git version tracking ──────────
 
     def _build_step1_preprocess(self, layout: QVBoxLayout):
         # Collapse/expand toggle
@@ -1066,11 +1066,8 @@ class WorkflowTab(QWidget):
             extra_widgets=[toggle_btn],
         )
 
-        self.git_prepare = GitPreparationCard(1)
-        self.git_prepare.activity.connect(self._log)
-        layout.addWidget(self.git_prepare)
-
         # Collapsible container — wraps the optional formatter/helper tasks.
+        # These run before Git so the committed baselines are already normalized.
         collapse_widget = QWidget()
         collapse_layout = QVBoxLayout(collapse_widget)
         collapse_layout.setContentsMargins(0, 0, 0, 0)
@@ -1085,9 +1082,9 @@ class WorkflowTab(QWidget):
 
         # ---- Task A: dazedformat -----------------------------------------
         ta = WorkflowStageCard(
-            2,
+            1,
             "Format game data",
-            "Normalize every JSON file with the bundled formatter before review or translation.",
+            "Normalize every JSON file with the bundled formatter before review, translation, or Git baseline.",
         )
         ta_inner = ta.body
         self._pp_dazedformat_title = ta.title_label
@@ -1109,7 +1106,7 @@ class WorkflowTab(QWidget):
 
         # ---- Task B: prettier on plugins.js
         tb_box = WorkflowStageCard(
-            3,
+            2,
             "Format plugin configuration",
             "Make plugins.js easier to audit and edit without changing its behavior.",
         )
@@ -1137,7 +1134,7 @@ class WorkflowTab(QWidget):
 
         # ---- Task C: copy gameupdate/ -----------------------------------
         tc = WorkflowStageCard(
-            4,
+            3,
             "Install the GameUpdate helper",
             "Copy GameUpdate into the game and write its patch configuration from your saved defaults.",
         )
@@ -1191,7 +1188,10 @@ class WorkflowTab(QWidget):
             f"color:{COLORS.text_primary};font-size:13px;font-weight:600;"
         )
         run_all_copy.addWidget(run_all_title)
-        run_all_hint = QLabel("Runs the formatting and GameUpdate tasks when their required paths are available.")
+        run_all_hint = QLabel(
+            "Runs the formatting and GameUpdate tasks when their required paths "
+            "are available. Finish these before creating the Git baseline."
+        )
         run_all_hint.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
         run_all_hint.setWordWrap(True)
         run_all_copy.addWidget(run_all_hint)
@@ -1220,6 +1220,10 @@ class WorkflowTab(QWidget):
         collapse_layout.addWidget(self.pp_run_all_bar)
 
         layout.addWidget(collapse_widget)
+
+        self.git_prepare = GitPreparationCard(4)
+        self.git_prepare.activity.connect(self._log)
+        layout.addWidget(self.git_prepare)
 
         def _toggle_preprocess(expanded: bool):
             toggle_btn.setText(
