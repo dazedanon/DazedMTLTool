@@ -397,16 +397,9 @@ def _vocab_speaker_lookup(speaker: str) -> str | None:
             rank = priority * 10 + (1 if alias_group else 0)
             if rank > best_priority:
                 best_priority = rank
-                # Use the alias form that matched the query when possible.
-                matched_alias = next(
-                    (
-                        alias
-                        for alias in aliases
-                        if set(speaker_source_lookup_keys(alias)) & query_keys
-                    ),
-                    aliases[0] if aliases else jp,
-                )
-                best = nameplate_gloss_for_alias(matched_alias, aliases, en.strip())
+                # Apply short/title rules against the live source nameplate so
+                # honorific forms like ニーナ様 keep English titles when present.
+                best = nameplate_gloss_for_alias(speaker, aliases, en.strip())
         return best
     except Exception:
         pass

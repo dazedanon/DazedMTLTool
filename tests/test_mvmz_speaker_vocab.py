@@ -522,6 +522,12 @@ class CharacterCompoundMatchingTests(unittest.TestCase):
         )
         self.assertEqual(
             nameplate_gloss_for_alias(
+                "ニーナ様", ["ニーナ", "ネーナ・エヴァンス"], "Lady Nena Evans"
+            ),
+            "Lady Nena",
+        )
+        self.assertEqual(
+            nameplate_gloss_for_alias(
                 "ニーナ様", ["ニーナ様", "ネーナ・エヴァンス"], "Lady Nena Evans"
             ),
             "Lady Nena",
@@ -532,6 +538,39 @@ class CharacterCompoundMatchingTests(unittest.TestCase):
             ),
             "van Helsing",
         )
+        self.assertEqual(
+            nameplate_gloss_for_alias(
+                "ロードス", ["ロードス", "ロードス・ナイト"], "Lord Rhodes Knight"
+            ),
+            "Rhodes",
+        )
+
+    def test_lexicalized_san_nameplate_is_not_honorific_coverage(self):
+        """``おじさん`` must not collapse to a curated ``おじ`` row."""
+        vocab = (
+            "# Game Characters\n"
+            "おじ (Uncle)\n"
+            "ニーナ / ネーナ・エヴァンス (Lady Nena Evans)\n"
+        )
+        with TemporaryDirectory() as tmp:
+            glossary_path = Path(tmp) / "glossary.txt"
+            glossary_path.write_text(vocab, encoding="utf-8")
+            with (
+                patch.object(mvmz, "VOCAB_PATH", glossary_path),
+                patch.object(mvmz, "active_glossary_path", return_value=glossary_path),
+            ):
+                mvmz._reload_vocab()
+                with mvmz._speakerCacheLock:
+                    mvmz._speakerCache.clear()
+
+                self.assertEqual(mvmz._vocab_speaker_lookup("おじ"), "Uncle")
+                self.assertIsNone(mvmz._vocab_speaker_lookup("おじさん"))
+                self.assertEqual(mvmz._vocab_speaker_lookup("ニーナ"), "Nena")
+                self.assertEqual(mvmz._vocab_speaker_lookup("ニーナ様"), "Lady Nena")
+
+                mvmz.SPEAKER_PARSE_MODE = True
+                mvmz.SPEAKER_COLLECTED = ["おじさん", "ニーナ様"]
+                self.assertEqual(mvmz.pendingSpeakerNames(), ["おじさん"])
 
     def test_terms_slash_row_does_not_match_half_term(self):
         pairs = parseVocabWithCategories(

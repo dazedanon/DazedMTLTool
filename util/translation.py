@@ -2998,7 +2998,7 @@ def normalize_vocab_source_key(source: str) -> str:
     return unicodedata.normalize("NFKC", str(source or "")).strip()
 
 
-_JP_HONORIFIC_SUFFIX_RE = re.compile(r"(様|さん|ちゃん|君|殿|先生|博士|氏)+$")
+_JP_HONORIFIC_SUFFIX_RE = re.compile(r"(様|殿|氏|先生|博士|君)+$")
 
 
 def honorific_stripped_speaker_forms(source: str) -> list[str]:
@@ -3007,6 +3007,9 @@ def honorific_stripped_speaker_forms(source: str) -> list[str]:
     Nameplates like ``ニーナ様`` should stay covered by curated ``ニーナ`` rows so
     preflight does not create a duplicate glossary entry and prompt context still
     receives the full character line.
+
+    Do not strip ``さん`` / ``ちゃん`` - those appear in lexicalized nameplates
+    such as ``おじさん`` that must not collapse to ``おじ``.
     """
     text = str(source or "").strip()
     if not text:
@@ -3113,8 +3116,8 @@ def _nameplate_token_key(token: str) -> str:
     return str(token or "").strip(" ,;:.").casefold()
 
 
-_JP_NAMEPLATE_TITLE_RE = re.compile(
-    r"(様|さん|ちゃん|君|殿|先生|博士|氏|レディ|ロード|ドクター|サー|教授|船長)"
+_JP_NAMEPLATE_TITLE_PREFIX_RE = re.compile(
+    r"^(レディ|ロード|ドクター|サー|教授|船長)([・\s\u3000]|$)"
 )
 
 
@@ -3123,7 +3126,9 @@ def _source_has_nameplate_title(alias: str) -> bool:
     text = str(alias or "").strip()
     if not text:
         return False
-    if _JP_NAMEPLATE_TITLE_RE.search(text):
+    if _JP_HONORIFIC_SUFFIX_RE.search(text):
+        return True
+    if _JP_NAMEPLATE_TITLE_PREFIX_RE.match(text):
         return True
     for token in re.split(r"[\s・\u3000]+", text):
         if _nameplate_token_key(token) in _NAMEPLATE_TITLE_PREFIXES:
@@ -3143,13 +3148,20 @@ def nameplate_gloss_for_alias(alias: str, aliases: list[str], translated: str) -
     (``レディ・ニーナ`` / ``ニーナ様`` -> ``Lady Nena``). Plain ``ニーナ`` against
     ``Lady Nena`` still resolves to ``Nena``. Surname particles (``van``, ``de``)
     keep the full gloss so ``van Helsing`` does not collapse to ``van``.
+
+    ``alias`` should be the live source being resolved (including honorifics), not
+    only a curated slash-alias spelling.
     """
     gloss = str(translated or "").strip()
     if not gloss or len(aliases) <= 1 or _aliases_look_orthographic(aliases):
         return gloss
     longest = max(aliases, key=len)
     query = str(alias or "").strip()
-    if query == longest or len(query) >= len(longest):
+    compare = query
+    stripped = honorific_stripped_speaker_forms(query)
+    if stripped:
+        compare = stripped[0]
+    if compare == longest or query == longest or len(compare) >= len(longest):
         return gloss
     tokens = gloss.split()
     if not tokens:

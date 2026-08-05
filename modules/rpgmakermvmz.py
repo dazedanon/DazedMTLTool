@@ -5086,20 +5086,23 @@ def _speaker_vocab_indexes():
             # short generated duplicates at the same category priority.
             alias_group = len(aliases) > 1
             for alias in aliases:
-                gloss = nameplate_gloss_for_alias(alias, aliases, translated)
+                short_gloss = nameplate_gloss_for_alias(alias, aliases, translated)
                 for key in speaker_source_lookup_keys(alias):
                     previous_priority = exact_priorities.get(key, 0)
                     if priority > previous_priority or (
                         alias_group and priority == previous_priority and priority > 0
                     ):
-                        exact[key] = gloss
+                        # Store the full curated gloss + alias group so lookup can
+                        # re-apply short/title rules against the live source
+                        # (e.g. ニーナ様 vs plain ニーナ).
+                        exact[key] = (list(aliases), translated)
                         exact_priorities[key] = priority
                     if _is_character_vocab_category(category):
                         previous = characters.get(key)
                         if previous is None or priority > previous[0] or (
                             alias_group and priority == previous[0]
                         ):
-                            characters[key] = (priority, gloss)
+                            characters[key] = (priority, short_gloss)
 
         _speakerVocabSource = vocab_text
         _speakerVocabExact = exact
@@ -5117,7 +5120,8 @@ def _vocab_speaker_lookup(speaker: str):
     for key in speaker_source_lookup_keys(speaker):
         hit = exact.get(key)
         if hit is not None:
-            return hit
+            aliases, translated = hit
+            return nameplate_gloss_for_alias(speaker, aliases, translated)
     return None
 
 
