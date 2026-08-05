@@ -12,6 +12,15 @@ if sys.platform.startswith("linux"):
 
     configure_qt_platform()
 
+# Before Qt, and it has to be before Qt: PyQt5 carries its own older Visual C++
+# runtime, Windows resolves a DLL by base name against what is already loaded,
+# and whichever copy wins is the one the whole process gets. Left to Qt, the
+# optional inpainting models cannot load at all. Standard library only, and a
+# no-op everywhere but Windows. See util/msvc_runtime.py.
+from util.msvc_runtime import prepare as _prepare_msvc_runtime  # noqa: E402
+
+_prepare_msvc_runtime()
+
 
 def check_dependencies():
     """Check if required dependencies are installed."""

@@ -107,6 +107,13 @@ def run_handler(project_root, module_name, filename, estimate_only):
         elif "Regex" in module_name:
             from modules.regex import handleRegex
             handler = handleRegex
+        # Must stay above the "Text" branch: this chain matches on substrings,
+        # and "Text" is inside "Image Text". Below it, image_text.json would be
+        # handed to the plain-text engine, which translates a JSON file line by
+        # line and destroys it.
+        elif "Image Text" in module_name:
+            from modules.imagetext import handleImageText
+            handler = handleImageText
         elif "Text" in module_name:
             from modules.text import handleText
             handler = handleText

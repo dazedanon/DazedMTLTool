@@ -170,6 +170,10 @@ TRANSLATION_MODULE_SPECS = (
     ("Text", (".txt", ".srt"), "modules.text", "handleText"),
     ("RenPy", (".rpy",), "modules.renpy", "handleRenpy"),
     ("Unity", (".unity",), "modules.unity", "handleUnity"),
+    # The strings the semi-manual image workflow exported. Declared by whole
+    # filename rather than ".json" so it never offers up a folder of RPG Maker
+    # data - the match below is endswith, so both forms work here.
+    ("Image Text", ("image_text.json",), "modules.imagetext", "handleImageText"),
     ("RPG Maker Plugin", (".js",), "modules.rpgmakerplugin", "handlePlugin"),
     ("Aquedi4 Prepared JSON", (".json",), "modules.aquedi4", "handleAquedi4"),
     ("SRPG Studio", (".json",), "modules.srpg", "handleSRPG"),

@@ -38,6 +38,13 @@ data/wolf_speakers.json
 !data/translation_contexts.json
 !data/sfx_reference/**
 
+# Downloaded on demand by the semi-manual image workflow, never committed:
+# ~450 MB of ONNX weights and a prebuilt PatchMatch library.
+# See util/imagetools/resources.py.
+data/models/
+data/libs/
+fonts/
+
 # Materialized copies and update state for bundled third-party tools.
 util/forge/.forge_version.json
 util/forge/legacy/
