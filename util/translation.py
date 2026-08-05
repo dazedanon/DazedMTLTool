@@ -2998,12 +2998,31 @@ def normalize_vocab_source_key(source: str) -> str:
     return unicodedata.normalize("NFKC", str(source or "")).strip()
 
 
+_JP_HONORIFIC_SUFFIX_RE = re.compile(r"(様|さん|ちゃん|君|殿|先生|博士|氏)+$")
+
+
+def honorific_stripped_speaker_forms(source: str) -> list[str]:
+    """Return base name forms with trailing Japanese honorifics removed.
+
+    Nameplates like ``ニーナ様`` should stay covered by curated ``ニーナ`` rows so
+    preflight does not create a duplicate glossary entry and prompt context still
+    receives the full character line.
+    """
+    text = str(source or "").strip()
+    if not text:
+        return []
+    base = _JP_HONORIFIC_SUFFIX_RE.sub("", text).strip(" ・\u3000")
+    if not base or base == text:
+        return []
+    return [base]
+
+
 def speaker_source_lookup_keys(source: str) -> list[str]:
     """Return ordered lookup keys for a speaker/glossary source.
 
-    Includes slash aliases, NFKC forms, and a small OCR lookalike map so
-    nameplates like ``コア1Ａ`` and ``二ーナ`` resolve to curated ``コア1A`` /
-    ``ニーナ`` rows instead of being re-translated into the glossary.
+    Includes slash aliases, NFKC forms, trailing-honorific bases, and a small
+    OCR lookalike map so nameplates like ``コア1Ａ``, ``二ーナ``, and ``ニーナ様``
+    resolve to curated ``コア1A`` / ``ニーナ`` rows instead of being rewritten.
     """
     keys: list[str] = []
     seen: set[str] = set()
@@ -3015,15 +3034,20 @@ def speaker_source_lookup_keys(source: str) -> list[str]:
         seen.add(text)
         keys.append(text)
 
-    for alias in split_vocab_source_aliases(source):
-        _add(alias)
-        normalized = normalize_vocab_source_key(alias)
+    def _add_with_variants(value: str) -> None:
+        _add(value)
+        normalized = normalize_vocab_source_key(value)
         _add(normalized)
         # Kanji 二 is a common OCR/font stand-in for katakana ニ on nameplates.
         if "二" in normalized:
             _add(normalized.replace("二", "ニ"))
-        if "二" in alias:
-            _add(alias.replace("二", "ニ"))
+        if "二" in value:
+            _add(value.replace("二", "ニ"))
+
+    for alias in split_vocab_source_aliases(source):
+        _add_with_variants(alias)
+        for stripped in honorific_stripped_speaker_forms(alias):
+            _add_with_variants(stripped)
     return keys
 
 
@@ -3089,6 +3113,24 @@ def _nameplate_token_key(token: str) -> str:
     return str(token or "").strip(" ,;:.").casefold()
 
 
+_JP_NAMEPLATE_TITLE_RE = re.compile(
+    r"(様|さん|ちゃん|君|殿|先生|博士|氏|レディ|ロード|ドクター|サー|教授|船長)"
+)
+
+
+def _source_has_nameplate_title(alias: str) -> bool:
+    """True when the JP/source nameplate itself carries a title or honorific."""
+    text = str(alias or "").strip()
+    if not text:
+        return False
+    if _JP_NAMEPLATE_TITLE_RE.search(text):
+        return True
+    for token in re.split(r"[\s・\u3000]+", text):
+        if _nameplate_token_key(token) in _NAMEPLATE_TITLE_PREFIXES:
+            return True
+    return False
+
+
 def nameplate_gloss_for_alias(alias: str, aliases: list[str], translated: str) -> str:
     """Pick the English nameplate gloss for one JP alias in a slash group.
 
@@ -3097,9 +3139,10 @@ def nameplate_gloss_for_alias(alias: str, aliases: list[str], translated: str) -
     English on the long form, but everyday short nameplates use the given name
     (``Nena``) so dialogue boxes do not show the full name.
 
-    Titles (``Lady``, ``Dr.``) are stripped before selecting the given name.
-    Surname particles (``van``, ``de``) keep the full gloss so ``van Helsing``
-    does not collapse to ``van``.
+    English titles are kept only when the source alias also has a title/honorific
+    (``レディ・ニーナ`` / ``ニーナ様`` -> ``Lady Nena``). Plain ``ニーナ`` against
+    ``Lady Nena`` still resolves to ``Nena``. Surname particles (``van``, ``de``)
+    keep the full gloss so ``van Helsing`` does not collapse to ``van``.
     """
     gloss = str(translated or "").strip()
     if not gloss or len(aliases) <= 1 or _aliases_look_orthographic(aliases):
@@ -3114,10 +3157,19 @@ def nameplate_gloss_for_alias(alias: str, aliases: list[str], translated: str) -
     first_key = _nameplate_token_key(tokens[0])
     if first_key in _NAMEPLATE_SURNAME_PARTICLES:
         return gloss
-    while tokens and _nameplate_token_key(tokens[0]) in _NAMEPLATE_TITLE_PREFIXES:
-        tokens = tokens[1:]
-    if not tokens:
-        return gloss
+    if first_key in _NAMEPLATE_TITLE_PREFIXES:
+        if _source_has_nameplate_title(query):
+            # Source carried a title; keep title + given name on the nameplate.
+            if len(tokens) == 1:
+                return gloss
+            title = tokens[0].strip(" ,;:")
+            given = tokens[1].strip(" ,;:")
+            return f"{title} {given}".strip() or gloss
+        # Plain source name: drop English titles, then take the given name.
+        while tokens and _nameplate_token_key(tokens[0]) in _NAMEPLATE_TITLE_PREFIXES:
+            tokens = tokens[1:]
+        if not tokens:
+            return gloss
     return tokens[0].strip(" ,;:") or gloss
 
 

@@ -93,6 +93,7 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
                 self.assertEqual(
                     mvmz._vocab_speaker_lookup("ネーナ・エヴァンス"), "Nena Evans"
                 )
+                self.assertEqual(mvmz._vocab_speaker_lookup("ニーナ様"), "Nena")
                 self.assertEqual(mvmz._vocab_speaker_lookup("クイーン"), "Queen")
                 self.assertEqual(mvmz._vocab_speaker_lookup("クィーン"), "Queen")
                 self.assertEqual(mvmz._vocab_speaker_lookup("コア1Ａ"), "Core 1A")
@@ -101,6 +102,7 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
                 mvmz.SPEAKER_PARSE_MODE = True
                 mvmz.SPEAKER_COLLECTED = [
                     "ニーナ",
+                    "ニーナ様",
                     "クィーン",
                     "コア1Ａ",
                     "二ーナ",
@@ -120,6 +122,7 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         self.assertIn("ニーナ / ネーナ・エヴァンス (Nena Evans)", written)
         self.assertIn("村人 (Villager)", written)
         self.assertNotRegex(written, r"(?m)^ニーナ \(")
+        self.assertNotRegex(written, r"(?m)^ニーナ様 \(")
         self.assertNotRegex(written, r"(?m)^クィーン \(")
         self.assertNotRegex(written, r"(?m)^二ーナ \(")
         self.assertNotRegex(written, r"(?m)^コア1Ａ \(")
@@ -508,6 +511,22 @@ class CharacterCompoundMatchingTests(unittest.TestCase):
             "Evans",
         )
         self.assertEqual(
+            nameplate_gloss_for_alias("ニーナ", aliases, "Lady Nena Evans"),
+            "Nena",
+        )
+        self.assertEqual(
+            nameplate_gloss_for_alias(
+                "レディ・ニーナ", ["レディ・ニーナ", "ネーナ・エヴァンス"], "Lady Nena Evans"
+            ),
+            "Lady Nena",
+        )
+        self.assertEqual(
+            nameplate_gloss_for_alias(
+                "ニーナ様", ["ニーナ様", "ネーナ・エヴァンス"], "Lady Nena Evans"
+            ),
+            "Lady Nena",
+        )
+        self.assertEqual(
             nameplate_gloss_for_alias(
                 "ヴァン", ["ヴァン", "ヴァン・ヘルシング"], "van Helsing"
             ),
@@ -527,6 +546,22 @@ class CharacterCompoundMatchingTests(unittest.TestCase):
 
         character_hit = buildMatchedVocabText(pairs, 'ニーナ "どうしたの？"')
         self.assertIn("ニーナ / ネーナ・エヴァンス (Nena Evans)", character_hit)
+
+    def test_honorific_nameplate_reuses_curated_character_context(self):
+        """``ニーナ様`` must reuse the curated row, not invent a short duplicate."""
+        note = (
+            "Female protagonist and Actors.json ID 1. Full name spoken once as "
+            "Nena Evans; everyday lines use ニーナ."
+        )
+        pairs = parseVocabWithCategories(
+            "# Game Characters\n"
+            f"ニーナ / ネーナ・エヴァンス (Nena Evans) - {note}\n"
+        )
+
+        matched = buildMatchedVocabText(pairs, 'ニーナ様 "お願いします"')
+        self.assertIn("ニーナ / ネーナ・エヴァンス (Nena Evans)", matched)
+        self.assertIn(note, matched)
+        self.assertNotIn("\nニーナ様 (", matched)
 
     def test_unique_full_name_component_matches_speaker_tag(self):
         pairs = parseVocabWithCategories(
