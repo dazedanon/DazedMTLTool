@@ -102,12 +102,27 @@ class ControlCodeProtectionTests(unittest.TestCase):
 class TranslationContentValidationTests(unittest.TestCase):
     def test_translation_content_validation_cases(self):
         language_regex = r"[\u3000一-龠ぁ-ゔァ-ヴー]+"
+        # Broader class matching MV/MZ-style CJK punctuation (includes 〝〟).
+        cjk_punct_regex = (
+            r"[\u3000\u3002-\u3009\u300C-\u303F\u3040-\u309A\u309C-\u30FA"
+            r"\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF61-\uFF9F]+"
+        )
         cases = (
             (
                 "ideographic choice padding",
                 "‣モラル崩壊　　　　　必要な欠片：10",
                 "‣Moral Collapse　　　　　Fragments Required: 10",
                 None,
+                language_regex,
+                True,
+                None,
+            ),
+            (
+                "cjk quote wrappers around english",
+                'This one uses something called 〝phytoncide〟.',
+                'This one uses something called 〝phytoncide〟.',
+                None,
+                cjk_punct_regex,
                 True,
                 None,
             ),
@@ -116,6 +131,7 @@ class TranslationContentValidationTests(unittest.TestCase):
                 "そのとおり",
                 "Exactly(そのとおり)!!",
                 None,
+                language_regex,
                 False,
                 "Source-language text remains",
             ),
@@ -124,6 +140,7 @@ class TranslationContentValidationTests(unittest.TestCase):
                 "鉱山って、英語でMineって 言うらしいわよ",
                 'Apparently, 鉱山 is called "Mine" in English.',
                 None,
+                language_regex,
                 False,
                 "Source-language text remains",
             ),
@@ -132,15 +149,17 @@ class TranslationContentValidationTests(unittest.TestCase):
                 "鉱山って、英語でMineって 言うらしいわよ",
                 'Apparently, a mine is called "Mine" in English.',
                 None,
+                language_regex,
                 True,
                 None,
             ),
-            ("Chinese CJK", "騎士", "骑士", "Chinese", True, None),
+            ("Chinese CJK", "騎士", "骑士", "Chinese", language_regex, True, None),
             (
                 "Japanese kana in Chinese",
                 "こんにちは",
                 "こんにちは",
                 "Chinese",
+                language_regex,
                 False,
                 "Japanese kana remains",
             ),
@@ -149,6 +168,7 @@ class TranslationContentValidationTests(unittest.TestCase):
                 "ほげぇぇぇーーっ！！",
                 "Hrooooghhhhhーー!!",
                 None,
+                language_regex,
                 False,
                 "Source-language text remains",
             ),
@@ -157,15 +177,16 @@ class TranslationContentValidationTests(unittest.TestCase):
                 "役人",
                 "}Line1:",
                 None,
+                language_regex,
                 False,
                 "Structured response marker",
             ),
         )
-        for label, source, translated, language, expected_valid, reason in cases:
+        for label, source, translated, language, regex, expected_valid, reason in cases:
             with self.subTest(label):
                 kwargs = {"target_language": language} if language else {}
                 valid, indices, reasons = tr.validate_translation_content(
-                    [source], [translated], language_regex, **kwargs
+                    [source], [translated], regex, **kwargs
                 )
                 self.assertEqual(valid, expected_valid, reasons)
                 self.assertEqual(indices, [] if expected_valid else [0])

@@ -61,6 +61,8 @@ _ACTOR_MAP_CACHE_LOCK = threading.Lock()
 _VAR_ACTOR_RE = re.compile(r"\\n\[(\d+)\]", re.IGNORECASE)
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
+# Intentionally skips U+309B (゛). Decorative CJK quotes are normalized via
+# convert_corner_brackets before detection so they do not false-trigger alone.
 LANGREGEX = r"[\u3000\u3002-\u3009\u300C-\u303F\u3040-\u309A\u309C-\u30FA\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF61-\uFF9F]+"
 
 # Get pricing configuration based on the model
@@ -565,11 +567,27 @@ def _scalar_original(cmd) -> str | None:
     return None
 
 
+def _has_japanese_text(text) -> bool:
+    """True when text still has Japanese after quote normalization.
+
+    Decorative wrappers such as 〝phytoncide〟 become ASCII quotes when
+    convertQuotes is on, matching output conversion, so English-only lines are
+    not treated as source text.
+    """
+    if text is None:
+        return False
+    sample = str(text)
+    if not sample.strip():
+        return False
+    sample = convert_corner_brackets(sample, TRANSLATION_CONFIG.convertQuotes)
+    return bool(re.search(LANGREGEX, sample))
+
+
 def _text_needs_translation(current) -> bool:
     """Return whether a live value should be translated under the skip setting."""
     if current is None or not str(current).strip():
         return False
-    return not IGNORETLTEXT or bool(re.search(LANGREGEX, str(current)))
+    return not IGNORETLTEXT or _has_japanese_text(current)
 
 
 _TARO_PLACEHOLDER_RE = re.compile(r"\bTaro(?:['’]s)?\b", re.IGNORECASE)
@@ -929,7 +947,7 @@ def _apply_entry_field_original(entry, field: str, raw: str) -> None:
         return
     if not isinstance(entry, dict) or not raw or not str(raw).strip():
         return
-    if not re.search(LANGREGEX, raw):
+    if not _has_japanese_text(raw):
         return
     orig = entry.get("_original")
     if not isinstance(orig, dict):
@@ -970,7 +988,7 @@ def _apply_system_scalar_original(data, field: str, raw: str) -> None:
     """Set root _original[field] only when empty and raw contains Japanese."""
     if not PRESERVEORIGINAL:
         return
-    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+    if not raw or not str(raw).strip() or not _has_japanese_text(raw):
         return
     orig = _system_orig(data)
     existing = orig.get(field)
@@ -1000,7 +1018,7 @@ def _apply_system_list_original(data, list_name: str, index: int, raw: str) -> N
     """Set _original[list_name][str(index)] only when empty and raw contains Japanese."""
     if not PRESERVEORIGINAL:
         return
-    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+    if not raw or not str(raw).strip() or not _has_japanese_text(raw):
         return
     orig = _system_orig(data)
     list_orig = orig.get(list_name)
@@ -1037,7 +1055,7 @@ def _apply_system_terms_original(data, category: str, index: int, raw: str) -> N
     """Set _original.terms[category][str(index)] only when empty and raw contains Japanese."""
     if not PRESERVEORIGINAL:
         return
-    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+    if not raw or not str(raw).strip() or not _has_japanese_text(raw):
         return
     orig = _system_orig(data)
     terms = orig.get("terms")
@@ -1079,7 +1097,7 @@ def _apply_system_terms_message_original(data, key: str, raw: str) -> None:
     """Set _original.terms.messages[key] only when empty and raw contains Japanese."""
     if not PRESERVEORIGINAL:
         return
-    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+    if not raw or not str(raw).strip() or not _has_japanese_text(raw):
         return
     orig = _system_orig(data)
     terms = orig.get("terms")
@@ -1387,7 +1405,7 @@ def translateLBNames(events):
         
         if "<LB>" in note_val:
             name_val = event.get("name") or ""
-            if isinstance(name_val, str) and name_val and re.search(LANGREGEX, name_val):
+            if isinstance(name_val, str) and name_val and _has_japanese_text(name_val):
                 lb_events.append((idx, name_val))
     
     # Batch translate if we have any
@@ -1957,7 +1975,7 @@ def searchNames(data, pbar, context, filename):
                     if "Client:" in match_text or "Client :" in match_text:
                         continue
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if IGNORETLTEXT and not re.search(LANGREGEX, match_text):
+                    if IGNORETLTEXT and not _has_japanese_text(match_text):
                         continue
                     # Normalize for AI (collapse intra-paragraph \n, keep headers)
                     notesBatch.append(_normalize_sg_desc(match_text))
@@ -1966,7 +1984,7 @@ def searchNames(data, pbar, context, filename):
                 for m in matches:
                     match_text = m if isinstance(m, str) else m[0]
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if IGNORETLTEXT and not re.search(LANGREGEX, match_text):
+                    if IGNORETLTEXT and not _has_japanese_text(match_text):
                         continue
                     notesBatch.append(match_text)
                     notesBatchMap.append((idx, regex, match_text, wordwrap))
@@ -2979,7 +2997,7 @@ def searchCodes(page, pbar, jobList, filename):
                             acExist = False
 
                         # Skip if IGNORETLTEXT is enabled and no Japanese text
-                        if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                        if IGNORETLTEXT and not _has_japanese_text(jaString):
                             return
 
                         # If there isn't any Japanese in the text just skip
@@ -3048,7 +3066,7 @@ def searchCodes(page, pbar, jobList, filename):
                         and codeList[i]["parameters"][1] == "OPEN_GALLERY"):
                     p2 = codeList[i]["parameters"][2]
                     if isinstance(p2, str) and p2.strip():
-                        if not (IGNORETLTEXT and not re.search(LANGREGEX, p2)):
+                        if not (IGNORETLTEXT and not _has_japanese_text(p2)):
                             if setData:
                                 list357.append(p2)
                             else:
@@ -3140,7 +3158,7 @@ def searchCodes(page, pbar, jobList, filename):
                             jaString = remaining[: len(remaining) - len(suffix)] if suffix else remaining
 
                             # Skip if IGNORETLTEXT is enabled and no Japanese text
-                            skip = IGNORETLTEXT and not re.search(LANGREGEX, jaString)
+                            skip = IGNORETLTEXT and not _has_japanese_text(jaString)
                             if not skip and jaString.strip():
                                 # Pass 1
                                 if setData:
@@ -3227,7 +3245,7 @@ def searchCodes(page, pbar, jobList, filename):
                         continue
 
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if IGNORETLTEXT and not re.search(LANGREGEX, kvValue):
+                    if IGNORETLTEXT and not _has_japanese_text(kvValue):
                         i += 1
                         continue
 
@@ -3387,7 +3405,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 textMatch = re.search(regex, param)
                                 if textMatch:
                                     text = _pat355655_captured_text(textMatch)
-                                    if not (IGNORETLTEXT and not re.search(LANGREGEX, text)):
+                                    if not (IGNORETLTEXT and not _has_japanese_text(text)):
                                         textLines.append(text)
                                         textLineIndices.append(j)
                                 j += 1
@@ -3436,7 +3454,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', cap):
                                     continue
 
-                                if IGNORETLTEXT and not re.search(LANGREGEX, cap):
+                                if IGNORETLTEXT and not _has_japanese_text(cap):
                                     continue
 
                                 if setData:
@@ -3477,7 +3495,7 @@ def searchCodes(page, pbar, jobList, filename):
                         for s in strings:
                             if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', s):
                                 continue
-                            if IGNORETLTEXT and not re.search(LANGREGEX, s):
+                            if IGNORETLTEXT and not _has_japanese_text(s):
                                 continue
                             translatable.append(s)
                         
@@ -3487,7 +3505,7 @@ def searchCodes(page, pbar, jobList, filename):
                         if nameMatch:
                             n = nameMatch.group(1)
                             if re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', n):
-                                if not (IGNORETLTEXT and not re.search(LANGREGEX, n)):
+                                if not (IGNORETLTEXT and not _has_japanese_text(n)):
                                     nameStr = n
                                     response = getSpeaker(n)
                                     translatedName = response[0]
@@ -3538,7 +3556,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 continue
                             if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', s):
                                 continue
-                            if IGNORETLTEXT and not re.search(LANGREGEX, s):
+                            if IGNORETLTEXT and not _has_japanese_text(s):
                                 continue
                             translatable.append(s)
                             translatableIndices.append(idx)
@@ -3657,7 +3675,7 @@ def searchCodes(page, pbar, jobList, filename):
                     match355 = re.search(mtxtRegex, jaString)
                     if match355:
                         text = match355.group(1)
-                        if not (IGNORETLTEXT and not re.search(LANGREGEX, text)):
+                        if not (IGNORETLTEXT and not _has_japanese_text(text)):
                             textLines.append(text)
                             textLineIndices.append(i)
 
@@ -3669,7 +3687,7 @@ def searchCodes(page, pbar, jobList, filename):
                             textMatch = re.search(mtxtRegex, param)
                             if textMatch:
                                 text = textMatch.group(1)
-                                if not (IGNORETLTEXT and not re.search(LANGREGEX, text)):
+                                if not (IGNORETLTEXT and not _has_japanese_text(text)):
                                     textLines.append(text)
                                     textLineIndices.append(j)
                         j += 1
@@ -3742,7 +3760,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if nameMatch:
                         n = nameMatch.group(1)
                         if re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', n):
-                            if not (IGNORETLTEXT and not re.search(LANGREGEX, n)):
+                            if not (IGNORETLTEXT and not _has_japanese_text(n)):
                                 nameStr = n
                                 response = getSpeaker(n)
                                 translatedName = response[0]
@@ -3753,7 +3771,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if textMatch:
                         t = textMatch.group(1)
                         if re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', t):
-                            if not (IGNORETLTEXT and not re.search(LANGREGEX, t)):
+                            if not (IGNORETLTEXT and not _has_japanese_text(t)):
                                 textStr = t
 
                     if textStr or nameStr:
@@ -3869,7 +3887,7 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                if IGNORETLTEXT and not _has_japanese_text(jaString):
                     i += 1
                     continue
 
@@ -3936,7 +3954,7 @@ def searchCodes(page, pbar, jobList, filename):
                 oldjaString = jaString
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                if IGNORETLTEXT and not _has_japanese_text(jaString):
                     i += 1
                     continue
 
@@ -4234,7 +4252,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     for match in matchList:
                         # Skip if IGNORETLTEXT is enabled and no Japanese text
-                        if IGNORETLTEXT and not re.search(LANGREGEX, match):
+                        if IGNORETLTEXT and not _has_japanese_text(match):
                             continue
 
                         # Look up translation from code 122 cache (file-backed)
@@ -4259,7 +4277,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                if IGNORETLTEXT and not _has_japanese_text(jaString):
                     i += 1
                     continue
 
@@ -4290,7 +4308,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                if IGNORETLTEXT and not _has_japanese_text(jaString):
                     i += 1
                     continue
 
@@ -4326,7 +4344,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                if IGNORETLTEXT and not _has_japanese_text(jaString):
                     i += 1
                     continue
 
@@ -4632,7 +4650,7 @@ def searchSS(state, pbar):
             for m in matches:
                 match_text = m if isinstance(m, str) else m[0]
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, match_text):
+                if IGNORETLTEXT and not _has_japanese_text(match_text):
                     continue
                 notesBatch.append(match_text)
                 notesBatchMap.append((regex, match_text, wordwrap))
@@ -5073,7 +5091,7 @@ def _speaker_translation_valid(source: str, translated: str) -> bool:
         return True
     return (
         normalized.casefold() != str(source or "").strip().casefold()
-        and re.search(LANGREGEX, normalized) is None
+        and not _has_japanese_text(normalized)
     )
 
 

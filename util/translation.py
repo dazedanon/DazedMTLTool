@@ -588,7 +588,19 @@ def validate_translation_content(
             # and is restored only after validation. Ignore ideographic spaces:
             # RPG Maker choice lists commonly use U+3000 as intentional visual
             # padding, and preserving that layout is not untranslated content.
-            residue_text = trans_str.replace("\u3000", "")
+            # Also ignore CJK quotation marks: engines whose langRegex includes
+            # the U+300C-U+303F block would otherwise reject English that keeps
+            # stylistic wrappers such as 〝loanword〟 or leftover 「」.
+            residue_text = (
+                trans_str.replace("\u3000", "")
+                .replace("「", "")
+                .replace("」", "")
+                .replace("『", "")
+                .replace("』", "")
+                .replace("〝", "")
+                .replace("〞", "")
+                .replace("〟", "")
+            )
             if normalized_target == "chinese" and re.search(
                 r"[ぁ-ゖァ-ヺー\uFF66-\uFF9F]", residue_text
             ):
@@ -2606,7 +2618,7 @@ class TranslationConfig:
 
 
 def convert_corner_brackets(text, enabled=True):
-    """Replace Japanese corner brackets 「」『』 with ASCII double quotes when enabled."""
+    """Replace Japanese quotation marks with ASCII double quotes when enabled."""
     if not enabled or not isinstance(text, str):
         return text
     return (
@@ -2614,6 +2626,9 @@ def convert_corner_brackets(text, enabled=True):
         .replace("」", '"')
         .replace("『", '"')
         .replace("』", '"')
+        .replace("〝", '"')
+        .replace("〞", '"')
+        .replace("〟", '"')
     )
 
 
@@ -4370,7 +4385,13 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
         # Ellipsis-only bypass: strings whose translatable content is purely '…' characters
         # (e.g. "「………」") should never be sent to the AI — just convert brackets and pass through.
         def _is_ellipsis_only(s):
-            inner = str(s).strip().lstrip('「『').rstrip('」』').strip()
+            inner = (
+                str(s)
+                .strip()
+                .lstrip('「『〝')
+                .rstrip('」』〞〟')
+                .strip()
+            )
             return bool(inner) and all(c in '\u2026\u30FC' for c in inner)
 
         def _convert_ellipsis(s):
