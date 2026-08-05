@@ -59,6 +59,13 @@ _speakerVocabCharacterPairs = []
 _ACTOR_MAP_CACHE: dict | None = None
 _ACTOR_MAP_CACHE_LOCK = threading.Lock()
 _VAR_ACTOR_RE = re.compile(r"\\n\[(\d+)\]", re.IGNORECASE)
+# Game-variable nameplates (\v[X]) often mirror an actor name via code-122 script.
+_VAR_GAME_RE = re.compile(r"\\v\[(\d+)\]", re.IGNORECASE)
+_VAR_ACTOR_MAP_CACHE: dict | None = None
+_ACTOR_NAME_SCRIPT_RE = re.compile(
+    r"\$gameActors\.actor\s*\(\s*(\d+)\s*\)\.name\s*\(\s*\)",
+    re.IGNORECASE,
+)
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 # Intentionally skips U+309B (゛). Decorative CJK quotes are normalized via
@@ -200,10 +207,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = False
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE101 = True
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE408 = False
@@ -1141,6 +1148,10 @@ def _replace_speaker_in_param(param_str: str, source_name: str, translated_name:
     bracket_disp = re.findall(r"【(.+?)】", param_str)
     if bracket_disp:
         return param_str.replace(bracket_disp[0], translated_name, 1)
+    # Prefer the display name so trailing plugin codes like \F[tt07] stay put.
+    display = _speaker_display_name(source_name) if source_name else ""
+    if display and display in param_str:
+        return param_str.replace(display, translated_name, 1)
     if source_name and source_name in param_str:
         return param_str.replace(source_name, translated_name, 1)
     return param_str
@@ -2583,6 +2594,24 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Replace Speaker
                 if len(speakerList) != 0:
+                    # Drop plugin/control codes from the nameplate used for glossary
+                    # lookup and [Speaker]: transport (e.g. Tsubaki\F[tt07] -> Tsubaki).
+                    # _replace_speaker_in_param keeps those codes on the written 401 line.
+                    # Pure \n[ID] / \v[ID] nameplates resolve to Actors.json (via code-122
+                    # actor-name scripts for \v) and must not be rewritten into the 401
+                    # parameter - the game still resolves them at runtime.
+                    resolved_speakers = []
+                    code_locked = []
+                    for raw_speaker in speakerList:
+                        display = _speaker_display_name(raw_speaker)
+                        resolved = _resolve_code_speaker_name(display)
+                        if resolved:
+                            resolved_speakers.append(resolved)
+                            code_locked.append(True)
+                        else:
+                            resolved_speakers.append(display)
+                            code_locked.append(False)
+                    speakerList = resolved_speakers
                     # Check if speaker+dialogue are on same line
                     sameLineMatch = re.match(r"^\s*【([^】]+)】(.+)", speakerWork, re.DOTALL)
                     if inlineSpeakerMatch and len(speakerList) == 1:
@@ -2636,9 +2665,13 @@ def searchCodes(page, pbar, jobList, filename):
                             _apply_original(codeList[i], oldjaString)
                         elif not setData and len(speakerList) == 1:
                             paramStr = codeList[i]["parameters"][0]
-                            codeList[i]["parameters"][0] = nametag + _replace_speaker_in_param(
-                                paramStr, speakerList[0], speaker
-                            )
+                            if code_locked[0]:
+                                # Keep \v[007]\AA[N] / \n[1] intact on the 401 line.
+                                codeList[i]["parameters"][0] = nametag + paramStr
+                            else:
+                                codeList[i]["parameters"][0] = nametag + _replace_speaker_in_param(
+                                    paramStr, speakerList[0], speaker
+                                )
                             _apply_original(codeList[i], oldjaString)
                         nametag = ""
 
@@ -3295,10 +3328,26 @@ def searchCodes(page, pbar, jobList, filename):
                     i += 1
                     continue
 
-                varActorMatch = re.match(r"^\s*(?:[\\]+[cC]\[\d+?\]\s*)?[\\]+[nN]\[(\d+)\]", jaString)
+                varActorMatch = re.match(
+                    r"^\s*(?:[\\]+[cC]\[\d+?\]\s*)?[\\]+[nN]\[(\d+)\]",
+                    jaString,
+                )
                 if varActorMatch:
                     actorName = _get_actor_map().get(int(varActorMatch.group(1)))
                     speaker = actorName or varActorMatch.group(0).strip()
+                    i += 1
+                    continue
+
+                varGameMatch = re.match(
+                    r"^\s*(?:[\\]+[cC]\[\d+?\]\s*)?[\\]+[vV]\[(\d+)\]",
+                    jaString,
+                )
+                if varGameMatch:
+                    actor_id = _get_var_actor_map().get(int(varGameMatch.group(1)))
+                    actorName = (
+                        _get_actor_map().get(int(actor_id)) if actor_id is not None else None
+                    )
+                    speaker = actorName or varGameMatch.group(0).strip()
                     i += 1
                     continue
 
@@ -4991,8 +5040,33 @@ def searchSystem(data, pbar):
 
     return totalTokens
 
-# Regex that matches one or more markup codes like \c[1], \n[2], \ow[3], etc.
-_MARKUP_STRIP_RE = re.compile(r"[\\]+[a-zA-Z]+\[[\w\d]*\]")
+# Regex that matches markup codes like \c[1], \n[2], \F[tt07], \FF[\w[3]], etc.
+_MARKUP_STRIP_RE = re.compile(r"[\\]+[A-Za-z]+\[(?:[^\[\]]|\[[^\]]*\])*\]")
+# Actor / game-variable nameplate codes that ARE the speaker identity.
+_SPEAKER_VAR_CODE_RE = re.compile(r"[\\]+[nNvV]\[\d+\]")
+
+
+def _speaker_display_name(name: str) -> str:
+    """Return the visible speaker nameplate with RPG Maker control codes removed.
+
+    FIRSTLINESPEAKERS (and some colour/plugin wrappers) leave trailing or
+    leading codes on the 401 name line, e.g. ``Tsubaki\\F[tt07]`` or
+    ``メア\\F[tme01]\\FF[tl05]\\AA[F]\\FH[ON]``.  Glossary lookup and the
+    ``[Speaker]:`` transport prefix need only the name; the written-back 401
+    parameter keeps the codes via ``_replace_speaker_in_param``.
+
+    Code-only nameplates such as ``\\v[007]\\AA[N]`` keep the variable/actor
+    code (``\\v[007]``) and drop presentation plugins (``\\AA``, ``\\FH``, …).
+    """
+    raw = str(name or "")
+    if not raw:
+        return raw
+    clean = _MARKUP_STRIP_RE.sub("", raw).strip()
+    if clean:
+        return clean
+    vars_only = "".join(_SPEAKER_VAR_CODE_RE.findall(raw))
+    return vars_only if vars_only else raw.strip()
+
 
 def _is_plausible_speaker(name: str) -> bool:
     """Return True only if *name* looks like a character name rather than dialogue or junk.
@@ -5007,7 +5081,9 @@ def _is_plausible_speaker(name: str) -> bool:
       • No brace/plugin markup or decorative symbols
       • No clause-like particle/verb fragments scraped from prose
     """
-    clean = _MARKUP_STRIP_RE.sub("", name).strip()
+    # Use the stripped form so trailing plugin codes (\F[tt07], etc.) do not
+    # poison length / character checks. Pure control-code nameplates stay empty.
+    clean = _MARKUP_STRIP_RE.sub("", str(name or "")).strip()
     if not clean:
         return False
     if len(clean) > 20:
@@ -5176,6 +5252,10 @@ def getSpeaker(speaker: str):
 
     Normal mode: translate immediately with caching.
     """
+    # Strip plugin/control codes so glossary keys and [Speaker]: prefixes stay
+    # clean (e.g. Tsubaki\F[tt07] -> Tsubaki). Callers that rewrite the 401
+    # parameter preserve those codes separately.
+    speaker = _speaker_display_name(speaker)
     if speaker == "":
         return ["", [0, 0]]
 
@@ -5303,11 +5383,105 @@ def _get_actor_map() -> dict:
         return {}
 
 
+def _scan_var_actor_assignments(data, into: dict) -> None:
+    """Collect code-122 script assignments of ``$gameActors.actor(N).name()`` into *into*."""
+
+    def _scan_list(lst):
+        for cmd in lst or []:
+            if not isinstance(cmd, dict) or cmd.get("code") != 122:
+                continue
+            params = cmd.get("parameters") or []
+            if len(params) < 5:
+                continue
+            # [startId, endId, operationType, operandType, operand]
+            try:
+                start_id = int(params[0])
+                end_id = int(params[1])
+                operand_type = params[3]
+                operand = params[4]
+            except (TypeError, ValueError):
+                continue
+            if operand_type != 4 or not isinstance(operand, str):
+                continue
+            match = _ACTOR_NAME_SCRIPT_RE.search(operand)
+            if not match:
+                continue
+            actor_id = int(match.group(1))
+            for var_id in range(start_id, end_id + 1):
+                into.setdefault(var_id, actor_id)
+
+    if isinstance(data, list):
+        # CommonEvents.json / Troops-style top-level list
+        for entry in data:
+            if isinstance(entry, dict):
+                _scan_list(entry.get("list"))
+        return
+    if not isinstance(data, dict):
+        return
+    for ev in data.get("events") or []:
+        if not isinstance(ev, dict):
+            continue
+        for page in ev.get("pages") or []:
+            if isinstance(page, dict):
+                _scan_list(page.get("list"))
+    _scan_list(data.get("list"))
+
+
+def _get_var_actor_map() -> dict:
+    """Lazily map game-variable IDs to actor IDs via code-122 actor-name scripts.
+
+    Games often mirror the protagonist with ``\\v[N]`` after:
+    ``Control Variables: #N = $gameActors.actor(1).name()``.
+    """
+    global _VAR_ACTOR_MAP_CACHE
+    with _ACTOR_MAP_CACHE_LOCK:
+        if _VAR_ACTOR_MAP_CACHE is not None:
+            return _VAR_ACTOR_MAP_CACHE
+        mapping: dict = {}
+        roots = (Path("files"), Path("translated"))
+        for root in roots:
+            if not root.is_dir():
+                continue
+            for candidate in sorted(root.glob("Map*.json")) + [
+                root / "CommonEvents.json"
+            ]:
+                if not candidate.is_file():
+                    continue
+                try:
+                    data = json.loads(candidate.read_text(encoding="utf-8-sig"))
+                except Exception:
+                    continue
+                _scan_var_actor_assignments(data, mapping)
+            # files/ is the source of truth; stop once it yielded anything
+            if mapping and root == Path("files"):
+                break
+        _VAR_ACTOR_MAP_CACHE = mapping
+        return _VAR_ACTOR_MAP_CACHE
+
+
+def _resolve_code_speaker_name(name: str) -> str | None:
+    """Resolve a pure ``\\n[ID]`` / ``\\v[ID]`` nameplate to an actor name, if known."""
+    raw = str(name or "").strip()
+    if not raw:
+        return None
+    actor_match = re.fullmatch(r"[\\]+[nN]\[(\d+)\]", raw)
+    if actor_match:
+        return _get_actor_map().get(int(actor_match.group(1))) or None
+    var_match = re.fullmatch(r"[\\]+[vV]\[(\d+)\]", raw)
+    if not var_match:
+        return None
+    actor_id = _get_var_actor_map().get(int(var_match.group(1)))
+    if actor_id is None:
+        return None
+    return _get_actor_map().get(int(actor_id)) or None
+
+
 def resetActorMapCache():
-    """Invalidate the cached actor map so it reloads on next use."""
-    global _ACTOR_MAP_CACHE
+    """Invalidate the cached actor and variable-actor maps so they reload on next use."""
+    global _ACTOR_MAP_CACHE, _VAR_ACTOR_MAP_CACHE
     with _ACTOR_MAP_CACHE_LOCK:
         _ACTOR_MAP_CACHE = None
+        _VAR_ACTOR_MAP_CACHE = None
 
 
 def translateAI(text, history, history_ctx=None):
@@ -5352,12 +5526,15 @@ def translateAI(text, history, history_ctx=None):
         # Return original payload and zero tokens so totals aren't affected
         return [text, [0, 0]]
 
-    # ── Actor variable substitution ──────────────────────────────────────────
-    # Replace \n[X] codes with actor names before sending to AI so the model
-    # sees real character names. Restore only exact-case name matches afterward;
-    # this avoids lower-case words like "red" and keeps the prompt clean.
+    # ── Actor / game-variable substitution ────────────────────────────────
+    # Replace \n[X] and mapped \v[X] codes with actor names before sending to
+    # AI so the model sees real character names. Restore only exact-case name
+    # matches afterward; this avoids lower-case words like "red" and keeps the
+    # prompt clean. \v[X] is resolved via code-122 `$gameActors.actor(N).name()`
+    # assignments (e.g. Ristaria \v[007] -> actor 1).
     actor_map = _get_actor_map()
-    reverse: dict[str, str] = {}  # actor_name -> "\\n[X]"
+    var_actor_map = _get_var_actor_map()
+    reverse: dict[str, str] = {}  # actor_name -> "\\n[X]" / "\\v[X]"
 
     def _sub(s: str, reverse_map: dict[str, str]) -> str:
         if not isinstance(s, str) or not actor_map:
@@ -5367,10 +5544,28 @@ def translateAI(text, history, history_ctx=None):
             name = actor_map.get(int(m.group(1)))
             return name if name else m.group(0)
 
-        def _repl(m: re.Match) -> str:
+        def _display_var_name(m: re.Match) -> str:
+            actor_id = var_actor_map.get(int(m.group(1)))
+            if actor_id is None:
+                return m.group(0)
+            name = actor_map.get(int(actor_id))
+            return name if name else m.group(0)
+
+        def _repl_actor(m: re.Match) -> str:
             aid = int(m.group(1))
             name = actor_map.get(aid)
             if name:
+                reverse_map[name] = m.group(0)
+                return name
+            return m.group(0)
+
+        def _repl_var(m: re.Match) -> str:
+            actor_id = var_actor_map.get(int(m.group(1)))
+            if actor_id is None:
+                return m.group(0)
+            name = actor_map.get(int(actor_id))
+            if name:
+                # Prefer restoring the original \v[X] form used in this string.
                 reverse_map[name] = m.group(0)
                 return name
             return m.group(0)
@@ -5382,10 +5577,13 @@ def translateAI(text, history, history_ctx=None):
         )
         if tag_match:
             speaker = _VAR_ACTOR_RE.sub(_display_actor_name, tag_match.group("speaker"))
-            body = _VAR_ACTOR_RE.sub(_repl, s[tag_match.end():])
+            speaker = _VAR_GAME_RE.sub(_display_var_name, speaker)
+            body = _VAR_ACTOR_RE.sub(_repl_actor, s[tag_match.end():])
+            body = _VAR_GAME_RE.sub(_repl_var, body)
             return f"{tag_match.group('open')}{speaker}{tag_match.group('close')}{body}"
 
-        return _VAR_ACTOR_RE.sub(_repl, s)
+        body = _VAR_ACTOR_RE.sub(_repl_actor, s)
+        return _VAR_GAME_RE.sub(_repl_var, body)
 
     if isinstance(text, list):
         item_reverses: list[dict[str, str]] = []

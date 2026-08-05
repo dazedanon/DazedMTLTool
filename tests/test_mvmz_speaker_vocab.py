@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Regression tests for deterministic RPG Maker speaker glossary handling."""
 
+import json
 import os
 import unittest
 from pathlib import Path
@@ -136,6 +137,105 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         self.assertTrue(mvmz._is_plausible_speaker("ニーナ"))
         self.assertTrue(mvmz._is_plausible_speaker("はるか"))
         self.assertTrue(mvmz._is_plausible_speaker("かがやき"))
+        # Trailing plugin face/font codes must not disqualify a real nameplate.
+        self.assertTrue(mvmz._is_plausible_speaker(r"ニーナ\F[tt07]"))
+        self.assertFalse(mvmz._is_plausible_speaker(r"\n[1]"))
+
+    def test_speaker_display_name_strips_plugin_codes(self):
+        """Visible nameplate text must drop trailing/leading \\F / \\C codes."""
+        cases = (
+            (r"Tsubaki\F[tt07]", "Tsubaki"),
+            (r"ニーナ\F[tt07]", "ニーナ"),
+            (r"\F[tt07]Tsubaki", "Tsubaki"),
+            (r"\C[2]アリス\C[0]", "アリス"),
+            (r"\C[2]アリス\C[0]\F[tt07]", "アリス"),
+            # Ristaria Map008 shapes
+            (r"メア\F[tme01]\FF[tl05]\AA[F]\FH[ON]", "メア"),
+            (r"リア\FF[tl05]\F[tme02]\AA[FF]", "リア"),
+            (r"ミカ\FH[ON]\F[tmi02]", "ミカ"),
+            (r"見知らぬ男\AA[N]", "見知らぬ男"),
+            (r"\v[007]\AA[N]", r"\v[007]"),
+            (r"\v[007]\AA[N]\FH[OFF]", r"\v[007]"),
+            (r"\v[007]\AA[N]\F[tmi11]\FH[ON]", r"\v[007]"),
+            (r"\n[1]", r"\n[1]"),
+            ("ニーナ", "ニーナ"),
+        )
+        for raw, expected in cases:
+            with self.subTest(raw=raw):
+                self.assertEqual(mvmz._speaker_display_name(raw), expected)
+
+    def test_replace_speaker_keeps_trailing_f_tag(self):
+        """Rewriting a nameplate must preserve trailing plugin codes on the 401 line."""
+        self.assertEqual(
+            mvmz._replace_speaker_in_param(r"Tsubaki\F[tt07]", r"Tsubaki\F[tt07]", "Tsubaki"),
+            r"Tsubaki\F[tt07]",
+        )
+        self.assertEqual(
+            mvmz._replace_speaker_in_param(r"椿\F[tt07]", "椿", "Tsubaki"),
+            r"Tsubaki\F[tt07]",
+        )
+        self.assertEqual(
+            mvmz._replace_speaker_in_param(
+                r"メア\F[tme01]\FF[tl05]\AA[F]\FH[ON]", "メア", "Mea"
+            ),
+            r"Mea\F[tme01]\FF[tl05]\AA[F]\FH[ON]",
+        )
+        self.assertEqual(
+            mvmz._replace_speaker_in_param(r"\v[007]\AA[N]", r"\v[007]", r"\v[007]"),
+            r"\v[007]\AA[N]",
+        )
+
+    def test_var_speaker_resolves_from_actor_name_script(self):
+        """\\v[N] mirrors Actors.json when code 122 assigns actor(N).name()."""
+        seed_map = {
+            "events": [
+                None,
+                {
+                    "id": 1,
+                    "pages": [
+                        {
+                            "list": [
+                                {
+                                    "code": 122,
+                                    "indent": 0,
+                                    "parameters": [
+                                        7,
+                                        7,
+                                        0,
+                                        4,
+                                        "$gameActors.actor(1).name()",
+                                    ],
+                                },
+                                {"code": 0, "indent": 0, "parameters": []},
+                            ]
+                        }
+                    ],
+                },
+            ]
+        }
+        actors = [None, {"id": 1, "name": "主人公"}]
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            files_dir = tmp_path / "files"
+            files_dir.mkdir()
+            (files_dir / "Map019.json").write_text(
+                json.dumps(seed_map, ensure_ascii=False), encoding="utf-8"
+            )
+            (files_dir / "Actors.json").write_text(
+                json.dumps(actors, ensure_ascii=False), encoding="utf-8"
+            )
+            orig_cwd = Path.cwd()
+            mvmz.resetActorMapCache()
+            try:
+                os.chdir(tmp_path)
+                self.assertEqual(mvmz._get_var_actor_map(), {7: 1})
+                self.assertEqual(mvmz._resolve_code_speaker_name(r"\v[007]"), "主人公")
+                self.assertEqual(mvmz._resolve_code_speaker_name(r"\n[1]"), "主人公")
+                self.assertIsNone(mvmz._resolve_code_speaker_name(r"\v[999]"))
+                self.assertIsNone(mvmz._resolve_code_speaker_name("メア"))
+            finally:
+                os.chdir(orig_cwd)
+                mvmz.resetActorMapCache()
 
     def test_covered_nameplate_variants_are_not_persisted(self):
         """Finalize must not write NFKC/lookalike variants of curated names."""
