@@ -10,6 +10,7 @@ import re
 import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -531,6 +532,169 @@ class TestMVMZSourceOriginal(unittest.TestCase):
             mvmz.CODE401 = orig_401
         self.assertEqual(speaker_cmd["_original"], "\\C[2]エルーシャ\\C[0]")
         self.assertIn("エルーシャ", speakers_seen)
+
+    def test_firstline_speaker_strips_trailing_f_tag(self):
+        """FIRSTLINESPEAKERS must use the bare name and keep trailing plugin codes."""
+        # Shapes taken from Ristaria Map008.json nameplates.
+        page = {
+            "list": [
+                {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2]},
+                {
+                    "code": 401,
+                    "indent": 0,
+                    "parameters": [r"メア\F[tme01]\FF[tl05]\AA[F]\FH[ON]"],
+                },
+                {"code": 401, "indent": 0, "parameters": ["「また、立派なものを建ててしまった…」"]},
+                {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2]},
+                {"code": 401, "indent": 0, "parameters": [r"\v[007]\AA[N]"]},
+                {
+                    "code": 401,
+                    "indent": 0,
+                    "parameters": ["「お前たち、いったい何の話をしてるんだ…。"],
+                },
+                {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2]},
+                {"code": 401, "indent": 0, "parameters": [r"見知らぬ男\AA[N]"]},
+                {
+                    "code": 401,
+                    "indent": 0,
+                    "parameters": ["「あの、すみません。こちらが養成院でしょうか？」"],
+                },
+                {"code": 0, "indent": 0, "parameters": []},
+            ]
+        }
+        speakers_seen = []
+
+        def speaker(name):
+            speakers_seen.append(name)
+            return [name if name.startswith("\\") else f"Speaker_{name}", [0, 0]]
+
+        orig_first = mvmz.FIRSTLINESPEAKERS
+        mvmz.FIRSTLINESPEAKERS = True
+        try:
+            with (
+                patch.object(mvmz, "_get_var_actor_map", return_value={}),
+                patch.object(mvmz, "_resolve_code_speaker_name", return_value=None),
+            ):
+                page_out, captured = _run_search_codes(page, speaker_fn=speaker)
+        finally:
+            mvmz.FIRSTLINESPEAKERS = orig_first
+
+        self.assertIn("メア", speakers_seen)
+        # No var→actor map: code nameplate stays unresolved for getSpeaker.
+        self.assertIn(r"\v[007]", speakers_seen)
+        self.assertIn("見知らぬ男", speakers_seen)
+        self.assertNotIn(r"メア\F[tme01]\FF[tl05]\AA[F]\FH[ON]", speakers_seen)
+        self.assertNotIn(r"\v[007]\AA[N]", speakers_seen)
+
+        cmds = [c for c in page_out["list"] if c.get("code") == 401]
+        self.assertEqual(
+            cmds[0]["parameters"][0], r"Speaker_メア\F[tme01]\FF[tl05]\AA[F]\FH[ON]"
+        )
+        # Unresolved \v nameplates must stay as codes on the 401 line.
+        self.assertEqual(cmds[2]["parameters"][0], r"\v[007]\AA[N]")
+        self.assertEqual(cmds[4]["parameters"][0], r"Speaker_見知らぬ男\AA[N]")
+
+        flat = []
+        for chunk in captured:
+            if isinstance(chunk, list):
+                flat.extend(chunk)
+            else:
+                flat.append(chunk)
+        joined = "\n".join(str(x) for x in flat)
+        self.assertIn("[Speaker_メア]:", joined)
+        self.assertIn("[Speaker_見知らぬ男]:", joined)
+        self.assertNotIn("tme01", joined)
+        self.assertNotIn("\\AA[", joined)
+
+    def test_firstline_var_speaker_resolves_via_actor_script(self):
+        """\\v[N] nameplates resolve through code-122 actor-name scripts + Actors.json."""
+        page = {
+            "list": [
+                {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2]},
+                {"code": 401, "indent": 0, "parameters": [r"\v[007]\AA[N]"]},
+                {
+                    "code": 401,
+                    "indent": 0,
+                    "parameters": ["「お前たち、いったい何の話をしてるんだ…。"],
+                },
+                {"code": 0, "indent": 0, "parameters": []},
+            ]
+        }
+        speakers_seen = []
+
+        def speaker(name):
+            speakers_seen.append(name)
+            return [f"Speaker_{name}", [0, 0]]
+
+        seed_map = {
+            "events": [
+                None,
+                {
+                    "id": 1,
+                    "pages": [
+                        {
+                            "list": [
+                                {
+                                    "code": 122,
+                                    "indent": 0,
+                                    "parameters": [
+                                        7,
+                                        7,
+                                        0,
+                                        4,
+                                        "$gameActors.actor(1).name()",
+                                    ],
+                                },
+                                {"code": 0, "indent": 0, "parameters": []},
+                            ]
+                        }
+                    ],
+                },
+            ]
+        }
+        actors = [
+            None,
+            {"id": 1, "name": "主人公"},
+            {"id": 2, "name": "アイリシア"},
+        ]
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            files_dir = tmp_path / "files"
+            files_dir.mkdir()
+            (files_dir / "Map001.json").write_text(
+                json.dumps(seed_map, ensure_ascii=False), encoding="utf-8"
+            )
+            (files_dir / "Actors.json").write_text(
+                json.dumps(actors, ensure_ascii=False), encoding="utf-8"
+            )
+            orig_cwd = Path.cwd()
+            orig_first = mvmz.FIRSTLINESPEAKERS
+            mvmz.FIRSTLINESPEAKERS = True
+            mvmz.resetActorMapCache()
+            try:
+                os.chdir(tmp_path)
+                page_out, captured = _run_search_codes(page, speaker_fn=speaker)
+            finally:
+                os.chdir(orig_cwd)
+                mvmz.FIRSTLINESPEAKERS = orig_first
+                mvmz.resetActorMapCache()
+
+        self.assertIn("主人公", speakers_seen)
+        self.assertNotIn(r"\v[007]", speakers_seen)
+        speaker_cmd = page_out["list"][1]
+        self.assertEqual(speaker_cmd["parameters"][0], r"\v[007]\AA[N]")
+        self.assertEqual(speaker_cmd.get("_original"), r"\v[007]\AA[N]")
+
+        flat = []
+        for chunk in captured:
+            if isinstance(chunk, list):
+                flat.extend(chunk)
+            else:
+                flat.append(chunk)
+        joined = "\n".join(str(x) for x in flat)
+        self.assertIn("[Speaker_主人公]:", joined)
+        self.assertNotIn(r"\v[007]", joined)
 
     def test_firstline_speaker_batch_uses_glossary_nameplate(self):
         """Unresolved batch speakers stay Japanese; glossary hits become English nameplates."""

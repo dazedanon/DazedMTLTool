@@ -248,6 +248,56 @@ class TestSkillsOriginal(unittest.TestCase):
         self.assertEqual(result2[1]["_original"], orig_snapshot)
         _assert_batches_japanese(captured2)
 
+    def test_skill_messages_always_strip_taro_placeholder(self):
+        """Action-log Taro must be removed even without a particle prefix / casing."""
+        cases = (
+            ("は触手を伸ばした！", "Taro extended a tentacle!", "extended a tentacle!"),
+            ("触手を伸ばした！", "Taro extended a tentacle!", "extended a tentacle!"),
+            ("は触手を伸ばした！", "taro extended a tentacle!", "extended a tentacle!"),
+            ("は触手を伸ばした！", "TARO extended a tentacle!", "extended a tentacle!"),
+        )
+        for source, model_out, expected in cases:
+            with self.subTest(source=source, model_out=model_out):
+                data = [
+                    None,
+                    {
+                        "id": 1,
+                        "name": "触手",
+                        "description": "説明",
+                        "message1": "",
+                        "message2": source,
+                        "message3": "",
+                        "message4": "",
+                    },
+                ]
+                replies = {"message": model_out}
+
+                def translate(text, history, batch=False):
+                    if isinstance(text, list):
+                        out = []
+                        for item in text:
+                            if item.startswith("Taro") or item == source:
+                                out.append(replies["message"])
+                            else:
+                                out.append("EN_TRANSLATED")
+                        return [out, [0, 0]]
+                    return ["EN_TRANSLATED", [0, 0]]
+
+                orig_t = mvmz.translateAI
+                orig_vocab = mvmz.update_vocab_section
+                mvmz.translateAI = translate
+                mvmz.update_vocab_section = lambda *args, **kwargs: None
+                try:
+                    result = copy.deepcopy(data)
+                    mvmz.searchNames(result, None, "Skills", "Skills.json")
+                finally:
+                    mvmz.translateAI = orig_t
+                    mvmz.update_vocab_section = orig_vocab
+
+                self.assertEqual(result[1]["message2"], expected)
+                self.assertNotIn("Taro", result[1]["message2"])
+                self.assertNotIn("taro", result[1]["message2"].casefold())
+
 
 class TestStatesOriginal(unittest.TestCase):
     def test_first_pass_writes_original(self):

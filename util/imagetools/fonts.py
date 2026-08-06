@@ -19,6 +19,9 @@ from util.paths import PROJECT_ROOT
 BUNDLED_FONT_DIR = PROJECT_ROOT / "fonts"
 
 # Windows / Linux / macOS families that cover Latin plus CJK punctuation.
+# Linux paths differ by distro: Debian uses truetype/<family>/, Arch uses
+# TTF/, Fedora uses package-named dirs. Absolute candidates cover the common
+# layouts; default_font also falls back to available_fonts() by basename.
 _SYSTEM_CANDIDATES = (
     "C:/Windows/Fonts/segoeui.ttf",
     "C:/Windows/Fonts/arial.ttf",
@@ -27,6 +30,13 @@ _SYSTEM_CANDIDATES = (
     "C:/Windows/Fonts/msgothic.ttc",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+    "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/google-noto/NotoSans-Regular.ttf",
     "/System/Library/Fonts/Helvetica.ttc",
 )
 
@@ -36,6 +46,33 @@ _BOLD_CANDIDATES = (
     "C:/Windows/Fonts/calibrib.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/noto/NotoSans-Bold.ttf",
+    "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/google-noto/NotoSans-Bold.ttf",
+)
+
+# Basenames tried against available_fonts() when the absolute candidates miss.
+_PREFERRED_REGULAR = (
+    "DejaVuSans.ttf",
+    "NotoSans-Regular.ttf",
+    "LiberationSans-Regular.ttf",
+    "FreeSans.ttf",
+    "AdwaitaSans-Regular.ttf",
+    "arial.ttf",
+    "Arial.ttf",
+    "segoeui.ttf",
+)
+_PREFERRED_BOLD = (
+    "DejaVuSans-Bold.ttf",
+    "NotoSans-Bold.ttf",
+    "LiberationSans-Bold.ttf",
+    "FreeSansBold.ttf",
+    "arialbd.ttf",
+    "segoeuib.ttf",
 )
 
 
@@ -208,6 +245,31 @@ def has_variant(font_path: str, bold: bool = False, italic: bool = False) -> boo
     return (bool(bold), bool(italic)) in _family_index().get(family.casefold(), {})
 
 
+def _first_available(bold: bool = False) -> str | None:
+    """A usable face from whatever the machine actually installed.
+
+    Distro layouts disagree on directory names, so once the absolute
+    candidates miss we match preferred basenames against available_fonts(),
+    then any Regular/Bold cut rather than whatever sorts first alphabetically
+    (often a Bold or Mono face).
+    """
+    fonts = available_fonts()
+    if not fonts:
+        return None
+    preferred = _PREFERRED_BOLD if bold else _PREFERRED_REGULAR
+    by_name = {path.name: path for path in fonts}
+    for name in preferred:
+        hit = by_name.get(name)
+        if hit is not None:
+            return str(hit)
+    for path in fonts:
+        stem = path.stem.casefold()
+        looks_bold = "bold" in stem or stem.endswith("bd")
+        if looks_bold == bold:
+            return str(path)
+    return str(fonts[0])
+
+
 def default_font(bold: bool = False) -> str:
     """Pick a sane default, preferring an explicit override then a bundled face."""
     override = os.getenv("IMGTL_FONT", "").strip()
@@ -228,6 +290,10 @@ def default_font(bold: bool = False) -> str:
     for candidate in _SYSTEM_CANDIDATES:
         if Path(candidate).is_file():
             return candidate
+
+    found = _first_available(bold=bold)
+    if found:
+        return found
     raise RuntimeError("No usable TrueType font found; set IMGTL_FONT to a .ttf path")
 
 

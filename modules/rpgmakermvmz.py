@@ -59,8 +59,17 @@ _speakerVocabCharacterPairs = []
 _ACTOR_MAP_CACHE: dict | None = None
 _ACTOR_MAP_CACHE_LOCK = threading.Lock()
 _VAR_ACTOR_RE = re.compile(r"\\n\[(\d+)\]", re.IGNORECASE)
+# Game-variable nameplates (\v[X]) often mirror an actor name via code-122 script.
+_VAR_GAME_RE = re.compile(r"\\v\[(\d+)\]", re.IGNORECASE)
+_VAR_ACTOR_MAP_CACHE: dict | None = None
+_ACTOR_NAME_SCRIPT_RE = re.compile(
+    r"\$gameActors\.actor\s*\(\s*(\d+)\s*\)\.name\s*\(\s*\)",
+    re.IGNORECASE,
+)
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
+# Intentionally skips U+309B (゛). Decorative CJK quotes are normalized via
+# convert_corner_brackets before detection so they do not false-trigger alone.
 LANGREGEX = r"[\u3000\u3002-\u3009\u300C-\u303F\u3040-\u309A\u309C-\u30FA\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF61-\uFF9F]+"
 
 # Get pricing configuration based on the model
@@ -565,11 +574,43 @@ def _scalar_original(cmd) -> str | None:
     return None
 
 
+def _has_japanese_text(text) -> bool:
+    """True when text still has Japanese after quote normalization.
+
+    Decorative wrappers such as 〝phytoncide〟 become ASCII quotes when
+    convertQuotes is on, matching output conversion, so English-only lines are
+    not treated as source text.
+    """
+    if text is None:
+        return False
+    sample = str(text)
+    if not sample.strip():
+        return False
+    sample = convert_corner_brackets(sample, TRANSLATION_CONFIG.convertQuotes)
+    return bool(re.search(LANGREGEX, sample))
+
+
 def _text_needs_translation(current) -> bool:
     """Return whether a live value should be translated under the skip setting."""
     if current is None or not str(current).strip():
         return False
-    return not IGNORETLTEXT or bool(re.search(LANGREGEX, str(current)))
+    return not IGNORETLTEXT or _has_japanese_text(current)
+
+
+_TARO_PLACEHOLDER_RE = re.compile(r"\bTaro(?:['’]s)?\b", re.IGNORECASE)
+
+
+def _strip_taro_placeholder(text: str) -> str:
+    """Remove the dummy player-name placeholder from skill/state action logs.
+
+    RPG Maker battle messages that start with a particle (は/を/…) are sent to the
+    model as ``Taro…`` so English gets a grammatical subject. The placeholder must
+    always be removed afterward - including when the model inserts Taro without a
+    particle prefix (prompt bleed) or varies casing (``taro`` / ``TARO``).
+    """
+    cleaned = _TARO_PLACEHOLDER_RE.sub("", str(text or ""))
+    cleaned = re.sub(r" {2,}", " ", cleaned)
+    return cleaned.strip(" \t\"'")
 
 
 def _param_current(cmd, index: int) -> str:
@@ -913,7 +954,7 @@ def _apply_entry_field_original(entry, field: str, raw: str) -> None:
         return
     if not isinstance(entry, dict) or not raw or not str(raw).strip():
         return
-    if not re.search(LANGREGEX, raw):
+    if not _has_japanese_text(raw):
         return
     orig = entry.get("_original")
     if not isinstance(orig, dict):
@@ -954,7 +995,7 @@ def _apply_system_scalar_original(data, field: str, raw: str) -> None:
     """Set root _original[field] only when empty and raw contains Japanese."""
     if not PRESERVEORIGINAL:
         return
-    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+    if not raw or not str(raw).strip() or not _has_japanese_text(raw):
         return
     orig = _system_orig(data)
     existing = orig.get(field)
@@ -984,7 +1025,7 @@ def _apply_system_list_original(data, list_name: str, index: int, raw: str) -> N
     """Set _original[list_name][str(index)] only when empty and raw contains Japanese."""
     if not PRESERVEORIGINAL:
         return
-    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+    if not raw or not str(raw).strip() or not _has_japanese_text(raw):
         return
     orig = _system_orig(data)
     list_orig = orig.get(list_name)
@@ -1021,7 +1062,7 @@ def _apply_system_terms_original(data, category: str, index: int, raw: str) -> N
     """Set _original.terms[category][str(index)] only when empty and raw contains Japanese."""
     if not PRESERVEORIGINAL:
         return
-    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+    if not raw or not str(raw).strip() or not _has_japanese_text(raw):
         return
     orig = _system_orig(data)
     terms = orig.get("terms")
@@ -1063,7 +1104,7 @@ def _apply_system_terms_message_original(data, key: str, raw: str) -> None:
     """Set _original.terms.messages[key] only when empty and raw contains Japanese."""
     if not PRESERVEORIGINAL:
         return
-    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+    if not raw or not str(raw).strip() or not _has_japanese_text(raw):
         return
     orig = _system_orig(data)
     terms = orig.get("terms")
@@ -1107,6 +1148,10 @@ def _replace_speaker_in_param(param_str: str, source_name: str, translated_name:
     bracket_disp = re.findall(r"【(.+?)】", param_str)
     if bracket_disp:
         return param_str.replace(bracket_disp[0], translated_name, 1)
+    # Prefer the display name so trailing plugin codes like \F[tt07] stay put.
+    display = _speaker_display_name(source_name) if source_name else ""
+    if display and display in param_str:
+        return param_str.replace(display, translated_name, 1)
     if source_name and source_name in param_str:
         return param_str.replace(source_name, translated_name, 1)
     return param_str
@@ -1371,7 +1416,7 @@ def translateLBNames(events):
         
         if "<LB>" in note_val:
             name_val = event.get("name") or ""
-            if isinstance(name_val, str) and name_val and re.search(LANGREGEX, name_val):
+            if isinstance(name_val, str) and name_val and _has_japanese_text(name_val):
                 lb_events.append((idx, name_val))
     
     # Batch translate if we have any
@@ -1941,7 +1986,7 @@ def searchNames(data, pbar, context, filename):
                     if "Client:" in match_text or "Client :" in match_text:
                         continue
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if IGNORETLTEXT and not re.search(LANGREGEX, match_text):
+                    if IGNORETLTEXT and not _has_japanese_text(match_text):
                         continue
                     # Normalize for AI (collapse intra-paragraph \n, keep headers)
                     notesBatch.append(_normalize_sg_desc(match_text))
@@ -1950,7 +1995,7 @@ def searchNames(data, pbar, context, filename):
                 for m in matches:
                     match_text = m if isinstance(m, str) else m[0]
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if IGNORETLTEXT and not re.search(LANGREGEX, match_text):
+                    if IGNORETLTEXT and not _has_japanese_text(match_text):
                         continue
                     notesBatch.append(match_text)
                     notesBatchMap.append((idx, regex, match_text, wordwrap))
@@ -2014,11 +2059,9 @@ def searchNames(data, pbar, context, filename):
             totalTokens[1] += response[1][1]
             
             # Apply translations back to data
-            for msg_idx, (entry_idx, msg_field, needs_taro, raw_msg) in enumerate(messages_map):
+            for msg_idx, (entry_idx, msg_field, _needs_taro, raw_msg) in enumerate(messages_map):
                 if msg_idx < len(translated_messages):
-                    translation = translated_messages[msg_idx]
-                    if needs_taro:
-                        translation = translation.replace("Taro", "")
+                    translation = _strip_taro_placeholder(translated_messages[msg_idx])
                     data[entry_idx][msg_field] = translation
                     _apply_entry_field_original(data[entry_idx], msg_field, raw_msg)
             
@@ -2551,6 +2594,24 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Replace Speaker
                 if len(speakerList) != 0:
+                    # Drop plugin/control codes from the nameplate used for glossary
+                    # lookup and [Speaker]: transport (e.g. Tsubaki\F[tt07] -> Tsubaki).
+                    # _replace_speaker_in_param keeps those codes on the written 401 line.
+                    # Pure \n[ID] / \v[ID] nameplates resolve to Actors.json (via code-122
+                    # actor-name scripts for \v) and must not be rewritten into the 401
+                    # parameter - the game still resolves them at runtime.
+                    resolved_speakers = []
+                    code_locked = []
+                    for raw_speaker in speakerList:
+                        display = _speaker_display_name(raw_speaker)
+                        resolved = _resolve_code_speaker_name(display)
+                        if resolved:
+                            resolved_speakers.append(resolved)
+                            code_locked.append(True)
+                        else:
+                            resolved_speakers.append(display)
+                            code_locked.append(False)
+                    speakerList = resolved_speakers
                     # Check if speaker+dialogue are on same line
                     sameLineMatch = re.match(r"^\s*【([^】]+)】(.+)", speakerWork, re.DOTALL)
                     if inlineSpeakerMatch and len(speakerList) == 1:
@@ -2604,9 +2665,13 @@ def searchCodes(page, pbar, jobList, filename):
                             _apply_original(codeList[i], oldjaString)
                         elif not setData and len(speakerList) == 1:
                             paramStr = codeList[i]["parameters"][0]
-                            codeList[i]["parameters"][0] = nametag + _replace_speaker_in_param(
-                                paramStr, speakerList[0], speaker
-                            )
+                            if code_locked[0]:
+                                # Keep \v[007]\AA[N] / \n[1] intact on the 401 line.
+                                codeList[i]["parameters"][0] = nametag + paramStr
+                            else:
+                                codeList[i]["parameters"][0] = nametag + _replace_speaker_in_param(
+                                    paramStr, speakerList[0], speaker
+                                )
                             _apply_original(codeList[i], oldjaString)
                         nametag = ""
 
@@ -2965,7 +3030,7 @@ def searchCodes(page, pbar, jobList, filename):
                             acExist = False
 
                         # Skip if IGNORETLTEXT is enabled and no Japanese text
-                        if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                        if IGNORETLTEXT and not _has_japanese_text(jaString):
                             return
 
                         # If there isn't any Japanese in the text just skip
@@ -3034,7 +3099,7 @@ def searchCodes(page, pbar, jobList, filename):
                         and codeList[i]["parameters"][1] == "OPEN_GALLERY"):
                     p2 = codeList[i]["parameters"][2]
                     if isinstance(p2, str) and p2.strip():
-                        if not (IGNORETLTEXT and not re.search(LANGREGEX, p2)):
+                        if not (IGNORETLTEXT and not _has_japanese_text(p2)):
                             if setData:
                                 list357.append(p2)
                             else:
@@ -3126,7 +3191,7 @@ def searchCodes(page, pbar, jobList, filename):
                             jaString = remaining[: len(remaining) - len(suffix)] if suffix else remaining
 
                             # Skip if IGNORETLTEXT is enabled and no Japanese text
-                            skip = IGNORETLTEXT and not re.search(LANGREGEX, jaString)
+                            skip = IGNORETLTEXT and not _has_japanese_text(jaString)
                             if not skip and jaString.strip():
                                 # Pass 1
                                 if setData:
@@ -3213,7 +3278,7 @@ def searchCodes(page, pbar, jobList, filename):
                         continue
 
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if IGNORETLTEXT and not re.search(LANGREGEX, kvValue):
+                    if IGNORETLTEXT and not _has_japanese_text(kvValue):
                         i += 1
                         continue
 
@@ -3263,10 +3328,26 @@ def searchCodes(page, pbar, jobList, filename):
                     i += 1
                     continue
 
-                varActorMatch = re.match(r"^\s*(?:[\\]+[cC]\[\d+?\]\s*)?[\\]+[nN]\[(\d+)\]", jaString)
+                varActorMatch = re.match(
+                    r"^\s*(?:[\\]+[cC]\[\d+?\]\s*)?[\\]+[nN]\[(\d+)\]",
+                    jaString,
+                )
                 if varActorMatch:
                     actorName = _get_actor_map().get(int(varActorMatch.group(1)))
                     speaker = actorName or varActorMatch.group(0).strip()
+                    i += 1
+                    continue
+
+                varGameMatch = re.match(
+                    r"^\s*(?:[\\]+[cC]\[\d+?\]\s*)?[\\]+[vV]\[(\d+)\]",
+                    jaString,
+                )
+                if varGameMatch:
+                    actor_id = _get_var_actor_map().get(int(varGameMatch.group(1)))
+                    actorName = (
+                        _get_actor_map().get(int(actor_id)) if actor_id is not None else None
+                    )
+                    speaker = actorName or varGameMatch.group(0).strip()
                     i += 1
                     continue
 
@@ -3373,7 +3454,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 textMatch = re.search(regex, param)
                                 if textMatch:
                                     text = _pat355655_captured_text(textMatch)
-                                    if not (IGNORETLTEXT and not re.search(LANGREGEX, text)):
+                                    if not (IGNORETLTEXT and not _has_japanese_text(text)):
                                         textLines.append(text)
                                         textLineIndices.append(j)
                                 j += 1
@@ -3422,7 +3503,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', cap):
                                     continue
 
-                                if IGNORETLTEXT and not re.search(LANGREGEX, cap):
+                                if IGNORETLTEXT and not _has_japanese_text(cap):
                                     continue
 
                                 if setData:
@@ -3463,7 +3544,7 @@ def searchCodes(page, pbar, jobList, filename):
                         for s in strings:
                             if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', s):
                                 continue
-                            if IGNORETLTEXT and not re.search(LANGREGEX, s):
+                            if IGNORETLTEXT and not _has_japanese_text(s):
                                 continue
                             translatable.append(s)
                         
@@ -3473,7 +3554,7 @@ def searchCodes(page, pbar, jobList, filename):
                         if nameMatch:
                             n = nameMatch.group(1)
                             if re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', n):
-                                if not (IGNORETLTEXT and not re.search(LANGREGEX, n)):
+                                if not (IGNORETLTEXT and not _has_japanese_text(n)):
                                     nameStr = n
                                     response = getSpeaker(n)
                                     translatedName = response[0]
@@ -3524,7 +3605,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 continue
                             if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', s):
                                 continue
-                            if IGNORETLTEXT and not re.search(LANGREGEX, s):
+                            if IGNORETLTEXT and not _has_japanese_text(s):
                                 continue
                             translatable.append(s)
                             translatableIndices.append(idx)
@@ -3643,7 +3724,7 @@ def searchCodes(page, pbar, jobList, filename):
                     match355 = re.search(mtxtRegex, jaString)
                     if match355:
                         text = match355.group(1)
-                        if not (IGNORETLTEXT and not re.search(LANGREGEX, text)):
+                        if not (IGNORETLTEXT and not _has_japanese_text(text)):
                             textLines.append(text)
                             textLineIndices.append(i)
 
@@ -3655,7 +3736,7 @@ def searchCodes(page, pbar, jobList, filename):
                             textMatch = re.search(mtxtRegex, param)
                             if textMatch:
                                 text = textMatch.group(1)
-                                if not (IGNORETLTEXT and not re.search(LANGREGEX, text)):
+                                if not (IGNORETLTEXT and not _has_japanese_text(text)):
                                     textLines.append(text)
                                     textLineIndices.append(j)
                         j += 1
@@ -3728,7 +3809,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if nameMatch:
                         n = nameMatch.group(1)
                         if re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', n):
-                            if not (IGNORETLTEXT and not re.search(LANGREGEX, n)):
+                            if not (IGNORETLTEXT and not _has_japanese_text(n)):
                                 nameStr = n
                                 response = getSpeaker(n)
                                 translatedName = response[0]
@@ -3739,7 +3820,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if textMatch:
                         t = textMatch.group(1)
                         if re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', t):
-                            if not (IGNORETLTEXT and not re.search(LANGREGEX, t)):
+                            if not (IGNORETLTEXT and not _has_japanese_text(t)):
                                 textStr = t
 
                     if textStr or nameStr:
@@ -3855,7 +3936,7 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                if IGNORETLTEXT and not _has_japanese_text(jaString):
                     i += 1
                     continue
 
@@ -3922,7 +4003,7 @@ def searchCodes(page, pbar, jobList, filename):
                 oldjaString = jaString
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                if IGNORETLTEXT and not _has_japanese_text(jaString):
                     i += 1
                     continue
 
@@ -4220,7 +4301,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     for match in matchList:
                         # Skip if IGNORETLTEXT is enabled and no Japanese text
-                        if IGNORETLTEXT and not re.search(LANGREGEX, match):
+                        if IGNORETLTEXT and not _has_japanese_text(match):
                             continue
 
                         # Look up translation from code 122 cache (file-backed)
@@ -4245,7 +4326,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                if IGNORETLTEXT and not _has_japanese_text(jaString):
                     i += 1
                     continue
 
@@ -4276,7 +4357,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                if IGNORETLTEXT and not _has_japanese_text(jaString):
                     i += 1
                     continue
 
@@ -4312,7 +4393,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                if IGNORETLTEXT and not _has_japanese_text(jaString):
                     i += 1
                     continue
 
@@ -4618,7 +4699,7 @@ def searchSS(state, pbar):
             for m in matches:
                 match_text = m if isinstance(m, str) else m[0]
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, match_text):
+                if IGNORETLTEXT and not _has_japanese_text(match_text):
                     continue
                 notesBatch.append(match_text)
                 notesBatchMap.append((regex, match_text, wordwrap))
@@ -4669,13 +4750,13 @@ def searchSS(state, pbar):
         translatedText = dazedwrap.wrapText(translatedText, width=LISTWIDTH)
         state["description"] = translatedText.replace('"', "")
     if "message1" in state and message1Response != "":
-        state["message1"] = message1Response[0].replace('"', "").replace("Taro", "")
+        state["message1"] = _strip_taro_placeholder(message1Response[0].replace('"', ""))
     if "message2" in state and message2Response != "":
-        state["message2"] = message2Response[0].replace('"', "").replace("Taro", "")
+        state["message2"] = _strip_taro_placeholder(message2Response[0].replace('"', ""))
     if "message3" in state and message3Response != "":
-        state["message3"] = message3Response[0].replace('"', "").replace("Taro", "")
+        state["message3"] = _strip_taro_placeholder(message3Response[0].replace('"', ""))
     if "message4" in state and message4Response != "":
-        state["message4"] = message4Response[0].replace('"', "").replace("Taro", "")
+        state["message4"] = _strip_taro_placeholder(message4Response[0].replace('"', ""))
 
     return totalTokens
 
@@ -4959,8 +5040,33 @@ def searchSystem(data, pbar):
 
     return totalTokens
 
-# Regex that matches one or more markup codes like \c[1], \n[2], \ow[3], etc.
-_MARKUP_STRIP_RE = re.compile(r"[\\]+[a-zA-Z]+\[[\w\d]*\]")
+# Regex that matches markup codes like \c[1], \n[2], \F[tt07], \FF[\w[3]], etc.
+_MARKUP_STRIP_RE = re.compile(r"[\\]+[A-Za-z]+\[(?:[^\[\]]|\[[^\]]*\])*\]")
+# Actor / game-variable nameplate codes that ARE the speaker identity.
+_SPEAKER_VAR_CODE_RE = re.compile(r"[\\]+[nNvV]\[\d+\]")
+
+
+def _speaker_display_name(name: str) -> str:
+    """Return the visible speaker nameplate with RPG Maker control codes removed.
+
+    FIRSTLINESPEAKERS (and some colour/plugin wrappers) leave trailing or
+    leading codes on the 401 name line, e.g. ``Tsubaki\\F[tt07]`` or
+    ``メア\\F[tme01]\\FF[tl05]\\AA[F]\\FH[ON]``.  Glossary lookup and the
+    ``[Speaker]:`` transport prefix need only the name; the written-back 401
+    parameter keeps the codes via ``_replace_speaker_in_param``.
+
+    Code-only nameplates such as ``\\v[007]\\AA[N]`` keep the variable/actor
+    code (``\\v[007]``) and drop presentation plugins (``\\AA``, ``\\FH``, …).
+    """
+    raw = str(name or "")
+    if not raw:
+        return raw
+    clean = _MARKUP_STRIP_RE.sub("", raw).strip()
+    if clean:
+        return clean
+    vars_only = "".join(_SPEAKER_VAR_CODE_RE.findall(raw))
+    return vars_only if vars_only else raw.strip()
+
 
 def _is_plausible_speaker(name: str) -> bool:
     """Return True only if *name* looks like a character name rather than dialogue or junk.
@@ -4975,7 +5081,9 @@ def _is_plausible_speaker(name: str) -> bool:
       • No brace/plugin markup or decorative symbols
       • No clause-like particle/verb fragments scraped from prose
     """
-    clean = _MARKUP_STRIP_RE.sub("", name).strip()
+    # Use the stripped form so trailing plugin codes (\F[tt07], etc.) do not
+    # poison length / character checks. Pure control-code nameplates stay empty.
+    clean = _MARKUP_STRIP_RE.sub("", str(name or "")).strip()
     if not clean:
         return False
     if len(clean) > 20:
@@ -5059,7 +5167,7 @@ def _speaker_translation_valid(source: str, translated: str) -> bool:
         return True
     return (
         normalized.casefold() != str(source or "").strip().casefold()
-        and re.search(LANGREGEX, normalized) is None
+        and not _has_japanese_text(normalized)
     )
 
 
@@ -5144,6 +5252,10 @@ def getSpeaker(speaker: str):
 
     Normal mode: translate immediately with caching.
     """
+    # Strip plugin/control codes so glossary keys and [Speaker]: prefixes stay
+    # clean (e.g. Tsubaki\F[tt07] -> Tsubaki). Callers that rewrite the 401
+    # parameter preserve those codes separately.
+    speaker = _speaker_display_name(speaker)
     if speaker == "":
         return ["", [0, 0]]
 
@@ -5271,11 +5383,105 @@ def _get_actor_map() -> dict:
         return {}
 
 
+def _scan_var_actor_assignments(data, into: dict) -> None:
+    """Collect code-122 script assignments of ``$gameActors.actor(N).name()`` into *into*."""
+
+    def _scan_list(lst):
+        for cmd in lst or []:
+            if not isinstance(cmd, dict) or cmd.get("code") != 122:
+                continue
+            params = cmd.get("parameters") or []
+            if len(params) < 5:
+                continue
+            # [startId, endId, operationType, operandType, operand]
+            try:
+                start_id = int(params[0])
+                end_id = int(params[1])
+                operand_type = params[3]
+                operand = params[4]
+            except (TypeError, ValueError):
+                continue
+            if operand_type != 4 or not isinstance(operand, str):
+                continue
+            match = _ACTOR_NAME_SCRIPT_RE.search(operand)
+            if not match:
+                continue
+            actor_id = int(match.group(1))
+            for var_id in range(start_id, end_id + 1):
+                into.setdefault(var_id, actor_id)
+
+    if isinstance(data, list):
+        # CommonEvents.json / Troops-style top-level list
+        for entry in data:
+            if isinstance(entry, dict):
+                _scan_list(entry.get("list"))
+        return
+    if not isinstance(data, dict):
+        return
+    for ev in data.get("events") or []:
+        if not isinstance(ev, dict):
+            continue
+        for page in ev.get("pages") or []:
+            if isinstance(page, dict):
+                _scan_list(page.get("list"))
+    _scan_list(data.get("list"))
+
+
+def _get_var_actor_map() -> dict:
+    """Lazily map game-variable IDs to actor IDs via code-122 actor-name scripts.
+
+    Games often mirror the protagonist with ``\\v[N]`` after:
+    ``Control Variables: #N = $gameActors.actor(1).name()``.
+    """
+    global _VAR_ACTOR_MAP_CACHE
+    with _ACTOR_MAP_CACHE_LOCK:
+        if _VAR_ACTOR_MAP_CACHE is not None:
+            return _VAR_ACTOR_MAP_CACHE
+        mapping: dict = {}
+        roots = (Path("files"), Path("translated"))
+        for root in roots:
+            if not root.is_dir():
+                continue
+            for candidate in sorted(root.glob("Map*.json")) + [
+                root / "CommonEvents.json"
+            ]:
+                if not candidate.is_file():
+                    continue
+                try:
+                    data = json.loads(candidate.read_text(encoding="utf-8-sig"))
+                except Exception:
+                    continue
+                _scan_var_actor_assignments(data, mapping)
+            # files/ is the source of truth; stop once it yielded anything
+            if mapping and root == Path("files"):
+                break
+        _VAR_ACTOR_MAP_CACHE = mapping
+        return _VAR_ACTOR_MAP_CACHE
+
+
+def _resolve_code_speaker_name(name: str) -> str | None:
+    """Resolve a pure ``\\n[ID]`` / ``\\v[ID]`` nameplate to an actor name, if known."""
+    raw = str(name or "").strip()
+    if not raw:
+        return None
+    actor_match = re.fullmatch(r"[\\]+[nN]\[(\d+)\]", raw)
+    if actor_match:
+        return _get_actor_map().get(int(actor_match.group(1))) or None
+    var_match = re.fullmatch(r"[\\]+[vV]\[(\d+)\]", raw)
+    if not var_match:
+        return None
+    actor_id = _get_var_actor_map().get(int(var_match.group(1)))
+    if actor_id is None:
+        return None
+    return _get_actor_map().get(int(actor_id)) or None
+
+
 def resetActorMapCache():
-    """Invalidate the cached actor map so it reloads on next use."""
-    global _ACTOR_MAP_CACHE
+    """Invalidate the cached actor and variable-actor maps so they reload on next use."""
+    global _ACTOR_MAP_CACHE, _VAR_ACTOR_MAP_CACHE
     with _ACTOR_MAP_CACHE_LOCK:
         _ACTOR_MAP_CACHE = None
+        _VAR_ACTOR_MAP_CACHE = None
 
 
 def translateAI(text, history, history_ctx=None):
@@ -5320,12 +5526,15 @@ def translateAI(text, history, history_ctx=None):
         # Return original payload and zero tokens so totals aren't affected
         return [text, [0, 0]]
 
-    # ── Actor variable substitution ──────────────────────────────────────────
-    # Replace \n[X] codes with actor names before sending to AI so the model
-    # sees real character names. Restore only exact-case name matches afterward;
-    # this avoids lower-case words like "red" and keeps the prompt clean.
+    # ── Actor / game-variable substitution ────────────────────────────────
+    # Replace \n[X] and mapped \v[X] codes with actor names before sending to
+    # AI so the model sees real character names. Restore only exact-case name
+    # matches afterward; this avoids lower-case words like "red" and keeps the
+    # prompt clean. \v[X] is resolved via code-122 `$gameActors.actor(N).name()`
+    # assignments (e.g. Ristaria \v[007] -> actor 1).
     actor_map = _get_actor_map()
-    reverse: dict[str, str] = {}  # actor_name -> "\\n[X]"
+    var_actor_map = _get_var_actor_map()
+    reverse: dict[str, str] = {}  # actor_name -> "\\n[X]" / "\\v[X]"
 
     def _sub(s: str, reverse_map: dict[str, str]) -> str:
         if not isinstance(s, str) or not actor_map:
@@ -5335,10 +5544,28 @@ def translateAI(text, history, history_ctx=None):
             name = actor_map.get(int(m.group(1)))
             return name if name else m.group(0)
 
-        def _repl(m: re.Match) -> str:
+        def _display_var_name(m: re.Match) -> str:
+            actor_id = var_actor_map.get(int(m.group(1)))
+            if actor_id is None:
+                return m.group(0)
+            name = actor_map.get(int(actor_id))
+            return name if name else m.group(0)
+
+        def _repl_actor(m: re.Match) -> str:
             aid = int(m.group(1))
             name = actor_map.get(aid)
             if name:
+                reverse_map[name] = m.group(0)
+                return name
+            return m.group(0)
+
+        def _repl_var(m: re.Match) -> str:
+            actor_id = var_actor_map.get(int(m.group(1)))
+            if actor_id is None:
+                return m.group(0)
+            name = actor_map.get(int(actor_id))
+            if name:
+                # Prefer restoring the original \v[X] form used in this string.
                 reverse_map[name] = m.group(0)
                 return name
             return m.group(0)
@@ -5350,10 +5577,13 @@ def translateAI(text, history, history_ctx=None):
         )
         if tag_match:
             speaker = _VAR_ACTOR_RE.sub(_display_actor_name, tag_match.group("speaker"))
-            body = _VAR_ACTOR_RE.sub(_repl, s[tag_match.end():])
+            speaker = _VAR_GAME_RE.sub(_display_var_name, speaker)
+            body = _VAR_ACTOR_RE.sub(_repl_actor, s[tag_match.end():])
+            body = _VAR_GAME_RE.sub(_repl_var, body)
             return f"{tag_match.group('open')}{speaker}{tag_match.group('close')}{body}"
 
-        return _VAR_ACTOR_RE.sub(_repl, s)
+        body = _VAR_ACTOR_RE.sub(_repl_actor, s)
+        return _VAR_GAME_RE.sub(_repl_var, body)
 
     if isinstance(text, list):
         item_reverses: list[dict[str, str]] = []
