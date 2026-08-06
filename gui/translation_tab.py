@@ -604,6 +604,13 @@ class TranslationWorker(QThread):
                             pass  # Ignore malformed progress lines
                     else:
                         stdout_lines.append(line)
+                        # Forward each line to the log as it is read, rather than
+                        # buffering the whole run and flushing it after the
+                        # process exits — a long translation was otherwise a
+                        # blank log until it finished. RESULT: is an internal
+                        # marker parsed below and is never shown.
+                        if line and not line.startswith('RESULT:'):
+                            self.emit_log(line)
                 process.stdout.close()
             
             def read_stderr():
@@ -645,11 +652,10 @@ class TranslationWorker(QThread):
                 for line in stdout_lines_clean
             )
 
-            # Forward all stdout output to log (this includes cost information)
-            for line in stdout_lines_clean:
-                if line.strip() and not line.startswith('RESULT:'):
-                    self.emit_log(line)
-            
+            # stdout was already forwarded to the log line by line as it was
+            # read (see read_stdout); it is not re-emitted here, only parsed for
+            # the RESULT/MISMATCH markers below.
+
             # Parse result
             if process.returncode == 0:
                 result_text = "Success"

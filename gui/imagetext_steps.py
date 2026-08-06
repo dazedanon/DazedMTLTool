@@ -560,6 +560,9 @@ class OcrStep(ImageStep):
         self.source_edit.setPlaceholderText("what the OCR read")
         self.source_edit.setFont(text_font())
         self.source_edit.textChanged.connect(self._source_edited)
+        # Highlighting text is one of the ways to split, so the Split button has
+        # to light up as the selection appears, not only as blocks are picked.
+        self.source_edit.selectionChanged.connect(self._refresh_split_enabled)
         right_layout.addWidget(self.source_edit, 1)
         self.skip_box = QCheckBox("Leave this one alone (do not translate)")
         self.skip_box.stateChanged.connect(self._skip_toggled)
@@ -572,7 +575,11 @@ class OcrStep(ImageStep):
         )
         self.merge_button.clicked.connect(self._merge)
         self.split_button = QPushButton("Split")
-        self.split_button.setToolTip("Break this block back into its separate lines.")
+        self.split_button.setToolTip(
+            "Break this block into its separate lines — or, if you highlight "
+            "part of the text above, into the highlighted text and the rest "
+            "(for a box the reader wrongly merged)."
+        )
         self.split_button.clicked.connect(self._split)
         self.delete_button = QPushButton("Delete")
         self.delete_button.clicked.connect(self._delete)
@@ -651,10 +658,34 @@ class OcrStep(ImageStep):
             entry.height, entry.width = self.array.shape[:2]
         self.canvas.show_image(entry, self.array)
         self._sync_panel()
+        self._refresh_confirm_button()
         self.editor.status(
             f"{entry.name} — {entry.status.replace('_', ' ')}. "
             + self.editor.counts_text()
         )
+
+    def _refresh_confirm_button(self) -> None:
+        """One button, two jobs: confirm an unchecked image, un-confirm a checked one.
+
+        Un-confirming is how a single image is translated out of a batch that
+        was confirmed together - and the way back from confirming one by
+        accident. It sends the image to needs-review, which is exactly what
+        drops it out of ``job.confirmed()`` and so out of the next translation.
+        """
+        entry = self.current_entry()
+        confirmed = entry is not None and entry.status in jobmod.REVIEWED
+        if confirmed:
+            self.confirm_button.setText("↩ Un-confirm this image")
+            self.confirm_button.setToolTip(
+                "Send this image back to needs-review so it is left out of the "
+                "translation. The boxes and text are kept."
+            )
+        else:
+            self.confirm_button.setText("✓ Confirm this image")
+            self.confirm_button.setToolTip(
+                "Mark the boxes and the text on this image as checked, and move "
+                "to the next one that still needs a look."
+            )
 
     # ------------------------------------------------------------- panel
     def current_block(self) -> TextBlock | None:
@@ -671,7 +702,7 @@ class OcrStep(ImageStep):
         block = self.current_block()
         selected = len(self.canvas.selected_ids())
         self.merge_button.setEnabled(selected >= 2)
-        self.split_button.setEnabled(bool(block) and block.line_count > 1)
+        self._refresh_split_enabled()
         self.delete_button.setEnabled(selected >= 1)
         if block is None:
             self.block_title.setText(
@@ -729,6 +760,75 @@ class OcrStep(ImageStep):
         # a box drawn here exists to have what the OCR missed typed into it.
         super()._add_box(box)
         self.source_edit.setFocus()
+
+    def _refresh_split_enabled(self) -> None:
+        """Split is live for a multi-line block *or* a text selection.
+
+        The line-based split needs more than one detected line; the
+        selection-based split (below) needs only some highlighted text, which is
+        how a box the reader wrongly merged into one line gets broken apart.
+        """
+        block = self.current_block()
+        has_selection = self.source_edit.textCursor().hasSelection()
+        self.split_button.setEnabled(bool(block) and (block.line_count > 1 or has_selection))
+
+    def _split(self) -> None:
+        # Highlight-driven split takes priority: if the user has selected part of
+        # the text, break the box at that selection rather than along the OCR's
+        # own line boundaries. This is the fix for a box the reader falsely
+        # merged, which often has no separate lines to split along.
+        cursor = self.source_edit.textCursor()
+        if cursor.hasSelection():
+            self._split_selection(cursor)
+            return
+        super()._split()
+
+    def _split_selection(self, cursor) -> None:
+        entry = self.current_entry()
+        block = self.current_block()
+        if entry is None or block is None:
+            return
+        text = self.source_edit.toPlainText()
+        start, end = cursor.selectionStart(), cursor.selectionEnd()
+        selected = " ".join(text[start:end].split())
+        rest = " ".join((text[:start] + " " + text[end:]).split())
+        if not selected or not rest:
+            # Nothing to peel off - the selection is the whole block, or empty
+            # once whitespace is stripped.
+            return
+
+        # Reading order: whichever of the two pieces sits earlier in the text is
+        # drawn first (top for horizontal text, right for vertical, which reads
+        # right-to-left).
+        selected_first = (start + end) / 2 < len(text) / 2
+        first_text, second_text = (
+            (selected, rest) if selected_first else (rest, selected)
+        )
+        total = len(first_text) + len(second_text)
+        fraction = len(first_text) / total if total else 0.5
+
+        box = block.box
+        if block.vertical:
+            first_w = max(1, round(box.w * fraction))
+            first_box = Box.from_xywh(box.x2 - first_w, box.y, first_w, box.h)
+            second_box = Box.from_xywh(box.x, box.y, max(1, box.w - first_w), box.h)
+        else:
+            first_h = max(1, round(box.h * fraction))
+            first_box = Box.from_xywh(box.x, box.y, box.w, first_h)
+            second_box = Box.from_xywh(box.x, box.y + first_h, box.w, max(1, box.h - first_h))
+
+        # New source only. The translation is dropped from both halves: the
+        # split changed what each says, so the old target no longer belongs to
+        # either. Style is measured fresh at the render step.
+        fresh = [
+            TextBlock(jobmod._new_id(), first_box, first_text, "", block.angle, []),
+            TextBlock(jobmod._new_id(), second_box, second_text, "", block.angle, []),
+        ]
+        index = entry.blocks.index(block)
+        entry.blocks.remove(block)
+        for offset, item in enumerate(fresh):
+            entry.blocks.insert(index + offset, item)
+        self._after_block_change(entry, [b.block_id for b in fresh])
 
     # ------------------------------------------------------------- reading
     def _read_selected(self) -> None:
@@ -828,6 +928,20 @@ class OcrStep(ImageStep):
         entry = self.current_entry()
         if entry is None:
             return
+        if entry.status in jobmod.REVIEWED:
+            # Already checked: this press un-checks it and stays put, so the
+            # image can be dropped from the translation or an accidental confirm
+            # undone.
+            entry.status = NEEDS_REVIEW
+            self.editor.reload_lists()
+            self.editor.save_now()
+            self.editor.refresh_gates()
+            self._refresh_confirm_button()
+            self.editor.status(
+                f"{entry.name} un-confirmed — it will not be translated until "
+                "you confirm it again."
+            )
+            return
         if not entry.blocks:
             QMessageBox.information(
                 self,
@@ -840,6 +954,7 @@ class OcrStep(ImageStep):
         self.editor.reload_lists()
         self.editor.save_now()
         self.editor.refresh_gates()
+        self._refresh_confirm_button()
         # The next one that still wants looking at, not simply the next row -
         # advancing by one stalls on an already-confirmed neighbour.
         moved = self.advance(
@@ -1317,6 +1432,7 @@ class TranslateStep(QWidget):
         )
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
+        self.progress.setFormat("Starting…")
         self.translate_button.setEnabled(False)
         self.estimate_button.setEnabled(False)
         self.stop_button.setEnabled(True)
@@ -1341,6 +1457,10 @@ class TranslateStep(QWidget):
         if total:
             self.progress.setRange(0, total)
             self.progress.setValue(current)
+            # Blocks done out of total, not just a bare percentage: the count is
+            # what tells you the run is still moving when a slow image sits at
+            # the same percent for a while.
+            self.progress.setFormat("%v / %m blocks · %p%")
 
     def _batch_phase(self, phase: str, payload) -> None:
         """Batch mode blocks the worker until this answers.
@@ -1435,11 +1555,14 @@ class TranslateStep(QWidget):
 
 
 class PreviewWorker(QThread):
-    """Render every translated image once, so switching between them is instant.
+    """Prepare the previews for images that are *not* on screen, in the background.
 
     Off the GUI thread because the first pass over an image also *measures* it,
-    which is the slow part - a dozen morphological passes per block. The panel is
-    disabled while this runs, so nothing edits a style out from under it.
+    which is the slow part - a dozen morphological passes per block. It runs while
+    the panel stays live, so it deliberately skips whichever image the user is
+    looking at: that one is rendered on the GUI thread by ``open_current``, and
+    rendering also assigns ``block.style``, so leaving the visible image to the
+    GUI is what keeps the worker from editing a style out from under the panel.
     """
 
     one = pyqtSignal(str, object, object)      # relpath, array, notes
@@ -1451,9 +1574,15 @@ class PreviewWorker(QThread):
         self.job = job
         self.entries = entries
         self._stop = False
+        # The image the GUI is showing; re-read before each render so navigation
+        # during the sweep hands the newly-opened image back to the GUI thread.
+        self._current: str | None = None
 
     def stop(self) -> None:
         self._stop = True
+
+    def set_current(self, relpath: str | None) -> None:
+        self._current = relpath
 
     def run(self) -> None:
         total = len(self.entries)
@@ -1462,6 +1591,10 @@ class PreviewWorker(QThread):
             if self._stop:
                 break
             self.progress.emit(index, total, entry.name)
+            # The visible image belongs to the GUI thread; skip it here so the
+            # two never measure the same blocks at once.
+            if entry.relpath == self._current:
+                continue
             try:
                 result = rendermod.render_job_image(self.job, entry)
             except Exception as exc:
@@ -1975,6 +2108,26 @@ class RenderStep(ImageStep):
         self.render_notes.setWordWrap(True)
         layout.addWidget(self.render_notes)
         layout.addStretch(1)
+
+        # The style controls a multi-selection edit fans out to every selected
+        # block, and each spin's real minimum. A field the selected blocks
+        # disagree on is shown blank; for a spin that means dropping it one step
+        # below its minimum onto a "—" special value, so the true minimum has to
+        # be remembered to restore it afterwards.
+        self._style_controls = (
+            self.bg_combo, self.inpaint_combo, self.colour_button, self.opacity_spin,
+            self.outline_box, self.outline_button, self.outline_width,
+            self.font_combo, self.bold_box, self.italic_box, self.align_combo,
+            self.cap_spin, self.overflow_box, self.tracking_spin,
+            self.width_spin, self.height_spin,
+        )
+        self._spin_min = {
+            spin: spin.minimum()
+            for spin in (self.opacity_spin, self.outline_width, self.cap_spin,
+                         self.tracking_spin, self.width_spin, self.height_spin)
+        }
+        self._multi_snapshot: dict = {}
+
         scroller.setWidget(panel)
         return scroller
 
@@ -1996,7 +2149,14 @@ class RenderStep(ImageStep):
 
     # ------------------------------------------------------------- entering
     def enter(self) -> None:
-        """Called when the tab is opened. Sweeps the previews once."""
+        """Called when the tab is opened.
+
+        The image on screen is rendered at once and the panel is usable
+        immediately; the rest are prepared on a low-priority background thread
+        that yields the visible image to the GUI. That is the whole difference
+        from before, when the panel sat disabled until every image had been
+        swept - a long wait on a folder of any size.
+        """
         self.reload_list()
         if self._swept:
             self.open_current()
@@ -2006,19 +2166,21 @@ class RenderStep(ImageStep):
         if not entries:
             return
         # The one on screen first and synchronously, so there is something to
-        # look at while the rest are worked through.
+        # look at and edit straight away.
         self.open_current()
         rest = [e for e in entries if e.relpath != self.current_relpath()]
         if not rest:
             return
-        self._set_panel_enabled(False)
         self.progress.setVisible(True)
         self.progress.setRange(0, len(rest))
         self.worker = PreviewWorker(self.job, rest, self)
+        self.worker.set_current(self.current_relpath())
         self.worker.progress.connect(self._sweep_progress)
         self.worker.one.connect(self._sweep_one)
         self.worker.done.connect(self._sweep_done)
-        self.worker.start()
+        # Low priority: the point is that it runs in the gaps while the user
+        # works the visible image, never ahead of them.
+        self.worker.start(QThread.LowPriority)
 
     def _sweep_progress(self, index: int, total: int, name: str) -> None:
         self.progress.setValue(index - 1)
@@ -2033,7 +2195,6 @@ class RenderStep(ImageStep):
     def _sweep_done(self, made: int) -> None:
         self.progress.setVisible(False)
         self.worker = None
-        self._set_panel_enabled(True)
         self.editor.reload_lists()
         self.editor.save_now()          # the sweep measured styles worth keeping
         problems = sum(
@@ -2044,18 +2205,6 @@ class RenderStep(ImageStep):
             + (f" {problems} block(s) need attention — see the ⚠ marks." if problems else "")
         )
 
-    def _set_panel_enabled(self, enabled: bool) -> None:
-        for widget in (
-            self.bg_combo, self.inpaint_combo, self.colour_button, self.opacity_spin,
-            self.outline_box, self.outline_button,
-            self.outline_width, self.cap_spin, self.align_combo, self.font_combo,
-            self.tracking_spin, self.width_spin, self.height_spin,
-            self.bold_box, self.italic_box, self.overflow_box,
-            self.remeasure_button, self.target_edit,
-            self.render_selected_button, self.render_all_button, self.confirm_button,
-        ):
-            widget.setEnabled(enabled)
-
     # ------------------------------------------------------------- preview
     def open_current(self) -> None:
         from gui.imagetext_canvas import load_array
@@ -2065,6 +2214,11 @@ class RenderStep(ImageStep):
         # is not a thing that happens.
         self.save_layer()
         entry = self.current_entry()
+        # Hand the now-visible image to the GUI: the background sweep re-reads
+        # this and steps around it, so the two never render the same image at
+        # once.
+        if self.worker is not None:
+            self.worker.set_current(entry.relpath if entry is not None else None)
         if entry is None:
             self.canvas.show_image(None, None)
             self.array = self.layer = self.cut = None
@@ -2142,6 +2296,19 @@ class RenderStep(ImageStep):
         except Exception:
             return None
 
+    def selected_blocks(self) -> list[TextBlock]:
+        """Every selected block, for editing a whole run of them at once."""
+        entry = self.current_entry()
+        if entry is None:
+            return []
+        out = []
+        for block_id in self.canvas.selected_ids():
+            try:
+                out.append(entry.block(block_id))
+            except Exception:
+                continue
+        return out
+
     def _style_for(self, block: TextBlock) -> Style:
         if block.style is None:
             entry = self.current_entry()
@@ -2153,7 +2320,6 @@ class RenderStep(ImageStep):
         return block.style
 
     def _sync_panel(self) -> None:
-        block = self.current_block()
         entry = self.current_entry()
         widgets = (
             self.bg_combo, self.inpaint_combo, self.colour_button, self.opacity_spin,
@@ -2163,6 +2329,14 @@ class RenderStep(ImageStep):
             self.bold_box, self.italic_box, self.overflow_box,
             self.remeasure_button, self.target_edit,
         )
+        # A spin left showing "—" from a previous multi-selection has its minimum
+        # dropped by one; put every spin back before rendering any panel state.
+        self._restore_spins()
+        blocks = self.selected_blocks()
+        if len(blocks) >= 2:
+            self._sync_panel_multi(blocks, entry, widgets)
+            return
+        block = blocks[0] if blocks else None
         if block is None:
             for widget in widgets:
                 widget.setEnabled(False)
@@ -2231,6 +2405,228 @@ class RenderStep(ImageStep):
         if entry is not None:
             self.render_notes.setText(self._note_text(entry))
 
+    # --------------------------------------------------- multi-selection panel
+    @staticmethod
+    def _uniform(values: list):
+        """``(all_equal, first_value)`` for a field across the selected blocks."""
+        first = values[0]
+        return all(value == first for value in values), first
+
+    def _restore_spins(self) -> None:
+        for spin, real_min in self._spin_min.items():
+            if spin.minimum() != real_min or spin.specialValueText():
+                spin.blockSignals(True)
+                spin.setSpecialValueText("")
+                spin.setMinimum(real_min)
+                spin.blockSignals(False)
+
+    def _spin_show(self, spin, value) -> None:
+        spin.blockSignals(True)
+        spin.setSpecialValueText("")
+        spin.setMinimum(self._spin_min[spin])
+        spin.setValue(max(spin.minimum(), int(round(value))))
+        spin.blockSignals(False)
+
+    def _spin_blank(self, spin) -> None:
+        """Show "—": the selected blocks disagree on this number."""
+        sentinel = self._spin_min[spin] - 1
+        spin.blockSignals(True)
+        spin.setMinimum(sentinel)
+        spin.setSpecialValueText("—")
+        spin.setValue(sentinel)
+        spin.blockSignals(False)
+
+    def _sync_combo(self, combo, values) -> None:
+        same, value = self._uniform(values)
+        combo.setCurrentIndex(max(0, combo.findData(value)) if same else -1)
+
+    def _sync_spin(self, spin, values) -> None:
+        same, value = self._uniform(values)
+        self._spin_show(spin, value) if same else self._spin_blank(spin)
+
+    def _sync_toggle(self, box, values) -> None:
+        same, value = self._uniform(values)
+        box.setChecked(value if same else False)
+
+    def _sync_colour(self, button, keys, colours) -> None:
+        same, _ = self._uniform(keys)
+        if same:
+            button.set_colour(colours[0])
+        else:
+            button.set_colour(None)
+            button.setText("—")
+
+    def _control_value(self, widget):
+        if isinstance(widget, QComboBox):
+            return widget.currentIndex()
+        if isinstance(widget, QSpinBox):
+            return widget.value()
+        if isinstance(widget, ColourButton):
+            colour = widget.colour()
+            return tuple(colour) if colour else None
+        return widget.isChecked()
+
+    def _sync_panel_multi(self, blocks, entry, widgets) -> None:
+        """Show the shared value where the selection agrees, "—" where it does not.
+
+        The text (source and translation) stays per-block and is switched off;
+        everything else is a style field that a single edit fans out to the
+        whole selection. A snapshot of the shown state is taken so ``_style_edited``
+        can tell which one control the user then changed.
+        """
+        styles = [self._style_for(block) for block in blocks]
+        for widget in widgets:
+            widget.setEnabled(True)
+        self.target_edit.setEnabled(False)
+        self._syncing = True
+        try:
+            self.block_title.setText(f"{len(blocks)} blocks selected")
+            self.source_view.setPlainText("")
+            self.target_edit.setPlainText("")
+
+            self._sync_combo(self.bg_combo, [s.background for s in styles])
+            self._sync_combo(
+                self.inpaint_combo,
+                [s.inpaint_method or inpaintmod.DEFAULT for s in styles],
+            )
+            self.inpaint_combo.setEnabled(
+                all(s.background == stylemod.BG_INPAINT for s in styles)
+            )
+            self._sync_colour(
+                self.colour_button,
+                [tuple(s.text_color[:3]) for s in styles],
+                [list(s.text_color) for s in styles],
+            )
+            self._sync_spin(
+                self.opacity_spin,
+                [max(1, round((s.text_color[3] if len(s.text_color) > 3 else 255) * 100 / 255))
+                 for s in styles],
+            )
+            outline_on = [bool(s.outline_color) for s in styles]
+            self._sync_toggle(self.outline_box, outline_on)
+            all_outline = all(outline_on)
+            self.outline_button.setEnabled(all_outline)
+            self.outline_width.setEnabled(all_outline)
+            if all_outline:
+                self._sync_colour(
+                    self.outline_button,
+                    [tuple((s.outline_color or [0, 0, 0, 255])[:3]) for s in styles],
+                    [list(s.outline_color or [0, 0, 0, 255]) for s in styles],
+                )
+                self._sync_spin(self.outline_width, [max(1, s.outline_width) for s in styles])
+            else:
+                self.outline_button.set_colour([0, 0, 0, 255])
+                self._spin_show(self.outline_width, self._spin_min[self.outline_width])
+
+            self._sync_combo(self.font_combo, [s.font for s in styles])
+            self._sync_spin(self.cap_spin, [s.cap_height for s in styles])
+            self._sync_combo(self.align_combo, [s.align for s in styles])
+            self._sync_spin(self.tracking_spin, [s.tracking for s in styles])
+            self._sync_spin(self.width_spin, [s.scale_x for s in styles])
+            self._sync_spin(self.height_spin, [s.scale_y for s in styles])
+            self._sync_toggle(self.bold_box, [s.bold for s in styles])
+            self._sync_toggle(self.italic_box, [s.italic for s in styles])
+            self._sync_toggle(self.overflow_box, [s.overflow for s in styles])
+
+            self._multi_snapshot = {
+                widget: self._control_value(widget) for widget in self._style_controls
+            }
+        finally:
+            self._syncing = False
+
+        self.style_summary.setText(
+            f"Editing {len(blocks)} blocks — a change applies to all of them."
+        )
+        self.style_notes.setText("")
+        if entry is not None:
+            self.render_notes.setText(self._note_text(entry))
+
+    def _apply_control(self, widget, block, entry, style) -> None:
+        """Push one panel control's value onto one block's style."""
+        if widget is self.bg_combo:
+            chosen = self.bg_combo.currentData()
+            if self.array is None or entry is None:
+                style.background = chosen
+            else:
+                stylemod.adopt_background(
+                    self.array, style, block.box,
+                    [b.box for b in entry.blocks if b.block_id != block.block_id],
+                    chosen,
+                )
+        elif widget is self.inpaint_combo:
+            style.inpaint_method = self.inpaint_combo.currentData()
+        elif widget is self.colour_button:
+            rgb = self.colour_button.colour()
+            if rgb:
+                alpha = style.text_color[3] if len(style.text_color) > 3 else 255
+                style.text_color = rgb[:3] + [alpha]
+        elif widget is self.opacity_spin:
+            alpha = round(self.opacity_spin.value() * 255 / 100)
+            style.text_color = style.text_color[:3] + [alpha]
+            if style.outline_color:
+                style.outline_color = style.outline_color[:3] + [alpha]
+        elif widget is self.outline_box:
+            if self.outline_box.isChecked():
+                if not style.outline_color:
+                    base = self.outline_button.colour() or [0, 0, 0, 255]
+                    alpha = style.text_color[3] if len(style.text_color) > 3 else 255
+                    style.outline_color = base[:3] + [alpha]
+                    style.outline_width = max(1, self.outline_width.value())
+            else:
+                style.outline_color = None
+                style.outline_width = 0
+        elif widget is self.outline_button:
+            if style.outline_color:
+                alpha = style.outline_color[3] if len(style.outline_color) > 3 else 255
+                style.outline_color = (
+                    self.outline_button.colour() or [0, 0, 0, 255]
+                )[:3] + [alpha]
+        elif widget is self.outline_width:
+            if style.outline_color:
+                style.outline_width = self.outline_width.value()
+        elif widget is self.font_combo:
+            style.font = self.font_combo.currentData()
+        elif widget is self.cap_spin:
+            style.cap_height = self.cap_spin.value()
+        elif widget is self.align_combo:
+            style.align = self.align_combo.currentData()
+        elif widget is self.tracking_spin:
+            style.tracking = self.tracking_spin.value()
+        elif widget is self.width_spin:
+            style.scale_x = self.width_spin.value()
+        elif widget is self.height_spin:
+            style.scale_y = self.height_spin.value()
+        elif widget is self.bold_box:
+            style.bold = self.bold_box.isChecked()
+        elif widget is self.italic_box:
+            style.italic = self.italic_box.isChecked()
+        elif widget is self.overflow_box:
+            style.overflow = self.overflow_box.isChecked()
+
+    def _style_edited_multi(self, blocks) -> None:
+        """Fan out only the control the user just changed to every selected block.
+
+        Every other field is left as each block had it, so an edit never
+        flattens the values the selection disagreed on.
+        """
+        entry = self.current_entry()
+        changed = [
+            widget for widget in self._style_controls
+            if self._control_value(widget) != self._multi_snapshot.get(widget)
+        ]
+        if not changed:
+            return
+        for widget in changed:
+            for block in blocks:
+                style = self._style_for(block)
+                self._apply_control(widget, block, entry, style)
+                style.locked = True
+        self.editor.schedule_save()
+        self.invalidate()
+        # The fanned-out field is now uniform, so re-syncing shows its shared
+        # value instead of "—" and rebuilds the snapshot for the next edit.
+        self._sync_panel()
+
     def _sync_cuts(self, font: str) -> None:
         """Offer Bold and Italic only where the family has that file.
 
@@ -2274,6 +2670,10 @@ class RenderStep(ImageStep):
 
     def _style_edited(self) -> None:
         if self._syncing:
+            return
+        blocks = self.selected_blocks()
+        if len(blocks) >= 2:
+            self._style_edited_multi(blocks)
             return
         block = self.current_block()
         if block is None:
@@ -2334,11 +2734,13 @@ class RenderStep(ImageStep):
         self.invalidate()
 
     def _remeasure(self) -> None:
-        block = self.current_block()
         entry = self.current_entry()
-        if block is None or entry is None or self.array is None:
+        blocks = self.selected_blocks()
+        if entry is None or self.array is None or not blocks:
             return
-        block.style = stylemod.measure(self.array, block, [b.box for b in entry.blocks])
+        boxes = [b.box for b in entry.blocks]
+        for block in blocks:
+            block.style = stylemod.measure(self.array, block, boxes)
         self._sync_panel()
         self.editor.schedule_save()
         self.invalidate()
