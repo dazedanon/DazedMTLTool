@@ -503,6 +503,10 @@ class OcrStep(ImageStep):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.addWidget(QLabel("Images — highlight the ones to read"))
         self.list = self._make_list(multi=True)
+        # Highlighting more rows changes what one Un-confirm press would drop, so
+        # the button has to relabel as the selection grows, not only as the
+        # current row moves.
+        self.list.itemSelectionChanged.connect(self._refresh_confirm_button)
         left_layout.addWidget(self.list, 1)
         self.process_selected = QPushButton("Process selected")
         self.process_selected.setToolTip(
@@ -664,6 +668,23 @@ class OcrStep(ImageStep):
             + self.editor.counts_text()
         )
 
+    def _unconfirm_targets(self) -> list[ImageEntry]:
+        """The confirmed images a single Un-confirm press would send back.
+
+        The highlighted confirmed rows, plus the current one — which is always
+        included, because the button only reads "Un-confirm" while the current
+        image is confirmed, so a press has to act on it at the least. Rows that
+        are highlighted but not yet confirmed are left alone: Un-confirm has
+        nothing to do to them.
+        """
+        entry = self.current_entry()
+        if entry is None or entry.status not in jobmod.REVIEWED:
+            return []
+        targets = [e for e in self.selected_entries() if e.status in jobmod.REVIEWED]
+        if entry not in targets:
+            targets.append(entry)
+        return targets
+
     def _refresh_confirm_button(self) -> None:
         """One button, two jobs: confirm an unchecked image, un-confirm a checked one.
 
@@ -671,15 +692,25 @@ class OcrStep(ImageStep):
         was confirmed together - and the way back from confirming one by
         accident. It sends the image to needs-review, which is exactly what
         drops it out of ``job.confirmed()`` and so out of the next translation.
+        With several confirmed rows highlighted it un-confirms all of them.
         """
         entry = self.current_entry()
         confirmed = entry is not None and entry.status in jobmod.REVIEWED
         if confirmed:
-            self.confirm_button.setText("↩ Un-confirm this image")
-            self.confirm_button.setToolTip(
-                "Send this image back to needs-review so it is left out of the "
-                "translation. The boxes and text are kept."
-            )
+            count = len(self._unconfirm_targets())
+            if count > 1:
+                self.confirm_button.setText(f"↩ Un-confirm these {count} images")
+                self.confirm_button.setToolTip(
+                    "Send the highlighted confirmed images back to needs-review "
+                    "so they are left out of the translation. The boxes and text "
+                    "are kept."
+                )
+            else:
+                self.confirm_button.setText("↩ Un-confirm this image")
+                self.confirm_button.setToolTip(
+                    "Send this image back to needs-review so it is left out of the "
+                    "translation. The boxes and text are kept."
+                )
         else:
             self.confirm_button.setText("✓ Confirm this image")
             self.confirm_button.setToolTip(
@@ -931,16 +962,26 @@ class OcrStep(ImageStep):
         if entry.status in jobmod.REVIEWED:
             # Already checked: this press un-checks it and stays put, so the
             # image can be dropped from the translation or an accidental confirm
-            # undone.
-            entry.status = NEEDS_REVIEW
+            # undone. When several confirmed rows are highlighted the press acts
+            # on all of them at once, which is how a batch confirmed together is
+            # dropped out of the translation in one go.
+            targets = self._unconfirm_targets()
+            for target in targets:
+                target.status = NEEDS_REVIEW
             self.editor.reload_lists()
             self.editor.save_now()
             self.editor.refresh_gates()
             self._refresh_confirm_button()
-            self.editor.status(
-                f"{entry.name} un-confirmed — it will not be translated until "
-                "you confirm it again."
-            )
+            if len(targets) == 1:
+                self.editor.status(
+                    f"{entry.name} un-confirmed — it will not be translated until "
+                    "you confirm it again."
+                )
+            else:
+                self.editor.status(
+                    f"{len(targets)} images un-confirmed — they will not be "
+                    "translated until you confirm them again."
+                )
             return
         if not entry.blocks:
             QMessageBox.information(
@@ -1358,21 +1399,23 @@ class TranslateStep(QWidget):
     def export_only(self) -> tuple[Path, Path | None] | None:
         from util.imagetools import exchange
 
-        pending = [e for e in self.job.images if e.status == NEEDS_REVIEW]
-        if pending and QMessageBox.question(
-            self,
-            "Confirm remaining images",
-            f"{len(pending)} image(s) have been read but not confirmed.\n\n"
-            "Confirm them all now and export?",
-        ) == QMessageBox.Yes:
-            for entry in pending:
-                entry.status = CONFIRMED
-        if not self.job.confirmed():
+        confirmed = self.job.confirmed()
+        if not confirmed:
             QMessageBox.information(
                 self, "Nothing to export",
                 "No image has been confirmed yet. Go back to Textboxes / OCR, "
                 "check the boxes, then press “Confirm this image”.",
             )
+            return None
+        # Some images read but not confirmed: translate only the confirmed ones
+        # rather than sweeping the rest in. If that is not what the user wants,
+        # cancelling sends them back to the OCR tab to confirm more first.
+        total = len(self.job.images)
+        if len(confirmed) < total and QMessageBox.question(
+            self,
+            "Translate confirmed images",
+            f"Translate {len(confirmed)} selected image(s) out of {total}?",
+        ) != QMessageBox.Yes:
             return None
         self.editor.save_now()
         try:
@@ -1632,6 +1675,11 @@ class RenderStep(ImageStep):
         self.previews: dict[str, np.ndarray] = {}
         self.notes: dict[str, list] = {}
         self.approved: set[str] = set()
+        # Reconstructions remembered per image, so turning a type knob does not
+        # re-run a model over every block on screen. Keyed by relpath and kept
+        # for a handful of images: the entries are window-sized pixel arrays,
+        # which is real memory, and anything evicted is merely recomputed.
+        self._erase_caches: dict[str, dict] = {}
         self.worker: PreviewWorker | None = None
         self._swept = False
         self._syncing = False
@@ -2127,6 +2175,7 @@ class RenderStep(ImageStep):
                          self.tracking_spin, self.width_spin, self.height_spin)
         }
         self._multi_snapshot: dict = {}
+        self._style_snapshot: dict = {}
 
         scroller.setWidget(panel)
         return scroller
@@ -2251,9 +2300,13 @@ class RenderStep(ImageStep):
         entry = self.current_entry()
         if entry is None or self.array is None:
             return
+        cache = self._erase_caches.setdefault(entry.relpath, {})
+        while len(self._erase_caches) > 3:
+            oldest = next(k for k in self._erase_caches if k != entry.relpath)
+            del self._erase_caches[oldest]
         try:
             result = rendermod.render_entry(
-                self.array, entry, paint=self.layer, cut=self.cut
+                self.array, entry, paint=self.layer, cut=self.cut, erase_cache=cache
             )
         except Exception as exc:
             self.render_notes.setText(f"Preview failed: {exc}")
@@ -2369,9 +2422,15 @@ class RenderStep(ImageStep):
             self.source_view.setPlainText(block.source_text)
             self.target_edit.setPlainText(block.target_text)
             self.bg_combo.setCurrentIndex(max(0, self.bg_combo.findData(style.background)))
+            # The *effective* method, not a fixed placeholder. A block that
+            # nobody chose for renders with the preferred model for its size,
+            # and the combo used to show the built-in fast one instead - so
+            # "switch it to AOT" was a no-op on a block already using AOT, with
+            # nothing on screen to say so.
             self.inpaint_combo.setCurrentIndex(
                 max(0, self.inpaint_combo.findData(
-                    style.inpaint_method or inpaintmod.DEFAULT
+                    style.inpaint_method
+                    or inpaintmod.preferred_for(block.box.w, block.box.h)
                 ))
             )
             self.inpaint_combo.setEnabled(style.background == stylemod.BG_INPAINT)
@@ -2395,6 +2454,15 @@ class RenderStep(ImageStep):
             self._sync_cuts(style.font)
         finally:
             self._syncing = False
+
+        # What the panel now shows, so `_style_edited` can tell the one control
+        # the user moves from the fifteen they did not. Writing the whole panel
+        # back used to make every default concrete on the first touch of any
+        # knob - most visibly the inpainting model, which was pinned to
+        # whatever the combo displayed.
+        self._style_snapshot = {
+            widget: self._control_value(widget) for widget in self._style_controls
+        }
 
         if style.locked:
             summary = "Set by you."
@@ -2487,7 +2555,8 @@ class RenderStep(ImageStep):
             self._sync_combo(self.bg_combo, [s.background for s in styles])
             self._sync_combo(
                 self.inpaint_combo,
-                [s.inpaint_method or inpaintmod.DEFAULT for s in styles],
+                [s.inpaint_method or inpaintmod.preferred_for(b.box.w, b.box.h)
+                 for b, s in zip(blocks, styles)],
             )
             self.inpaint_combo.setEnabled(
                 all(s.background == stylemod.BG_INPAINT for s in styles)
@@ -2541,14 +2610,19 @@ class RenderStep(ImageStep):
         if entry is not None:
             self.render_notes.setText(self._note_text(entry))
 
-    def _apply_control(self, widget, block, entry, style) -> None:
-        """Push one panel control's value onto one block's style."""
+    def _apply_control(self, widget, block, entry, style) -> str:
+        """Push one panel control's value onto one block's style.
+
+        Returns a sentence when the image refuses what the control asked for,
+        "" otherwise - the single-block panel shows it, the multi-edit drops it
+        because one sentence cannot speak for a dozen blocks.
+        """
         if widget is self.bg_combo:
             chosen = self.bg_combo.currentData()
             if self.array is None or entry is None:
                 style.background = chosen
             else:
-                stylemod.adopt_background(
+                return stylemod.adopt_background(
                     self.array, style, block.box,
                     [b.box for b in entry.blocks if b.block_id != block.block_id],
                     chosen,
@@ -2602,6 +2676,7 @@ class RenderStep(ImageStep):
             style.italic = self.italic_box.isChecked()
         elif widget is self.overflow_box:
             style.overflow = self.overflow_box.isChecked()
+        return ""
 
     def _style_edited_multi(self, blocks) -> None:
         """Fan out only the control the user just changed to every selected block.
@@ -2680,56 +2755,49 @@ class RenderStep(ImageStep):
             return
         entry = self.current_entry()
         style = self._style_for(block)
-        chosen = self.bg_combo.currentData()
-        if self.array is None or entry is None:
-            style.background = chosen
-        else:
-            # Sample whatever the method needs while the image is in hand.
-            # Setting only the name is how a block reached the renderer marked
-            # "vgradient" with no gradient in it, and came back with a complaint
-            # about its own internals.
-            problem = stylemod.adopt_background(
-                self.array, style, block.box,
-                [b.box for b in entry.blocks if b.block_id != block.block_id],
-                chosen,
-            )
+        # Only the control the user moved is written back, same as the
+        # multi-edit. Writing the whole panel used to make every displayed
+        # default concrete on the first touch of any knob - most visibly the
+        # inpainting model, where changing the text colour silently pinned the
+        # block to whatever the combo happened to be showing.
+        changed = [
+            widget for widget in self._style_controls
+            if self._control_value(widget) != self._style_snapshot.get(widget)
+        ]
+        for widget in changed:
+            problem = self._apply_control(widget, block, entry, style)
             if problem:
                 self.style_notes.setText(problem)
-        style.inpaint_method = self.inpaint_combo.currentData()
-        self.inpaint_combo.setEnabled(chosen == stylemod.BG_INPAINT)
-        if chosen == stylemod.BG_INPAINT and not inpaintmod.available(
-            style.inpaint_method
-        ):
-            self.style_notes.setText(inpaintmod.status(style.inpaint_method))
-        opacity = round(self.opacity_spin.value() * 255 / 100)
-        style.text_color = (self.colour_button.colour() or style.text_color)[:3] + [
-            opacity
-        ]
-        if self.outline_box.isChecked():
-            style.outline_color = (
-                self.outline_button.colour() or [0, 0, 0, 255]
-            )[:3] + [opacity]
-            style.outline_width = self.outline_width.value()
-        else:
-            style.outline_color = None
-            style.outline_width = 0
-        self.outline_button.setEnabled(self.outline_box.isChecked())
-        self.outline_width.setEnabled(self.outline_box.isChecked())
-        style.cap_height = self.cap_spin.value()
-        style.align = self.align_combo.currentData()
-        style.font = self.font_combo.currentData()
-        style.tracking = self.tracking_spin.value()
-        style.scale_x = self.width_spin.value()
-        style.scale_y = self.height_spin.value()
-        style.overflow = self.overflow_box.isChecked()
-        # Before the two cuts are read, not after: whether Bold is on offer at
-        # all is a property of the family just chosen, not of the one before
-        # it, and a box this turns off must not still reach the style.
+        if changed:
+            if self.bg_combo in changed or self.inpaint_combo in changed:
+                chosen = self.bg_combo.currentData()
+                self.inpaint_combo.setEnabled(chosen == stylemod.BG_INPAINT)
+                effective = style.inpaint_method or inpaintmod.preferred_for(
+                    block.box.w, block.box.h
+                )
+                if chosen == stylemod.BG_INPAINT and not inpaintmod.available(effective):
+                    self.style_notes.setText(inpaintmod.status(effective))
+            self.outline_button.setEnabled(self.outline_box.isChecked())
+            self.outline_width.setEnabled(self.outline_box.isChecked())
+        # Bold and Italic are files, not switches, so they are reconciled on
+        # every pass, edit or none: the family just chosen may lack the cut,
+        # and a cut can vanish between edits. `_sync_cuts` unchecks what it
+        # cannot offer, and the style follows the boxes.
         self._sync_cuts(style.font)
-        style.bold = self.bold_box.isChecked()
-        style.italic = self.italic_box.isChecked()
+        revoked = (
+            style.bold != self.bold_box.isChecked()
+            or style.italic != self.italic_box.isChecked()
+        )
+        if revoked:
+            style.bold = self.bold_box.isChecked()
+            style.italic = self.italic_box.isChecked()
+        if not changed and not revoked:
+            return
         style.locked = True
         self.style_summary.setText("Set by you.")
+        self._style_snapshot = {
+            widget: self._control_value(widget) for widget in self._style_controls
+        }
         self.editor.schedule_save()
         self.invalidate()
 
@@ -2885,7 +2953,13 @@ class RenderStep(ImageStep):
             self.progress.setValue(index - 1)
             self.editor.status(f"Rendering {index}/{len(entries)}: {entry.name}")
             try:
-                result = rendermod.render_job_image(self.job, entry)
+                # The final write reads the same pristine pixels the preview
+                # did, so the preview's reconstructions are reused verbatim -
+                # "Render all" on the image just previewed costs the text pass.
+                result = rendermod.render_job_image(
+                    self.job, entry,
+                    erase_cache=self._erase_caches.get(entry.relpath),
+                )
                 rendermod.write_entry(self.job, entry, result.array)
             except Exception as exc:
                 entry.error = str(exc)
@@ -2922,6 +2996,9 @@ class RenderStep(ImageStep):
             return
         if entry.status == RENDERED:
             entry.status = TRANSLATED
+        # The stash swap changes which pixels future renders start from, so
+        # nothing remembered against the old ones can hit again.
+        self._erase_caches.pop(entry.relpath, None)
         self.approved.discard(entry.relpath)
         self.editor.reload_lists()
         self.editor.save_now()

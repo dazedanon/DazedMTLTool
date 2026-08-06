@@ -83,6 +83,15 @@ MIN_BLOB_AREA = 300
 
 MAX_OUTLINE = 5
 
+#: How far a text colour must stand from its background before the reading is
+#: believed outright. Below this the text would be near-invisible on its own
+#: background, which no artist draws - it is the signature of a measurement
+#: that landed on the outline or on an artwork blend. Calibrated on the
+#: profile-screen image: every broken reading sat within 285 of its
+#: background, every correct one that the rescue must not touch at 417 or
+#: further.
+ILLEGIBLE = 350
+
 
 @dataclass
 class Style:
@@ -731,6 +740,33 @@ def _relief(plane: np.ndarray, kernel: np.ndarray, tolerance: int):
     )
 
 
+def _polar_marks(crop: np.ndarray, tolerance: int = 45) -> tuple[np.ndarray, np.ndarray]:
+    """``(darker, lighter)``: everything thin that stands out from its patch.
+
+    Both polarities run because neither is known in advance - the same picture
+    can hold white glyphs on a blue band and blue glyphs on white paper. The
+    same two filters also run over the alpha channel: text is often cut *into*
+    a translucent panel rather than drawn on it, and then the only thing that
+    separates the glyphs from the panel is that they are a different degree of
+    there. Skipped when the crop has one opacity throughout, which is the usual
+    case and where both masks would be empty anyway - so this cannot change the
+    reading of an ordinary opaque image.
+    """
+    span = max(5, min(31, min(crop.shape[0], crop.shape[1]) // 2))
+    if span % 2 == 0:
+        span += 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (span, span))
+    darker, lighter = _relief(
+        np.ascontiguousarray(crop[:, :, :3]), kernel, tolerance
+    )
+    alpha = np.ascontiguousarray(crop[:, :, 3])
+    if int(alpha.max()) - int(alpha.min()) > ALPHA_TOLERANCE:
+        thinner, thicker = _relief(alpha[:, :, None], kernel, ALPHA_RELIEF)
+        darker = darker | thinner
+        lighter = lighter | thicker
+    return darker, lighter
+
+
 def _local_ink(crop: np.ndarray, tolerance: int = 45) -> np.ndarray:
     """Glyphs picked out against a background that has no single colour.
 
@@ -741,8 +777,6 @@ def _local_ink(crop: np.ndarray, tolerance: int = 45) -> np.ndarray:
     A closing removes everything darker than its surroundings and thinner than
     the kernel; an opening removes everything lighter. Each result is the
     background as it would be *without* the text, so the difference is the text.
-    Both run because the polarity is not known in advance - the same picture can
-    hold white glyphs on a blue band and blue glyphs on white paper.
 
     Each filter, though, also reports the *other* one's background wholesale:
     over white paper the opening reports the paper, all of it. The smaller of
@@ -755,24 +789,7 @@ def _local_ink(crop: np.ndarray, tolerance: int = 45) -> np.ndarray:
     A plain blur will not do either: on a line of text the window holds more
     text than background, so the average *is* the text and the reading inverts.
     """
-    span = max(5, min(31, min(crop.shape[0], crop.shape[1]) // 2))
-    if span % 2 == 0:
-        span += 1
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (span, span))
-    darker, lighter = _relief(
-        np.ascontiguousarray(crop[:, :, :3]), kernel, tolerance
-    )
-    # The same two filters over the alpha channel. Text is often cut *into* a
-    # translucent panel rather than drawn on it, and then the only thing that
-    # separates the glyphs from the panel is that they are a different degree of
-    # there. Skipped when the crop has one opacity throughout, which is the
-    # usual case and where both masks would be empty anyway - so this cannot
-    # change the reading of an ordinary opaque image.
-    alpha = np.ascontiguousarray(crop[:, :, 3])
-    if int(alpha.max()) - int(alpha.min()) > ALPHA_TOLERANCE:
-        thinner, thicker = _relief(alpha[:, :, None], kernel, ALPHA_RELIEF)
-        darker = darker | thinner
-        lighter = lighter | thicker
+    darker, lighter = _polar_marks(crop, tolerance)
     if darker.mean() <= 0.35 and lighter.mean() <= 0.35:
         return darker | lighter
     return darker if darker.mean() <= lighter.mean() else lighter
@@ -803,6 +820,113 @@ def drop_thick_shapes(selection: np.ndarray) -> np.ndarray:
         if stroke > max(5.0, min(w, h) * 0.45):
             keep[index] = False
     return keep[labels]
+
+
+def _hidden_fill(crop: np.ndarray, mask: np.ndarray, style: Style) -> list[int] | None:
+    """The fill of type whose fill the ink mask cannot see, or None.
+
+    White type with a dark outline over bright artwork defeats the relief
+    reading from the other side than `_with_counters` fixes: the *lighter* mask
+    holds the artwork's own brights as well as the fill and so loses to the
+    darker one, which is the outline. Everything downstream then speaks of the
+    ring - the measured "text colour" comes out as the stroke, or as the
+    antialiased blend around it, and the English is drawn in a grey that sinks
+    into exactly the background the original was outlined to stand off from.
+    On the profile-screen test image that was 31 blocks of 80, every one of
+    them white in the original.
+
+    The fill is still in the picture: it is the coherent colour hugging the ink
+    that is neither the ink nor the background. Measured, in that order:
+
+    * *the reading is broken* - the measured text colour sits close to the
+      measured background. That is the definition of the failure: text the
+      colour of its own background cannot be read, and game text is drawn to
+      be read. A reading that is plainly legible is never overturned - on
+      this image the rescue's one wrong move was to "fix" two blocks whose
+      white was already right, because their dark outline mass looked exactly
+      like a hidden fill. Position cannot tell a fill from an outline at this
+      size (both are pinched between ink in a dense kanji row - measured, not
+      supposed); legibility can.
+    * *on the other side of the relief* - the mask kept one polarity, so what
+      it missed is a mark of the opposite one, within three pixels of the ink
+      (three, because the reach has to cross to the middle of the fill);
+    * *substantial* - at least 12% of the ink's own mass, which an antialiased
+      rim never reaches;
+    * *coherent* - a third within one tone, which artwork fragments are not;
+    * *legible* - far from the measured background, because a fill the colour
+      of its own background is not a reading, it is the failure repeated;
+    * *not already accounted for* - far from the measured outline too. A band
+      the outline's own colour is the outline, seen from the other side.
+
+    Only consulted when the background is being reconstructed: everywhere else
+    the background has a colour, the mask is measured against it, and a fill
+    that contrasts with it is already in the mask.
+    """
+    ink = int(mask.sum())
+    if ink < 24:
+        return None
+    if not style.fill or len(style.fill) < 4 or style.fill[3] <= ALPHA_OPAQUE:
+        return None
+    if distance(style.text_color, style.fill) > ILLEGIBLE:
+        return None
+    darker, lighter = _polar_marks(crop)
+    # The ink came from one side of the relief, so what its reading missed is
+    # on the other side. Pooling both sides lets the artwork's darks vote
+    # against the fill on the very blocks being rescued.
+    with_dark = int((mask & darker).sum())
+    with_light = int((mask & lighter).sum())
+    opposite = lighter if with_dark >= with_light else darker
+    near = cv2.dilate(
+        mask.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    ) > 0
+    band = opposite & near & ~mask
+    candidates = band & (crop[:, :, 3] > ALPHA_OPAQUE)
+    # The gaps between strokes are marked by the same relief - against a dark
+    # ring everything beside it reads as a light mark, the paper included -
+    # and left in they out-vote the fill with more background.
+    reference = np.array(style.fill[:3], dtype=np.int16)
+    away = (
+        np.abs(crop[:, :, :3].astype(np.int16) - reference).sum(axis=2) > 90
+    )
+    candidates &= away
+    pixels = crop[candidates]
+    if pixels.shape[0] < max(24, int(ink * 0.12)):
+        return None
+    colour = dominant_color(pixels)
+    if flat_share(pixels, colour, tolerance=45) < 0.35:
+        return None
+    if distance(colour, style.fill) <= 90:
+        return None
+    if style.outline_color is not None and distance(colour, style.outline_color) <= 90:
+        return None
+    return colour
+
+
+def _ring_stroke(
+    crop: np.ndarray, mask: np.ndarray, fill: list[int], opacity: int
+) -> tuple[list[int], int]:
+    """The stroke colour and width of a mask that turned out to be a ring.
+
+    The mask holds the outline and its blends into everything around it, so a
+    single dominant colour lands between the two. Split by luminance instead
+    and take the side *farther from the recovered fill* - for a dark ring
+    around white type that is the dark side, and for the inverse type the
+    bright one, with nothing assumed about which way round this image is.
+    """
+    pixels = crop[mask]
+    luma = (
+        0.299 * pixels[:, 0] + 0.587 * pixels[:, 1] + 0.114 * pixels[:, 2]
+    ).astype(np.uint8)
+    threshold, _ = cv2.threshold(luma, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    halves = [pixels[luma <= threshold], pixels[luma > threshold]]
+    candidates = [dominant_color(half) for half in halves if half.shape[0] >= 12]
+    if not candidates:
+        candidates = [dominant_color(pixels)]
+    colour = max(candidates, key=lambda c: distance(c, fill))
+
+    reach = cv2.distanceTransform(mask.astype(np.uint8), cv2.DIST_L2, 3)
+    width = int(round(float(np.percentile(reach[mask], 90))))
+    return list(colour[:3]) + [opacity], max(1, min(MAX_OUTLINE, width))
 
 
 def ink_opacity(crop: np.ndarray, mask: np.ndarray) -> int:
@@ -1059,6 +1183,22 @@ def measure(array: np.ndarray, block, others: list[Box] | None = None) -> Style:
         # One piece of type, one opacity: a stroke drawn at a different alpha to
         # the fill it hugs shows as a seam down the middle of every glyph.
         style.outline_color = list(style.outline_color[:3]) + [style.text_color[3]]
+    if style.background == BG_INPAINT:
+        # Over artwork the reading above can come back holding the *outline*:
+        # see `_hidden_fill`. It is only believed when it names a colour far
+        # from the one just measured - anything nearer is the same reading
+        # with more steps.
+        hidden = _hidden_fill(crop, mask, style)
+        if hidden is not None and distance(hidden, style.text_color) > 140:
+            opacity = style.text_color[3]
+            style.outline_color, style.outline_width = _ring_stroke(
+                crop, mask, hidden, opacity
+            )
+            style.text_color = list(hidden[:3]) + [opacity]
+            style.notes.append(
+                "the fill is invisible against this artwork; it was read from "
+                "the paint between the outline strokes"
+            )
     style.cap_height = measure_cap_height(
         mask, block.vertical, len(block.lines)
     )

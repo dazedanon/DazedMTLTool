@@ -25,6 +25,7 @@ different reactions from the person looking at the preview.
 
 from __future__ import annotations
 
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -176,9 +177,16 @@ def word_limit(target: Box, words: list[Box], pad: int = 3) -> np.ndarray | None
 
 
 def erase(
-    array: np.ndarray, box: Box, style: Style, limit: np.ndarray | None = None
+    array: np.ndarray,
+    box: Box,
+    style: Style,
+    limit: np.ndarray | None = None,
+    cache: dict | None = None,
 ) -> Note:
-    """Reconstruct the background under one block's glyphs, in place."""
+    """Reconstruct the background under one block's glyphs, in place.
+
+    *cache* remembers reconstructions across renders - see ``_reconstruct``.
+    """
     if style.background == BG_KEEP:
         return Note("", True, "background left as it is", tight=True)
 
@@ -260,7 +268,7 @@ def erase(
         # Only the glyph pixels go into the mask. The one inpaint that looked
         # awful in testing had a box-wide mask over 24% artwork, and it smeared
         # the artwork rather than the text.
-        return _reconstruct(array, target, mask, style)
+        return _reconstruct(array, target, mask, style, box, cache)
 
     # Everything above needs its own measurement to work with, and falling
     # through means the method is set but that measurement is not there. Say
@@ -270,8 +278,19 @@ def erase(
     return Note("", False, _unerasable(style))
 
 
+#: How many reconstructions one cache may hold before the oldest are dropped.
+#: Sized for the editor's case - every block of the image on screen, with room
+#: for a few variants while a method is being compared - not for a whole job.
+CACHE_CAP = 256
+
+
 def _reconstruct(
-    array: np.ndarray, target: Box, mask: np.ndarray, style: Style
+    array: np.ndarray,
+    target: Box,
+    mask: np.ndarray,
+    style: Style,
+    box: Box | None = None,
+    cache: dict | None = None,
 ) -> Note:
     """Rebuild the artwork under *mask*, colour **and** opacity.
 
@@ -287,8 +306,17 @@ def _reconstruct(
     away to average from. A model is the opposite: a hole with no picture around
     it is a hole it has nothing to say about, so it is handed a frame of context
     and only the masked pixels are taken from what comes back.
+
+    *box* is the block's own rectangle, before the erase bleed - the figure the
+    panel also sees, so the two choose the size-dependent default from the same
+    number. *cache* maps ``(method, window, pixels, hole)`` to the repaired
+    window: a reconstruction is a pure function of those four, so a hit is
+    exact, not approximate. This is what makes turning a type knob on one block
+    cheap on an image with eighty - the other seventy-nine holes are filled
+    from the cache instead of being reconstructed again from the same inputs.
     """
-    method = style.inpaint_method or inpaintmod.preferred()
+    sized = target if box is None else box
+    method = style.inpaint_method or inpaintmod.preferred_for(sized.w, sized.h)
     bounds = Box.from_size(array.shape[1], array.shape[0])
 
     # Fully transparent pixels have no colour to lend - what is stored under
@@ -321,6 +349,20 @@ def _reconstruct(
         target.x - window.x : target.x2 - window.x,
     ] = mask
 
+    key = None
+    if cache is not None:
+        key = (
+            method,
+            window.as_tuple(),
+            zlib.crc32(view.tobytes()),
+            zlib.crc32(hole.tobytes()),
+        )
+        remembered = cache.get(key)
+        if remembered is not None:
+            pixels, ok, message, tight = remembered
+            view[:, :] = pixels
+            return Note("", ok, message, tight=tight)
+
     unknown = hole | (view[:, :, 3] == 0)
 
     rgb = cv2.cvtColor(np.ascontiguousarray(view), cv2.COLOR_RGBA2RGB)
@@ -335,16 +377,25 @@ def _reconstruct(
         # Nothing was reconstructed, whatever the reason. Saying "reconstructed"
         # here is the failure the user has to spot for themselves, and they
         # should not have to.
-        return Note("", True, (
+        note = Note("", True, (
             "there was too little clean artwork around this box to rebuild "
             "what the glyphs were sitting on — nothing was erased. Try a "
             "different “Inpainting method”, or widen the box"
         ), tight=True)
+    else:
+        # Named, because which model ran is otherwise invisible: the method
+        # box on the panel shows what *will* run, and when that is a fallback
+        # the note is the only place the truth of this render appears.
+        message = f"artwork reconstructed under the glyphs ({inpaintmod.short_label(method)})"
+        if complaint:
+            message = f"{message} - {complaint}"
+        note = Note("", True, message, tight=True)
 
-    message = "artwork reconstructed under the glyphs"
-    if complaint:
-        message = f"{message} - {complaint}"
-    return Note("", True, message, tight=True)
+    if cache is not None:
+        cache[key] = (view.copy(), note.ok, note.message, note.tight)
+        while len(cache) > CACHE_CAP:
+            cache.pop(next(iter(cache)))
+    return note
 
 
 _MISSING = {
@@ -773,12 +824,16 @@ def render_entry(
     only: str = "",
     paint: np.ndarray | None = None,
     cut: np.ndarray | None = None,
+    erase_cache: dict | None = None,
 ) -> Result:
     """Render one image. *source* is the pristine original and is never mutated.
 
     ``only`` renders a single block, which is what the preview uses while a knob
     is being dragged. ``paint`` is the user's manual touch-up layer and ``cut``
-    is what their eraser took out of the picture.
+    is what their eraser took out of the picture. ``erase_cache`` is handed to
+    every reconstruction so a repeat render pays only for the blocks whose
+    inputs actually changed - pass the same dict across renders of the same
+    image, and nothing else.
 
     Four passes, not one, and the order is the point:
 
@@ -831,7 +886,8 @@ def render_entry(
             continue
 
         erased = erase(
-            array, box, style, word_limit(_bleed_box(array, box), word_boxes)
+            array, box, style,
+            word_limit(_bleed_box(array, box), word_boxes), erase_cache,
         )
         if not erased.ok:
             notes[block.block_id] = Note(block.block_id, False, erased.message)
@@ -888,6 +944,7 @@ def render_job_image(
     font_name: str | None = None,
     paint: np.ndarray | None = None,
     cut: np.ndarray | None = None,
+    erase_cache: dict | None = None,
 ) -> Result:
     """Render one job image from its pristine pixels.
 
@@ -908,7 +965,10 @@ def render_job_image(
             paint = load_layer(job, entry, source.shape)
         if cut is None:
             cut = load_cut(job, entry, source.shape)
-    return render_entry(source, entry, font_name=font_name, paint=paint, cut=cut)
+    return render_entry(
+        source, entry,
+        font_name=font_name, paint=paint, cut=cut, erase_cache=erase_cache,
+    )
 
 
 def write_entry(job, entry, array: np.ndarray) -> Path:

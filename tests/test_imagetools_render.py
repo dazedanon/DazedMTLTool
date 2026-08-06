@@ -2089,5 +2089,346 @@ class OutlinedTypeTests(unittest.TestCase):
         self.assertFalse(bool(mask[25 - 6, 20 - 4]))
 
 
+class ReconstructionCacheTests(unittest.TestCase):
+    """Repeat renders pay only for the blocks whose inputs changed.
+
+    The preview re-renders the whole image on every knob turn, and with a
+    model as the reconstruction that was a multi-second freeze per turn on an
+    image with eighty blocks. A reconstruction is a pure function of the
+    method, the window and the pixels in it, so remembering it is exact.
+    """
+
+    def counting(self, seen):
+        real = inpaintmod.fill
+
+        def fill(rgb, mask, method=inpaintmod.DEFAULT, *args, **kwargs):
+            seen.append(method)
+            return real(rgb, mask, method, *args, **kwargs)
+
+        return fill
+
+    def scene(self):
+        style = Style(
+            background=stylemod.BG_INPAINT,
+            fill=[0, 0, 0, 255],
+            inpaint_method=inpaintmod.TELEA,
+        )
+        return plate(panel_alpha=255), style
+
+    def test_the_same_erase_is_paid_for_once(self):
+        seen, remembered = [], {}
+        array, style = self.scene()
+        box = Box(28, 26, 172, 54)
+        first, second = array.copy(), array.copy()
+        with patch.object(inpaintmod, "fill", self.counting(seen)):
+            note_a = render.erase(first, box, style, None, remembered)
+            note_b = render.erase(second, box, style, None, remembered)
+        self.assertEqual(len(seen), 1)
+        self.assertTrue((first == second).all())
+        # The note is part of the result: a hit must say what the miss said.
+        self.assertEqual(
+            (note_a.ok, note_a.message, note_a.tight),
+            (note_b.ok, note_b.message, note_b.tight),
+        )
+
+    def test_only_the_changed_block_recomputes(self):
+        seen, remembered = [], {}
+        array, style = self.scene()
+        left, right = Box(28, 26, 96, 54), Box(104, 26, 172, 54)
+        with patch.object(inpaintmod, "fill", self.counting(seen)):
+            work = array.copy()
+            render.erase(work, left, style, None, remembered)
+            render.erase(work, right, style, None, remembered)
+            self.assertEqual(len(seen), 2)
+            work = array.copy()
+            render.erase(work, left, style, None, remembered)
+            render.erase(work, Box(104, 24, 172, 54), style, None, remembered)
+        self.assertEqual(len(seen), 3, "the untouched block was recomputed")
+
+    def test_a_different_method_is_a_different_entry(self):
+        seen, remembered = [], {}
+        array, style = self.scene()
+        box = Box(28, 26, 172, 54)
+        with patch.object(inpaintmod, "fill", self.counting(seen)):
+            render.erase(array.copy(), box, style, None, remembered)
+            style.inpaint_method = inpaintmod.NS
+            render.erase(array.copy(), box, style, None, remembered)
+        self.assertEqual(seen, [inpaintmod.TELEA, inpaintmod.NS])
+
+    def test_without_a_cache_nothing_is_remembered(self):
+        seen = []
+        array, style = self.scene()
+        box = Box(28, 26, 172, 54)
+        with patch.object(inpaintmod, "fill", self.counting(seen)):
+            render.erase(array.copy(), box, style)
+            render.erase(array.copy(), box, style)
+        self.assertEqual(len(seen), 2)
+
+    def test_the_cache_is_kept_from_growing_without_bound(self):
+        array, style = self.scene()
+        remembered = {}
+        for step in range(render.CACHE_CAP + 40):
+            style.inpaint_method = (
+                inpaintmod.TELEA if step % 2 else inpaintmod.NS
+            )
+            shift = step % 140
+            render.erase(
+                array.copy(), Box(10 + shift, 26, 50 + shift, 54),
+                style, None, remembered,
+            )
+        self.assertLessEqual(len(remembered), render.CACHE_CAP)
+
+    @needs_font
+    def test_render_entry_hands_the_cache_down(self):
+        seen, remembered = [], {}
+        array = plate(panel_alpha=255)
+        item = block(Box(28, 26, 172, 54), target="Hi")
+        item.style = Style(
+            background=stylemod.BG_INPAINT,
+            fill=[0, 0, 0, 255],
+            inpaint_method=inpaintmod.TELEA,
+            text_color=[255, 255, 255, 255],
+            cap_height=14,
+        )
+        with patch.object(inpaintmod, "fill", self.counting(seen)):
+            one = render.render_entry(
+                array, entry_of([item]), erase_cache=remembered
+            )
+            two = render.render_entry(
+                array, entry_of([item]), erase_cache=remembered
+            )
+        self.assertEqual(len(seen), 1)
+        self.assertTrue((one.array == two.array).all())
+
+
+class SizeAwareDefaultTests(unittest.TestCase):
+    """AOT is for bubbles; a hole the size of a figure goes to LaMa.
+
+    Measured on the profile-screen image: a 259x441 block through AOT came
+    back a dark blob with the erased text embossed into it, and through LaMa
+    kept the figure's silhouette and colours. Nothing here asserts quality -
+    it asserts who is asked, which is the part that was invisible.
+    """
+
+    def setUp(self):
+        inpaintmod.forget()
+        self.addCleanup(inpaintmod.forget)
+
+    def test_small_blocks_keep_the_preferred_model(self):
+        with patch.object(inpaintmod, "available", lambda m: m == inpaintmod.AOT):
+            self.assertEqual(
+                inpaintmod.preferred_for(120, 30), inpaintmod.AOT
+            )
+
+    def test_large_blocks_prefer_lama_when_it_is_ready(self):
+        with patch.object(
+            inpaintmod, "available",
+            lambda m: m in (inpaintmod.AOT, inpaintmod.LAMA),
+        ):
+            self.assertEqual(
+                inpaintmod.preferred_for(
+                    inpaintmod.BIG_SIDE, inpaintmod.BIG_SIDE
+                ),
+                inpaintmod.LAMA,
+            )
+
+    def test_a_narrow_banner_is_not_a_large_block(self):
+        """The shorter side decides: a 500px-wide label is still bubble-sized."""
+        with patch.object(
+            inpaintmod, "available",
+            lambda m: m in (inpaintmod.AOT, inpaintmod.LAMA),
+        ):
+            self.assertEqual(
+                inpaintmod.preferred_for(500, inpaintmod.BIG_SIDE - 1),
+                inpaintmod.AOT,
+            )
+
+    def test_without_lama_the_size_changes_nothing(self):
+        with patch.object(inpaintmod, "available", lambda m: m == inpaintmod.AOT):
+            self.assertEqual(
+                inpaintmod.preferred_for(400, 400), inpaintmod.AOT
+            )
+
+    def test_the_erase_asks_with_the_blocks_own_size(self):
+        """A big block that chose nothing reconstructs through LaMa."""
+        seen = []
+        array = canvas(400, 400, (255, 255, 255, 255))
+        glyphs(array, Box(40, 40, 360, 360), (10, 10, 10, 255), pitch=40, stroke=8)
+        style = Style(background=stylemod.BG_INPAINT, fill=[255, 255, 255, 255])
+        with patch.object(
+            inpaintmod, "available",
+            lambda m: m in (inpaintmod.AOT, inpaintmod.LAMA),
+        ):
+            with patch.object(
+                inpaintmod, "fill",
+                lambda rgb, mask, method, *a, **k: (seen.append(method) or (rgb, "")),
+            ):
+                render.erase(array, Box(38, 38, 362, 362), style)
+        self.assertEqual(seen, [inpaintmod.LAMA])
+
+    def test_the_note_names_the_method_that_ran(self):
+        """The combo says what will run; the note is the record of what did."""
+        array = plate(panel_alpha=255)
+        style = Style(
+            background=stylemod.BG_INPAINT,
+            fill=[0, 0, 0, 255],
+            inpaint_method=inpaintmod.TELEA,
+        )
+        note = render.erase(array, Box(28, 26, 172, 54), style)
+        self.assertTrue(note.ok)
+        self.assertIn("(Telea)", note.message)
+
+
+class HiddenFillTests(unittest.TestCase):
+    """White type, dark outline, bright artwork: the fill is not in the mask.
+
+    The relief reading keeps the smaller polarity, and over bright artwork the
+    lighter mask holds the artwork's own brights as well as the fill - so the
+    ink mask is the outline ring, and every colour downstream was read off the
+    ring. On the profile-screen image that put 31 blocks of 80 into greys that
+    sank into exactly the background the original was outlined to stand off
+    from.
+    """
+
+    def artwork(self, base, amplitude=60, width=200, height=80, seed=7):
+        """Blotches at figure scale plus grain: varies like a drawing, not
+        like sensor noise, so `classify_background` calls it artwork."""
+        rng = np.random.default_rng(seed)
+        blobs = rng.integers(
+            -amplitude, amplitude, size=(height // 8, width // 8, 3), dtype=np.int16
+        ).astype(np.float32)
+        blobs = cv2.resize(blobs, (width, height), interpolation=cv2.INTER_LINEAR)
+        grain = rng.integers(-12, 12, size=(height, width, 3), dtype=np.int16)
+        rgb = np.clip(
+            np.array(base, dtype=np.int16)[None, None, :]
+            + blobs.astype(np.int16) + grain,
+            0, 255,
+        ).astype(np.uint8)
+        alpha = np.full((height, width, 1), 255, dtype=np.uint8)
+        return np.ascontiguousarray(np.concatenate([rgb, alpha], axis=2))
+
+    def sandwich(self, array, box, dark=(25, 30, 50, 255), core=(255, 255, 255, 255)):
+        """Dark|light|dark strips: outlined strokes, open at both ends.
+
+        Open on purpose - a 1px antialiased outline never closes around its
+        fill, which is exactly why `_with_counters` cannot recover this case
+        and `_hidden_fill` exists. Returns the *outline* pixels as a mask over
+        the whole array, which is what the relief reading recovers on the real
+        image once the artwork's own brights have drowned the lighter half.
+        """
+        ring = np.zeros(array.shape[:2], dtype=bool)
+        for left in range(box.x, box.x2 - 8, 14):
+            array[box.y : box.y2, left : left + 9] = dark
+            array[box.y : box.y2, left + 2 : left + 7] = core
+            ring[box.y : box.y2, left : left + 2] = True
+            ring[box.y : box.y2, left + 7 : left + 9] = True
+        return ring
+
+    def test_the_fill_between_the_strokes_is_found(self):
+        array = canvas(200, 80, (60, 60, 70, 255))
+        ring = self.sandwich(array, Box(40, 30, 160, 48))
+        crop_box = Box(38, 26, 162, 52)
+        rows, cols = crop_box.slices()
+        # What measurement said before the rescue: the ring, which is next to
+        # invisible against this background - the condition for a second look.
+        style = Style(
+            background=stylemod.BG_INPAINT,
+            fill=[60, 60, 70, 255],
+            text_color=[25, 30, 50, 255],
+        )
+        colour = stylemod._hidden_fill(array[rows, cols], ring[rows, cols], style)
+        self.assertIsNotNone(colour)
+        self.assertGreater(min(colour[:3]), 240)
+
+    def test_plain_strokes_offer_no_hidden_fill(self):
+        """Un-outlined dark strokes: everything beside them is background."""
+        array = canvas(200, 80, (60, 60, 70, 255))
+        self.sandwich(array, Box(40, 30, 160, 48), core=(25, 30, 50, 255))
+        # The whole stroke is the mask when there is no core to miss.
+        stroke = np.zeros(array.shape[:2], dtype=bool)
+        stroke[30:48, 40:160] = (array[30:48, 40:160, :3] < 55).all(axis=2)
+        crop_box = Box(38, 26, 162, 52)
+        rows, cols = crop_box.slices()
+        style = Style(
+            background=stylemod.BG_INPAINT,
+            fill=[60, 60, 70, 255],
+            text_color=[25, 30, 50, 255],
+        )
+        self.assertIsNone(
+            stylemod._hidden_fill(array[rows, cols], stroke[rows, cols], style)
+        )
+
+    def test_a_legible_reading_is_never_overturned(self):
+        """The rescue's one wrong move, pinned: white read correctly, with an
+        unmeasured dark outline beside it that looks exactly like a hidden
+        fill. Position cannot tell the two apart at this size; the fact that
+        white on this background is plainly readable can."""
+        array = self.artwork((117, 116, 113), amplitude=20)
+        ring = self.sandwich(
+            array, Box(40, 30, 160, 48),
+            dark=(255, 255, 255, 255), core=(18, 17, 14, 255),
+        )
+        # Mask = the white the reading already holds; the dark "core" plays
+        # the outline mass hugging it.
+        crop_box = Box(38, 26, 162, 52)
+        rows, cols = crop_box.slices()
+        style = Style(
+            background=stylemod.BG_INPAINT,
+            fill=[117, 116, 113, 255],
+            text_color=[255, 255, 255, 255],
+        )
+        self.assertIsNone(
+            stylemod._hidden_fill(array[rows, cols], ring[rows, cols], style)
+        )
+
+    def test_a_band_the_outlines_colour_is_the_outline(self):
+        """A measured outline explains the band; nothing is left to rescue."""
+        array = canvas(200, 80, (60, 60, 70, 255))
+        ring = self.sandwich(array, Box(40, 30, 160, 48))
+        crop_box = Box(38, 26, 162, 52)
+        rows, cols = crop_box.slices()
+        style = Style(
+            background=stylemod.BG_INPAINT,
+            fill=[60, 60, 70, 255],
+            text_color=[25, 30, 50, 255],
+            outline_color=[255, 255, 255, 255],
+        )
+        self.assertIsNone(
+            stylemod._hidden_fill(array[rows, cols], ring[rows, cols], style)
+        )
+
+    def test_measure_recovers_white_type_over_dark_artwork(self):
+        """The whole path: ring mask in, white fill and dark outline out."""
+        array = self.artwork((60, 60, 70), amplitude=30)
+        ring = self.sandwich(array, Box(40, 30, 160, 48))
+        item = block(Box(38, 26, 162, 52))
+        rows, cols = item.box.slices()
+        ring_crop = ring[rows, cols]
+
+        def polarity_lost(crop, tolerance=45):
+            # What the relief reading returns on the real image: the artwork's
+            # own brights drown the lighter mask, so only the outline is kept.
+            if crop.shape[:2] == ring_crop.shape:
+                return ring_crop.copy()
+            return np.zeros(crop.shape[:2], dtype=bool)
+
+        with patch.object(stylemod, "_local_ink", polarity_lost):
+            measured = stylemod.measure(array, item)
+        self.assertEqual(measured.background, stylemod.BG_INPAINT)
+        self.assertGreater(min(measured.text_color[:3]), 240)
+        self.assertIsNotNone(measured.outline_color)
+        self.assertLess(max(measured.outline_color[:3]), 90)
+        self.assertGreaterEqual(measured.outline_width, 1)
+        self.assertTrue(any("between the outline" in n for n in measured.notes))
+
+    def test_type_that_stands_off_its_artwork_is_left_as_measured(self):
+        """White on dark speckle reads correctly already; no rescue fires."""
+        array = self.artwork((45, 50, 65), amplitude=30)
+        glyphs(array, Box(40, 30, 160, 50), (255, 255, 255, 255), stroke=5, soft=False)
+        measured = stylemod.measure(array, block(Box(38, 28, 162, 52)))
+        self.assertEqual(measured.background, stylemod.BG_INPAINT)
+        self.assertGreater(min(measured.text_color[:3]), 220)
+
+
 if __name__ == "__main__":
     unittest.main()
