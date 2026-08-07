@@ -17,6 +17,20 @@ from util import batch_providers, evaluation
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _mock_live_translation_response(_provider, params, **_kwargs):
+    """Build a schema-shaped live response for evaluation unit tests."""
+    schema = params["response_format"]["json_schema"]["schema"]
+    count = int(schema["properties"]["translations"]["minItems"])
+    return {
+        "text": json.dumps({"translations": ["English text"] * count}),
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "thinking_tokens": 0,
+    }
+
+
 class EvaluationAtomicWriteTests(unittest.TestCase):
     def test_atomic_json_write_retries_transient_replace_lock(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -707,8 +721,12 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertEqual(
             params["anthropic"]["output_config"]["format"]["schema"]
             ["required"],
-            [f"Line{i}" for i in range(1, request["schema_line_count"] + 1)],
+            ["translations"],
         )
+        schema = params["anthropic"]["output_config"]["format"]["schema"]
+        translations = schema["properties"]["translations"]
+        self.assertEqual(translations["minItems"], request["schema_line_count"])
+        self.assertEqual(translations["maxItems"], request["schema_line_count"])
         live_anthropic = evaluation._provider_params(
             {**candidates[2], "execution": "live"}, request
         )
@@ -1160,15 +1178,7 @@ class EvaluationManifestTests(unittest.TestCase):
             })
 
             def response(_provider, params, **_kwargs):
-                required = params["response_format"]["json_schema"]["schema"]["required"]
-                return {
-                    "text": json.dumps({key: "English text" for key in required}),
-                    "prompt_tokens": 100,
-                    "completion_tokens": 20,
-                    "cache_read_input_tokens": 0,
-                    "cache_creation_input_tokens": 0,
-                    "thinking_tokens": 0,
-                }
+                return _mock_live_translation_response(_provider, params)
 
             with (
                 mock.patch.object(
@@ -1540,15 +1550,7 @@ class EvaluationManifestTests(unittest.TestCase):
             })
 
             def response(_provider, params, **_kwargs):
-                required = params["response_format"]["json_schema"]["schema"]["required"]
-                return {
-                    "text": json.dumps({key: "English text" for key in required}),
-                    "prompt_tokens": 100,
-                    "completion_tokens": 20,
-                    "cache_read_input_tokens": 0,
-                    "cache_creation_input_tokens": 0,
-                    "thinking_tokens": 0,
-                }
+                return _mock_live_translation_response(_provider, params)
 
             with (
                 mock.patch.object(evaluation, "_clients", return_value=(object(), None)),
@@ -1657,15 +1659,7 @@ class EvaluationManifestTests(unittest.TestCase):
             })
 
             def response(_provider, params, **_kwargs):
-                required = params["response_format"]["json_schema"]["schema"]["required"]
-                return {
-                    "text": json.dumps({key: "English text" for key in required}),
-                    "prompt_tokens": 100,
-                    "completion_tokens": 20,
-                    "cache_read_input_tokens": 0,
-                    "cache_creation_input_tokens": 0,
-                    "thinking_tokens": 0,
-                }
+                return _mock_live_translation_response(_provider, params)
 
             responses = [RuntimeError("HTTP 429: rate limited"), response]
 
@@ -1735,15 +1729,7 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertNotIn("provider_errors", live_candidate)
 
             def response(_provider, params, **_kwargs):
-                required = params["response_format"]["json_schema"]["schema"]["required"]
-                return {
-                    "text": json.dumps({key: "English text" for key in required}),
-                    "prompt_tokens": 100,
-                    "completion_tokens": 20,
-                    "cache_read_input_tokens": 0,
-                    "cache_creation_input_tokens": 0,
-                    "thinking_tokens": 0,
-                }
+                return _mock_live_translation_response(_provider, params)
 
             with (
                 mock.patch.object(evaluation, "_clients", return_value=(object(), None)),

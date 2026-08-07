@@ -225,5 +225,43 @@ class TranslationContentValidationTests(unittest.TestCase):
         self.assertIn("Excessive character repetition", warnings[0])
 
 
+class TranslationResponseSchemaTests(unittest.TestCase):
+    def test_schema_pins_positional_translations_array(self):
+        schema = tr.createTranslationSchema(3)
+        translations = schema["properties"]["translations"]
+        self.assertEqual(schema["required"], ["translations"])
+        self.assertEqual(translations["minItems"], 3)
+        self.assertEqual(translations["maxItems"], 3)
+        self.assertEqual(translations["items"], {"type": "string"})
+
+    def test_extract_and_log_keep_numeric_line_order(self):
+        # Provider may emit LineN keys lexically (Line1, Line10, Line2).
+        raw = (
+            '{"Line1":"One","Line10":"Ten","Line2":"Two","Line3":"Three",'
+            '"Line4":"Four","Line5":"Five","Line6":"Six","Line7":"Seven",'
+            '"Line8":"Eight","Line9":"Nine"}'
+        )
+        self.assertEqual(
+            tr.extractTranslation(raw, True),
+            [
+                "One", "Two", "Three", "Four", "Five",
+                "Six", "Seven", "Eight", "Nine", "Ten",
+            ],
+        )
+        logged = tr.format_translation_response_for_log(raw)
+        self.assertLess(logged.index('"Line2"'), logged.index('"Line10"'))
+        self.assertEqual(
+            tr.extractTranslation(
+                '{"translations":["A","B","C"]}', True
+            ),
+            ["A", "B", "C"],
+        )
+        array_logged = tr.format_translation_response_for_log(
+            '{"translations":["A","B","C"]}'
+        )
+        self.assertIn('"Line1": "A"', array_logged)
+        self.assertIn('"Line3": "C"', array_logged)
+
+
 if __name__ == "__main__":
     unittest.main()

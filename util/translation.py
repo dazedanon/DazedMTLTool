@@ -3489,19 +3489,77 @@ def createContext(config, subbedText, formatType, history=None):
 
 
 def createTranslationSchema(numLines):
-    """Create a JSON schema for translation response based on number of lines."""
-    properties = {}
-    required = []
-    for i in range(1, numLines + 1):
-        line_key = f"Line{i}"
-        properties[line_key] = {"type": "string"}
-        required.append(line_key)
+    """Create a JSON schema for translation response based on number of lines.
+
+    Use a positional ``translations`` array rather than ``Line1``/``Line2``/
+    ``Line10`` object keys. OpenAI often emits those object keys in lexical
+    order, which is hard to read and invites off-by-one confusion. ``minItems``
+    / ``maxItems`` pin the exact line count for strict providers.
+    """
+    count = max(1, int(numLines or 1))
     return {
         "type": "object",
-        "properties": properties,
-        "required": required,
+        "properties": {
+            "translations": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": count,
+                "maxItems": count,
+            }
+        },
+        "required": ["translations"],
         "additionalProperties": False,
     }
+
+
+def format_translation_response_for_log(raw_text) -> str:
+    """Pretty-print a model/cache response with LineN keys in numeric order.
+
+    Logs stay human-readable whether the provider returned a translations
+    array or a LineN object (including lexically ordered keys).
+    """
+    if raw_text is None:
+        return ""
+    if not isinstance(raw_text, str):
+        try:
+            parsed = raw_text
+        except Exception:
+            return str(raw_text)
+    else:
+        try:
+            parsed = json.loads(raw_text)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return str(raw_text)
+
+    if not isinstance(parsed, dict):
+        try:
+            return json.dumps(parsed, indent=4, ensure_ascii=False)
+        except (TypeError, ValueError):
+            return str(parsed)
+
+    if isinstance(parsed.get("translations"), list):
+        ordered = {
+            f"Line{i + 1}": value
+            for i, value in enumerate(parsed["translations"])
+        }
+        return json.dumps(ordered, indent=4, ensure_ascii=False)
+
+    numeric_keys = []
+    for key in parsed.keys():
+        match = re.fullmatch(r"Line(\d+)", str(key))
+        if match:
+            numeric_keys.append(int(match.group(1)))
+    if numeric_keys:
+        ordered = {
+            f"Line{n}": parsed.get(f"Line{n}", "")
+            for n in sorted(numeric_keys)
+        }
+        return json.dumps(ordered, indent=4, ensure_ascii=False)
+
+    try:
+        return json.dumps(parsed, indent=4, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return str(parsed)
 
 
 def _anthropic_content_text(content) -> str:
@@ -5058,12 +5116,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             
             formatted_output = last_raw_translation
             try:
-                parsed_json = json.loads(last_raw_translation)
-                # Normalize array-based output to LineN format for log readability
-                if isinstance(parsed_json, dict) and "translations" in parsed_json and isinstance(parsed_json["translations"], list):
-                    parsed_json = {f"Line{i+1}": v for i, v in enumerate(parsed_json["translations"])}
-                formatted_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
-            except (json.JSONDecodeError, ValueError):
+                formatted_output = format_translation_response_for_log(
+                    last_raw_translation
+                )
+            except Exception:
                 pass
             
             # Only open and write to log file when we have something to log
@@ -5110,11 +5166,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
 
             formatted_mismatch_output = last_raw_translation
             try:
-                parsed_json = json.loads(last_raw_translation)
-                if isinstance(parsed_json, dict) and "translations" in parsed_json and isinstance(parsed_json["translations"], list):
-                    parsed_json = {f"Line{i+1}": v for i, v in enumerate(parsed_json["translations"])}
-                formatted_mismatch_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
-            except (json.JSONDecodeError, ValueError):
+                formatted_mismatch_output = format_translation_response_for_log(
+                    last_raw_translation
+                )
+            except Exception:
                 pass
             with open(config.mismatchLogPath, "a+", encoding="utf-8") as mismatchFile:
                 mismatchFile.write(f"Failed after retries: {filename}\n")
