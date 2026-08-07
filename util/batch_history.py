@@ -421,7 +421,14 @@ def refresh_batch_status(batch_id: str) -> dict:
     }
     if local_status:
         fields["status"] = local_status
-    return upsert_history_entry(batch_id, **fields)
+    updated = upsert_history_entry(batch_id, **fields)
+    # Refresh is how the UI learns a provider cancel finished after the local
+    # cancel call already returned "cancelling", or after cancel outside the app.
+    # Drop that id from active state so a later Batch History resume is not
+    # blocked by a run that can no longer be resumed.
+    if local_status == STATUS_CANCELED:
+        _remove_active_batch_ids([batch_id])
+    return updated
 
 
 def cancel_batches(batch_ids: Iterable[str]) -> list[dict]:
@@ -440,8 +447,28 @@ def cancel_batches(batch_ids: Iterable[str]) -> list[dict]:
             status_info = provider_retrieve_batch(provider, bid, client=client)
             api_status = status_info["api_status"]
             if api_status not in CANCELABLE_API:
-                results.append({"id": bid, "ok": False, "error": f"not cancelable ({api_status})"})
-                upsert_history_entry(bid, notes=f"cancel skipped: {api_status}", api_status=api_status)
+                # Already cancelled at the provider: sync local history + clear
+                # the active lock. Other terminal statuses stay non-cancelable.
+                if api_status == "cancelled":
+                    mark_batches_canceled([bid], api_status=api_status)
+                    canceled_active.append(bid)
+                    results.append({
+                        "id": bid,
+                        "ok": True,
+                        "api_status": api_status,
+                        "already_cancelled": True,
+                    })
+                else:
+                    results.append({
+                        "id": bid,
+                        "ok": False,
+                        "error": f"not cancelable ({api_status})",
+                    })
+                    upsert_history_entry(
+                        bid,
+                        notes=f"cancel skipped: {api_status}",
+                        api_status=api_status,
+                    )
                 continue
             canceled = provider_cancel_batch(provider, bid, client=client)
             new_status = canceled["api_status"]
@@ -478,9 +505,22 @@ def _remove_active_batch_ids(batch_ids: list[str]) -> None:
                             BATCH_STATE_FILE.unlink()
                     except Exception:
                         pass
+                    # Submit leaves the collect queue on disk until fetch. Once
+                    # every submitted id is canceled, that queue is leftover and
+                    # must not block Batch History recovery.
+                    _clear_batch_queue_file()
             else:
                 state["batches"] = batches
                 _write_batch_file(BATCH_STATE_FILE, state)
+
+
+def _clear_batch_queue_file() -> None:
+    """Remove leftover collect queue. Caller must hold the batch file lock."""
+    try:
+        if BATCH_QUEUE_FILE.exists():
+            BATCH_QUEUE_FILE.unlink()
+    except Exception:
+        pass
 
 
 def _usage_from_message(u) -> dict:
@@ -691,18 +731,7 @@ def _entry_batch_info(entry: dict) -> dict:
     }
 
 
-def _assert_recovery_target_unlocked(entries: list[dict]) -> None:
-    """Block a history action from replacing an unrelated active recovery run."""
-    state = _read_batch_file(BATCH_STATE_FILE, strict=True)
-    queue = _read_batch_file(BATCH_QUEUE_FILE, strict=True)
-    _read_batch_file(BATCH_RESULTS_FILE, strict=True)
-    if not state and not queue:
-        return
-
-    target_ids = {str(row.get("id")) for row in entries if row.get("id")}
-    target_run_ids = {str(row.get("run_id")) for row in entries if row.get("run_id")}
-    target_run_id = next(iter(target_run_ids), "") if len(target_run_ids) == 1 else ""
-    active_run_id = str(state.get("run_id") or "")
+def _active_batch_ids(state: dict) -> set[str]:
     active_ids = {
         str(batch_id) for batch_id in (state.get("batch_ids") or []) if batch_id
     }
@@ -711,6 +740,66 @@ def _assert_recovery_target_unlocked(entries: list[dict]) -> None:
         for batch in (state.get("batches") or [])
         if batch.get("id")
     )
+    return active_ids
+
+
+def _discard_stale_canceled_active_state(state: dict) -> dict:
+    """Drop submitted active state whose batches are canceled/errored in history.
+
+    Must run under the batch file lock. Fetched result ownership is preserved.
+    Returns the remaining state dict (empty when the stale lock was removed).
+    """
+    if not state:
+        return {}
+    # Fetched results are still recoverable; never auto-delete them here.
+    if state.get("status") == "fetched" or state.get("batch_ids"):
+        return state
+    active_ids = _active_batch_ids(state)
+    if not active_ids:
+        return state
+    history = _read_history_unlocked()
+    for bid in active_ids:
+        entry = _find_entry(history, bid)
+        if (entry or {}).get("status") not in (STATUS_CANCELED, STATUS_ERROR):
+            return state
+    try:
+        if BATCH_STATE_FILE.exists():
+            BATCH_STATE_FILE.unlink()
+    except Exception:
+        pass
+    _clear_batch_queue_file()
+    return {}
+
+
+def _discard_stale_active_locks() -> tuple[dict, dict]:
+    """Clear canceled state and orphan queues. Caller must hold the file lock."""
+    state = _discard_stale_canceled_active_state(
+        _read_batch_file(BATCH_STATE_FILE, strict=True)
+    )
+    queue = _read_batch_file(BATCH_QUEUE_FILE, strict=True)
+    # A collect queue with no state is leftover from a canceled/cleared submit
+    # (queue normally survives until fetch). Legitimate unsubmitted collects
+    # always have status=queued state via saveQueuedBatchMetadata.
+    if not state and queue:
+        _clear_batch_queue_file()
+        queue = {}
+    return state, queue
+
+
+def _assert_recovery_target_unlocked(entries: list[dict]) -> None:
+    """Block a history action from replacing an unrelated active recovery run."""
+    _read_batch_file(BATCH_RESULTS_FILE, strict=True)
+    # Canceled/errored active rows are not resumable and must not block recovery
+    # of a different history entry after the GUI run has already stopped.
+    state, queue = _discard_stale_active_locks()
+    if not state and not queue:
+        return
+
+    target_ids = {str(row.get("id")) for row in entries if row.get("id")}
+    target_run_ids = {str(row.get("run_id")) for row in entries if row.get("run_id")}
+    target_run_id = next(iter(target_run_ids), "") if len(target_run_ids) == 1 else ""
+    active_run_id = str(state.get("run_id") or "")
+    active_ids = _active_batch_ids(state)
 
     same_run = bool(
         target_run_id
@@ -866,9 +955,14 @@ def activate_for_resume(batch_id: str) -> str:
         # Older state files have no result_keys marker and are intentionally
         # redownloaded: cache keys are model-independent, so a merely non-empty
         # result file cannot identify the provider batch that produced it.
-        with _batch_file_lock():
-            results = _read_batch_file(BATCH_RESULTS_FILE, strict=True)
-            active_state = _read_batch_file(BATCH_STATE_FILE, strict=True)
+        with BATCH_LOCK:
+            with _batch_file_lock():
+                # Clear canceled/errored locks and orphan queues so they cannot
+                # look like an owned active run. Unrelated recoverable active
+                # state still blocks inside redownload_batch.
+                _discard_stale_active_locks()
+                results = _read_batch_file(BATCH_RESULTS_FILE, strict=True)
+                active_state = _read_batch_file(BATCH_STATE_FILE, strict=True)
         active_ids = set(active_state.get("batch_ids") or [])
         recorded_keys = active_state.get("result_keys")
         owns_results = (

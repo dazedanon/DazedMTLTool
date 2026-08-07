@@ -1333,6 +1333,173 @@ class ActivateResumeTests(BatchHistoryTestBase):
 
         self.assertEqual(T._read_batch_file(T.BATCH_STATE_FILE), active_state)
 
+    def test_canceled_active_state_does_not_block_recovery(self):
+        """Canceled locks must clear on sync/cancel and not block another resume."""
+        # Cancel of an already-cancelled provider job clears the active lock.
+        BH.upsert_history_entry(
+            "batch-already",
+            status=BH.STATUS_SUBMITTED,
+            provider="openai",
+            api_status="in_progress",
+            custom_ids={"req-1": "k"},
+        )
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "submitted",
+                "batches": [{"id": "batch-already", "custom_ids": {"req-1": "k"}}],
+            },
+        )
+        with (
+            mock.patch.object(BH, "_client_for_entry", return_value=object()),
+            mock.patch.object(
+                BH,
+                "provider_retrieve_batch",
+                return_value={
+                    "api_status": "cancelled",
+                    "ended": True,
+                    "counts": {
+                        "processing": 0,
+                        "succeeded": 0,
+                        "errored": 0,
+                        "canceled": 1,
+                        "expired": 0,
+                    },
+                },
+            ),
+            mock.patch.object(BH, "provider_cancel_batch") as cancel,
+        ):
+            results = BH.cancel_batches(["batch-already"])
+        cancel.assert_not_called()
+        self.assertTrue(results[0]["ok"])
+        self.assertTrue(results[0].get("already_cancelled"))
+        self.assertFalse(T.BATCH_STATE_FILE.exists())
+
+        # Refresh that learns the provider cancelled also clears the active lock.
+        BH.upsert_history_entry(
+            "batch-live-cancel",
+            status=BH.STATUS_SUBMITTED,
+            provider="openai",
+            custom_ids={"req-1": "k"},
+        )
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "submitted",
+                "run_id": "translation-live-cancel",
+                "batches": [{
+                    "id": "batch-live-cancel",
+                    "custom_ids": {"req-1": "k"},
+                }],
+            },
+        )
+        with mock.patch.object(
+            BH,
+            "provider_retrieve_batch",
+            return_value={
+                "api_status": "cancelled",
+                "ended": True,
+                "counts": {
+                    "processing": 0,
+                    "succeeded": 0,
+                    "errored": 0,
+                    "canceled": 2,
+                    "expired": 0,
+                },
+            },
+        ):
+            entry = BH.refresh_batch_status("batch-live-cancel")
+        self.assertEqual(entry["status"], BH.STATUS_CANCELED)
+        self.assertFalse(T.BATCH_STATE_FILE.exists())
+
+        # Stale canceled active state left behind must not block a different resume.
+        BH.upsert_history_entry(
+            "batch-canceled",
+            status=BH.STATUS_CANCELED,
+            run_id="translation-canceled",
+            custom_ids={"req-c": "canceled-key"},
+        )
+        BH.upsert_history_entry(
+            "batch-ended",
+            status=BH.STATUS_ENDED,
+            run_id="translation-ended",
+            custom_ids={"req-e": "ended-key"},
+            model="gpt-test",
+            provider="openai",
+            file_set=["a.json"],
+        )
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "submitted",
+                "run_id": "translation-canceled",
+                "batches": [{
+                    "id": "batch-canceled",
+                    "custom_ids": {"req-c": "canceled-key"},
+                }],
+            },
+        )
+        with mock.patch.object(BH, "redownload_batch") as redownload:
+            self.assertEqual(BH.activate_for_resume("batch-ended"), "fetched")
+        redownload.assert_called_once_with("batch-ended")
+        # Stale canceled lock is cleared before redownload; mocked redownload
+        # does not rewrite state.
+        self.assertFalse(T.BATCH_STATE_FILE.exists())
+
+        BH.upsert_history_entry(
+            "batch-ready",
+            status=BH.STATUS_SUBMITTED,
+            run_id="translation-ready",
+            custom_ids={"req-r": "ready-key"},
+            model="gpt-test",
+            provider="openai",
+            file_set=["a.json"],
+        )
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "submitted",
+                "run_id": "translation-canceled",
+                "batches": [{
+                    "id": "batch-canceled",
+                    "custom_ids": {"req-c": "canceled-key"},
+                }],
+            },
+        )
+        self.assertEqual(BH.activate_for_resume("batch-ready"), "submitted")
+        state = T._read_batch_file(T.BATCH_STATE_FILE)
+        self.assertEqual(state["run_id"], "translation-ready")
+        self.assertEqual(state["batches"][0]["id"], "batch-ready")
+
+        # Orphan collect queue with no state (left after cancel cleared state)
+        # must not block either.
+        T._write_batch_file(
+            T.BATCH_QUEUE_FILE,
+            {"orphan-key": {"params": {"model": "gpt-test"}, "provider": "openai"}},
+        )
+        if T.BATCH_STATE_FILE.exists():
+            T.BATCH_STATE_FILE.unlink()
+        with mock.patch.object(BH, "redownload_batch") as redownload:
+            self.assertEqual(BH.activate_for_resume("batch-ended"), "fetched")
+        redownload.assert_called_once_with("batch-ended")
+        self.assertFalse(T.BATCH_QUEUE_FILE.exists())
+
+        # A real unsubmitted collect (queued state + queue) still blocks.
+        T._write_batch_file(
+            T.BATCH_QUEUE_FILE,
+            {"queued-key": {"params": {"model": "gpt-test"}, "provider": "openai"}},
+        )
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "queued",
+                "run_id": "translation-queued",
+                "file_set": ["a.json"],
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "Another translation batch run"):
+            BH.activate_for_resume("batch-ended")
+
     def test_activate_fetched_does_not_relabel_another_batch_results(self):
         BH.upsert_history_entry(
             "batch-b",
