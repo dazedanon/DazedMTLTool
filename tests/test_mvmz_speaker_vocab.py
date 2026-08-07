@@ -237,6 +237,116 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
                 os.chdir(orig_cwd)
                 mvmz.resetActorMapCache()
 
+    def test_blank_actor_slot_uses_real_name_fallback(self):
+        """Empty Actors.json names substitute a real given name, then restore \\n[ID]."""
+        mvmz.resetActorMapCache()
+        mvmz._ACTOR_MAP_CACHE = {3: "Player"}
+        mvmz._EMPTY_ACTOR_IDS_CACHE = {4}
+        mvmz._EMPTY_ACTOR_NAME_CACHE = {}
+        try:
+            subbed, reverse = mvmz._substitute_actor_names(
+                r'なんでPlayer\N[4] より先に',
+                {3: "Player"},
+            )
+            # Leading space prevents PlayerAlex fusion so restore can match.
+            self.assertEqual(subbed, "なんでPlayer Alex より先に")
+            self.assertEqual(reverse, {"Alex": r"\N[4]"})
+            self.assertEqual(
+                mvmz._restore_actor_names(
+                    "Why did Alex fall asleep before Player Alex?",
+                    reverse,
+                ),
+                r"Why did \N[4] fall asleep before Player \N[4]?",
+            )
+            # Model often glues the spaced form back together.
+            self.assertEqual(
+                mvmz._restore_actor_names("before PlayerAlex...?", reverse),
+                r"before Player\N[4]...?",
+            )
+        finally:
+            mvmz.resetActorMapCache()
+
+    def test_adjacent_actor_codes_do_not_fuse_into_playeralex(self):
+        """\\n[3]\\n[4] with actor3=Player and blank 4 must not become PlayerAlex."""
+        mvmz.resetActorMapCache()
+        mvmz._ACTOR_MAP_CACHE = {3: "Player"}
+        mvmz._EMPTY_ACTOR_IDS_CACHE = {4}
+        mvmz._EMPTY_ACTOR_NAME_CACHE = {}
+        try:
+            subbed, reverse = mvmz._substitute_actor_names(
+                r"（もし、\N[3]\N[4]が私の想いによって",
+                {3: "Player"},
+            )
+            self.assertEqual(subbed, "（もし、Player Alexが私の想いによって")
+            self.assertEqual(reverse.get("Player"), r"\N[3]")
+            self.assertEqual(reverse.get("Alex"), r"\N[4]")
+            self.assertEqual(
+                mvmz._restore_actor_names(
+                    "If PlayerAlex was summoned here by my feelings...",
+                    reverse,
+                ),
+                r"If \N[3]\N[4] was summoned here by my feelings...",
+            )
+        finally:
+            mvmz.resetActorMapCache()
+
+    def test_blank_actor_fallbacks_are_distinct_per_id(self):
+        """Multiple blank actor slots must not share one restore name."""
+        mvmz.resetActorMapCache()
+        mvmz._ACTOR_MAP_CACHE = {}
+        mvmz._EMPTY_ACTOR_IDS_CACHE = {4, 5}
+        mvmz._EMPTY_ACTOR_NAME_CACHE = {}
+        try:
+            first, rev1 = mvmz._substitute_actor_names(r"Hello \N[4]", {})
+            second, rev2 = mvmz._substitute_actor_names(r"Hello \N[5]", {})
+            self.assertEqual(first, "Hello Alex")
+            self.assertEqual(second, "Hello Blake")
+            self.assertEqual(rev1, {"Alex": r"\N[4]"})
+            self.assertEqual(rev2, {"Blake": r"\N[5]"})
+        finally:
+            mvmz.resetActorMapCache()
+
+    def test_unknown_actor_code_is_not_given_fallback(self):
+        """Codes for IDs that are not blank Actors.json slots stay untouched."""
+        mvmz.resetActorMapCache()
+        mvmz._ACTOR_MAP_CACHE = {1: "Hero"}
+        mvmz._EMPTY_ACTOR_IDS_CACHE = set()
+        mvmz._EMPTY_ACTOR_NAME_CACHE = {}
+        try:
+            subbed, reverse = mvmz._substitute_actor_names(r"Meet \N[99]", {1: "Hero"})
+            self.assertEqual(subbed, r"Meet \N[99]")
+            self.assertEqual(reverse, {})
+        finally:
+            mvmz.resetActorMapCache()
+
+    def test_actors_json_records_blank_custom_name_slots(self):
+        """Actors.json blank names are tracked even when other actors are named."""
+        actors = [
+            None,
+            {"id": 3, "name": "Player"},
+            {"id": 4, "name": ""},
+        ]
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            files_dir = tmp_path / "files"
+            files_dir.mkdir()
+            (files_dir / "Actors.json").write_text(
+                json.dumps(actors, ensure_ascii=False), encoding="utf-8"
+            )
+            orig_cwd = Path.cwd()
+            mvmz.resetActorMapCache()
+            try:
+                os.chdir(tmp_path)
+                self.assertEqual(mvmz._get_actor_map(), {3: "Player"})
+                self.assertEqual(mvmz._get_empty_actor_ids(), {4})
+                self.assertEqual(
+                    mvmz._actor_name_for_translation(4, {3: "Player"}),
+                    "Alex",
+                )
+            finally:
+                os.chdir(orig_cwd)
+                mvmz.resetActorMapCache()
+
     def test_covered_nameplate_variants_are_not_persisted(self):
         """Finalize must not write NFKC/lookalike variants of curated names."""
         mvmz.SPEAKER_PARSE_MODE = True

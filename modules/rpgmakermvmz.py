@@ -66,6 +66,29 @@ _ACTOR_NAME_SCRIPT_RE = re.compile(
     r"\$gameActors\.actor\s*\(\s*(\d+)\s*\)\.name\s*\(\s*\)",
     re.IGNORECASE,
 )
+# Blank Actors.json slots are usually player-entered names. Substitute a real
+# given name for the model, then restore the original \n[ID] / \v[ID] code.
+# Distinct names are assigned per empty actor ID for the run (Alex first).
+_EMPTY_ACTOR_FALLBACK_NAMES = (
+    "Alex",
+    "Blake",
+    "Casey",
+    "Drew",
+    "Eden",
+    "Finley",
+    "Harper",
+    "Jordan",
+    "Kai",
+    "Logan",
+    "Morgan",
+    "Quinn",
+    "Riley",
+    "Skyler",
+    "Taylor",
+)
+_EMPTY_ACTOR_NAME_CACHE: dict[int, str] = {}
+# Actor IDs present in Actors.json with a blank name (custom / player-entered).
+_EMPTY_ACTOR_IDS_CACHE: set[int] | None = None
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 # Intentionally skips U+309B (゛). Decorative CJK quotes are normalized via
@@ -5342,27 +5365,43 @@ def getSpeaker(speaker: str):
             NAMESLIST.append([speaker, translated])
     return [translated, response[1]]
 
+def _parse_actors_json_entries(data) -> tuple[dict[int, str], set[int]]:
+    """Split Actors.json entries into named map vs blank (custom-name) IDs."""
+    named: dict[int, str] = {}
+    empty_ids: set[int] = set()
+    if not isinstance(data, list):
+        return named, empty_ids
+    for entry in data:
+        if not entry or not isinstance(entry, dict):
+            continue
+        aid = entry.get("id")
+        if aid is None:
+            continue
+        name = (entry.get("name") or "").strip()
+        if name:
+            named[int(aid)] = name
+        else:
+            empty_ids.add(int(aid))
+    return named, empty_ids
+
+
 def _get_actor_map() -> dict:
     """Lazily load actor_id -> name from Actors.json, falling back to vocab actor entries."""
-    global _ACTOR_MAP_CACHE
+    global _ACTOR_MAP_CACHE, _EMPTY_ACTOR_IDS_CACHE
     with _ACTOR_MAP_CACHE_LOCK:
-        if _ACTOR_MAP_CACHE:
+        if _ACTOR_MAP_CACHE is not None:
             return _ACTOR_MAP_CACHE
         for candidate in (Path("translated/Actors.json"), Path("files/Actors.json")):
             if candidate.is_file():
                 try:
                     data = json.loads(candidate.read_text(encoding="utf-8-sig"))
-                    m: dict = {}
-                    for entry in data:
-                        if not entry or not isinstance(entry, dict):
-                            continue
-                        aid = entry.get("id")
-                        name = (entry.get("name") or "").strip()
-                        if aid is not None and name:
-                            m[int(aid)] = name
-                    if m:
-                        _ACTOR_MAP_CACHE = m
-                        return m
+                    named, empty_ids = _parse_actors_json_entries(data)
+                    # Keep Actors.json even when every slot is blank: those IDs
+                    # still need custom-name fallbacks during translation.
+                    if named or empty_ids:
+                        _ACTOR_MAP_CACHE = named
+                        _EMPTY_ACTOR_IDS_CACHE = empty_ids
+                        return named
                 except Exception:
                     continue
         try:
@@ -5376,11 +5415,21 @@ def _get_actor_map() -> dict:
                         m[aid] = name
             if m:
                 _ACTOR_MAP_CACHE = m
+                _EMPTY_ACTOR_IDS_CACHE = set()
                 return m
         except Exception:
             pass
         _ACTOR_MAP_CACHE = {}
+        _EMPTY_ACTOR_IDS_CACHE = set()
         return {}
+
+
+def _get_empty_actor_ids() -> set[int]:
+    """Return actor IDs that exist in Actors.json with a blank name."""
+    _get_actor_map()
+    if _EMPTY_ACTOR_IDS_CACHE is None:
+        return set()
+    return _EMPTY_ACTOR_IDS_CACHE
 
 
 def _scan_var_actor_assignments(data, into: dict) -> None:
@@ -5476,12 +5525,158 @@ def _resolve_code_speaker_name(name: str) -> str | None:
     return _get_actor_map().get(int(actor_id)) or None
 
 
+def _fallback_actor_display_name(actor_id: int, reserved_names: set[str] | None = None) -> str:
+    """Pick a real given name for a blank/custom actor slot.
+
+    The first empty actor ID in a run gets ``Alex`` unless that name is already
+    used by Actors.json (or another empty slot). Later empty IDs get the next
+    free roster entry. Assignments are stable for the run via cache.
+    """
+    aid = int(actor_id)
+    cached = _EMPTY_ACTOR_NAME_CACHE.get(aid)
+    if cached:
+        return cached
+
+    reserved_cf = {str(n).casefold() for n in (reserved_names or ()) if n}
+    reserved_cf |= {n.casefold() for n in _EMPTY_ACTOR_NAME_CACHE.values()}
+
+    for candidate in _EMPTY_ACTOR_FALLBACK_NAMES:
+        if candidate.casefold() not in reserved_cf:
+            _EMPTY_ACTOR_NAME_CACHE[aid] = candidate
+            return candidate
+
+    uniquified = f"Alex{aid}"
+    _EMPTY_ACTOR_NAME_CACHE[aid] = uniquified
+    return uniquified
+
+
+def _actor_name_for_translation(actor_id: int, actor_map: dict) -> str | None:
+    """Return Actors.json name, or a real-name fallback for blank custom slots.
+
+    Unknown actor IDs (not present / not blank in Actors.json) return ``None``
+    so the original ``\\n[ID]`` code is left for normal script-code protection.
+    """
+    aid = int(actor_id)
+    name = actor_map.get(aid)
+    if name:
+        return name
+    if aid not in _get_empty_actor_ids():
+        return None
+    reserved = {str(v) for v in actor_map.values() if v}
+    return _fallback_actor_display_name(aid, reserved)
+
+
+def _substitute_actor_names(
+    text: str,
+    actor_map: dict,
+    var_actor_map: dict | None = None,
+) -> tuple[str, dict[str, str]]:
+    """Replace ``\\n[ID]`` / mapped ``\\v[ID]`` with display names for the model.
+
+    Returns ``(substituted_text, reverse_map)`` where *reverse_map* maps the
+    exact display name back to the original control code for post-AI restore.
+    Blank Actors.json slots use :func:`_actor_name_for_translation` fallbacks.
+    """
+    if not isinstance(text, str):
+        return text, {}
+
+    var_actor_map = var_actor_map or {}
+    reverse_map: dict[str, str] = {}
+
+    def _spaced_name(chunk: str, match: re.Match, name: str) -> str:
+        # Keep substituted names from fusing into one restore-breaking token.
+        # Cases: literal "Player" + \n[4], or adjacent \n[3]\n[4] where actor 3
+        # is named Player and 4 falls back to Alex (one-pass re.sub does not
+        # see the first replacement as the previous character).
+        if match.start() > 0:
+            prev = chunk[match.start() - 1]
+            if prev.isascii() and prev.isalnum():
+                return f" {name}"
+            if re.search(r"\\[nNvV]\[\d+\]$", chunk[: match.start()]):
+                return f" {name}"
+        return name
+
+    def _display_actor_name(m: re.Match) -> str:
+        name = _actor_name_for_translation(int(m.group(1)), actor_map)
+        return name if name else m.group(0)
+
+    def _display_var_name(m: re.Match) -> str:
+        actor_id = var_actor_map.get(int(m.group(1)))
+        if actor_id is None:
+            return m.group(0)
+        name = _actor_name_for_translation(int(actor_id), actor_map)
+        return name if name else m.group(0)
+
+    def _repl_actor(m: re.Match, chunk: str) -> str:
+        name = _actor_name_for_translation(int(m.group(1)), actor_map)
+        if not name:
+            return m.group(0)
+        reverse_map[name] = m.group(0)
+        return _spaced_name(chunk, m, name)
+
+    def _repl_var(m: re.Match, chunk: str) -> str:
+        actor_id = var_actor_map.get(int(m.group(1)))
+        if actor_id is None:
+            return m.group(0)
+        name = _actor_name_for_translation(int(actor_id), actor_map)
+        if not name:
+            return m.group(0)
+        # Prefer restoring the original \v[X] form used in this string.
+        reverse_map[name] = m.group(0)
+        return _spaced_name(chunk, m, name)
+
+    tag_match = re.match(
+        rf"^(?P<open>\s*\[)(?P<speaker>{SPEAKER_BRACKET_INNER})(?P<close>\]\s*[|:：]\s*)",
+        text,
+        re.IGNORECASE,
+    )
+    if tag_match:
+        speaker = _VAR_ACTOR_RE.sub(_display_actor_name, tag_match.group("speaker"))
+        speaker = _VAR_GAME_RE.sub(_display_var_name, speaker)
+        body = text[tag_match.end():]
+        body = _VAR_ACTOR_RE.sub(lambda m: _repl_actor(m, body), body)
+        body = _VAR_GAME_RE.sub(lambda m: _repl_var(m, body), body)
+        return (
+            f"{tag_match.group('open')}{speaker}{tag_match.group('close')}{body}",
+            reverse_map,
+        )
+
+    body = _VAR_ACTOR_RE.sub(lambda m: _repl_actor(m, text), text)
+    body = _VAR_GAME_RE.sub(lambda m: _repl_var(m, body), body)
+    return body, reverse_map
+
+
+def _restore_actor_names(text: str, reverse_map: dict[str, str]) -> str:
+    """Restore substituted actor display names to their original control codes.
+
+    Handles both spaced forms (``Player Alex``) and fused forms the model
+    sometimes emits (``PlayerAlex``) by first splitting a name glued to a
+    preceding Latin/digit run, then applying normal word-boundary restore.
+    """
+    if not isinstance(text, str) or not reverse_map:
+        return text
+    names = "|".join(
+        re.escape(n) for n in sorted(reverse_map, key=len, reverse=True)
+    )
+
+    def _replace(match: re.Match) -> str:
+        return reverse_map[match.group(1)]
+
+    # PlayerAlex -> Player\n[4] (when Alex is the fallback / second code)
+    glued = re.compile(rf"(?<=[A-Za-z0-9])({names})(?![A-Za-z0-9])")
+    text = glued.sub(_replace, text)
+    bounded = re.compile(rf"(?<!\w)({names})(?!\w)")
+    return bounded.sub(_replace, text)
+
+
 def resetActorMapCache():
     """Invalidate the cached actor and variable-actor maps so they reload on next use."""
-    global _ACTOR_MAP_CACHE, _VAR_ACTOR_MAP_CACHE
+    global _ACTOR_MAP_CACHE, _VAR_ACTOR_MAP_CACHE, _EMPTY_ACTOR_NAME_CACHE, _EMPTY_ACTOR_IDS_CACHE
     with _ACTOR_MAP_CACHE_LOCK:
         _ACTOR_MAP_CACHE = None
         _VAR_ACTOR_MAP_CACHE = None
+        _EMPTY_ACTOR_IDS_CACHE = None
+        _EMPTY_ACTOR_NAME_CACHE = {}
 
 
 def translateAI(text, history, history_ctx=None):
@@ -5531,71 +5726,24 @@ def translateAI(text, history, history_ctx=None):
     # AI so the model sees real character names. Restore only exact-case name
     # matches afterward; this avoids lower-case words like "red" and keeps the
     # prompt clean. \v[X] is resolved via code-122 `$gameActors.actor(N).name()`
-    # assignments (e.g. Ristaria \v[007] -> actor 1).
+    # assignments (e.g. Ristaria \v[007] -> actor 1). Blank actor slots use a
+    # real given-name fallback (Alex, …) so custom/player names are not left as
+    # opaque __PROTECTED__ tokens.
     actor_map = _get_actor_map()
     var_actor_map = _get_var_actor_map()
     reverse: dict[str, str] = {}  # actor_name -> "\\n[X]" / "\\v[X]"
-
-    def _sub(s: str, reverse_map: dict[str, str]) -> str:
-        if not isinstance(s, str) or not actor_map:
-            return s
-
-        def _display_actor_name(m: re.Match) -> str:
-            name = actor_map.get(int(m.group(1)))
-            return name if name else m.group(0)
-
-        def _display_var_name(m: re.Match) -> str:
-            actor_id = var_actor_map.get(int(m.group(1)))
-            if actor_id is None:
-                return m.group(0)
-            name = actor_map.get(int(actor_id))
-            return name if name else m.group(0)
-
-        def _repl_actor(m: re.Match) -> str:
-            aid = int(m.group(1))
-            name = actor_map.get(aid)
-            if name:
-                reverse_map[name] = m.group(0)
-                return name
-            return m.group(0)
-
-        def _repl_var(m: re.Match) -> str:
-            actor_id = var_actor_map.get(int(m.group(1)))
-            if actor_id is None:
-                return m.group(0)
-            name = actor_map.get(int(actor_id))
-            if name:
-                # Prefer restoring the original \v[X] form used in this string.
-                reverse_map[name] = m.group(0)
-                return name
-            return m.group(0)
-
-        tag_match = re.match(
-            rf"^(?P<open>\s*\[)(?P<speaker>{SPEAKER_BRACKET_INNER})(?P<close>\]\s*[|:：]\s*)",
-            s,
-            re.IGNORECASE,
-        )
-        if tag_match:
-            speaker = _VAR_ACTOR_RE.sub(_display_actor_name, tag_match.group("speaker"))
-            speaker = _VAR_GAME_RE.sub(_display_var_name, speaker)
-            body = _VAR_ACTOR_RE.sub(_repl_actor, s[tag_match.end():])
-            body = _VAR_GAME_RE.sub(_repl_var, body)
-            return f"{tag_match.group('open')}{speaker}{tag_match.group('close')}{body}"
-
-        body = _VAR_ACTOR_RE.sub(_repl_actor, s)
-        return _VAR_GAME_RE.sub(_repl_var, body)
 
     if isinstance(text, list):
         item_reverses: list[dict[str, str]] = []
         subbed_text = []
         for s in text:
-            item_reverse: dict[str, str] = {}
-            subbed_text.append(_sub(s, item_reverse))
+            subbed, item_reverse = _substitute_actor_names(s, actor_map, var_actor_map)
+            subbed_text.append(subbed)
             item_reverses.append(item_reverse)
         text = subbed_text
     else:
         item_reverses = []
-        text = _sub(text, reverse)
+        text, reverse = _substitute_actor_names(text, actor_map, var_actor_map)
 
     result = sharedtranslateAI(
         text=text,
@@ -5609,24 +5757,16 @@ def translateAI(text, history, history_ctx=None):
     THREAD_CTX.last_translation_had_mismatch = last_translation_had_mismatch()
 
     # ── Restore \n[X] codes in translated output ───────────────────────────
-    def _restore(s: str, reverse_map: dict[str, str]) -> str:
-        if not isinstance(s, str) or not reverse_map:
-            return s
-        restore_pat = re.compile(
-            r"(?<!\w)(" + "|".join(re.escape(n) for n in sorted(reverse_map, key=len, reverse=True)) + r")(?!\w)",
-        )
-        return restore_pat.sub(lambda m: reverse_map[m.group(1)], s)
-
     if reverse or any(item_reverses):
         if isinstance(result[0], list):
             restored = []
             for idx, s in enumerate(result[0]):
                 reverse_map = item_reverses[idx] if idx < len(item_reverses) else {}
-                restored.append(_restore(s, reverse_map))
+                restored.append(_restore_actor_names(s, reverse_map))
             result[0] = restored
         elif isinstance(result[0], str):
             reverse_map = item_reverses[0] if item_reverses else reverse
-            result[0] = _restore(result[0], reverse_map)
+            result[0] = _restore_actor_names(result[0], reverse_map)
 
     return result
 
