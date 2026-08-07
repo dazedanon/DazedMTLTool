@@ -184,6 +184,8 @@ def openFiles(filename):
                 # One request per image. A very dense image is split, but only
                 # within itself - the boundary between images is never crossed.
                 parts = (len(regions) + GROUP_SIZE - 1) // GROUP_SIZE
+                imageTokens = [0, 0]
+                done = 0
                 for part in range(parts):
                     group = regions[part * GROUP_SIZE : (part + 1) * GROUP_SIZE]
                     # Newlines inside a block are the source art's own line
@@ -200,19 +202,39 @@ def openFiles(filename):
                     translated = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
+                    imageTokens[0] += response[1][0]
+                    imageTokens[1] += response[1][1]
 
+                    # The bar is not touched here: the shared translateAI already
+                    # advances PBAR for every batch it sends, the same way it does
+                    # for every other engine module. Updating it again here counted
+                    # each block twice, which filled the bar at half the real
+                    # progress and pinned it at 100% for the rest of the run.
                     if not isinstance(translated, list) or len(translated) != len(group):
                         got = len(translated) if isinstance(translated, list) else "?"
                         MISMATCH.append(
                             f"{imageName} (expected {len(group)}, got {got})"
                         )
-                        pbar.update(len(group))
                         continue
 
                     if not ESTIMATE:
                         for region, text in zip(group, translated):
                             region["target"] = str(text).strip()
-                    pbar.update(len(group))
+                    done += len(group)
+
+                # One line per image, written as it finishes rather than only at
+                # the end of the whole file, so the log ticks over during the run
+                # and shows how far along it is. Cost is deliberately left off: it
+                # is computed once per file from thread-local accumulators that
+                # calculateCost resets, and calling it here would empty them.
+                progress = "estimated" if ESTIMATE else f"{done}/{len(regions)} translated"
+                tqdm.write(
+                    Fore.GREEN + f"  {imageName}" + Fore.RESET
+                    + Fore.YELLOW
+                    + f"  [{progress}]"
+                    f"[Input: {imageTokens[0]}][Output: {imageTokens[1]}]"
+                    + Fore.RESET
+                )
         except Exception:
             traceback.print_exc()
             return [data, totalTokens, "Fail"]

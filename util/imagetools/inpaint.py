@@ -72,6 +72,24 @@ METHOD_LABELS = {
     AOT: "AOT — a lighter model, tuned for speech bubbles",
 }
 
+#: The same methods at note length: the render note says which reconstruction
+#: actually ran, and the label's explanatory half would drown the sentence it
+#: sits in. The two classical fills need distinct names here precisely because
+#: their long labels both open with "Fast".
+SHORT_NAMES = {
+    TELEA: "Telea",
+    NS: "Navier–Stokes",
+    PATCHMATCH: "PatchMatch",
+    LAMA: "LaMa",
+    LAMA_MANGA: "LaMa (manga)",
+    AOT: "AOT",
+}
+
+
+def short_label(method: str) -> str:
+    """The method's name at in-a-sentence length."""
+    return SHORT_NAMES.get(method, method or DEFAULT)
+
 #: The one that always works. Nothing to install, nothing to download.
 DEFAULT = TELEA
 
@@ -337,6 +355,33 @@ def preferred() -> str:
     if "method" not in _PREFERRED:
         _PREFERRED["method"] = PREFERRED if available(PREFERRED) else DEFAULT
     return _PREFERRED["method"]
+
+
+#: Past this many pixels on a block's *shorter* side, AOT stops being the right
+#: first reach. Measured, not asserted: on the profile-screen test image a
+#: 259x441 block came back from AOT as a dark blob with the erased text
+#: embossed into it, and its small siblings came back hatched with the
+#: screentone it was trained on; the same holes through LaMa kept the figure's
+#: silhouette and colours. AOT keeps the default below the line because
+#: bubble-sized holes are its home ground and it is several times quicker.
+BIG_SIDE = 160
+
+
+def preferred_for(width: int = 0, height: int = 0) -> str:
+    """``preferred()``, but sized: LaMa for blocks past ``BIG_SIDE``.
+
+    The panel calls this with the block it is describing and the renderer with
+    the block it is filling, so the two always name the same method. Probed and
+    memoised the same way as ``preferred`` - a model only wins while it is
+    genuinely ready, and ``forget`` clears the answer.
+    """
+    if min(width, height) < BIG_SIDE:
+        return preferred()
+    if "large" not in _PREFERRED:
+        _PREFERRED["large"] = next(
+            (m for m in (LAMA, LAMA_MANGA) if available(m)), ""
+        )
+    return _PREFERRED["large"] or preferred()
 
 
 def status(method: str) -> str:

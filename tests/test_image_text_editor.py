@@ -246,6 +246,29 @@ class OcrStepTests(EditorTestCase):
         step._delete()
         self.assertEqual(entry.status, NEEDS_REVIEW)
 
+    def test_un_confirm_applies_to_every_selected_confirmed_image(self):
+        step = self.dialog.ocr_step
+        for entry in self.dialog.job.images:
+            entry.status = CONFIRMED
+        self.dialog.reload_lists()
+        step.list.selectAll()
+        step.confirm_current()
+        self.assertEqual(
+            {e.status for e in self.dialog.job.images}, {NEEDS_REVIEW},
+            "un-confirm with several rows highlighted left some still confirmed",
+        )
+
+    def test_un_confirm_leaves_highlighted_but_unconfirmed_rows_alone(self):
+        step = self.dialog.ocr_step
+        self.dialog.job.find("one.png").status = CONFIRMED
+        self.dialog.reload_lists()
+        step.select_relpath("one.png")
+        step.list.selectAll()
+        step.confirm_current()
+        # The two that were never confirmed have nothing to un-confirm; only
+        # the one that was is sent back.
+        self.assertEqual(self.dialog.job.find("one.png").status, NEEDS_REVIEW)
+
 
 class TranslateStepTests(EditorTestCase):
     def test_export_writes_into_the_game_workspace_and_the_mirror(self):
@@ -262,11 +285,32 @@ class TranslateStepTests(EditorTestCase):
             "the export escaped the redirect and would land in the real files/",
         )
 
+    def test_declining_the_translate_prompt_exports_nothing(self):
+        self.dialog.ocr_step.confirm_current()  # one confirmed, two left over
+        self.dialog.goto_step(STEP_TRANSLATE)
+        with patch.object(
+            QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.No)
+        ):
+            self.assertIsNone(self.dialog.translate_step.export_only())
+
+    def test_translating_never_confirms_the_leftover_images(self):
+        step = self.dialog.ocr_step
+        step.select_relpath("one.png")
+        step.confirm_current()
+        self.dialog.goto_step(STEP_TRANSLATE)
+        self.assertIsNotNone(self.dialog.translate_step.export_only())
+        # The two we never confirmed are untouched, not swept into the export.
+        others = [e for e in self.dialog.job.images if e.relpath != "one.png"]
+        self.assertTrue(
+            all(e.status == NEEDS_REVIEW for e in others),
+            "translating confirmed images silently confirmed the rest",
+        )
+
     def test_export_with_nothing_confirmed_writes_nothing(self):
         self.dialog.goto_step(STEP_TRANSLATE)
-        # The "confirm them all now?" prompt is answered Yes by the patch, so
-        # the images that have been *read* go; the point is that it does not
-        # crash and does not invent images that were never looked at.
+        # Nothing confirmed at all: there is no subset to translate, so the
+        # export bows out with the "go confirm something" notice rather than
+        # inventing images that were never looked at.
         for entry in self.dialog.job.images:
             entry.blocks = []
             entry.status = PENDING
@@ -977,6 +1021,56 @@ class ParameterPanelTests(EditorTestCase):
         self.assertNotIn(block.source_text[:8], title)
         self.assertIn("Block 1", title)
         self.assertIn(f"{block.box.w}×{block.box.h}", title)
+
+
+class ModelChoiceTests(EditorTestCase):
+    """The model combo tells the truth, and an edit touches only its own knob.
+
+    Two halves of one reported bug: the combo showed the built-in fast method
+    while the render used the preferred model, so "switch it to AOT" was a
+    no-op on a block already using AOT - and the first touch of any other
+    knob wrote the displayed placeholder into the style, making the downgrade
+    real.
+    """
+
+    def open_render(self):
+        self.translate_everything()
+        self.dialog.goto_step(STEP_RENDER)
+        step = self.dialog.render_step
+        if step.worker is not None:
+            step.worker.wait(30_000)
+        self.app.processEvents()
+        step.select_relpath("one.png")
+        step.canvas.select([step.current_entry().blocks[0].block_id])
+        self.app.processEvents()
+        return step
+
+    def test_the_combo_shows_the_method_that_will_actually_run(self):
+        with patch.object(
+            inpaintmod, "preferred_for", lambda w, h: inpaintmod.NS
+        ):
+            step = self.open_render()
+            block = step.current_entry().blocks[0]
+            self.assertEqual(block.style.inpaint_method, "")
+            self.assertEqual(step.inpaint_combo.currentData(), inpaintmod.NS)
+
+    def test_touching_one_knob_leaves_the_others_unwritten(self):
+        step = self.open_render()
+        block = step.current_entry().blocks[0]
+        self.assertEqual(block.style.inpaint_method, "")
+        step.cap_spin.setValue(step.cap_spin.value() + 3)
+        self.assertEqual(block.style.cap_height, step.cap_spin.value())
+        self.assertTrue(block.style.locked)
+        # The model stays "whatever is best here" until somebody chooses one.
+        self.assertEqual(block.style.inpaint_method, "")
+
+    def test_choosing_a_model_still_reaches_the_style(self):
+        step = self.open_render()
+        block = step.current_entry().blocks[0]
+        step.inpaint_combo.setCurrentIndex(
+            step.inpaint_combo.findData(inpaintmod.NS)
+        )
+        self.assertEqual(block.style.inpaint_method, inpaintmod.NS)
 
 
 class TypeControlTests(EditorTestCase):
