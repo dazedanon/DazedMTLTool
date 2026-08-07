@@ -17,10 +17,20 @@ from util import batch_providers, evaluation
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _extract_schema_line_count(schema):
+    translations = (schema.get("properties") or {}).get("translations")
+    if isinstance(translations, dict) and translations.get("minItems") is not None:
+        return int(translations["minItems"])
+    return len(schema.get("required") or [])
+
+
 def _mock_live_translation_response(_provider, params, **_kwargs):
     """Build a schema-shaped live response for evaluation unit tests."""
-    schema = params["response_format"]["json_schema"]["schema"]
-    count = int(schema["properties"]["translations"]["minItems"])
+    if "response_format" in params:
+        schema = params["response_format"]["json_schema"]["schema"]
+    else:
+        schema = params["output_config"]["format"]["schema"]
+    count = _extract_schema_line_count(schema)
     return {
         "text": json.dumps({"translations": ["English text"] * count}),
         "prompt_tokens": 100,
@@ -721,12 +731,10 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertEqual(
             params["anthropic"]["output_config"]["format"]["schema"]
             ["required"],
-            ["translations"],
+            [f"Line{i}" for i in range(1, request["schema_line_count"] + 1)],
         )
         schema = params["anthropic"]["output_config"]["format"]["schema"]
-        translations = schema["properties"]["translations"]
-        self.assertEqual(translations["minItems"], request["schema_line_count"])
-        self.assertEqual(translations["maxItems"], request["schema_line_count"])
+        self.assertEqual(_extract_schema_line_count(schema), request["schema_line_count"])
         live_anthropic = evaluation._provider_params(
             {**candidates[2], "execution": "live"}, request
         )

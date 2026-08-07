@@ -3512,6 +3512,28 @@ def createTranslationSchema(numLines):
     }
 
 
+def createLegacyTranslationSchema(numLines):
+    """Create the historical ``LineN`` object schema.
+
+    Claude's native structured-output path does not accept the newer
+    ``minItems``/``maxItems`` array contract, so this compatibility schema
+    keeps explicit ``Line1`` ... ``LineN`` required fields.
+    """
+    count = max(1, int(numLines or 1))
+    properties = {}
+    required = []
+    for i in range(1, count + 1):
+        line_key = f"Line{i}"
+        properties[line_key] = {"type": "string"}
+        required.append(line_key)
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
+
+
 def format_translation_response_for_log(raw_text) -> str:
     """Pretty-print a model/cache response with LineN keys in numeric order.
 
@@ -3685,7 +3707,7 @@ def buildClaudeRequest(system, user, history, formatType, model, numLines=None,
         ant_kwargs["output_config"] = {
             "format": {
                 "type": "json_schema",
-                "schema": createTranslationSchema(numLines),
+                "schema": createLegacyTranslationSchema(numLines),
             }
         }
     elif not _NO_SAMPLING_RE.search(model or ""):
