@@ -257,6 +257,28 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(self.tab.batch_overall_bar.format(), "Failed")
         self.assertNotEqual(self.tab.batch_overall_bar.value(), 100)
 
+        # Resume/poll must clear a stale Failed overall-bar label from a prior finish.
+        self.tab._on_batch_phase("polling", None)
+        self.assertEqual(self.tab.batch_overall_bar.format(), "%p%")
+        self.assertIn("Processing", self.tab.batch_phase_title.text())
+
+        self.tab._on_batch_phase("failed", {"message": "previous local run failed"})
+        self.tab._on_batch_phase("poll_status", [{
+            "id": "batch_x",
+            "api_status": "in_progress",
+            "request_count": 54,
+            "counts": {
+                "succeeded": 40,
+                "processing": 14,
+                "errored": 0,
+                "canceled": 0,
+                "expired": 0,
+            },
+        }])
+        self.assertEqual(self.tab.batch_overall_bar.format(), "%p%")
+        self.assertIn("Processing", self.tab.batch_phase_title.text())
+        self.assertIn("in_progress", self.tab.batch_poll_status.text())
+
     def test_gemini_submit_estimate_uses_precision_and_thinking_warning(self) -> None:
         self.tab._batch_active = True
         self.tab._on_batch_phase("submit", {

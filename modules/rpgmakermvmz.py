@@ -150,7 +150,7 @@ def refreshRuntimeConfig():
 
 # Config (Default)
 # FIRSTLINESPEAKERS: Guess speaker from first line.
-FIRSTLINESPEAKERS = True
+FIRSTLINESPEAKERS = False
 # INLINE401SPEAKERS: Extract speaker from "Name「dialogue」" inline format on 401 lines.
 INLINE401SPEAKERS = False
 # FACENAME101: Map face name -> speaker.
@@ -207,10 +207,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = True
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE101 = False
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
 CODE408 = False

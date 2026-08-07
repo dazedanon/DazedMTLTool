@@ -2767,6 +2767,7 @@ class TranslationTab(QWidget):
             self._set_batch_steps(2)
             self.batch_phase_title.setText("Batch Translate - Processing")
             self.batch_overall_bar.setRange(0, 100)
+            self.batch_overall_bar.setFormat("%p%")
             self.batch_overall_bar.setValue(55)
             self.batch_pipeline_stack.setCurrentIndex(2)
             self.batch_poll_status.setText("Submitted - waiting for the provider to process the batch…")
@@ -2776,12 +2777,15 @@ class TranslationTab(QWidget):
                 self.batch_poll_bar.setFormat("Waiting for first status…")
         elif phase == "poll_status":
             self._set_batch_steps(2)
+            self.batch_phase_title.setText("Batch Translate - Processing")
+            self.batch_overall_bar.setFormat("%p%")
             self.batch_pipeline_stack.setCurrentIndex(2)
             self._update_batch_poll_dashboard(payload)
         elif phase == "consume":
             self._batch_consume_started = True
             self._set_batch_steps(3)
             self.batch_phase_title.setText("Batch Translate - Pass 2/2: Write")
+            self.batch_overall_bar.setFormat("%p%")
             self.batch_overall_bar.setValue(80)
             self.batch_pipeline_stack.setCurrentIndex(3)
             self.batch_consume_status.setText("Pass 2/2: writing translated files from batch results…")
@@ -3803,6 +3807,7 @@ class TranslationTab(QWidget):
             self._finish_pending = None
             if batch_mode:
                 self._set_progress_view_mode(True, len(selected_files))
+                self.batch_overall_bar.setFormat("%p%")
                 self.batch_overall_bar.setValue(0)
                 self.batch_pipeline_stack.setCurrentIndex(0)
                 self.batch_live_status.setText("")
