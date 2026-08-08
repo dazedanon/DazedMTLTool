@@ -249,6 +249,7 @@ class UpdatePreview:
     asset_manifest_available: bool = True
     baseline_source_root: Path | None = None
     preserved_translation_asset_paths: tuple[str, ...] = ()
+    patch_overlay: bool = False
 
     @property
     def changed_paths(self) -> tuple[str, ...]:
@@ -807,6 +808,7 @@ def _save_pending_asset_plan(
     manifest_digest: str,
     *,
     preserved_translation_assets: tuple[str, ...] = (),
+    patch_overlay: bool = False,
 ) -> None:
     _write_json_atomic(
         _asset_state_path(repo, game_prefix, "pending-assets"),
@@ -817,6 +819,7 @@ def _save_pending_asset_plan(
             "original_commit": original_commit,
             "manifest_digest": manifest_digest,
             "preserved_translation_assets": tuple(preserved_translation_assets),
+            "patch_overlay": patch_overlay,
         },
     )
 
@@ -845,9 +848,13 @@ def _load_pending_asset_plan(
             raise ValueError("invalid preserved translation assets")
         if not isinstance(preserved_translation_assets, list):
             raise ValueError("invalid preserved translation assets")
+        patch_overlay = document.get("patch_overlay", False)
+        if not isinstance(patch_overlay, bool):
+            raise ValueError("invalid patch overlay setting")
         return {
             **{key: document[key] for key in required},
             "preserved_translation_assets": tuple(preserved_translation_assets),
+            "patch_overlay": patch_overlay,
         }
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         raise GitWorkflowError(f"Pending asset update is invalid: {path}") from exc
@@ -989,6 +996,22 @@ def _build_ignored_asset_manifest(
             _hash_file(entry.path), file_stat.st_size, entry.mode
         )
     return manifest
+
+
+def _proposed_asset_manifest(
+    source: Path,
+    ignored_paths: Iterable[str],
+    baseline: Mapping[str, _AssetManifestEntry] | None,
+    *,
+    patch_overlay: bool,
+) -> dict[str, _AssetManifestEntry]:
+    """Build the next asset manifest from a release folder or copy-over patch."""
+    supplied = _build_ignored_asset_manifest(source, ignored_paths)
+    if not patch_overlay:
+        return supplied
+    proposed = dict(baseline or {})
+    proposed.update(supplied)
+    return proposed
 
 
 def _asset_manifest_for_source(
@@ -1315,6 +1338,7 @@ def _write_tree_from_folder(
     base_commit: str | None,
     format_json: bool = True,
     materialize_json: bool = False,
+    replace_game_tree: bool = True,
 ) -> _TreeBuild:
     discovered_files = _source_files(source, format_json=format_json)
     managed_ignore = repo.joinpath(game_prefix, ".gitignore")
@@ -1337,13 +1361,20 @@ def _write_tree_from_folder(
         else:
             _run_git(repo, "read-tree", "--empty", env=index_env)
 
-        existing = _run_git(repo, "ls-files", "-z", env=index_env).stdout.split("\x00")
-        prefix_marker = f"{game_prefix}/" if game_prefix else ""
-        removals = [
-            path
-            for path in existing
-            if path and (not game_prefix or path == game_prefix or path.startswith(prefix_marker))
-        ]
+        removals = []
+        if replace_game_tree:
+            existing = _run_git(repo, "ls-files", "-z", env=index_env).stdout.split("\x00")
+            prefix_marker = f"{game_prefix}/" if game_prefix else ""
+            removals = [
+                path
+                for path in existing
+                if path
+                and (
+                    not game_prefix
+                    or path == game_prefix
+                    or path.startswith(prefix_marker)
+                )
+            ]
         index_lines = [f"0 {_ZERO_OID}\t{path}" for path in removals]
 
         raw_files = [entry for entry in files if entry.normalized_text is None]
@@ -2247,14 +2278,69 @@ def _display_path(path: str, game_prefix: str) -> str:
     return path[len(prefix) :] if prefix and path.startswith(prefix) else path
 
 
+def _validate_patch_root_alignment(
+    repo: Path,
+    source: Path,
+    original_commit: str,
+    game_prefix: str,
+) -> None:
+    """Reject a patch that clearly belongs one directory above the selection."""
+    if not game_prefix:
+        return
+    entries = _source_files(source, format_json=False)
+    if not entries:
+        return
+    original_files = _tree_files(repo, original_commit, "")
+    selected = PurePosixPath(game_prefix)
+    parent_prefix = "" if str(selected.parent) == "." else selected.parent.as_posix()
+    direct_matches = []
+    intended_matches = []
+    for entry in entries:
+        direct = _prefixed(parent_prefix, entry.relative)
+        intended = _prefixed(game_prefix, entry.relative)
+        if direct in original_files:
+            direct_matches.append(entry.relative)
+        if intended in original_files:
+            intended_matches.append(entry.relative)
+
+    first_parts = {
+        PurePosixPath(entry.relative).parts[0].casefold()
+        for entry in entries
+        if PurePosixPath(entry.relative).parts
+    }
+    repeats_selected_folder = selected.name.casefold() in first_parts
+    strongly_shifted = (
+        len(direct_matches) >= 3
+        and len(direct_matches) >= max(1, len(intended_matches)) * 4
+    )
+    if not direct_matches or (not repeats_selected_folder and not strongly_shifted):
+        return
+
+    example = next(
+        (
+            path
+            for path in direct_matches
+            if PurePosixPath(path).parts[0].casefold() == selected.name.casefold()
+        ),
+        direct_matches[0],
+    )
+    raise GitWorkflowError(
+        "The patch paths do not line up with the selected translated game folder. "
+        f"For example, {example!r} already exists one folder above the selection, "
+        "so applying here would create a duplicated folder path. Select the game "
+        f"root instead: {repo.joinpath(*selected.parent.parts)}"
+    )
+
+
 def preview_official_update(
     translated_game: str | Path,
     new_official_game: str | Path,
     version: str,
     *,
     previous_official_game: str | Path | None = None,
+    patch_overlay: bool = False,
 ) -> UpdatePreview:
-    """Build a non-ref preview of the normalized official release tree."""
+    """Build a non-ref preview of a full release or copy-over patch tree."""
     game = Path(translated_game).expanduser().resolve()
     version = _validate_version(version)
     status = inspect_repository(game)
@@ -2270,11 +2356,19 @@ def preview_official_update(
     if not status.worktree_clean:
         raise GitWorkflowError("Commit current translation changes before previewing")
     official = _validate_source(new_official_game, game)
+    if patch_overlay:
+        _validate_patch_root_alignment(
+            status.repo_root,
+            official,
+            status.original_commit,
+            status.game_prefix,
+        )
     build = _write_tree_from_folder(
         status.repo_root,
         official,
         game_prefix=status.game_prefix,
         base_commit=status.original_commit,
+        replace_game_tree=not patch_overlay,
     )
     build = _preserve_tool_owned_paths(
         status.repo_root,
@@ -2283,7 +2377,7 @@ def preview_official_update(
         status.game_prefix,
     )
     preserved_translation_assets = ()
-    if previous_official_game is None:
+    if previous_official_game is None and not patch_overlay:
         build, preserved_translation_assets = _preserve_unbased_translation_assets(
             status.repo_root,
             build,
@@ -2311,7 +2405,12 @@ def preview_official_update(
             game,
             status.game_prefix,
         )
-    proposed_assets = _build_ignored_asset_manifest(official, build.ignored_paths)
+    proposed_assets = _proposed_asset_manifest(
+        official,
+        build.ignored_paths,
+        baseline_assets,
+        patch_overlay=patch_overlay,
+    )
     external_changes = _external_asset_changes(
         game, baseline_assets, proposed_assets
     )
@@ -2456,6 +2555,7 @@ def preview_official_update(
         asset_manifest_available=stored_asset_baseline,
         baseline_source_root=baseline_source,
         preserved_translation_asset_paths=preserved_translation_assets,
+        patch_overlay=patch_overlay,
     )
 
 
@@ -2476,15 +2576,20 @@ def _complete_pending_asset_plan(
             "The pending asset update does not match the registered original version"
         )
     source = _validate_source(plan["source"], game)
-    proposed = _asset_manifest_for_source(
+    baseline = _load_asset_manifest(status.repo_root, status.game_prefix)
+    supplied = _asset_manifest_for_source(
         status.repo_root, source, status.game_prefix
     )
+    if plan.get("patch_overlay", False):
+        proposed = dict(baseline or {})
+        proposed.update(supplied)
+    else:
+        proposed = supplied
     if _manifest_digest(proposed) != plan["manifest_digest"]:
         raise GitWorkflowError(
             "The official folder changed before its assets were synchronized. "
             "Restore that folder and finish the asset update."
         )
-    baseline = _load_asset_manifest(status.repo_root, status.game_prefix)
     preserved_translation_assets = plan.get("preserved_translation_assets", ())
     changes = tuple(
         change
@@ -2534,6 +2639,7 @@ def apply_official_update(
     expected_asset_manifest: str | None = None,
     previous_official_game: str | Path | None = None,
     expected_baseline_asset_manifest: str | None = None,
+    patch_overlay: bool = False,
 ) -> UpdateResult:
     game = Path(translated_game).expanduser().resolve()
     version = _validate_version(version)
@@ -2559,12 +2665,20 @@ def apply_official_update(
         )
     official = _validate_source(new_official_game, game)
     repo = status.repo_root
+    if patch_overlay:
+        _validate_patch_root_alignment(
+            repo,
+            official,
+            status.original_commit,
+            status.game_prefix,
+        )
     _reject_original_checked_out_elsewhere(repo)
     new_tree = _write_tree_from_folder(
         repo,
         official,
         game_prefix=status.game_prefix,
         base_commit=status.original_commit,
+        replace_game_tree=not patch_overlay,
     )
     new_tree = _preserve_tool_owned_paths(
         repo,
@@ -2573,7 +2687,7 @@ def apply_official_update(
         status.game_prefix,
     )
     preserved_translation_assets = ()
-    if previous_official_game is None:
+    if previous_official_game is None and not patch_overlay:
         new_tree, preserved_translation_assets = (
             _preserve_unbased_translation_assets(
                 repo,
@@ -2583,10 +2697,6 @@ def apply_official_update(
                 status.game_prefix,
             )
         )
-    proposed_assets = _build_ignored_asset_manifest(
-        official, new_tree.ignored_paths
-    )
-    proposed_asset_digest = _manifest_digest(proposed_assets)
     baseline_assets = _load_asset_manifest(repo, status.game_prefix)
     baseline_was_missing = baseline_assets is None
     baseline_metadata_kind = None
@@ -2637,6 +2747,13 @@ def apply_official_update(
     elif existing_baseline_source == _ASSET_BASELINE_SOURCE_BOOTSTRAP:
         baseline_metadata_kind = _ASSET_BASELINE_SOURCE_CURRENT_GAME
         baseline_metadata_has_unbased_assets = bool(preserved_translation_assets)
+    proposed_assets = _proposed_asset_manifest(
+        official,
+        new_tree.ignored_paths,
+        baseline_assets,
+        patch_overlay=patch_overlay,
+    )
+    proposed_asset_digest = _manifest_digest(proposed_assets)
     baseline_asset_digest = _manifest_digest(baseline_assets)
     if expected_tree is not None and new_tree.tree != expected_tree:
         raise GitWorkflowError(
@@ -2709,6 +2826,7 @@ def apply_official_update(
         original_commit,
         proposed_asset_digest,
         preserved_translation_assets=preserved_translation_assets,
+        patch_overlay=patch_overlay,
     )
     try:
         _run_git(

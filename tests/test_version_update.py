@@ -413,6 +413,90 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertEqual(status.original_version, "1.03")
         self.assertEqual(status.translation_version, "1.03")
 
+    def test_copy_over_patch_preserves_omitted_files_and_updates_supplied_assets(self):
+        self.write_versions("old dialogue\n", "English dialogue\n", "unused\n")
+        for folder in (self.old, self.translated):
+            folder.joinpath("data").mkdir()
+            folder.joinpath("movies").mkdir()
+            folder.joinpath("data/System.json").write_text(
+                '{"version":1}', encoding="utf-8"
+            )
+            folder.joinpath("data/Unchanged.json").write_text(
+                '{"keep":true}', encoding="utf-8"
+            )
+            folder.joinpath("movies/ending.gdat").write_bytes(b"old movie")
+            folder.joinpath("movies/unchanged.gdat").write_bytes(b"keep movie")
+            folder.joinpath("eol.txt").write_bytes(b"same text\r\n")
+        patch_folder = self.root / "Ver.1.1_patch"
+        patch_folder.joinpath("data").mkdir(parents=True)
+        patch_folder.joinpath("movies").mkdir()
+        patch_folder.joinpath("data/System.json").write_text(
+            '{"version":2}', encoding="utf-8"
+        )
+        patch_folder.joinpath("data/Unchanged.json").write_text(
+            '{"keep":true}', encoding="utf-8"
+        )
+        patch_folder.joinpath("eol.txt").write_bytes(b"same text\r\n")
+        patch_folder.joinpath("movies/ending.gdat").write_bytes(b"new movie")
+        bootstrap_repository(self.translated, self.old, "1.00")
+
+        preview = preview_official_update(
+            self.translated, patch_folder, "1.10", patch_overlay=True
+        )
+
+        self.assertTrue(preview.patch_overlay)
+        self.assertEqual(preview.deleted_paths, ())
+        self.assertIn("data/System.json", preview.modified_paths)
+        self.assertNotIn("data/Unchanged.json", preview.changed_paths)
+        self.assertNotIn("eol.txt", preview.changed_paths)
+        external = {change.path: change for change in preview.external_changes}
+        self.assertEqual(external["movies/ending.gdat"].change, "Replaced")
+        self.assertNotIn("movies/unchanged.gdat", external)
+
+        apply_official_update(
+            self.translated,
+            patch_folder,
+            "1.10",
+            expected_tree=preview.proposed_tree,
+            expected_asset_manifest=preview.proposed_asset_manifest,
+            patch_overlay=True,
+        )
+
+        self.assertEqual(
+            self.translated.joinpath("data/System.json").read_text(encoding="utf-8"),
+            '{\n    "version": 2\n}',
+        )
+        self.assertTrue(self.translated.joinpath("data/Unchanged.json").is_file())
+        self.assertTrue(self.translated.joinpath("game.txt").is_file())
+        self.assertEqual(
+            self.translated.joinpath("movies/ending.gdat").read_bytes(), b"new movie"
+        )
+        self.assertEqual(
+            self.translated.joinpath("movies/unchanged.gdat").read_bytes(), b"keep movie"
+        )
+
+    def test_copy_over_patch_rejects_a_data_folder_selected_as_the_game_root(self):
+        self.write_versions("old\n", "translated\n", "unused\n")
+        for folder in (self.old, self.translated):
+            folder.joinpath("data").mkdir()
+            for name in ("Actors.json", "Items.json", "System.json"):
+                folder.joinpath("data", name).write_text("[]", encoding="utf-8")
+        patch_folder = self.root / "Ver.1.1_patch"
+        patch_folder.joinpath("data").mkdir(parents=True)
+        for name in ("Actors.json", "Items.json", "System.json"):
+            patch_folder.joinpath("data", name).write_text("[]", encoding="utf-8")
+        bootstrap_repository(self.translated, self.old, "1.00")
+
+        with self.assertRaisesRegex(
+            GitWorkflowError, "Select the game root instead"
+        ):
+            preview_official_update(
+                self.translated / "data",
+                patch_folder,
+                "1.10",
+                patch_overlay=True,
+            )
+
     def test_conflicting_file_uses_normalized_new_official_copy_and_is_reported(self):
         self.write_versions(
             '{"name":"Japanese","value":1}\n',
@@ -1449,6 +1533,11 @@ class VersionUpdateUITests(unittest.TestCase):
         try:
             self.assertEqual(tab.preview_btn.text(), "Preview update")
             self.assertEqual(tab.update_btn.text(), "Apply update")
+            self.assertFalse(tab.patch_overlay_check.isChecked())
+            self.assertIn("copy its files", tab.patch_overlay_check.text())
+            tab.new_edit.setText("/tmp/Ver.1.1_patch")
+            self.assertEqual(tab.new_version_edit.text(), "1.1")
+            self.assertTrue(tab.patch_overlay_check.isChecked())
             self.assertFalse(tab.update_btn.isEnabled())
             self.assertTrue(tab.bootstrap_card.isHidden())
             self.assertTrue(tab.update_card.isHidden())

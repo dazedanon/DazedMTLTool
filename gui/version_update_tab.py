@@ -8,6 +8,7 @@ from typing import Callable
 
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QFormLayout,
     QHeaderView,
@@ -47,6 +48,7 @@ from util.version_update import (
 
 
 _VERSION_HINT = re.compile(r"(?i)(?:^|[\s_\-[(])v(?:er(?:sion)?\.?)?[\s._-]*(\d+(?:\.\d+)+)")
+_PATCH_HINT = re.compile(r"(?i)(?:^|[\s_-])patch(?:$|[\s_-])")
 
 
 class _WorkflowThread(QThread):
@@ -118,7 +120,7 @@ class VersionUpdateTab(QWidget):
         self.current_edit = self._folder_row(
             repository_form,
             "Translated game:",
-            "Folder containing the translated working game",
+            "Game root containing data/, www/, or the game executable",
         )
         self.current_edit.textChanged.connect(self._translated_game_changed)
         repository_card.add_layout(repository_form)
@@ -207,7 +209,7 @@ class VersionUpdateTab(QWidget):
 
         update_card = SectionCard(
             "3. Apply an official update",
-            "Choose the clean folder for the new official release, preview its impact, then apply it to the translated game.",
+            "Choose a complete official release or a copy-over patch, preview its impact, then apply it to the translated game.",
         )
         self.baseline_panel = QWidget()
         self.baseline_panel.setObjectName("transparentCardPanel")
@@ -237,8 +239,8 @@ class VersionUpdateTab(QWidget):
         update_form.setContentsMargins(0, 0, 0, 0)
         self.new_edit = self._folder_row(
             update_form,
-            "New official game:",
-            "Clean folder containing the new official release",
+            "Official update folder:",
+            "Complete official game or extracted patch folder",
         )
         self.new_edit.textChanged.connect(self._guess_new_version)
         self.new_edit.textChanged.connect(lambda _text: self._invalidate_preview())
@@ -246,6 +248,17 @@ class VersionUpdateTab(QWidget):
         self.new_version_edit.setPlaceholderText("For example: 1.03")
         self.new_version_edit.textChanged.connect(lambda _text: self._invalidate_preview())
         update_form.addRow("New version:", self.new_version_edit)
+        self.patch_overlay_check = QCheckBox(
+            "This is a patch folder (copy its files over the previous official version)"
+        )
+        self.patch_overlay_check.setToolTip(
+            "Files omitted from the patch are kept. Use this for updates whose "
+            "instructions say to copy and overwrite selected folders or files."
+        )
+        self.patch_overlay_check.toggled.connect(
+            lambda _checked: self._invalidate_preview()
+        )
+        update_form.addRow("Update type:", self.patch_overlay_check)
         update_card.add_layout(update_form)
         self.preview_empty = QLabel(
             "Preview file-level update impact before applying it."
@@ -460,6 +473,8 @@ class VersionUpdateTab(QWidget):
             guessed = self._version_from_path(text)
             if guessed:
                 self.new_version_edit.setText(guessed)
+        if text.strip() and _PATCH_HINT.search(Path(text).name):
+            self.patch_overlay_check.setChecked(True)
 
     def refresh_status(self):
         selected = self.current_edit.text().strip()
@@ -651,6 +666,7 @@ class VersionUpdateTab(QWidget):
             self.abort_btn,
         ):
             button.setEnabled(not busy)
+        self.patch_overlay_check.setEnabled(not busy)
         if not busy:
             self.update_btn.setEnabled(
                 self._preview is not None
@@ -778,11 +794,12 @@ class VersionUpdateTab(QWidget):
             or self._preview.source_root != Path(official).expanduser().resolve()
             or self._preview.version != version
             or self._preview.baseline_source_root != resolved_baseline
+            or self._preview.patch_overlay != self.patch_overlay_check.isChecked()
         ):
             QMessageBox.warning(
                 self,
                 "Preview required",
-                "Preview the current official folder and version before applying the update.",
+                "Preview the current update folder, type, and version before applying the update.",
             )
             return
         self._run(
@@ -798,6 +815,7 @@ class VersionUpdateTab(QWidget):
                 expected_baseline_asset_manifest=(
                     self._preview.baseline_asset_manifest
                 ),
+                patch_overlay=self.patch_overlay_check.isChecked(),
             ),
             self._show_update_result,
         )
@@ -820,6 +838,7 @@ class VersionUpdateTab(QWidget):
                 official,
                 version,
                 previous_official_game=baseline or None,
+                patch_overlay=self.patch_overlay_check.isChecked(),
             ),
             self._show_preview,
         )
@@ -868,7 +887,8 @@ class VersionUpdateTab(QWidget):
         )
 
         expected = (
-            "Git-tracked patch: "
+            ("Patch folder overlay. " if preview.patch_overlay else "Complete release. ")
+            + "Git-tracked patch: "
             f"{sum(change.change == 'Added' for change in preview.file_changes)} added · "
             f"{sum(change.change == 'Modified' for change in preview.file_changes)} modified · "
             f"{sum(change.change == 'Removed' for change in preview.file_changes)} removed. "
@@ -877,6 +897,8 @@ class VersionUpdateTab(QWidget):
             f"{sum(change.change == 'Replaced' for change in preview.external_changes)} replaced · "
             f"{sum(change.change == 'Removed' for change in preview.external_changes)} removed."
         )
+        if preview.patch_overlay:
+            expected += " Files omitted from the patch are preserved."
         non_image_assets = tuple(
             change
             for change in preview.external_changes

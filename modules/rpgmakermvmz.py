@@ -230,10 +230,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = False
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE101 = True
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE408 = False
@@ -252,7 +252,7 @@ CODE320 = False
 CODE324 = False
 CODE325 = False
 CODE111 = False
-CODE108 = True
+CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
 # All known code-357 headerMapping entries. Enable entries via ENABLED_PLUGINS_357.

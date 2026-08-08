@@ -75,8 +75,13 @@ branch.
 
 ## Updating
 
-The user supplies a clean new official folder and version. A preview creates the
-proposed Git tree without moving either branch. Valid JSON is parsed and emitted
+The user supplies either a clean new official folder or an extracted copy-over
+patch, plus the new version. A patch folder is overlaid on the registered
+`original` tree: supplied files replace matching paths while omitted files are
+preserved. This matches patches whose instructions say to copy folders into the
+game and approve overwrites; patch folders cannot express file deletions.
+A preview creates the proposed Git tree without moving either branch. Valid JSON
+is parsed and emitted
 with `indent=4` and `ensure_ascii=False`. Other tracked UTF-8 text is normalized
 to LF line endings, except Windows CRLF-sensitive scripts such as `.bat`, `.cmd`,
 and `.reg`. The supplied official folder itself is never modified.

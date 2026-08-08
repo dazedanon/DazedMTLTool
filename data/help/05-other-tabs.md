@@ -76,7 +76,13 @@ GameUpdate `.gitignore` before creating either commit. Existing project-specific
 after the bundled rules so they still take precedence.
 
 For a later release, select the clean new official game, enter its version, and click **Preview
-changes**. The overview lists added, modified, deleted, and potentially overlapping files. Valid
+changes**. If the developer instead supplies a smaller patch with instructions to copy its folders
+over the game and overwrite files, select the extracted patch folder and enable **This is a patch
+folder**. Files omitted from a patch are preserved; use a complete official game folder when an
+update needs to delete files. Select the translated game's root folder, not its `data` subfolder;
+otherwise patch paths would be nested one level too deep.
+
+The overview lists added, modified, deleted, and potentially overlapping files. Valid
 JSON is shown as normalized before commit so Git can compare individual lines. A JSON file that
 cannot be safely formatted is left unchanged and displayed as a warning. Files excluded by Git
 are listed separately and are not included in the release commit. Review the overview, then click
