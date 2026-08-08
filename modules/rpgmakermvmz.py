@@ -3990,6 +3990,8 @@ def searchCodes(page, pbar, jobList, filename):
                     regex = r"text_indicator\s?:\s?(.+)"
                 elif "NW名前指定" in jaString:
                     regex = r"NW名前指定\s+(.+)"
+                elif "<namePop:" in jaString:
+                    regex = r"<namePop:\s*([^>]+)>"
                 else:
                     i += 1
                     continue
