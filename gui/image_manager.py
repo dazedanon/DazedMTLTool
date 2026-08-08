@@ -510,7 +510,8 @@ class ImageManager(QWidget):
         self.image_list.currentItemChanged.connect(self._show_preview)
         self.image_list.setToolTip(
             "Click highlights one image. Ctrl-click toggles individual images, Shift-click "
-            "selects a range, and Ctrl+A highlights the current page."
+            "selects a range, and Ctrl+A highlights the current page. Changing a filter "
+            "or page clears highlights."
         )
         browser_layout.addWidget(self.image_list, 1)
 
@@ -967,6 +968,7 @@ class ImageManager(QWidget):
         QMessageBox.critical(self, "Image Scan Failed", message)
 
     def _apply_filters(self) -> None:
+        self.selected_ids.clear()
         query = self.search_edit.text().strip().casefold()
         folder = self.folder_combo.currentData() or ""
         state = self.state_combo.currentData()
@@ -982,6 +984,7 @@ class ImageManager(QWidget):
         self.filtered_assets = filtered
         self.page = 0
         self._render_page()
+        self._update_selection_status()
 
     def _page_assets(self) -> list[ImageAsset]:
         start = self.page * _PAGE_SIZE
@@ -1056,8 +1059,10 @@ class ImageManager(QWidget):
         self.image_list.viewport().update()
 
     def _change_page(self, delta: int) -> None:
+        self.selected_ids.clear()
         self.page += delta
         self._render_page()
+        self._update_selection_status()
 
     def _selection_changed(self) -> None:
         page_ids = {

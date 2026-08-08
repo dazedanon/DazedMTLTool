@@ -138,40 +138,33 @@ class ImageManagerSelectionTests(unittest.TestCase):
             reopened.close()
             self.app.processEvents()
 
-    def test_highlights_survive_filters_without_refreshing_editable_view(self):
-        self._click(1)
-        self._click(3, Qt.ControlModifier)
-        selected_before = set(self.manager.selected_ids)
-        self.assertEqual(len(selected_before), 2)
+    def test_highlights_clear_when_filter_or_page_changes(self):
+        with patch("gui.image_manager._PAGE_SIZE", 2):
+            self.manager._apply_filters()
+            self._click(0)
+            self._click(1, Qt.ControlModifier)
+            self.assertEqual(len(self.manager.selected_ids), 2)
 
-        self.manager.search_edit.setText("image0")
-        self.app.processEvents()
-        self.manager.search_edit.clear()
-        self.app.processEvents()
+            self.manager.search_edit.setText("image0")
+            self.app.processEvents()
+            self.assertEqual(self.manager.selected_ids, set())
+            self.assertEqual(self.manager.image_list.selectedItems(), [])
+            self.assertIn("0 highlighted", self.manager.status_label.text())
 
-        self.assertEqual(self.manager.selected_ids, selected_before)
-        selected_ids = {
-            item.data(Qt.UserRole + 1)
-            for item in self.manager.image_list.selectedItems()
-        }
-        self.assertEqual(selected_ids, selected_before)
+            self.manager.search_edit.clear()
+            self.app.processEvents()
+            self._click(0)
+            self.assertEqual(len(self.manager.selected_ids), 1)
 
-        for asset_id in selected_before:
-            asset = self.manager.assets_by_id[asset_id]
-            asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
-            asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
-        editable_filter = self.manager.state_combo.findData("editable")
-        self.manager.state_combo.setCurrentIndex(editable_filter)
-        QTest.qWait(20)
-        self.app.processEvents()
-        self.assertEqual(self.manager.image_list.count(), 2)
-        self.assertEqual(self.manager.selected_ids, selected_before)
+            self.manager._change_page(1)
+            self.app.processEvents()
+            self.assertEqual(self.manager.selected_ids, set())
+            self.assertEqual(self.manager.image_list.selectedItems(), [])
+            self.assertIn("0 highlighted", self.manager.status_label.text())
 
-        removed_id = self.manager.image_list.item(0).data(Qt.UserRole + 1)
-        self._click(0, Qt.ControlModifier)
-        self.app.processEvents()
-        self.assertNotIn(removed_id, self.manager.selected_ids)
-        self.assertEqual(self.manager.image_list.count(), 2)
+            self.manager._change_page(-1)
+            self.app.processEvents()
+            self.assertEqual(self.manager.image_list.selectedItems(), [])
 
     def test_delete_key_removes_only_highlighted_workspace_copy(self):
         asset = self.manager.assets[0]
