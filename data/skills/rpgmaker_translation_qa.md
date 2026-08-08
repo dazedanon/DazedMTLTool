@@ -38,10 +38,16 @@ checks with targeted semantic review.
   manifest described below; do not hand-pick or reshuffle samples between runs.
 - Review nearby event commands together when meaning, speaker, referent, or control-code placement
   depends on context.
+- For clusters repeated across files, speakers, event shapes, or database fields, inspect their
+  locator metadata for context diversity. Expand at least one occurrence from each materially
+  distinct context class when the text is short, ambiguous, risk-flagged, or context-sensitive;
+  do not assume one representative proves every occurrence is semantically correct.
 - State exact coverage. Never imply that sampled semantic review covered every line.
 
-Use a temporary script or compact index when useful. Do not leave generated QA artifacts in the
-game data folder or elsewhere in the game folder.
+Prefer a committed, tested DazedTL audit runner when one supports the required manifest schema.
+Record its version or content hash. If no suitable runner exists, use a temporary script or compact
+index and preserve the helper with the external checkpoint so the audit remains reproducible. Do
+not leave generated QA artifacts in the game data folder or elsewhere in the game folder.
 
 ## High-throughput full-coverage review
 
@@ -75,6 +81,42 @@ names and gameplay terms, while rejecting substring collisions and contextually 
 Report the glossary path, whether it loaded, its usable entry count, and the number of confirmed
 violations. If the user approves a deliberate style or terminology exception, record it in the
 temporary manifest and do not raise it again unless its context or spelling materially changes.
+
+## Memory-bounded review and recovery
+
+Keep the full audit reproducible without retaining a large editor, terminal, or helper-process
+footprint. The frozen manifest on disk is the source of truth; retain compact identifiers,
+dispositions, risk reasons, and checksums there rather than full parsed JSON or expanded candidate
+text in memory.
+
+- Process a single compact pane (normally 75–150 rows) and its targeted context at a time. Keep
+  only the current wave, the current high-risk subset, and evidence for unresolved candidates in
+  memory; retrieve surrounding commands and alternate occurrences on demand, then discard them.
+- Use ranked review: handle high-risk rows first with contextual expansion, then review lower-risk
+  rows in frozen order through compact direct comparisons and targeted contextual spot checks
+  across strata. Do not expand full event context for every apparently sound low-risk row, but
+  record a review disposition for each representative.
+- Batch confirmed fixes and validation work at the remediation-wave level. Do not reparse the
+  entire corpus after each individual edit when the same cached manifest remains valid; perform
+  the required complete reparse and regression cycle before closing the batch.
+- Use short-lived helper processes for inventory generation, scoring, validation, and regression.
+  Have each process write its compact result or checkpoint and exit before the next expensive
+  phase so its parsed objects and intermediate data are released.
+- Never dump a complete manifest, JSON file, candidate corpus, or verbose per-row progress into
+  the terminal or agent conversation. Emit compact totals, the active pane, confirmed findings,
+  and bounded diagnostic excerpts only. Cap query output before displaying it.
+- After every closed wave and before a potentially expensive operation, save a validated manifest
+  checkpoint containing the ordered identities, reviewed dispositions, issue signatures, and
+  checksum. On interruption or restart, reload and verify that checkpoint; do not rebuild or
+  reprint the corpus merely to resume.
+- If host memory pressure or editor stutter appears, first checkpoint the current state, let active
+  helpers exit, clear no-longer-needed in-memory candidate/context collections, and resume from
+  the manifest with smaller panes or output caps. Do not compensate by reducing coverage,
+  skipping contextual evidence, or altering frozen wave membership.
+
+Memory-bounded operation changes storage and presentation only. Every frozen representative still
+needs a recorded review disposition, and risk ranking remains an attention order rather than a
+substitute for semantic coverage.
 
 ## Actionability threshold
 
@@ -110,14 +152,30 @@ locator.
 
 Freeze the complete cluster universe before Wave 1. For each cluster, choose the lexicographically
 lowest stable identity as its representative and compute its selection key as
-`SHA-256("rpgmaker-qa-v2\0" + representative identity)`. Assign the representative a primary
-stratum tuple of `file, event-code-or-database-field, speaker-or-empty, length-band`. Group by that
-tuple, sort tuple names lexicographically, sort each group by mandatory-review status first and
-selection key second, then interleave the groups round-robin while skipping exhausted groups.
+`SHA-256("rpgmaker-qa-v3\0" + representative identity)`. For new v3 audits, construct the frozen
+order hierarchically so one dominant file cannot consume the final waves:
+
+1. Group representatives by file. Within each file, group by the sub-stratum tuple of
+   `event-code-or-database-field, speaker-or-empty, length-band`.
+2. Sort each sub-stratum by mandatory-review status first and selection key second, then interleave
+   the sub-strata round-robin to create one deterministic queue per file.
+3. Build the global order by repeatedly selecting the non-exhausted file with the smallest
+   `consumed queue entries / total queue entries` ratio, breaking ties by relative filename, and
+   taking its next representative. This keeps each substantial file advancing through roughly the
+   same percentage of its queue across the audit instead of exhausting smaller files early.
+
 Split that one frozen order into consecutive waves. Save and report a SHA-256 checksum of the
-ordered representative-identity list. Reuse the manifest on resumed QA; never regenerate it merely
-because English values were edited. This fixed construction is the release-readiness sampling
-order; additional contextual leads may be reviewed, but they do not replace its wave entries.
+ordered representative-identity list. Reuse any valid saved manifest on resumed QA, including a
+v2 manifest; never regenerate it merely because the algorithm changed or English values were
+edited. This fixed construction is the release-readiness sampling order; additional contextual
+leads may be reviewed, but they do not replace its wave entries.
+
+For every cluster, retain all locator context facets: relative file, event code or database field,
+speaker, display shape, and nearby-command signature when available. The representative supplies
+base pair coverage. When those facets reveal materially distinct contexts, create a deterministic
+context-diversity queue using the lexicographically lowest locator in each distinct context class.
+Review all risk-bearing classes and record how many total classes were checked. Treat these checks
+as occurrence-context coverage, not additional unique-cluster coverage.
 
 Before presenting the first findings report, run non-overlapping discovery waves until the audit
 converges, exhausts the frozen manifest, or encounters an actual runtime/tool limit:
@@ -233,6 +291,17 @@ Use the source and surrounding event context as evidence. Do not call a translat
 because another valid wording is possible. Exclude subjective polish and plausible intentional
 localization choices from findings rather than assigning them a severity.
 
+## Static QA boundary and runtime handoff
+
+Do not equate static corpus coverage with runtime or playthrough coverage. After static convergence,
+recommend a separate targeted playtest covering the most heavily repaired events, representative
+message and choice shapes, name boxes, control-code behavior, wrapping exceptions, and any
+engine-specific pagination assumptions. Do not launch the game or create saves/configuration under
+this skill unless the user separately authorizes that phase and its filesystem side effects.
+
+Report static readiness and runtime confidence separately. A complete static audit may support a
+release recommendation while still naming focused playtest scenarios that remain unverified.
+
 ## Converged audit output and approval gate
 
 Do not edit during discovery. Complete the convergence loop, exhaust the manifest, or report the
@@ -245,7 +314,9 @@ actual runtime/tool limit before returning these sections:
 - Pairs mechanically checked and unresolved pairs
 - Unique pairs/clusters
 - Pairs semantically reviewed, sampling method, and strata represented
+- Repeated-pair context classes found and context classes reviewed
 - Per-wave coverage, overlap, new actionable findings, clean-wave count, and convergence status
+- Audit runner version or helper content hash and checkpoint schema
 - Any blind spots
 
 ### Findings summary
