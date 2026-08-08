@@ -30,6 +30,12 @@ class ReleasePackageTests(unittest.TestCase):
             self._write(game, "Data/manual.txt", b"runtime text")
             self._write(game, "Save01.sav", b"translator save")
             self._write(game, "Save/Slot1.rpgsave", b"translator save")
+            nested_save = self._write(
+                game, "www/save/file1.rpgsave", b"nested translator save"
+            )
+            nested_sav = self._write(
+                game, "runtime/profile.sav", b"nested translator save"
+            )
             self._write(game, ".git/config")
             self._write(game, ".dazedtl/images/menu.png")
             self._write(game, "wolf_json/manifest.json")
@@ -99,6 +105,8 @@ class ReleasePackageTests(unittest.TestCase):
                 "Data.wolf.bak",
                 "Save01.sav",
                 "Save/Slot1.rpgsave",
+                "www/save/file1.rpgsave",
+                "runtime/profile.sav",
                 ".git/config",
                 ".dazedtl/images/menu.png",
                 "wolf_json/manifest.json",
@@ -114,6 +122,9 @@ class ReleasePackageTests(unittest.TestCase):
                 "gameupdate/previous_patch_sha.txt",
             ):
                 self.assertNotIn(prefix + relative, names)
+
+            self.assertEqual(nested_save.read_bytes(), b"nested translator save")
+            self.assertEqual(nested_sav.read_bytes(), b"nested translator save")
 
             self.assertIn('"name":"CorePlugin"', archived_plugins)
             self.assertIn("TLInspector", archived_plugins)

@@ -39,6 +39,11 @@ _EXCLUDED_DIR_NAMES = frozenset(
     }
 )
 
+# Engines do not agree on where saves live. RPG Maker MV/MZ deployments, for
+# example, can put them below ``www/save`` instead of at the game root.
+_SAVE_DIR_NAMES = frozenset({"save", "saves", "savedata", "save_data"})
+_SAVE_FILE_SUFFIXES = frozenset({".rpgsave", ".sav"})
+
 # DazedTL creates these at the game root while translating or playtesting.
 _EXCLUDED_ROOT_DIR_NAMES = frozenset(
     {
@@ -56,8 +61,6 @@ _EXCLUDED_ROOT_DIR_NAMES = frozenset(
         "files",
         "log",
         "logs",
-        "save",
-        "saves",
         "scripts",
         "skills",
         "test",
@@ -143,6 +146,9 @@ def exclusion_reason(relative: str | Path, *, is_dir: bool = False) -> str | Non
         return "tool metadata or cache"
 
     name = parts[-1]
+    if is_dir and name in _SAVE_DIR_NAMES:
+        return "local save data"
+
     if name.startswith(".env"):
         return "private environment configuration"
     if name in _EXCLUDED_FILE_NAMES:
@@ -161,8 +167,14 @@ def exclusion_reason(relative: str | Path, *, is_dir: bool = False) -> str | Non
                 return "translator configuration or documentation"
             if relative.suffix.casefold() in _ROOT_DOCUMENT_SUFFIXES:
                 return "root documentation file"
-            if name.startswith("save") or relative.suffix.casefold() in {".rpgsave", ".sav"}:
+            if (
+                name.startswith("save")
+                or relative.suffix.casefold() in _SAVE_FILE_SUFFIXES
+            ):
                 return "local save data"
+
+    if not is_dir and relative.suffix.casefold() in _SAVE_FILE_SUFFIXES:
+        return "local save data"
 
     if not is_dir and name.endswith(_BACKUP_SUFFIXES):
         return "backup or temporary file"
