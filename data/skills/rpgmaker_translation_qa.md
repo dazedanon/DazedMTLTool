@@ -43,6 +43,32 @@ checks with targeted semantic review.
 Use a temporary script or compact index when useful. Do not leave generated QA artifacts in the
 game data folder or elsewhere in the game folder.
 
+## High-throughput full-coverage review
+
+Optimize the review representation before reducing scope. After building the frozen manifest,
+create a compact, lossless review view backed by the manifest instead of repeatedly printing full
+pair records as JSON. Each displayed row should normally contain only the frozen ordinal, repeated
+locator count, risk reasons, source, and translation, with embedded newlines escaped onto one row.
+Keep filenames, JSON paths, identities, strata, and complete flags in the manifest and expand them
+only for entries that need investigation. Use panes of roughly 75–150 compact rows, adjusted to the
+actual text length, and combine panes into routine 500-pair waves.
+
+Before reviewing the first pane, score the entire unreviewed frozen suffix with a high-recall risk
+overlay. Include existing mechanical flags plus heuristic cues for negation, numbers, quantities,
+conditions, temporal order, pronouns, referents, kinship, glossary terms, short ambiguous text,
+large length changes, and inconsistent source/translation clusters. Inspect the highest-risk rows
+first, then scan every remaining row in the wave in frozen order. Risk ranking changes attention
+order only: it must not change frozen wave membership, count as semantic review by itself, or allow
+any row to be skipped. Record an explicit reviewed disposition for every wave representative.
+
+Resolve likely defects in batches. Retrieve surrounding event commands, alternate translations of
+the same source, glossary records, and authoritative database entries only for candidates that need
+that evidence. Propagate all confirmed signatures corpus-wide, apply the approved fixes together,
+then run one complete regression cycle for the remediation wave. Do not rerun the same expensive
+inventory or print verbose progress between individual findings when its cached inputs are still
+valid. Always perform the required full reparse and mechanical/regression checks before closing the
+wave.
+
 Before checking terminology, load `{{VOCAB_FILE}}`, confirm that it is readable, and build a
 deduplicated source-term to approved-English index. Treat it as authoritative for applicable
 names and gameplay terms, while rejecting substring collisions and contextually different senses.
@@ -105,7 +131,7 @@ converges, exhausts the frozen manifest, or encounters an actual runtime/tool li
   values for any actionable signature. A new affected value of an existing signature resets the
   clean-wave count. Dismissed stylistic or intentional differences do not reset it.
 - After the required minimum, require the final two consecutive waves to be clean. If either of the
-  last two required waves is not clean, continue with non-overlapping 250-pair extension waves
+  last two required waves is not clean, continue with non-overlapping 500-pair extension waves
   from the frozen order until two consecutive waves are clean or every unique pair is reviewed.
   Treat 2,500 pairs as a routine reporting checkpoint, not permission to make a false readiness
   claim. If an actual runtime or tool limit prevents extension, report non-convergence and the
@@ -182,7 +208,10 @@ Check every resolvable pair for:
    terms, changed numbers, polarity/negation risk, pronoun or subject flips, and punctuation or
    quote damage.
 6. Likely display overflow using the configured wrap widths when available. Distinguish an actual
-   overlong display line from intentional newlines or non-dialogue script text.
+   overlong display line from intentional newlines or non-dialogue script text. If runtime evidence
+   or the user confirms that a command shape such as code 401 automatically paginates safely,
+   record that exception once and suppress overflow-only findings for that shape; continue checking
+   the same values for semantic and control-code defects.
 
 Treat token spelling case-insensitively only where RPG Maker itself does; preserve the spelling and
 escaping already used by the file. Do not flag natural English word order merely because an inline
