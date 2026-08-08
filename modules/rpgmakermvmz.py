@@ -239,19 +239,19 @@ CODE102 = False
 CODE408 = False
 
 # Variables
-CODE122 = False
-CODE122_VAR_MIN = 0
-CODE122_VAR_MAX = 2000
+CODE122 = True
+CODE122_VAR_MIN = 9
+CODE122_VAR_MAX = 10
 
 # Plugins / Scripts
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
-CODE320 = False
+CODE356 = True
+CODE320 = True
 CODE324 = False
 CODE325 = False
-CODE111 = True
+CODE111 = False
 CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
@@ -2468,7 +2468,16 @@ def searchCodes(page, pbar, jobList, filename):
                 reduceWidthFlag = False
 
             ## Event Code: 401 Show Text
-            if "code" in codeList[i] and codeList[i]["code"] in [401, 405, -1] and ((codeList[i]["code"] in [401, -1] and CODE401) or (codeList[i]["code"] == 405 and CODE405)):
+            if "code" in codeList[i] and codeList[i]["code"] in [401, 405, -1] and (
+                (
+                    codeList[i]["code"] in [401, -1]
+                    and (CODE401 or SPEAKER_PARSE_MODE)
+                )
+                or (
+                    codeList[i]["code"] == 405
+                    and (CODE405 or SPEAKER_PARSE_MODE)
+                )
+            ):
                 # Save Code and starting index (j)
                 code = codeList[i]["code"]
                 j = i
@@ -3326,7 +3335,11 @@ def searchCodes(page, pbar, jobList, filename):
                             codeList[i]["parameters"][0] = f"'{kvKey} = {translatedText}'"
 
             ## Event Code: 101 [Name] [Optional]
-            if "code" in codeList[i] and codeList[i]["code"] == 101 and CODE101 is True:
+            if (
+                "code" in codeList[i]
+                and codeList[i]["code"] == 101
+                and (CODE101 or SPEAKER_PARSE_MODE)
+            ):
                 isVar = False
 
                 # Check for face name mappings first (before other processing)
@@ -3432,7 +3445,8 @@ def searchCodes(page, pbar, jobList, filename):
                 rawName = _101_name_source(codeList[i], isVar)
                 sourceName = _101_speaker_name(rawName)
                 currentName = _101_speaker_name(_101_name_current(codeList[i], isVar))
-                if sourceName and _text_needs_translation(currentName):
+                name_to_check = sourceName if SPEAKER_PARSE_MODE else currentName
+                if sourceName and _text_needs_translation(name_to_check):
                     response = getSpeaker(sourceName)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]

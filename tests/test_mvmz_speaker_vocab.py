@@ -373,10 +373,23 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         self.assertEqual(written, vocab)
         self.assertNotIn("# Speakers", written)
 
-    def test_speaker_parse_uses_original_when_live_text_is_english(self):
-        """Preflight must still collect nameplates from _original on translated rows."""
+    def test_speaker_parse_ignores_translation_switches_and_uses_original(self):
+        """Collect Names must inspect source nameplates regardless of phase settings."""
         page = {
             "list": [
+                {
+                    "code": 101,
+                    "indent": 0,
+                    "parameters": ["", 0, 0, 2, "Alice"],
+                    "_original": "アリス",
+                },
+                {
+                    "code": 401,
+                    "indent": 0,
+                    "parameters": ['"Hello."'],
+                    "_original": "「こんにちは」",
+                },
+                {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2]},
                 {
                     "code": 401,
                     "indent": 0,
@@ -393,22 +406,25 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
             ]
         }
         orig_first = mvmz.FIRSTLINESPEAKERS
+        orig_101 = mvmz.CODE101
         orig_401 = mvmz.CODE401
         orig_ignore = mvmz.IGNORETLTEXT
         orig_parse = mvmz.SPEAKER_PARSE_MODE
         orig_t = mvmz.translateAI
         mvmz.FIRSTLINESPEAKERS = True
-        mvmz.CODE401 = True
+        mvmz.CODE101 = False
+        mvmz.CODE401 = False
         mvmz.IGNORETLTEXT = True
         mvmz.resetSpeakerState()
         mvmz.setSpeakerParseMode(True)
         mvmz.translateAI = lambda text, history, batch=False: [text, [0, 0]]
         try:
             mvmz.searchCodes(page, None, [], "Map001.json")
-            self.assertEqual(mvmz.SPEAKER_COLLECTED, ["ニーナ"])
+            self.assertEqual(mvmz.SPEAKER_COLLECTED, ["アリス", "ニーナ"])
         finally:
             mvmz.translateAI = orig_t
             mvmz.FIRSTLINESPEAKERS = orig_first
+            mvmz.CODE101 = orig_101
             mvmz.CODE401 = orig_401
             mvmz.IGNORETLTEXT = orig_ignore
             mvmz.setSpeakerParseMode(orig_parse)
