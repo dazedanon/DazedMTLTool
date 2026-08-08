@@ -50,11 +50,25 @@ dark until the work that justifies them exists.
    another's.
 3. **Render** — the inpainting method, colour, outline, size, alignment and font
    are measured from the image and pre-filled, each labelled *Measured from the
-   image · N% confident* until touched. Tracking, horizontal and vertical scale,
+   image · N% confident* until touched, and an edit writes back only the one
+   control that moved — the fifteen the user did not touch keep their measured
+   or default values instead of being pinned to whatever the panel displayed.
+   Tracking, horizontal and vertical scale,
    bold and italic sit beside them, neutral until asked for, in Photoshop's
    units so a number copied off that panel means the same thing here — width and
    height are independent, so 50% height gives letters half as tall and exactly
-   as wide. Boxes can
+   as wide.
+
+   One measurement deserves its own sentence: white type with a dark outline
+   over bright artwork blends its own fill into the background, so the ink
+   mask holds only the outline ring and the "text colour" came back as the
+   ring, or as the blend around it — grey English sinking into exactly the
+   background the original was outlined to stand off from. When the measured
+   text colour sits close to the measured background (text drawn to be
+   unreadable is a broken reading, not a fact about the game), the fill is
+   re-read from the coherent colour hugging the ink that is neither the ink
+   nor the background, and the ring becomes the stroke. A reading that is
+   plainly legible is never overturned by this. Boxes can
    be added, merged, split and deleted from this step too, because a box that is
    a line too short is something you find out by looking at the render. A pencil
    and eraser handle whatever measurement will never get right; strokes land
@@ -109,11 +123,31 @@ flat background and a smear on a patterned one. Asking for a method that is not
 installed reconstructs the fast way **and says so in the block's note**, rather
 than failing.
 
-A block that has never been touched gets `aot` where the model is installed and
-`telea` where it is not — `inpaint.preferred()`, probed once per session and
-re-probed after a download. Naming a model as *the* default outright would put
+A block that has never been touched gets the preferred method *for its size*:
+`aot` where the model is installed and `telea` where it is not, except that a
+block past 160 px on its shorter side goes to LaMa when either LaMa is on disk
+— `inpaint.preferred_for()`, probed once per session and re-probed after a
+download. The line is measured, not asserted: a 259×441 block through AOT came
+back as a dark blob with the erased text embossed into it, and the same hole
+through LaMa kept the figure's silhouette and colours; AOT keeps the default
+below the line because bubble-sized holes are its home ground and it is
+several times quicker. Naming a model as *the* default outright would put
 every untouched block onto something that may not be there, and the complaint
 would arrive at render time on somebody who chose nothing.
+
+The model picker on the panel shows this *effective* method — the one that
+will actually run — never a placeholder. It used to show the built-in fast
+one for any block that had chosen nothing, while the render used the
+preferred model, so "switch it to AOT" was a no-op on a block already using
+AOT. The block's note is the other half of that honesty: it names the method
+that *did* run, in the past tense, fallback included.
+
+Reconstructions are also remembered across preview renders, keyed on the
+method, the window and the exact pixels in it — a pure function, so a hit is
+exact. Turning a type knob on one block used to re-run a model over every
+block on the image; now the other blocks' holes are filled from the cache,
+which on an 80-block profile screen is the difference between a six-second
+freeze per knob and a third of a second.
 
 Two things about the models were settled by measurement rather than by reading
 reference code, and both are pinned as tests rather than left as comments.

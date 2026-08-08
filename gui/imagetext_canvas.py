@@ -312,6 +312,7 @@ class Canvas(QGraphicsView):
         self.boxes_visible = True
         self._draft: QGraphicsRectItem | None = None
         self._origin = QPointF()
+        self._banding = False
         self._scene.selectionChanged.connect(self._on_selection)
 
     def scale_factor(self) -> float:
@@ -362,7 +363,13 @@ class Canvas(QGraphicsView):
             if self.entry is not None:
                 for ordinal, block in enumerate(self.entry.blocks, start=1):
                     item = BoxItem(block, ordinal, self)
-                    item.setVisible(self.boxes_visible)
+                    # Never setVisible(False) to hide a box - hiding is done by
+                    # the item's ``ghost`` flag (set from ``boxes_visible`` in its
+                    # constructor), which stops it drawing while keeping it
+                    # clickable. setVisible(False) here left a rebuilt-while-hidden
+                    # box actually invisible, and re-ticking "Show boxes" only
+                    # clears ghost, so the box stayed gone until the next image
+                    # switch rebuilt it visible.
                     self._scene.addItem(item)
                     self.items_by_id[block.block_id] = item
         finally:
@@ -443,6 +450,15 @@ class Canvas(QGraphicsView):
             self._draft.setPen(pen)
             event.accept()
             return
+        if event.button() == Qt.LeftButton and event.modifiers() & Qt.ControlModifier:
+            # Ctrl + drag is a rubber-band multi-select. A plain drag pans the
+            # view (ScrollHandDrag), so the modifier is what frees the drag to
+            # sweep a rectangle instead; Qt's RubberBandDrag ticks every
+            # selectable box it crosses. Restored on release.
+            self._banding = True
+            self.setDragMode(QGraphicsView.RubberBandDrag)
+            super().mousePressEvent(event)
+            return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -464,6 +480,11 @@ class Canvas(QGraphicsView):
                                   round(rect.width()), round(rect.height()))
                 )
             event.accept()
+            return
+        if self._banding:
+            self._banding = False
+            super().mouseReleaseEvent(event)
+            self.setDragMode(QGraphicsView.ScrollHandDrag)
             return
         super().mouseReleaseEvent(event)
 
