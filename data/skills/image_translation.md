@@ -67,7 +67,12 @@ Recursively enumerate the PNGs in the editable image folder. Identify:
 - Visible source-language text and intended in-place output paths.
 - Authoritative glossary files.
 - Related image variants that share a layout.
+- Exact duplicates that can reuse one accepted render, identified by content hash rather than filename alone.
+- Near-duplicate families that share geometry but differ by progression state, marker, icon, portrait, or unlocked artwork.
 - Images without player-visible text, which must remain untouched.
+
+Build a family inventory before rendering.
+Record which labels and art states are valid in each variant explicitly instead of inferring presence from loose pixel counts or filename numbering.
 
 The task context grants editing authority only for existing PNGs inside the editable image folder
 and its single required `image_translation_log.md` file.
@@ -98,10 +103,10 @@ Record:
 - Whether a panel contains faint, translucent, partially obscured, or progression-dependent
   artwork beneath its text.
 
-Create a contact sheet when multiple variants share a layout. View each target at original
-resolution before choosing coordinates. Treat distinctive effects as required design constraints,
-not optional decoration. A luminous pink title, for example, must remain luminous and pink; flat
-white text or a newly invented dark pill is not an equivalent treatment.
+Create contact sheets when multiple variants share a layout.
+View each target at original resolution before choosing coordinates, and create enlarged crops for small labels, borders, counters, or glyph remnants that are hard to judge in a full-screen sheet.
+Treat distinctive effects as required design constraints, not optional decoration.
+A luminous pink title, for example, must remain luminous and pink; flat white text or a newly invented dark pill is not an equivalent treatment.
 
 Do not decide that a low-contrast region is blank merely because its artwork is subtle. Compare
 contrast-enhanced views when necessary, and inspect representative pages from the beginning,
@@ -162,6 +167,9 @@ Preserve:
 
 Do not rely on OCR alone. Verify OCR output visually, especially for stylized Japanese fonts.
 
+Review translations as one coherent screen after the literal meaning is established.
+Prefer natural UI wording that preserves the source tone and function over awkward word-for-word phrasing, and keep related labels, counters, descriptions, and glossary terms internally consistent.
+
 ### 7. Classify the background
 
 Choose the least destructive valid removal method.
@@ -173,6 +181,9 @@ Choose the least destructive valid removal method.
 | Solid background | Fill the bounded text region |
 | Simple gradient | Interpolate or clone a clean patch |
 | Repeating texture | Clone a nearby matching region |
+| Native segmented or beveled UI | Rebuild the original component geometry, including borders, dividers, tabs, and texture |
+| Small label over pixel art | Use a tightly bounded palette-matched plaque only when clean deterministic reconstruction is unavailable |
+| Freestanding text over a regular pattern | Restore only the glyph pixels from the surrounding pattern, then redraw equivalent outlined text |
 | Bokeh/noisy field | Clone and feather a clean patch |
 | Text over cleanly sourced artwork | Rebuild from the clean art layer, then render text |
 | Text over flattened artwork only | Use a precise mask only when demonstrably safe |
@@ -192,6 +203,9 @@ For each translated string, record its text, anchor or baseline, maximum permitt
 font file and size, fill or gradient, outline, shadow, inner and outer glow layers, blur radius,
 spread, opacity, offset, blend behavior, alignment, and minimum padding. Sample effect colors
 from the source and reproduce multi-layer effects in separate deterministic passes.
+
+Do not let bright roofs, walls, highlights, flowers, arrows, or other background pixels expand a text estimate.
+Size any required backing region from the larger of the complete source-glyph footprint, including its outline, and the measured target-text footprint, then add only the minimum safe padding, normally about 2 to 4 pixels per side for small UI labels.
 
 For each protected region, record its bounds and required policy: pixel-identical, no text, or
 no overlap.
@@ -214,6 +228,11 @@ the asset:
 Replace enough of the panel to remove every source glyph. Avoid semi-transparent overlays that
 leave source text visible beneath them. Do not cover frame borders, portraits, or unrelated
 decoration.
+
+Rebuild the actual UI component rather than filling a broad bounding rectangle.
+Preserve arrow tails, beveled edges, rounded corners, split label/value cells, divider lines, compact anatomy tabs, and repeating panel patterns.
+Repaint label and value subcells independently when a counter contains both static text and a number.
+If a native panel texture is regular, reconstruct or tile that texture inside the original shape instead of flattening it to one sampled color.
 
 When a reading surface contains background art, rebuild in this order:
 
@@ -241,10 +260,11 @@ Use real font metrics. Fit text in this order:
 1. Use a font that matches the original visual weight.
 2. Prefer a condensed family for narrow UI panels.
 3. Measure the rendered target string.
-4. Reduce font size only within a reasonable visual range.
-5. Wrap only when the UI clearly permits multiple lines.
-6. Shorten wording only when meaning remains accurate.
-7. Skip or request review if no safe fit exists.
+4. Keep a readable size floor appropriate to the asset's runtime scale.
+5. Expand a safe label horizontally to the measured target width before shrinking the text below that readable floor.
+6. Wrap only when the UI clearly permits multiple lines.
+7. Shorten wording only when meaning remains accurate.
+8. Skip or request review if no safe fit exists.
 
 Reproduce outlines, shadows, glows, gradients, and translucency consistent with the original
 asset. Preserve character-name colors and other meaningful visual distinctions. When the exact
@@ -302,6 +322,7 @@ dark, highly saturated, or close to the text color. Do not proceed to the full b
 samples show all intended artwork and no source glyphs at original resolution.
 
 After the representative gate passes, render the entire candidate set from the backup.
+Use one shared renderer and one accepted layout for exact duplicates and template families while applying explicit per-variant label and art-state inventories so that reuse does not erase progression differences.
 
 ### 13. Validate before installation
 
@@ -315,6 +336,7 @@ Perform all applicable checks:
 - Confirm changed pixels remain inside approved regions.
 - Inspect every variant in a contact sheet.
 - Inspect important images at original resolution.
+- Inspect enlarged crops around every reconstructed boundary and every end of a source string for clipped paint, leaked outlines, and partial source glyphs.
 - Simulate dynamic values at their runtime coordinates.
 - Check for clipping, ghosted source glyphs, bad baselines, and collisions.
 - Confirm that every source background illustration still exists in the candidate and remains
@@ -332,9 +354,8 @@ Perform all applicable checks:
 
 Create contact sheets organized by both template and progression state. A full-set visual sweep
 is required even when structural and pixel checks pass; hashes cannot detect an illustration
-that was intentionally but incorrectly covered during reconstruction.
-
-Do not install a candidate that fails a hard check.
+that was intentionally but incorrectly covered during reconstruction, and no candidate that
+fails a hard check may be installed.
 
 ### 14. Install atomically
 
@@ -343,7 +364,8 @@ After validation:
 - Copy or move the candidate over its matching file in the editable image folder.
 - Preserve the backup outside that folder.
 - Re-run structural checks on the installed file.
-- Hash the installed result when reproducibility matters.
+- Compare each installed file against its validated candidate byte-for-byte or by cryptographic hash.
+- Open at least one important installed asset from its final path to confirm that validation did not stop at the temporary candidate.
 
 ### 15. Write the image work log
 
@@ -423,6 +445,8 @@ Do not paste full image files, large encoded data, or unrelated source code.
 - Never discard a distinctive glow, gradient, outline, shadow, or transparency merely because
   plain text is easier to render.
 - Never introduce a generic pill, panel, or badge behind freestanding source text.
+- Never derive a label box from every bright pixel in a broad search region when the region also contains bright artwork.
+- Never shrink target text to an unreadable size merely to preserve the source-language width.
 - Never install before reviewing the actual rendered candidate.
 - Never overwrite the only original.
 - Never claim pixel preservation without running a pixel comparison.
@@ -444,6 +468,9 @@ precedence over masks, cloning, blurring, and opaque covers.
 Use localized patch replacement when the background is simple and panel reconstruction would
 alter too much, or a clean neighboring texture can be cloned safely.
 
+Use a small palette-matched plaque over pixel art only when the user has authorized that treatment and the original glyphs cannot be removed safely; it must cover the complete source outline, hug the measured source or target text with minimal padding, use a readable outlined font, and avoid unrelated artwork.
+Defer large artwork-integrated titles instead of covering them with an oversized box.
+
 Skip and request review when:
 
 - Text overlaps a character, unique illustration detail, or irregular border.
@@ -459,6 +486,7 @@ Consider the task complete only when:
 
 - All source strings in scope have a translated, preserved, skipped, or review disposition.
 - Every installed bitmap passes structural validation.
+- Every installed bitmap matches the validated candidate.
 - Protected regions pass their required pixel checks.
 - Dynamic values have adequate space.
 - Visual inspection finds no clipping or source-text ghosts.
