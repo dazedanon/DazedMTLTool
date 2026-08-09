@@ -1625,8 +1625,11 @@ def batchRunMetadata():
         return dict(_read_batch_file(BATCH_STATE_FILE))
 
 
-def saveQueuedBatchMetadata(file_set=None):
+def saveQueuedBatchMetadata(file_set=None, runtime_profile=None):
     """Persist the file scope of an unsubmitted queue for safe resume."""
+    from util.runtime_profile import copy_batch_runtime_profile
+
+    saved_profile = copy_batch_runtime_profile(runtime_profile)
     with BATCH_LOCK:
         with _batch_file_lock():
             state = _read_batch_file(BATCH_STATE_FILE)
@@ -1638,7 +1641,40 @@ def saveQueuedBatchMetadata(file_set=None):
                 "provider": getBatchProvider(os.getenv("model", "")),
                 "cache_key_version": BATCH_CACHE_KEY_VERSION,
             })
+            if saved_profile is not None:
+                state["runtime_profile"] = saved_profile
             _write_batch_file(BATCH_STATE_FILE, state)
+
+
+def saveBatchRuntimeProfile(runtime_profile):
+    """Attach an explicitly confirmed legacy profile to active recovery data."""
+    from util.runtime_profile import copy_batch_runtime_profile
+
+    saved_profile = copy_batch_runtime_profile(runtime_profile)
+    if saved_profile is None:
+        raise ValueError("A batch runtime profile is required")
+    batch_ids = []
+    with BATCH_LOCK:
+        with _batch_file_lock():
+            state = _read_batch_file(BATCH_STATE_FILE, strict=True)
+            if not state:
+                raise ValueError("No active batch state is available")
+            state["runtime_profile"] = saved_profile
+            batch_ids = list(state.get("batch_ids") or [])
+            batch_ids.extend(
+                info.get("id")
+                for info in (state.get("batches") or [])
+                if info.get("id")
+            )
+            _write_batch_file(BATCH_STATE_FILE, state)
+
+    try:
+        from util.batch_history import upsert_history_entry
+
+        for batch_id in dict.fromkeys(batch_ids):
+            upsert_history_entry(batch_id, runtime_profile=saved_profile)
+    except Exception as exc:
+        print(f"[BATCH] history runtime-profile update failed: {exc}", flush=True)
 
 
 def clearBatchFiles(*, strict=False):
@@ -2058,6 +2094,8 @@ def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
                 len(batch.get("custom_ids") or {}) for batch in batches
             ),
         }
+        if previous_state.get("runtime_profile") is not None:
+            state_doc["runtime_profile"] = previous_state["runtime_profile"]
         _attach_glossary_freeze(state_doc, previous_state)
         with BATCH_LOCK:
             with _batch_file_lock():
@@ -2317,6 +2355,8 @@ def fetchTranslationBatches(batches=None):
                 "cost_estimate": state.get("cost_estimate"),
                 "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
+            if state.get("runtime_profile") is not None:
+                fetched_state["runtime_profile"] = state["runtime_profile"]
             _attach_glossary_freeze(fetched_state, state)
             _write_batch_file(BATCH_STATE_FILE, fetched_state)
         _batch_results = None

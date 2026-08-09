@@ -8,6 +8,7 @@ import sys
 import os
 from pathlib import Path
 import io
+import json
 import threading
 
 # Set UTF-8 encoding for stdout to handle Unicode characters
@@ -136,7 +137,21 @@ def run_handler(project_root, module_name, filename, estimate_only):
         else:
             print(f"ERROR:Unknown module: {module_name}")
             sys.exit(1)
-        
+
+        runtime_profile_json = os.getenv("DAZED_BATCH_RUNTIME_PROFILE", "").strip()
+        if runtime_profile_json:
+            if "RPG Maker MV/MZ" not in module_name:
+                raise ValueError(
+                    "A batch runtime profile was supplied for the wrong translation module"
+                )
+            from modules import rpgmakermvmz
+            from util.runtime_profile import apply_batch_runtime_profile
+
+            apply_batch_runtime_profile(
+                rpgmakermvmz,
+                json.loads(runtime_profile_json),
+            )
+
         # Run the handler
         handler_result = handler(filename, estimate_only)
         

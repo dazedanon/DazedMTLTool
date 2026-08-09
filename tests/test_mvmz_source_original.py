@@ -287,12 +287,24 @@ class TestMVMZSourceOriginal(unittest.TestCase):
         self.assertEqual(mvmz._split_choice_condition_prefix(source), ("", source))
 
     def test_choice_condition_suffix_parser_handles_chained_nested_calls(self):
-        source = "？？？ 必要な欠片：30 en(foo(v[88])>99) if(s[278]&!s[276])"
+        cases = [
+            (
+                "？？？ 必要な欠片：30 en(foo(v[88])>99) if(s[278]&!s[276])",
+                "？？？ 必要な欠片：30",
+                " en(foo(v[88])>99) if(s[278]&!s[276])",
+            ),
+            (
+                "▼トランテルラif(s[61])",
+                "▼トランテルラ",
+                "if(s[61])",
+            ),
+        ]
 
-        label, suffix = mvmz._split_choice_condition_suffix(source)
-
-        self.assertEqual(label, "？？？ 必要な欠片：30")
-        self.assertEqual(suffix, " en(foo(v[88])>99) if(s[278]&!s[276])")
+        for source, expected_label, expected_suffix in cases:
+            with self.subTest(source=source):
+                label, suffix = mvmz._split_choice_condition_suffix(source)
+                self.assertEqual(label, expected_label)
+                self.assertEqual(suffix, expected_suffix)
 
     def test_choice_condition_suffix_parser_leaves_malformed_input_untouched(self):
         source = "？？？ 必要な欠片：30 en(v[88]>99"
@@ -316,7 +328,7 @@ class TestMVMZSourceOriginal(unittest.TestCase):
         self.assertEqual(choice, "if(v[31]>=4)Labyrinth floor 4: library")
 
     def test_choice_translation_hides_and_restores_condition_suffix_byte_for_byte(self):
-        source = "‣？？？ 必要な欠片：30 en(v[88]>99) if(s[278]&!s[276])"
+        source = "▼トランテルラif(s[61])"
         page = {
             "list": [
                 {"code": 102, "indent": 0, "parameters": [[source], -1, 0, 2, 0]},
@@ -324,16 +336,13 @@ class TestMVMZSourceOriginal(unittest.TestCase):
         }
 
         def translate(text, _history, _batch=False):
-            self.assertEqual(text, ["‣？？？ 必要な欠片：30"])
-            return [["‣??? fragments required: 30"], [0, 0]]
+            self.assertEqual(text, ["▼トランテルラ"])
+            return [["▼Tranterra"], [0, 0]]
 
         translated, _ = _run_search_codes(page, translate_fn=translate)
 
         choice = _find_commands(translated, 102)[0]["parameters"][0][0]
-        self.assertEqual(
-            choice,
-            "‣??? fragments required: 30 en(v[88]>99) if(s[278]&!s[276])",
-        )
+        self.assertEqual(choice, "▼Tranterraif(s[61])")
 
     def test_first_pass_writes_original(self):
         page, _ = _run_search_codes(_load_map_excerpt())

@@ -374,6 +374,7 @@ class TranslationWorker(QThread):
         self.parse_speakers = parse_speakers
         self.batch_mode = batch_mode
         self.batch_resume_state = batch_resume_state
+        self.batch_runtime_profile = None
         self._batch_submit_event = threading.Event()
         self._batch_submit_approved = False
         self._batch_pending_estimate = None
@@ -633,8 +634,17 @@ class TranslationWorker(QThread):
             env['PYTHONIOENCODING'] = 'utf-8'  # Force UTF-8 encoding
             if batch_phase in ("collect", "consume"):
                 env["BATCH_PHASE"] = batch_phase
+                if self.batch_runtime_profile is not None:
+                    env["DAZED_BATCH_RUNTIME_PROFILE"] = json.dumps(
+                        self.batch_runtime_profile,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                else:
+                    env.pop("DAZED_BATCH_RUNTIME_PROFILE", None)
             else:
                 env.pop("BATCH_PHASE", None)
+                env.pop("DAZED_BATCH_RUNTIME_PROFILE", None)
             
             process = subprocess.Popen(
                 [
@@ -789,6 +799,10 @@ class TranslationWorker(QThread):
         try:
             import modules.rpgmakermvmz as mvmz
             mvmz.refreshRuntimeConfig()
+            if self.batch_runtime_profile is not None:
+                from util.runtime_profile import apply_batch_runtime_profile
+
+                apply_batch_runtime_profile(mvmz, self.batch_runtime_profile)
         except Exception as exc:
             self.emit_log(f"❌ Could not start speaker preflight: {exc}")
             return False
@@ -1136,6 +1150,32 @@ class TranslationWorker(QThread):
                 self.finished_signal.emit(False, "Batch + Parse Speakers unsupported")
                 return
 
+            if self.batch_mode:
+                from util.runtime_profile import (
+                    capture_batch_runtime_profile,
+                    copy_batch_runtime_profile,
+                    is_rpgmaker_mvmz,
+                )
+                from util.translation import batchRunMetadata
+
+                if self.batch_resume_state:
+                    saved_profile = batchRunMetadata().get("runtime_profile")
+                    if is_rpgmaker_mvmz(self.module_info[0]) and saved_profile is None:
+                        self.emit_log(
+                            "❌ This RPG Maker batch predates saved runtime profiles. "
+                            "Resume was stopped before writing files. Reopen it from the "
+                            "guided workflow and confirm the original code profile first."
+                        )
+                        self.finished_signal.emit(False, "Batch runtime profile missing")
+                        return
+                    self.batch_runtime_profile = copy_batch_runtime_profile(
+                        saved_profile
+                    )
+                else:
+                    self.batch_runtime_profile = capture_batch_runtime_profile(
+                        self.module_info[0], self.project_root
+                    )
+
             files_dir = self.project_root / "files"
             if not files_dir.exists():
                 self.emit_log("❌ Files directory does not exist!")
@@ -1270,7 +1310,10 @@ class TranslationWorker(QThread):
                             if est is not None:
                                 est = dict(est)
                                 est["files"] = len(matching_files)
-                            saveQueuedBatchMetadata(matching_files)
+                            saveQueuedBatchMetadata(
+                                matching_files,
+                                runtime_profile=self.batch_runtime_profile,
+                            )
                             if not self._wait_batch_submit(est):
                                 self._emit_batch_phase("canceled", est)
                                 self.emit_log(
@@ -3765,7 +3808,64 @@ class TranslationTab(QWidget):
                         batch_resume_state = None
 
             if batch_resume_state:
-                saved_files = list(batchRunMetadata().get("file_set") or [])
+                batch_metadata = batchRunMetadata()
+                if batch_metadata.get("runtime_profile") is None:
+                    from util.runtime_profile import (
+                        capture_batch_runtime_profile,
+                        is_rpgmaker_mvmz,
+                    )
+
+                    if is_rpgmaker_mvmz(selected_module[0]):
+                        try:
+                            current_profile = capture_batch_runtime_profile(
+                                selected_module[0], self.project_root
+                            )
+                        except Exception as exc:
+                            QMessageBox.warning(
+                                self,
+                                "Batch Profile Unavailable",
+                                "Could not read the current RPG Maker code profile. "
+                                "Resume was stopped before writing files.\n\n"
+                                f"{exc}",
+                            )
+                            return
+                        enabled_codes = sorted(
+                            key
+                            for key, enabled in (
+                                (current_profile or {}).get("config", {}).items()
+                            )
+                            if key.startswith("CODE") and enabled is True
+                        )
+                        profile_summary = ", ".join(enabled_codes) or "no event codes"
+                        reply = QMessageBox.question(
+                            self,
+                            "Confirm legacy batch profile",
+                            "This batch was created before DazedTL saved its RPG Maker "
+                            "code profile. To prevent another no-op write, confirm that "
+                            "the current settings match the original collect pass.\n\n"
+                            f"Currently enabled: {profile_summary}\n\n"
+                            "Use these settings for this batch?",
+                            QMessageBox.Yes | QMessageBox.No,
+                            QMessageBox.No,
+                        )
+                        if reply != QMessageBox.Yes:
+                            return
+                        from util.translation import saveBatchRuntimeProfile
+
+                        try:
+                            saveBatchRuntimeProfile(current_profile)
+                        except Exception as exc:
+                            QMessageBox.warning(
+                                self,
+                                "Batch Profile Not Saved",
+                                "Could not attach the confirmed code profile. Resume "
+                                "was stopped before writing files.\n\n"
+                                f"{exc}",
+                            )
+                            return
+                        batch_metadata = batchRunMetadata()
+
+                saved_files = list(batch_metadata.get("file_set") or [])
                 if saved_files:
                     self.select_files_by_name(saved_files)
                     selected_files = self.get_selected_files()

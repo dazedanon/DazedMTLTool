@@ -231,10 +231,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = False
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE101 = True
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE408 = False
@@ -898,16 +898,20 @@ def _split_choice_condition_prefix(text: str) -> tuple[str, str]:
 def _split_choice_condition_suffix(text: str) -> tuple[str, str]:
     """Split trailing plugin condition clauses while preserving their exact bytes.
 
-    A suffix can contain one or more whitespace-delimited ``if(...)``/``en(...)``
-    clauses, including nested calls. Unbalanced or mixed trailing text is left
-    untouched so visible choice text cannot be removed accidentally.
+    A suffix can contain one or more ``if(...)``/``en(...)`` clauses, attached
+    directly to the label or separated by whitespace, including nested calls.
+    Unbalanced or mixed trailing text is left untouched so visible choice text
+    cannot be removed accidentally.
     """
     if not isinstance(text, str):
         return text, ""
 
-    for match in re.finditer(r"\s+(?=(?:if|en)\()", text):
-        suffix_start = match.start()
-        cursor = match.end()
+    for match in re.finditer(r"(?:if|en)\(", text):
+        condition_start = match.start()
+        suffix_start = condition_start
+        while suffix_start > 0 and text[suffix_start - 1].isspace():
+            suffix_start -= 1
+        cursor = condition_start
 
         while True:
             end = _choice_condition_end(text, cursor)
@@ -915,13 +919,12 @@ def _split_choice_condition_suffix(text: str) -> tuple[str, str]:
                 break
             cursor = end
 
-            whitespace_start = cursor
             while cursor < len(text) and text[cursor].isspace():
                 cursor += 1
 
             if cursor == len(text):
                 return text[:suffix_start], text[suffix_start:]
-            if whitespace_start == cursor:
+            if not text.startswith(("if(", "en("), cursor):
                 break
 
     return text, ""

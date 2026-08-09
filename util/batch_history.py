@@ -277,9 +277,11 @@ def record_submit(
     """Record newly submitted provider batches into durable history."""
     file_set = list(file_set or [])
     glossary_freeze = None
+    runtime_profile = None
     try:
         with _batch_file_lock():
             state = _read_batch_file(BATCH_STATE_FILE)
+        runtime_profile = state.get("runtime_profile")
         freeze_text = state.get("glossary_freeze")
         if isinstance(freeze_text, str) and freeze_text:
             glossary_freeze = freeze_text
@@ -316,6 +318,8 @@ def record_submit(
         )
         if glossary_freeze is not None:
             fields["glossary_freeze"] = glossary_freeze
+        if runtime_profile is not None:
+            fields["runtime_profile"] = runtime_profile
         upsert_history_entry(bid, **fields)
 
 
@@ -898,6 +902,18 @@ def redownload_batch(batch_id: str) -> dict:
                 "file_set": entry.get("file_set") or [],
                 "result_keys": sorted(results),
             }
+            runtime_profile = entry.get("runtime_profile")
+            if runtime_profile is None:
+                runtime_profile = next(
+                    (
+                        row.get("runtime_profile")
+                        for row in entries
+                        if row.get("runtime_profile") is not None
+                    ),
+                    None,
+                )
+            if runtime_profile is not None:
+                state_payload["runtime_profile"] = runtime_profile
             freeze_text = entry.get("glossary_freeze")
             if not isinstance(freeze_text, str) or not freeze_text:
                 for row in entries:
@@ -1002,6 +1018,18 @@ def activate_for_resume(batch_id: str) -> str:
                     "file_set": entry.get("file_set") or [],
                     "cost_estimate": entry.get("cost_estimate"),
                 }
+                runtime_profile = entry.get("runtime_profile")
+                if runtime_profile is None:
+                    runtime_profile = next(
+                        (
+                            row.get("runtime_profile")
+                            for row in entries
+                            if row.get("runtime_profile") is not None
+                        ),
+                        None,
+                    )
+                if runtime_profile is not None:
+                    state["runtime_profile"] = runtime_profile
                 _write_batch_file(BATCH_STATE_FILE, state)
         if status == STATUS_ENDED:
             # Already ended at the provider; poll will immediately proceed to fetch.

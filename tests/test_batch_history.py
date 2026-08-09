@@ -430,12 +430,39 @@ class BatchRunStateTests(BatchHistoryTestBase):
         )
 
     def test_queued_batch_metadata_preserves_resume_file_scope(self):
-        T.saveQueuedBatchMetadata(["Map001.json", "Map002.json"])
+        runtime_profile = {
+            "engine": "rpgmakermvmz",
+            "version": 1,
+            "config": {
+                "CODE101": True,
+                "CODE401": True,
+                "CODE405": True,
+                "CODE102": True,
+            },
+            "enabled_plugins_357": [],
+            "enabled_patterns_355655": [],
+        }
+        T.saveQueuedBatchMetadata(
+            ["Map001.json", "Map002.json"],
+            runtime_profile=runtime_profile,
+        )
 
         self.assertEqual(T.batchRunMetadata()["status"], "queued")
         self.assertEqual(
             T.batchRunMetadata()["file_set"],
             ["Map001.json", "Map002.json"],
+        )
+        self.assertEqual(
+            T.batchRunMetadata()["runtime_profile"], runtime_profile
+        )
+        confirmed_legacy_profile = {
+            **runtime_profile,
+            "config": {**runtime_profile["config"], "CODE408": True},
+        }
+        T.saveBatchRuntimeProfile(confirmed_legacy_profile)
+        self.assertEqual(
+            T.batchRunMetadata()["runtime_profile"],
+            confirmed_legacy_profile,
         )
 
 
@@ -659,9 +686,20 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
 
     def test_submit_and_fetch_preserve_glossary_freeze(self):
         freeze_text = "# Game Characters\nカイン (Cain)\n"
+        runtime_profile = {
+            "engine": "rpgmakermvmz",
+            "version": 1,
+            "config": {"CODE401": True, "CODE102": True},
+            "enabled_plugins_357": [],
+            "enabled_patterns_355655": [],
+        }
         T._write_batch_file(
             T.BATCH_STATE_FILE,
-            {"status": "queued", "glossary_freeze": freeze_text},
+            {
+                "status": "queued",
+                "glossary_freeze": freeze_text,
+                "runtime_profile": runtime_profile,
+            },
         )
         T.queue_batch_request(
             '{"Line1":"猫"}',
@@ -684,8 +722,10 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
 
         submitted = T._read_batch_file(T.BATCH_STATE_FILE)
         self.assertEqual(submitted.get("glossary_freeze"), freeze_text)
+        self.assertEqual(submitted.get("runtime_profile"), runtime_profile)
         history_entry = BH.read_history()["batches"][0]
         self.assertEqual(history_entry.get("glossary_freeze"), freeze_text)
+        self.assertEqual(history_entry.get("runtime_profile"), runtime_profile)
 
         T._write_batch_file(
             T.BATCH_RESULTS_FILE,
@@ -705,6 +745,7 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
         fetched = T._read_batch_file(T.BATCH_STATE_FILE)
         self.assertEqual(fetched.get("status"), "fetched")
         self.assertEqual(fetched.get("glossary_freeze"), freeze_text)
+        self.assertEqual(fetched.get("runtime_profile"), runtime_profile)
 
     def test_split_submission_checkpoints_and_retry_skips_paid_work(self):
         for payload in ('{"Line1":"猫"}', '{"Line1":"犬"}'):

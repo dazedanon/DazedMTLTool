@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -76,7 +77,8 @@ class TranslationWorkerTests(unittest.TestCase):
     def test_validation_marker_is_a_soft_mismatch(self) -> None:
         """Paid/validated chunks stay written; mismatch does not hard-fail the file."""
         worker = TranslationWorker(
-            Path(__file__).resolve().parents[1], ("JSON", (".json",), None)
+            Path(__file__).resolve().parents[1],
+            ("RPG Maker MV/MZ", (".json",), None),
         )
         process = SimpleNamespace(
             stdout=io.StringIO(
@@ -86,8 +88,17 @@ class TranslationWorkerTests(unittest.TestCase):
             returncode=0,
             wait=lambda: None,
         )
+        worker.batch_runtime_profile = {
+            "engine": "rpgmakermvmz",
+            "version": 1,
+            "config": {"CODE401": True},
+            "enabled_plugins_357": [],
+            "enabled_patterns_355655": [],
+        }
 
-        with mock.patch("gui.translation_tab.subprocess.Popen", return_value=process):
+        with mock.patch(
+            "gui.translation_tab.subprocess.Popen", return_value=process
+        ) as popen:
             result = worker.run_module_in_process(
                 "Map001.json", False, batch_phase="consume"
             )
@@ -95,6 +106,10 @@ class TranslationWorkerTests(unittest.TestCase):
         self.assertEqual(result[0], "VALIDATION_MISMATCH")
         self.assertIn("validation failed", result[1].lower())
         self.assertEqual(result[2], "TOTAL: success")
+        pinned_profile = json.loads(
+            popen.call_args.kwargs["env"]["DAZED_BATCH_RUNTIME_PROFILE"]
+        )
+        self.assertTrue(pinned_profile["config"]["CODE401"])
 
     def test_batch_consume_continues_after_soft_mismatch(self) -> None:
         worker = TranslationWorker(Path.cwd(), ("JSON", (".json",), None))
@@ -207,7 +222,7 @@ class TranslationTabUITests(unittest.TestCase):
 
         self.assertEqual(self.tab.mode_combo.currentText(), "Translate")
 
-    def test_cancel_returns_to_files_and_workflow_resume_is_not_blocked(self) -> None:
+    def test_cancel_and_legacy_resume_preserve_safe_workflow(self) -> None:
         self.tab._batch_active = True
         self.tab._on_batch_phase("canceled", {"requests": 3})
         self.tab._apply_finish_ui(True, "Batch canceled")
@@ -241,6 +256,55 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertIsNone(self.tab.translation_worker.batch_resume_state)
         activate_game_context.assert_called_once_with(
             self.tab.settings, "RPG Maker MV/MZ"
+        )
+        start.assert_called_once_with()
+
+        profile = {
+            "engine": "rpgmakermvmz",
+            "version": 1,
+            "config": {
+                "CODE101": True,
+                "CODE401": True,
+                "CODE405": True,
+                "CODE102": True,
+            },
+            "enabled_plugins_357": [],
+            "enabled_patterns_355655": [],
+        }
+        self.tab.select_files_by_name(["Map001.json"])
+        metadata_without_profile = {"file_set": ["Map001.json"]}
+        metadata_with_profile = {
+            **metadata_without_profile,
+            "runtime_profile": profile,
+        }
+
+        with (
+            mock.patch("util.translation.isBatchSupported", return_value=True),
+            mock.patch(
+                "util.translation.batchRunMetadata",
+                side_effect=[metadata_without_profile, metadata_with_profile],
+            ),
+            mock.patch(
+                "util.runtime_profile.capture_batch_runtime_profile",
+                return_value=profile,
+            ),
+            mock.patch("util.translation.saveBatchRuntimeProfile") as save_profile,
+            mock.patch(
+                "gui.translation_tab.QMessageBox.question",
+                return_value=QMessageBox.Yes,
+            ) as question,
+            mock.patch(
+                "gui.translation_tab._activate_configured_game_context",
+                return_value=("", {}),
+            ),
+            mock.patch.object(TranslationWorker, "start") as start,
+        ):
+            self.tab.start_translation(forced_resume_state="fetched")
+
+        save_profile.assert_called_once_with(profile)
+        self.assertIn("legacy batch profile", question.call_args.args[1].lower())
+        self.assertEqual(
+            self.tab.translation_worker.batch_resume_state, "fetched"
         )
         start.assert_called_once_with()
 
