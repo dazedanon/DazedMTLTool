@@ -2,7 +2,12 @@
 
 import unittest
 
-from util.skills import load_clipboard_skill, load_project_setup
+from util.skills import (
+    RPGMAKER_QA_FOCUSES,
+    load_clipboard_skill,
+    load_project_setup,
+    load_rpgmaker_qa_skill,
+)
 from util.rpgmaker_markers import SUPPORTED_CODE408_MARKERS
 
 
@@ -29,21 +34,48 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 self._assert_interactive_in_place_prompt(prompt)
                 self.assertIn(project_scope, prompt)
 
-    def test_rpgmaker_qa_prompt_scales_and_requires_approval(self):
-        prompt = load_clipboard_skill("rpgmaker_translation_qa.md")
-        lowered = prompt.casefold()
-        self.assertIn("control-code scope and placement", lowered)
-        self.assertIn("do not edit during discovery", lowered)
-        self.assertIn("stop and wait for approval", lowered)
-        self.assertIn("never modify or remove `_original`", lowered)
-        self.assertIn("`relative file + json path + source hash`", lowered)
-        self.assertIn("never claim readiness without", lowered)
-        for placeholder in (
-            "{{GAME_DATA_FOLDER}}",
-            "{{GAME_ROOT}}",
-            "{{VOCAB_FILE}}",
-        ):
-            self.assertIn(placeholder, prompt)
+    def test_rpgmaker_qa_prompts_are_bounded_and_require_approval(self):
+        self.assertEqual(
+            [focus for focus, _label in RPGMAKER_QA_FOCUSES],
+            ["database", "risky-codes", "dialogue", "release"],
+        )
+        focus_signatures = {
+            "dialogue": "Audit only event commands 101, 102, 401, and 405",
+            "database": "Audit `_original` leaves in these canonical database files",
+            "risky-codes": "Audit translated or translation-sensitive event commands",
+            "release": "Inventory every `_original` leaf in every JSON file",
+        }
+        for focus, _label in RPGMAKER_QA_FOCUSES:
+            with self.subTest(focus=focus):
+                prompt = load_rpgmaker_qa_skill(focus)
+                lowered = prompt.casefold()
+                self.assertIn("perform one new semantic discovery wave", lowered)
+                self.assertIn("do not edit until the user approves", lowered)
+                self.assertIn("never modify or remove `_original`", lowered)
+                self.assertIn("complete all four qa passes; none is optional", lowered)
+                self.assertIn("do not skip any", lowered)
+                self.assertIn("`relative file + canonical json path + sha-256", lowered)
+                self.assertIn(focus_signatures[focus], prompt)
+                for other_focus, signature in focus_signatures.items():
+                    if other_focus != focus:
+                        self.assertNotIn(signature, prompt)
+                for placeholder in (
+                    "{{GAME_DATA_FOLDER}}",
+                    "{{GAME_ROOT}}",
+                    "{{VOCAB_FILE}}",
+                ):
+                    self.assertIn(placeholder, prompt)
+                if focus == "dialogue":
+                    self.assertIn("more than 2,500 clusters", prompt)
+                    self.assertIn("at least five 500-pair waves", prompt)
+                    self.assertIn("final two consecutive waves", prompt)
+                    self.assertIn(
+                        "`consumed queue entries / total queue entries`", prompt
+                    )
+                    self.assertIn("score the entire unreviewed frozen suffix", prompt)
+                    self.assertIn("corpus-wide propagation resets", prompt)
+        with self.assertRaises(ValueError):
+            load_rpgmaker_qa_skill("everything")
 
     def test_rpgmaker_project_setup_covers_optional_text_and_widths(self):
         prompt = load_project_setup("rpgmaker")

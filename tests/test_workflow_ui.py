@@ -110,8 +110,12 @@ class WorkflowShellTests(unittest.TestCase):
         self.workflow.setup_editors._save_vocab()
         self.assertTrue(glossary.is_file())
 
-        self.assertEqual(self.workflow._step_tabs.count(), 9)
-        self.assertEqual(len(self.workflow._step_rail.buttons), 9)
+        self.assertEqual(self.workflow._step_tabs.count(), 10)
+        self.assertEqual(len(self.workflow._step_rail.buttons), 10)
+        self.assertEqual(
+            [button.accessibleName() for button in self.workflow._step_rail.buttons[7:10]],
+            ["Step 8: QA", "Step 9: Images", "Step 10: Playtest"],
+        )
 
         self.workflow._goto_step(3)
         self.app.processEvents()

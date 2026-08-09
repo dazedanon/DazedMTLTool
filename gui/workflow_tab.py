@@ -9,9 +9,10 @@ Provides a guided, step-by-step interface:
   Step 3  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache)
   Step 4  – Translation Phase 2 (risky codes)
   Step 5  – Plugins.js prompt helpers and export translated/ to the game
-  Step 6  – Deterministically rewrap and QA the exported game data
-  Step 7  – Prepare and translate editable bitmap UI images
-  Step 8  – Install TL Inspector and/or Forge playtest plugins
+  Step 6  – Deterministically rewrap the exported game data
+  Step 7  – Run the four required translation QA passes
+  Step 8  – Prepare and translate editable bitmap UI images
+  Step 9  – Install TL Inspector and/or Forge playtest plugins
 """
 
 from __future__ import annotations
@@ -30,7 +31,12 @@ from util.game_settings import (
     normalize_wrap_widths,
     save_game_wrap_widths,
 )
-from util.skills import load_clipboard_skill, load_project_setup
+from util.skills import (
+    RPGMAKER_QA_FOCUSES,
+    load_clipboard_skill,
+    load_project_setup,
+    load_rpgmaker_qa_skill,
+)
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
 from util.id_ranges import legacy_exclusive_range, normalize_id_ranges
 
@@ -105,9 +111,10 @@ _STEP_PURPOSES = {
     3: "Translate database and dialogue text, then build the variable cache.",
     4: "Translate audited variable, plugin, and script text only when required.",
     5: "Prepare plugin or script text and export reviewed translations to the game.",
-    6: "Rewrap exported text and run the final game-data audit.",
-    7: "Check image readiness, then continue in the Image Manager.",
-    8: "Configure playtest tools, inspect the finished game, and build the public release.",
+    6: "Rewrap exported text using the saved display-width rules.",
+    7: "Complete every focused game-data QA pass before release checks.",
+    8: "Check image readiness, then continue in the Image Manager.",
+    9: "Configure playtest tools, inspect the finished game, and build the public release.",
 }
 
 # ---------------------------------------------------------------------------
@@ -298,7 +305,7 @@ _STEP_HELP: dict[int, str] = {
         "use Git before continuing."
     ),
     6: (
-        "<b>Step 6 - Fix line wrapping and run final text checks</b><br><br>"
+        "<b>Step 6 - Fix line wrapping</b><br><br>"
         "Complete Export in Step 5 before using this page.<br><br>"
         "<b>What to do</b><br>"
         "1. Choose which game-data files and kinds of text to check. The presets are enough "
@@ -307,13 +314,22 @@ _STEP_HELP: dict[int, str] = {
         "special limit.<br>"
         "3. Click <b>Preview rewrap</b>. This shows proposed line-break changes without saving "
         "them.<br>"
-        "4. Review the results, then click <b>Apply rewrap</b>.<br>"
-        "5. Click <b>Copy final QA skill</b>, paste it into your AI helper, and fix the problems "
-        "it reports.<br><br>"
-        "Continue through Images and Playtest before building the public release."
+        "4. Review the results, then click <b>Apply rewrap</b>.<br><br>"
+        "Continue to Translation QA after the approved wrapping changes are applied."
     ),
     7: (
-        "<b>Step 7 - Translate text inside images</b><br><br>"
+        "<b>Step 7 - Run translation QA</b><br><br>"
+        "Complete Rewrap in Step 6 before using this page.<br><br>"
+        "<b>What to do (all four passes are required)</b><br>"
+        "1. Copy and complete <b>Database files</b> QA.<br>"
+        "2. Copy and complete <b>Risky event codes</b> QA.<br>"
+        "3. Copy and complete <b>Dialogue, choices & scrolling text</b> QA.<br>"
+        "4. Copy and complete <b>Coverage & release gate</b> QA.<br><br>"
+        "Carry each pass's checkpoint or report into the final gate. Do not continue because "
+        "only one pass was clean; the release check requires evidence from every pass."
+    ),
+    8: (
+        "<b>Step 8 - Translate text inside images</b><br><br>"
         "This guided image step is available for MV/MZ games.<br><br>"
         "<b>What to do</b><br>"
         "1. Click <b>Refresh readiness</b> and resolve any warning it shows.<br>"
@@ -325,8 +341,8 @@ _STEP_HELP: dict[int, str] = {
         "The image skill uses the Glossary already copied to the game in Step 5. It edits "
         "working PNG copies first, not the game's original image files."
     ),
-    8: (
-        "<b>Step 8 - Playtest and build the release</b><br><br>"
+    9: (
+        "<b>Step 9 - Playtest and build the release</b><br><br>"
         "This page is available for MV/MZ games.<br><br>"
         "<b>What to do</b><br>"
         "1. Choose the hotkeys and screen size for the playtest tools, then click "
@@ -624,13 +640,14 @@ class WorkflowTab(QWidget):
             ("4  TL Phase 2",   self._build_step5_tl_phase2),
             ("5  Export",       self._build_step5_finish),
             ("6  Rewrap",       self._build_step5_rewrap),
-            ("7  Images",       self._build_step6_images),
-            ("8  Playtest",     self._build_step8_playtest),
+            ("7  QA",           self._build_step7_qa),
+            ("8  Images",       self._build_step8_images),
+            ("9  Playtest",     self._build_step9_playtest),
         ]
         self._step_labels = [label for label, _ in _tab_defs]
         rail_labels = [
             "Project", "Prepare", "Setup", "Phase 1", "Phase 2",
-            "Export", "Rewrap", "Images", "Playtest",
+            "Export", "Rewrap", "QA", "Images", "Playtest",
         ]
         self._step_done: set[int] = set()
         self._step_rail = WorkflowStepRail(rail_labels)
@@ -834,6 +851,7 @@ class WorkflowTab(QWidget):
             "Phase2",
             "Export",
             "Rewrap",
+            "QA",
             "Images",
             "Playtest",
         )
@@ -907,9 +925,9 @@ class WorkflowTab(QWidget):
             self._populate_p2_checkboxes()
         if index == 6:
             self._refresh_rewrap_files()
-        if index == 7:
-            self._refresh_image_workflow_status()
         if index == 8:
+            self._refresh_image_workflow_status()
+        if index == 9:
             self._refresh_playtest_status()
             self._load_playtest_settings()
 
@@ -1060,6 +1078,7 @@ class WorkflowTab(QWidget):
             display_title,
             _STEP_PURPOSES.get(step_idx, "Complete this workflow step."),
             optional=False,
+            total_steps=10,
         )
         for widget in extra_widgets or []:
             # The standard header already owns the Optional badge. Preserve
@@ -2235,7 +2254,7 @@ class WorkflowTab(QWidget):
     # ── Step 6: Rewrap exported game data ─────────────────────────────────
 
     def _build_step5_rewrap(self, layout: QVBoxLayout):
-        self._add_step_header(layout, "Step 6 — Rewrap & Release", 6)
+        self._add_step_header(layout, "Step 6 — Rewrap Game Data", 6)
 
         source_banner = StatusBanner(
             "Complete Step 0 and export in Step 5 to load the game data source.",
@@ -2505,32 +2524,52 @@ class WorkflowTab(QWidget):
         review_stage.add_widget(self._rewrap_results_disclosure)
         layout.addWidget(review_stage)
 
-        # Stage 4 — final data QA. MV/MZ release packaging happens only after
-        # images and playtesting; Ace exposes an engine-specific release action
-        # here because its later MV/MZ-only steps are hidden.
-        finish_stage = WorkflowStageCard(
-            4,
-            "Run final QA",
-            "Audit the rewrapped game data before continuing to images and playtesting.",
+        QTimer.singleShot(0, self._refresh_rewrap_files)
+        QTimer.singleShot(0, self._load_rewrap_widths)
+
+    # ── Step 7: Translation QA ─────────────────────────────────────────────
+
+    def _build_step7_qa(self, layout: QVBoxLayout):
+        self._add_step_header(layout, "Step 7 — Translation QA", 7)
+
+        qa_stage = WorkflowStageCard(
+            1,
+            "Complete all translation QA passes",
+            "Run every focused pass in order after rewrapping, then carry its evidence into the final gate.",
         )
-        self._rewrap_finish_stage = finish_stage
+        self._qa_finish_stage = qa_stage
         self._qa_ai_help_banner = StatusBanner(
-            "How to use this: click Copy final QA skill, paste the copied instructions into "
-            "your AI helper with the translated game folder open, and fix the problems it "
-            "finds before moving on.",
+            "Complete all four required QA passes in order. Each copied prompt audits one bounded "
+            "surface; the final coverage pass checks their evidence and blocks release on gaps.",
             "info",
         )
-        finish_stage.add_widget(self._qa_ai_help_banner)
-        finish_actions = QHBoxLayout()
-        finish_actions.setSpacing(Spacing.SM)
-        qa_btn = _make_btn("🔎  Copy final QA skill", "#8a6d3b")
+        qa_stage.add_widget(self._qa_ai_help_banner)
+        qa_focus_row = QHBoxLayout()
+        qa_focus_row.setSpacing(Spacing.SM)
+        qa_focus_label = QLabel("QA pass")
+        qa_focus_label.setStyleSheet(f"color:{COLORS.text_secondary};")
+        qa_focus_row.addWidget(qa_focus_label)
+        self._qa_focus_combo = QComboBox()
+        for focus_key, focus_label in RPGMAKER_QA_FOCUSES:
+            self._qa_focus_combo.addItem(focus_label, focus_key)
+        self._qa_focus_combo.setToolTip(
+            "Complete every pass from 1 through 4; run Coverage & release gate last."
+        )
+        self._qa_focus_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        qa_focus_row.addWidget(self._qa_focus_combo, 1)
+        qa_stage.add_layout(qa_focus_row)
+        qa_actions = QHBoxLayout()
+        qa_actions.setSpacing(Spacing.SM)
+        qa_btn = _make_btn("🔎  Copy selected QA pass", "#8a6d3b")
         qa_btn.setToolTip(
-            "After export and rewrap, copy the scalable QA skill for the detected game data folder."
+            "Copy the selected focused QA pass for the detected game data folder."
         )
         qa_btn.clicked.connect(self._copy_translation_qa_prompt)
         _size_action_button(qa_btn, Geometry.ACTION_WIDE)
-        finish_actions.addWidget(qa_btn)
+        qa_actions.addWidget(qa_btn)
 
+        # Images and playtesting are MV/MZ-only. Ace exposes its release action
+        # here after the same required game-data QA sequence.
         self._ace_release_zip_btn = _make_btn(
             "📦  Build public release ZIP", "#0e639c"
         )
@@ -2542,18 +2581,15 @@ class WorkflowTab(QWidget):
         self._ace_release_zip_btn.clicked.connect(self._create_public_release)
         _size_action_button(self._ace_release_zip_btn, Geometry.ACTION_WIDE)
         self._ace_release_zip_btn.hide()
-        finish_actions.addWidget(self._ace_release_zip_btn)
+        qa_actions.addWidget(self._ace_release_zip_btn)
         _equalize_action_buttons(
             qa_btn,
             self._ace_release_zip_btn,
             width=Geometry.ACTION_WIDE,
         )
-        finish_actions.addStretch()
-        finish_stage.add_layout(finish_actions)
-        layout.addWidget(finish_stage)
-
-        QTimer.singleShot(0, self._refresh_rewrap_files)
-        QTimer.singleShot(0, self._load_rewrap_widths)
+        qa_actions.addStretch()
+        qa_stage.add_layout(qa_actions)
+        layout.addWidget(qa_stage)
 
     # ── Step 5: Plugins.js + Export ────────────────────────────────────────
 
@@ -2633,10 +2669,10 @@ class WorkflowTab(QWidget):
         export_layout.addLayout(export_actions)
         layout.addWidget(export_card)
 
-    # ── Step 7: Editable images ─────────────────────────────────────────────
+    # ── Step 8: Editable images ─────────────────────────────────────────────
 
-    def _build_step6_images(self, layout: QVBoxLayout):
-        self._add_step_header(layout, "Step 7 — Translate Images", 7)
+    def _build_step8_images(self, layout: QVBoxLayout):
+        self._add_step_header(layout, "Step 8 — Translate Images", 8)
 
         status_box = WorkflowStageCard(
             1,
@@ -2704,11 +2740,11 @@ class WorkflowTab(QWidget):
             maximum=360,
         )
 
-    # ── Step 8: Playtest (TL Inspector) ─────────────────────────────────────
+    # ── Step 9: Playtest (TL Inspector) ─────────────────────────────────────
 
-    def _build_step8_playtest(self, layout: QVBoxLayout):
-        self._step8_section_label = self._add_step_header(
-            layout, "Step 8 — Playtest Tools", 8
+    def _build_step9_playtest(self, layout: QVBoxLayout):
+        self._step9_section_label = self._add_step_header(
+            layout, "Step 9 — Playtest Tools", 9
         )
 
         settings_box = WorkflowStageCard(
@@ -2869,7 +2905,7 @@ class WorkflowTab(QWidget):
 
         settings_inner.addLayout(action_row)
         layout.addWidget(settings_box)
-        self._step8_settings_box = settings_box
+        self._step9_settings_box = settings_box
 
         # ── Plugins (TL Inspector + Forge) ────────────────────────────────────
         plugins_box = WorkflowStageCard(
@@ -2913,9 +2949,9 @@ class WorkflowTab(QWidget):
         tli_btn_row.addStretch()
         plugins_inner.addLayout(tli_btn_row)
 
-        self._step8_forge_section = QWidget()
-        self._step8_forge_section.setStyleSheet("background:transparent;")
-        forge_section_layout = QVBoxLayout(self._step8_forge_section)
+        self._step9_forge_section = QWidget()
+        self._step9_forge_section.setStyleSheet("background:transparent;")
+        forge_section_layout = QVBoxLayout(self._step9_forge_section)
         forge_section_layout.setContentsMargins(0, 4, 0, 0)
         forge_section_layout.setSpacing(Spacing.SM)
 
@@ -2951,19 +2987,19 @@ class WorkflowTab(QWidget):
         forge_btn_row.addStretch()
         forge_section_layout.addLayout(forge_btn_row)
 
-        plugins_inner.addWidget(self._step8_forge_section)
+        plugins_inner.addWidget(self._step9_forge_section)
 
-        self._step8_tli_credits = QLabel("Idea by Sakura · Plugin by Kao_SSS")
-        self._step8_tli_credits.setStyleSheet("color:#77777a;font-size:11px;font-style:italic;padding-top:2px;")
-        plugins_inner.addWidget(self._step8_tli_credits)
+        self._step9_tli_credits = QLabel("Idea by Sakura · Plugin by Kao_SSS")
+        self._step9_tli_credits.setStyleSheet("color:#77777a;font-size:11px;font-style:italic;padding-top:2px;")
+        plugins_inner.addWidget(self._step9_tli_credits)
 
-        self._step8_forge_credits = QLabel(
+        self._step9_forge_credits = QLabel(
             'Forge by <a href="https://gitgud.io/zero64801/forge-mvmz" style="color:#7a9abf">len</a>'
         )
-        self._step8_forge_credits.setStyleSheet("color:#77777a;font-size:11px;font-style:italic;")
-        self._step8_forge_credits.setTextFormat(Qt.RichText)
-        self._step8_forge_credits.setOpenExternalLinks(True)
-        plugins_inner.addWidget(self._step8_forge_credits)
+        self._step9_forge_credits.setStyleSheet("color:#77777a;font-size:11px;font-style:italic;")
+        self._step9_forge_credits.setTextFormat(Qt.RichText)
+        self._step9_forge_credits.setOpenExternalLinks(True)
+        plugins_inner.addWidget(self._step9_forge_credits)
 
         self._install_both_btn = _make_btn("⬇  Install both plugins", "#0e639c")
         self._install_both_btn.setMinimumHeight(30)
@@ -2985,8 +3021,8 @@ class WorkflowTab(QWidget):
         plugins_inner.addWidget(self._install_both_btn)
 
         layout.addWidget(plugins_box)
-        self._step8_playtest_box = plugins_box
-        self._step8_forge_box = self._step8_forge_section
+        self._step9_playtest_box = plugins_box
+        self._step9_forge_box = self._step9_forge_section
 
         verify_stage = WorkflowStageCard(
             3,
@@ -3198,7 +3234,7 @@ class WorkflowTab(QWidget):
             )
 
     def _load_playtest_settings(self):
-        """Load playtest hotkeys and editor settings from .env into Step 8 controls."""
+        """Load playtest hotkeys and editor settings from .env into Step 9 controls."""
         try:
             from util.playtest.config import load_config
             cfg = load_config()
@@ -3222,7 +3258,7 @@ class WorkflowTab(QWidget):
         self._populate_tli_editor_combo(select=cfg.get("editorCmd", "auto"))
 
     def _resolve_playtest_config(self) -> dict:
-        """Build playtest config dict from Step 8 controls."""
+        """Build playtest config dict from Step 9 controls."""
         mode = self._tli_editor_combo.currentData()
         if mode == "__custom__":
             editor = self._tli_editor_custom.text().strip() or "auto"
@@ -3286,8 +3322,8 @@ class WorkflowTab(QWidget):
         self._refresh_playtest_status()
 
     def _refresh_playtest_status(self):
-        """Update Step 8 status labels for the current engine."""
-        if getattr(self, "_step8_playtest_box", None) is not None:
+        """Update Step 9 status labels for the current engine."""
+        if getattr(self, "_step9_playtest_box", None) is not None:
             self._refresh_tl_inspector_status()
         self._refresh_forge_status()
 
@@ -3327,7 +3363,7 @@ class WorkflowTab(QWidget):
         self._apply_playtest_settings()
 
     def _refresh_tl_inspector_status(self):
-        """Update Step 8 TL Inspector status label from the current game folder."""
+        """Update Step 9 TL Inspector status label from the current game folder."""
         label = getattr(self, "_tli_status_label", None)
         if label is None:
             return
@@ -3403,7 +3439,7 @@ class WorkflowTab(QWidget):
         self._refresh_playtest_status()
 
     def _refresh_forge_status(self):
-        """Update Step 8 Forge status label from the current game folder."""
+        """Update Step 9 Forge status label from the current game folder."""
         label = getattr(self, "_forge_status_label", None)
         if label is None:
             return
@@ -3601,10 +3637,10 @@ class WorkflowTab(QWidget):
                 if self._data_path else
                 "Game data destination: detect a project in Step 0"
             )
-        # Steps 7–8 in this RPG workflow are MV/MZ only. The standalone Images
+        # Steps 8–9 in this RPG workflow are MV/MZ only. The standalone Images
         # page also supports Generic loose PNG projects.
         show_mvmz_tools = not is_ace
-        tool_indices = (7, 8)
+        tool_indices = (8, 9)
         for tool_idx in tool_indices:
             if hasattr(self, "_step_tabs") and self._step_tabs.count() > tool_idx:
                 if hasattr(self._step_tabs, "setTabVisible"):
@@ -3617,20 +3653,22 @@ class WorkflowTab(QWidget):
         ace_release_btn = getattr(self, "_ace_release_zip_btn", None)
         if ace_release_btn is not None:
             ace_release_btn.setVisible(is_ace)
-        finish_stage = getattr(self, "_rewrap_finish_stage", None)
-        if finish_stage is not None:
-            finish_stage.title_label.setText(
-                "Run final QA and build the release" if is_ace else "Run final QA"
-            )
-            finish_stage.description_label.setText(
-                "Audit the rewrapped game data, then build the Ace release."
+        qa_stage = getattr(self, "_qa_finish_stage", None)
+        if qa_stage is not None:
+            qa_stage.title_label.setText(
+                "Complete translation QA and build the release"
                 if is_ace else
-                "Audit the rewrapped game data before continuing to images and playtesting."
+                "Complete all translation QA passes"
+            )
+            qa_stage.description_label.setText(
+                "Complete all four QA passes, then build the Ace release."
+                if is_ace else
+                "Run every focused pass in order after rewrapping, then carry its evidence into the final gate."
             )
         if is_ace and self._step_tabs.currentIndex() in tool_indices:
-            self._goto_step(6)
+            self._goto_step(7)
         self._refresh_step_strip()
-        box = getattr(self, "_step8_playtest_box", None)
+        box = getattr(self, "_step9_playtest_box", None)
         install_both_btn = getattr(self, "_install_both_btn", None)
         if box is not None:
             box.setVisible(show_mvmz_tools)
@@ -4334,7 +4372,7 @@ class WorkflowTab(QWidget):
         )
 
     def _copy_translation_qa_prompt(self):
-        """Copy the post-export RPG Maker QA skill with this game's paths."""
+        """Copy one focused post-export RPG Maker QA pass with this game's paths."""
         try:
             game_root = self._prepared_project_or_warn()
             if not game_root:
@@ -4348,7 +4386,8 @@ class WorkflowTab(QWidget):
                 "{{GAME_ROOT}}": str(Path(game_root).expanduser().resolve()),
                 "{{VOCAB_FILE}}": str(ensure_game_glossary(game_root)),
             }
-            prompt = load_clipboard_skill("rpgmaker_translation_qa.md")
+            focus = self._qa_focus_combo.currentData() or "dialogue"
+            prompt = load_rpgmaker_qa_skill(str(focus))
             missing = [token for token in replacements if token not in prompt]
             if missing:
                 raise ValueError(
@@ -4358,7 +4397,9 @@ class WorkflowTab(QWidget):
             for token, value in replacements.items():
                 prompt = prompt.replace(token, value)
             QApplication.clipboard().setText(prompt)
-            self._log(f"RPG Maker game-data QA skill copied for {game_data}.")
+            self._log(
+                f"RPG Maker QA pass '{self._qa_focus_combo.currentText()}' copied for {game_data}."
+            )
         except Exception as exc:
             self._log(f"❌ Could not copy translation QA skill: {exc}")
 

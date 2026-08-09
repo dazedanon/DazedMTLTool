@@ -446,11 +446,11 @@ class RPGMakerWorkflowImageStepTests(unittest.TestCase):
                 workflow = WorkflowTab(host)
             try:
                 workflow.folder_edit.setText(str(game_root))
-                workflow._goto_step(7)
+                workflow._goto_step(8)
                 workflow._refresh_image_workflow_status()
 
-                self.assertEqual(workflow._step_tabs.count(), 9)
-                self.assertEqual(workflow._step_tabs.currentIndex(), 7)
+                self.assertEqual(workflow._step_tabs.count(), 10)
+                self.assertEqual(workflow._step_tabs.currentIndex(), 8)
                 self.assertIn("Runtime images:</span> 1", workflow._image_workflow_status.text())
                 self.assertIn("Glossary:</span>", workflow._image_workflow_status.text())
                 self.assertTrue(game_root.joinpath("glossary.txt").is_file())

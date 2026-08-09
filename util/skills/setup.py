@@ -12,6 +12,15 @@ _ENGINE_MARKERS = {
     "wolf": ("<!-- engine:wolf -->", "<!-- /engine:wolf -->"),
 }
 
+RPGMAKER_QA_FOCUSES = (
+    ("database", "1  Database files"),
+    ("risky-codes", "2  Risky event codes"),
+    ("dialogue", "3  Dialogue, choices & scrolling text"),
+    ("release", "4  Coverage & release gate"),
+)
+
+_RPGMAKER_QA_FILENAME = "rpgmaker_translation_qa.md"
+
 
 def _read_skill_file(name: str) -> str:
     path = SKILLS_DIR / name
@@ -74,6 +83,46 @@ def load_clipboard_skill(name: str) -> str:
     if path_name.name != name or path_name.suffix.casefold() != ".md":
         raise ValueError(f"Invalid clipboard skill filename: {name!r}")
     return _read_skill_file(name).strip() + "\n"
+
+
+def load_rpgmaker_qa_skill(focus: str) -> str:
+    """Load the shared RPG Maker QA rules plus one bounded focus section."""
+    valid_focuses = {key for key, _label in RPGMAKER_QA_FOCUSES}
+    if focus not in valid_focuses:
+        raise ValueError(f"Unknown RPG Maker QA focus: {focus!r}")
+
+    text = _read_skill_file(_RPGMAKER_QA_FILENAME)
+    selected = ""
+    sections: list[tuple[int, int]] = []
+    for key, _label in RPGMAKER_QA_FOCUSES:
+        start_marker = f"<!-- qa-focus:{key} -->"
+        end_marker = f"<!-- /qa-focus:{key} -->"
+        start = text.find(start_marker)
+        if start == -1:
+            raise ValueError(f"QA skill is missing focus marker: {start_marker}")
+        end = text.find(end_marker, start + len(start_marker))
+        if end == -1:
+            raise ValueError(f"QA skill is missing focus marker: {end_marker}")
+        if text.find(start_marker, start + len(start_marker)) != -1:
+            raise ValueError(f"QA skill has duplicate focus marker: {start_marker}")
+        body = text[start + len(start_marker) : end]
+        if key == focus:
+            selected = body.strip()
+        sections.append((start, end + len(end_marker)))
+
+    common_parts: list[str] = []
+    pos = 0
+    for start, end in sorted(sections):
+        if start < pos:
+            raise ValueError("QA focus sections must not overlap")
+        common_parts.append(text[pos:start])
+        pos = end
+    common_parts.append(text[pos:])
+
+    if not selected:
+        raise ValueError(f"QA focus section is empty: {focus}")
+    common = "".join(common_parts).strip()
+    return f"{common}\n\n{selected}\n"
 
 
 def skills_dir() -> Path:

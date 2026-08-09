@@ -16,6 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
+    QApplication,
     QComboBox,
     QListWidget,
     QListWidgetItem,
@@ -84,20 +85,20 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (6, "load_rewrap_widths", {"text": "Load saved line widths"}),
             (6, "run_rewrap", {"text": "Preview rewrap"}),
             (6, "run_rewrap", {"text": "Apply rewrap"}),
-            (6, "copy_translation_qa_prompt", {"text": "Copy final QA skill"}),
-            (7, "refresh_image_workflow_status", {"text": "Refresh readiness"}),
-            (7, "open_image_manager", {"text": "Open Image Manager"}),
-            (8, "detect_tli_editors", {"text": "Find editors"}),
-            (8, "browse_tli_editor", {"text": "Choose…"}),
-            (8, "save_playtest_settings", {"text": "Save defaults"}),
-            (8, "apply_playtest_settings", {"text": "Apply settings to game"}),
-            (8, "install_tl_inspector", {"text": "Install TL Inspector"}),
-            (8, "uninstall_tl_inspector", {"text": "Remove TL Inspector"}),
-            (8, "install_forge", {"text": "Install Forge"}),
-            (8, "uninstall_forge", {"text": "Remove Forge"}),
-            (8, "create_public_release", {"text": "Build public release ZIP"}),
-            (8, "install_both_playtest", {"text": "Install both plugins"}),
-            (8, "refresh_playtest_status", {"text": "Refresh plugin status"}),
+            (7, "copy_translation_qa_prompt", {"text": "Copy selected QA pass"}),
+            (8, "refresh_image_workflow_status", {"text": "Refresh readiness"}),
+            (8, "open_image_manager", {"text": "Open Image Manager"}),
+            (9, "detect_tli_editors", {"text": "Find editors"}),
+            (9, "browse_tli_editor", {"text": "Choose…"}),
+            (9, "save_playtest_settings", {"text": "Save defaults"}),
+            (9, "apply_playtest_settings", {"text": "Apply settings to game"}),
+            (9, "install_tl_inspector", {"text": "Install TL Inspector"}),
+            (9, "uninstall_tl_inspector", {"text": "Remove TL Inspector"}),
+            (9, "install_forge", {"text": "Install Forge"}),
+            (9, "uninstall_forge", {"text": "Remove Forge"}),
+            (9, "create_public_release", {"text": "Build public release ZIP"}),
+            (9, "install_both_playtest", {"text": "Install both plugins"}),
+            (9, "refresh_playtest_status", {"text": "Refresh plugin status"}),
         )
         self.assertEqual(len(cases), 47)
         for step, endpoint, locator in cases:
@@ -151,8 +152,29 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         FakeWorker.reset()
 
     def test_project_selection_and_auto_import_preserve_exact_scope(self):
-        game, _data = self.harness.make_mvmz_project("MZ")
+        game, data = self.harness.make_mvmz_project("MZ")
         self.harness.prepare_project(game)
+        self.workflow._data_path = str(data)
+        self.assertEqual(
+            [
+                self.workflow._qa_focus_combo.itemData(index)
+                for index in range(self.workflow._qa_focus_combo.count())
+            ],
+            ["database", "risky-codes", "dialogue", "release"],
+        )
+        database_index = self.workflow._qa_focus_combo.findData("database")
+        self.assertGreaterEqual(database_index, 0)
+        self.workflow._qa_focus_combo.setCurrentIndex(database_index)
+        QApplication.clipboard().clear()
+
+        self.workflow._copy_translation_qa_prompt()
+
+        prompt = QApplication.clipboard().text()
+        self.assertIn("Selected focus: Database files", prompt)
+        self.assertNotIn("Selected focus: Dialogue", prompt)
+        self.assertIn(str(data.resolve()), prompt)
+        self.assertIn(str(game.resolve()), prompt)
+        self.assertNotIn("{{GAME_DATA_FOLDER}}", prompt)
         items = [
             {"name": "Actors.json", "path": "/fixture/Actors.json", "size_kb": 1, "category": "core", "default": True},
             {"name": "Map001.json", "path": "/fixture/Map001.json", "size_kb": 1, "category": "map", "default": False},
@@ -216,6 +238,7 @@ class WorkflowHandlerContractTests(unittest.TestCase):
             self.assertEqual(FakeWorker.instances[-1].args, (str(data), "MVMZ"))
             self.assertTrue(self.workflow._step_buttons[7].isVisible())
             self.assertTrue(self.workflow._step_buttons[8].isVisible())
+            self.assertTrue(self.workflow._step_buttons[9].isVisible())
 
         game, _data, ace_json = self.harness.make_ace_project()
         FakeWorker.reset()
@@ -224,8 +247,9 @@ class WorkflowHandlerContractTests(unittest.TestCase):
             self.workflow._detect_folder()
         self.assertEqual(Path(self.workflow._data_path), ace_json)
         self.assertEqual(FakeWorker.instances[-1].args, (str(ace_json), "MVMZ"))
-        self.assertFalse(self.workflow._step_buttons[7].isVisible())
+        self.assertTrue(self.workflow._step_buttons[7].isVisible())
         self.assertFalse(self.workflow._step_buttons[8].isVisible())
+        self.assertFalse(self.workflow._step_buttons[9].isVisible())
 
         active_worker = FakeWorker()
         active_worker.running = True

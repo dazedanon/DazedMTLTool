@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from util.skills.contexts import ctx, reload_contexts
-from util.skills.setup import load_clipboard_skill, load_project_setup, skills_dir
+from util.skills.setup import (
+    RPGMAKER_QA_FOCUSES,
+    load_clipboard_skill,
+    load_project_setup,
+    load_rpgmaker_qa_skill,
+    skills_dir,
+)
 from util.skills.system import (
     custom_skill_path_for_game,
     game_skill_path_for_game,
@@ -20,8 +26,10 @@ __all__ = [
     "custom_skill_path_for_game",
     "game_skill_path_for_game",
     "list_custom_skill_paths",
+    "RPGMAKER_QA_FOCUSES",
     "load_clipboard_skill",
     "load_project_setup",
+    "load_rpgmaker_qa_skill",
     "load_system_prompt",
     "migrate_game_skill_text",
     "quirks_path_for_game",

@@ -49,6 +49,7 @@ STEP_SLUGS = (
     "phase-2",
     "export",
     "rewrap",
+    "qa",
     "images",
     "playtest",
 )
@@ -254,8 +255,8 @@ def _apply_fixture_state(workflow, state: str) -> None:
         workflow._set_activity_visible(True, persist=False)
         return
     if state == "complete":
-        workflow._step_done.update(range(8))
-        workflow._refresh_step_strip(8)
+        workflow._step_done.update(range(9))
+        workflow._refresh_step_strip(9)
         workflow._p0_status_lbl.setText("Complete")
         workflow._p1_status_lbl.setText("Complete")
         workflow._p1b_status_lbl.setText("Complete")

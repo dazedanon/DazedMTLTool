@@ -123,8 +123,9 @@ class SkillsTab(QWidget):
             tab_title="Translation QA",
             path=SKILLS_DIR / "rpgmaker_translation_qa.md",
             hint=(
-                "Post-export RPG Maker game-data audit. Keep the {{GAME_DATA_FOLDER}}, "
-                "{{GAME_ROOT}}, and {{VOCAB_FILE}} placeholders."
+                "Shared post-export rules plus four independently copied QA focus sections. "
+                "Keep every qa-focus marker and the {{GAME_DATA_FOLDER}}, {{GAME_ROOT}}, and "
+                "{{VOCAB_FILE}} placeholders."
             ),
             is_json=False,
         )
