@@ -764,16 +764,24 @@ class TestMVMZSourceOriginal(unittest.TestCase):
             "list": [
                 {"code": 108, "indent": 0, "parameters": ["選択肢ヘルプ"]},
                 {"code": 408, "indent": 0, "parameters": ["これは選択肢のヘルプです。"]},
+                {"code": 408, "indent": 0, "parameters": ["二行目のヘルプです。"]},
             ]
         }
+        source_page = copy.deepcopy(page)
         page, captured = _run_search_codes(page)
-        cmd = _find_commands(page, 408)[0]
-        self.assertEqual(cmd.get("_original"), "これは選択肢のヘルプです。")
-        self.assertNotEqual(cmd["parameters"][0], cmd["_original"])
+        comments = _find_commands(page, 408)
+        self.assertEqual(
+            [cmd.get("_original") for cmd in comments],
+            ["これは選択肢のヘルプです。", "二行目のヘルプです。"],
+        )
+        self.assertTrue(all(cmd["parameters"][0] != cmd["_original"] for cmd in comments))
         self.assertGreater(len(captured), 0)
 
         page2, captured2 = _run_search_codes(page)
-        self.assertEqual(cmd["_original"], _find_commands(page2, 408)[0]["_original"])
+        self.assertEqual(
+            [cmd["_original"] for cmd in comments],
+            [cmd["_original"] for cmd in _find_commands(page2, 408)],
+        )
         for payload in captured2:
             items = payload if isinstance(payload, list) else [payload]
             for item in items:
@@ -781,27 +789,49 @@ class TestMVMZSourceOriginal(unittest.TestCase):
                     continue
                 self.assertTrue(_has_japanese(item), f"408 re-run sent non-Japanese: {item!r}")
 
-    def test_first_408_after_empty_108_is_translated_and_preserved(self):
+        original_join408 = mvmz.JOIN408
+        mvmz.JOIN408 = True
+        try:
+            joined_page, _ = _run_search_codes(source_page)
+            rerun_page, rerun_captured = _run_search_codes(joined_page)
+        finally:
+            mvmz.JOIN408 = original_join408
+
+        joined_comments = _find_commands(rerun_page, 408)
+        self.assertEqual(len(joined_comments), 1)
+        self.assertEqual(
+            joined_comments[0]["_original"],
+            "これは選択肢のヘルプです。\n二行目のヘルプです。",
+        )
+        self.assertTrue(
+            any("これは選択肢のヘルプです。" in str(payload) for payload in rerun_captured)
+        )
+
+    def test_unsupported_408_blocks_are_not_translated(self):
         page = {
             "list": [
                 {"code": 108, "indent": 0, "parameters": [""]},
                 {"code": 408, "indent": 0, "parameters": ["テレポート。"]},
+                {"code": 108, "indent": 0, "parameters": ["開発メモ"]},
                 {"code": 408, "indent": 0, "parameters": ["条件スイッチ。"]},
+                {"code": 408, "indent": 0, "parameters": ["この行も内部用。"]},
             ]
         }
 
-        page, _ = _run_search_codes(page)
+        page, captured = _run_search_codes(page)
         comments = _find_commands(page, 408)
 
-        self.assertEqual(comments[0].get("_original"), "テレポート。")
-        self.assertEqual(comments[1].get("_original"), "条件スイッチ。")
-        self.assertEqual(comments[0]["parameters"][0], "EN_TRANSLATED")
-        self.assertEqual(comments[1]["parameters"][0], "EN_TRANSLATED")
+        self.assertEqual(
+            [cmd["parameters"][0] for cmd in comments],
+            ["テレポート。", "条件スイッチ。", "この行も内部用。"],
+        )
+        self.assertTrue(all("_original" not in cmd for cmd in comments))
+        self.assertEqual(captured, [])
 
     def test_failed_408_fallback_does_not_write_originals(self):
         page = {
             "list": [
-                {"code": 108, "indent": 0, "parameters": [""]},
+                {"code": 108, "indent": 0, "parameters": ["選択肢ヘルプ"]},
                 {"code": 408, "indent": 0, "parameters": ["第一行"]},
                 {"code": 408, "indent": 0, "parameters": ["第二行"]},
             ]
@@ -830,7 +860,7 @@ class TestMVMZSourceOriginal(unittest.TestCase):
     def test_short_408_batch_is_not_partially_applied(self):
         page = {
             "list": [
-                {"code": 108, "indent": 0, "parameters": [""]},
+                {"code": 108, "indent": 0, "parameters": ["選択肢ヘルプ"]},
                 {"code": 408, "indent": 0, "parameters": ["第一行"]},
                 {"code": 408, "indent": 0, "parameters": ["第二行"]},
             ]

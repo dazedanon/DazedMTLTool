@@ -317,8 +317,8 @@ class RPGMakerTab(QWidget):
         
         self.code408_cb, layout = self._create_checkbox_with_description(
             "Comment Text (408)",
-            "⚠️ Enable only when a plugin displays it",
-            "Continuation lines from 108/408 comment blocks; usually internal, sometimes player-facing.",
+            "Recognized player-facing comment text",
+            "Continuation lines from supported 108/408 comment blocks.",
         )
         self.code408_cb.setStyleSheet("QCheckBox { font-size: 11px; color: #ffaa66; }")
         col2.addLayout(layout)
@@ -692,8 +692,8 @@ class RPGMakerTab(QWidget):
         # Check for high-cost options
         if self.code408_cb.isChecked():
             warnings.append(
-                "CODE 408 (comment continuation text) is enabled. Confirm an enabled plugin "
-                "shows it to players; otherwise this can significantly increase translation costs!"
+                "CODE 408 (supported comment text) is enabled. Only recognized player-facing "
+                "108 markers and their continuation lines will be translated."
             )
             
         # Check for conflicting options

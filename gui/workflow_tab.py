@@ -1648,7 +1648,7 @@ class WorkflowTab(QWidget):
         p1_box = WorkflowStageCard(
             3,
             "Translate dialogue and choices",
-            "Translate names, messages, scrolling text, and choices. Include code 408 only when an enabled plugin displays it.",
+            "Translate names, messages, scrolling text, choices, and optionally supported code-408 comment text.",
         )
         p1_inner = p1_box.body
         self._phase1_code408_cb = QCheckBox(
@@ -1659,8 +1659,8 @@ class WorkflowTab(QWidget):
             saved_408 = saved_408.strip().casefold() in {"1", "true", "yes", "on"}
         self._phase1_code408_cb.setChecked(bool(saved_408))
         self._phase1_code408_cb.setToolTip(
-            "Enable only when Project Setup finds an enabled plugin that displays text from "
-            "108/408 comment blocks. Leave off for ordinary editor comments."
+            "Enable when Project Setup finds player-facing text under a supported 108 marker. "
+            "Unrecognized and ordinary editor comment blocks stay untouched."
         )
         self._phase1_code408_cb.stateChanged.connect(
             lambda state: self._save_setting("phase1_code408", bool(state))

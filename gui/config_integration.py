@@ -279,7 +279,7 @@ class ConfigIntegration:
             "CODE405": "Show Text (Scrolling) - Longer dialogue",
             "CODE102": "Show Choices - Player choice options",
             "CODE101": "Character Names - Turn on when names exist in 101",
-            "CODE408": "Comment continuations - enable only for plugin-displayed player text",
+            "CODE408": "Supported comment continuations - recognized player-facing 108 markers only",
             "CODE122": "Control Variables - Text stored in variables",
             
             "CODE355655": "Scripts - Text within script commands",

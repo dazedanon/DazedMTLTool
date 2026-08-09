@@ -237,6 +237,9 @@ CODE102 = False
 
 # Optional
 CODE408 = False
+# Code 408 continues an RPG Maker comment started by code 108. Only known
+# player-facing comment blocks should be sent for translation.
+SUPPORTED_CODE408_MARKERS = frozenset({"選択肢ヘルプ"})
 
 # Variables
 CODE122 = False
@@ -715,6 +718,28 @@ def _text_group_end(codeList, start: int, allowed_codes: tuple[int, ...]) -> int
             break
         end += 1
     return end
+
+
+def _code408_has_supported_marker(codeList, index: int) -> bool:
+    """Return whether a 408 belongs to a known player-facing comment block."""
+    marker_index = index - 1
+    while marker_index >= 0:
+        command = codeList[marker_index]
+        if command.get("code") == 408:
+            marker_index -= 1
+            continue
+        if command.get("code") == -1 and not command.get("parameters"):
+            marker_index -= 1
+            continue
+        break
+
+    if marker_index < 0 or codeList[marker_index].get("code") != 108:
+        return False
+
+    parameters = codeList[marker_index].get("parameters") or []
+    if not parameters:
+        return False
+    return str(parameters[0]).strip() in SUPPORTED_CODE408_MARKERS
 
 
 def _apply_original(cmd, raw_source: str) -> None:
@@ -3892,13 +3917,11 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 408 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 408) and CODE408 is True:
                 # A 108 starts an RPG Maker comment and each following 408
-                # continues it. Accept the first continuation regardless of the
-                # 108 text so the entire comment block is handled consistently.
-                if i > 0:
-                    prevCode = codeList[i - 1].get("code", None)
-                    if prevCode not in [108, 408]:
-                        i += 1
-                        continue
+                # continues it. Translate only blocks whose 108 marker identifies
+                # a supported player-facing use.
+                if not _code408_has_supported_marker(codeList, i):
+                    i += 1
+                    continue
 
                 if not codeList[i].get("parameters"):
                     i += 1

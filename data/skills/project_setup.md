@@ -166,23 +166,25 @@ Do **not** include:
 #### Code 408
 
 Code `408` is a continuation of an editor comment. It is normally internal, but plugins can parse
-`108`/`408` comment blocks and display their contents to players.
+`108`/`408` comment blocks and display their contents to players. DazedTL extracts code-408 text
+only from recognized player-facing code-108 markers; currently supported: `選択肢ヘルプ`.
 
 1. Inventory code-408 values and group them with their preceding code-108 command.
 2. Search enabled plugin sources and event-handling code for the discovered comment tags,
-   prefixes, or parsing APIs. Do not infer runtime visibility from Japanese text alone.
-3. Treat the Phase 1 checkbox as a **global extraction decision**: enabling it includes every code
-   408 value, not only the runtime-displayed subset. Report both the total inventory and confirmed
-   player-visible count, then inspect whether the visible values are real game text, debug text,
-   placeholders, or isolated test content.
-4. Choose `ENABLE` only when evidence shows a meaningful, recurring body of code-408 content is
-   shown to players and bulk extraction is proportionate and safe. A plugin consumer by itself is
-   not enough evidence to enable the checkbox globally.
-5. Choose `SKIP` when values are editor notes, disabled-plugin metadata, or have no runtime
-   consumer. Also choose `SKIP` when the visible subset is tiny relative to the inventory,
-   isolated to debug/test maps, or merely placeholder text; give exact locators and recommend
-   translating those few values manually later if they matter. If evidence is inconclusive,
-   choose `SKIP` and state what must be playtested.
+   prefixes, or parsing APIs. Compare every player-facing marker found with DazedTL's supported
+   marker list. Do not infer runtime visibility from Japanese text alone.
+3. Report the total code-408 inventory, the count under supported markers, and the confirmed
+   player-visible count. Inspect matching values for real game text, debug text, placeholders, or
+   isolated test content. Unsupported marker blocks remain untouched even when code 408 is enabled.
+4. Choose `ENABLE` when a supported marker has player-facing text worth translating. Choose `SKIP`
+   when no supported marker is present, its plugin is disabled, or matching values are only debug,
+   test, or placeholder content. If runtime visibility is inconclusive, choose `SKIP` and state what
+   must be playtested.
+5. Explicitly report every confirmed or suspected player-facing marker that is not currently
+   supported. Preserve the exact code-108 marker text and list its plugin consumer/evidence,
+   code-408 block and line counts, representative map/event locators, and confidence. Tell the user
+   to add or request support for each listed marker in DazedTL before translation. If none are found,
+   say `No unsupported player-facing code-408 markers found`; never omit this result.
 6. Tell the user to set the **Translate code 408 plugin/comment text** checkbox in Phase 1 to the
    recommended state. This is a user choice; do not edit tool configuration yourself.
 
@@ -227,6 +229,10 @@ Label the fence language as `rpgmaker_config`. Inside:
 
 ```text
 CODE408 : ENABLE|SKIP - <runtime evidence, affected count, and confidence>
+
+Unsupported CODE408 markers:
+- `<exact code-108 marker>` : <plugin/runtime evidence; block and line counts; example locators; confidence; add tool support>
+- `None found` (use only when the scan found no unsupported player-facing markers)
 
 Dialogue : width=<full width> ; faceWidth=<code-101 face width> ; font=<px or keep current (measured px)> ; rows=<count>
 List/Help: listWidth=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count or varies>
