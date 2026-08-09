@@ -44,19 +44,24 @@ Keep this pass independent and measurable instead of widening it into a whole-ga
 - Mechanically check 100% of resolvable in-scope source/translation pairs.
 - Deduplicate identical source/translation pairs for semantic review while retaining every locator
   and materially distinct context class.
-- Perform one new semantic discovery wave per invocation. Use 500 pairs as the routine wave size;
-  follow a selected focus's explicit small-corpus rule when it requires reviewing up to 750 pairs.
-  Report the exact remaining count and stop after the wave, regression work, and findings report.
-  A later invocation must resume the next non-overlapping wave from the same frozen manifest.
+- Review every frozen cluster before this focus may end or request approval.
+  Use 500 pairs as the routine wave size and follow a selected focus's explicit small-corpus rule
+  when it requires reviewing up to 750 pairs.
+  After each wave, persist the checkpoint and continue immediately with the next non-overlapping
+  wave from the same frozen manifest in the same invocation.
+  Do not stop merely because one wave completed or was clean.
+  If an actual runtime or tool limit prevents continuing, report the focus as incomplete with the
+  exact unreviewed count and resume from the checkpoint on the next invocation.
 - Put every mechanically flagged, glossary-bearing, short ambiguous, and context-sensitive cluster
   in the mandatory-review queue. Mandatory status changes attention order inside the current wave;
   it must not silently increase the wave or count as semantic review by itself.
 - Inspect nearby commands or records when speaker, referent, token placement, or meaning needs
   context. For repeated text, inspect at least one occurrence from every materially different
   speaker, event shape, database field, or nearby-command context.
-- Never imply that a sampled semantic wave covered every line. Readiness requires 100% mechanical
-  coverage, zero unresolved Critical/High findings, and the selected focus's explicit completion or
-  convergence rule. When a focus defines no earlier convergence rule, review every frozen cluster.
+- Never imply that a partial semantic wave covered every line.
+  Readiness requires 100% mechanical coverage, zero unresolved Critical/High findings, and an
+  explicit reviewed disposition for every frozen cluster.
+  Sampling, risk ranking, or consecutive clean waves cannot substitute for exhaustive coverage.
 
 ## Reproducible inventory and checkpoint
 
@@ -122,7 +127,8 @@ propagation to an identical Japanese sentence or the current semantic wave.
 
 ## Required report and approval gate
 
-Return these sections after the one bounded discovery wave:
+Return these sections after the exhaustive discovery run, or after documenting a genuine runtime,
+tool, or evidence blocker that prevents it from finishing:
 
 ### Focus coverage
 
@@ -154,13 +160,17 @@ signatures while retaining representative locators and affected counts. Never du
 
 ### Focus status and next action
 
-State `complete`, `incomplete — more semantic waves remain`, or `blocked — unresolved evidence or
-findings`. Only the Coverage & release gate focus may make a whole-game release recommendation.
-End with one focused approval question offering the relevant choices:
+State `complete`, `incomplete - execution interrupted with clusters remaining`, or
+`blocked - unresolved evidence or findings`.
+Only the Coverage & release gate focus may make a whole-game release recommendation.
+Ask for fix approval only when zero frozen clusters remain unreviewed.
+If execution was interrupted or blocked, provide the checkpoint and exact resume position instead
+of presenting a normal completion approval gate.
+When coverage is complete, end with one focused approval question offering the relevant choices:
 
 - Apply all high-confidence fixes found in this focus.
 - Apply selected finding IDs only.
-- Make no edits and continue the next non-overlapping wave.
+- Make no edits after the completed review.
 - Stop with no edits.
 
 Do not edit until the user approves.
@@ -175,8 +185,8 @@ plugin/script source under `{{GAME_ROOT}}` from this game-data QA prompt.
 Reparse every affected JSON file, rerun this focus's complete mechanical checks, rescan each
 approved issue signature across all in-scope pairs until no new affected values appear, and confirm
 no residue, token, display, or structural regression. Put edited identities in a regression queue;
-do not count regression as a new semantic wave. Report fixes and remaining risks, then stop unless
-the approval explicitly requested the next discovery wave.
+do not count regression as a new semantic wave.
+Report fixes and remaining risks, then stop.
 
 <!-- qa-focus:dialogue -->
 ## Selected focus: Dialogue, choices, and scrolling text
@@ -231,29 +241,25 @@ members of the current wave first, then review every remaining member in frozen 
 must not change wave membership, substitute for review, or allow any member to be skipped. Record an
 explicit reviewed disposition for every representative.
 
-Use these minimums and convergence rules across resumable invocations:
+Review every frozen dialogue cluster across consecutive resumable waves:
 
-- With 750 or fewer unique dialogue clusters, review all of them in the first wave.
-- With 751–2,500 clusters, complete at least two non-overlapping 500-pair waves.
-- With more than 2,500 clusters, complete at least five 500-pair waves before convergence is
-  possible. Treat 2,500 reviewed pairs as a checkpoint, not permission to stop automatically.
-- After the required minimum, require the final two consecutive waves to be clean. A wave is clean
-  only when it produces zero new actionable Critical/High/Medium signatures and zero newly
-  confirmed live values for every actionable signature, including signatures discovered earlier.
-- If either required clean wave is dirty, continue with the next non-overlapping 500-pair wave until
-  two consecutive clean waves occur or the frozen manifest is exhausted. A new affected value from
-  corpus-wide propagation resets the clean-wave count.
-- Do not impose an arbitrary total-wave cap. If an actual runtime/tool limit prevents the next
-  invocation or checkpoint, report non-convergence and the exact unreviewed count.
+- With 750 or fewer unique dialogue clusters, review all of them in one wave.
+- With more than 750 clusters, review consecutive non-overlapping 500-pair waves plus the final
+  partial wave until the frozen manifest is exhausted.
+- Persist the checkpoint after each wave, but continue automatically in the same invocation.
+  Resume in a later invocation only after a genuine runtime or tool interruption.
+- Track clean-wave history as diagnostic evidence, not as permission to leave clusters unreviewed.
+- Do not impose an arbitrary total-wave cap.
+  If an actual runtime or tool limit prevents the next wave or checkpoint, report incomplete status
+  and the exact unreviewed count.
 
 For repeated clusters, retain all locator context facets and deterministically review every
 risk-bearing materially distinct context class. These occurrence checks supplement representative
 coverage; they do not inflate the unique-cluster count or replace a frozen wave member.
 
-Dialogue status may be `complete — exhaustive` when all clusters were reviewed, or `complete —
-converged sample` after the minimum and two clean waves. For converged sampling, report the exact
-reviewed and unreviewed counts, represented strata, context-class coverage, wave history, issue
-propagation totals, and manifest checksum. Never describe a converged sample as line-complete.
+Dialogue status may be `complete - exhaustive` only when all frozen clusters were reviewed.
+Report the exact reviewed count, zero unreviewed count, represented strata, context-class coverage,
+wave history, issue-propagation totals, and manifest checksum.
 <!-- /qa-focus:dialogue -->
 
 <!-- qa-focus:database -->
@@ -287,6 +293,10 @@ Stratify the wave by filename, entity type, field name, record identity, and sho
 length band. Prioritize glossary entities, similarly named levels/variants, battle terminology,
 menu labels, parameter names, state messages, actor identity, number/element/type mismatches, and
 inconsistent translations of one database term.
+
+Review every frozen database cluster in consecutive waves before reporting this focus complete or
+asking for fix approval.
+The final database coverage report must show zero unreviewed clusters.
 <!-- /qa-focus:database -->
 
 <!-- qa-focus:risky-codes -->
@@ -359,10 +369,12 @@ without `_original`. Mechanically recheck structural integrity, live counterpart
 runtime tokens/placeholders, obvious residue, and cross-class glossary/inconsistency signatures.
 Do not repeat semantic review already evidenced by completed focus checkpoints or reports.
 
-Semantically review only class 4 and actionable cross-class conflicts in this pass, using the
-shared 500-pair wave bound. Treat class 5 as a coverage blocker until resolved or explicitly shown
-to be non-translated/internal. Stratify class 4 by file, JSON field/shape, runtime visibility,
-plugin marker where applicable, and length band.
+Semantically review only class 4 and actionable cross-class conflicts in this pass.
+Use consecutive 500-pair waves until every frozen class-4 cluster has a reviewed disposition.
+Treat class 5 as a coverage blocker until resolved or explicitly shown to be
+non-translated/internal.
+Stratify class 4 by file, JSON field/shape, runtime visibility, plugin marker where applicable, and
+length band.
 
 ### Plugins and other assets
 

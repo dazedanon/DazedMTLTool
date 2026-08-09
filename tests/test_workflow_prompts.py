@@ -34,7 +34,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 self._assert_interactive_in_place_prompt(prompt)
                 self.assertIn(project_scope, prompt)
 
-    def test_rpgmaker_qa_prompts_are_bounded_and_require_approval(self):
+    def test_rpgmaker_qa_prompts_are_exhaustive_and_require_approval(self):
         self.assertEqual(
             [focus for focus, _label in RPGMAKER_QA_FOCUSES],
             ["database", "risky-codes", "dialogue", "release"],
@@ -49,7 +49,16 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             with self.subTest(focus=focus):
                 prompt = load_rpgmaker_qa_skill(focus)
                 lowered = prompt.casefold()
-                self.assertIn("perform one new semantic discovery wave", lowered)
+                self.assertIn(
+                    "review every frozen cluster before this focus may end", lowered
+                )
+                self.assertIn(
+                    "continue immediately with the next non-overlapping", lowered
+                )
+                self.assertIn(
+                    "ask for fix approval only when zero frozen clusters remain", lowered
+                )
+                self.assertNotIn("perform one new semantic discovery wave", lowered)
                 self.assertIn("do not edit until the user approves", lowered)
                 self.assertIn("never modify or remove `_original`", lowered)
                 self.assertIn("complete all four qa passes; none is optional", lowered)
@@ -66,14 +75,16 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 ):
                     self.assertIn(placeholder, prompt)
                 if focus == "dialogue":
-                    self.assertIn("more than 2,500 clusters", prompt)
-                    self.assertIn("at least five 500-pair waves", prompt)
-                    self.assertIn("final two consecutive waves", prompt)
+                    self.assertIn("review every frozen dialogue cluster", lowered)
+                    self.assertIn("partial wave until the frozen manifest", lowered)
+                    self.assertIn("complete - exhaustive", lowered)
+                    self.assertNotIn("converged sample", lowered)
                     self.assertIn(
                         "`consumed queue entries / total queue entries`", prompt
                     )
                     self.assertIn("score the entire unreviewed frozen suffix", prompt)
-                    self.assertIn("corpus-wide propagation resets", prompt)
+                if focus == "database":
+                    self.assertIn("zero unreviewed clusters", lowered)
         with self.assertRaises(ValueError):
             load_rpgmaker_qa_skill("everything")
 
