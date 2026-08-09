@@ -391,7 +391,9 @@ For RPG Maker, include **Speaker settings** first:
 - `FACENAME101`: ENABLE or SKIP. When enabled, list only proven filename-to-speaker mappings.
 
 Then include **RPG Maker settings** with the code-408 decision, unsupported marker support requests,
-and Dialogue, List/Help, and Notes wrap/font values specified above.
+and Dialogue, List/Help, and Notes wrap/font values specified above. Tell the user to enter the
+recommended widths in Workflow and click **Save line widths**; DazedTL stores them with the selected
+game and reloads them automatically when switching projects.
 
 For Wolf, include **Speaker settings** with `LOWCONF_FIRSTLINE: ENABLE|SKIP` and representative
 examples. Do not emit RPG Maker settings.

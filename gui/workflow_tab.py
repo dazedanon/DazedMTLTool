@@ -23,6 +23,13 @@ import threading
 from pathlib import Path
 
 from util.paths import APP_NAME, ORG_NAME, ensure_game_glossary
+from util.game_settings import (
+    DEFAULT_WRAP_WIDTHS,
+    GameSettingsError,
+    load_game_wrap_widths,
+    normalize_wrap_widths,
+    save_game_wrap_widths,
+)
 from util.skills import load_clipboard_skill, load_project_setup
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
 
@@ -250,7 +257,8 @@ _STEP_HELP: dict[int, str] = {
         "1. Leave <b>Normal Translate</b> selected unless you already know you want Batch "
         "Translate.<br>"
         "2. Enter the line widths recommended by the setup helper and click "
-        "<b>Save line widths</b>.<br>"
+        "<b>Save line widths</b>. They are stored with this game and reload when you switch "
+        "projects.<br>"
         "3. Click <b>Translate database</b> for item names, descriptions, and other menu "
         "text.<br>"
         "4. Click <b>Translate dialogue</b> for conversations and choices.<br>"
@@ -723,7 +731,7 @@ class WorkflowTab(QWidget):
         """Refresh live settings and detect the saved folder when first shown."""
         super().showEvent(event)
         self._update_responsive_shell()
-        self.refresh_wrap_widths_from_env()
+        self.refresh_wrap_widths_for_game()
         if not self._detected_on_show and self._setting("last_game_folder", ""):
             self._detected_on_show = True
             QTimer.singleShot(100, self._detect_folder)
@@ -889,7 +897,7 @@ class WorkflowTab(QWidget):
             self._auto_import_if_needed()
 
         if index == 3:
-            self.refresh_wrap_widths_from_env()
+            self.refresh_wrap_widths_for_game()
         if index == 4:
             self._populate_p2_checkboxes()
         if index == 6:
@@ -1567,9 +1575,8 @@ class WorkflowTab(QWidget):
         wrap_inner.addWidget(wrap_box_title)
 
         wrap_hint = QLabel(
-            "These values reload directly from .env when this page is shown. Saving writes the "
-            "dialogue, face-dialogue, list/help, and note limits back to .env; font recommendations "
-            "are not applied here."
+            "These values are saved with the selected game and reload automatically when you "
+            "switch projects. Font recommendations are not applied here."
         )
         wrap_hint.setWordWrap(True)
         wrap_hint.setStyleSheet("color:#a6a6a6;font-size:13px;")
@@ -1612,7 +1619,7 @@ class WorkflowTab(QWidget):
         apply_wrap_btn = _make_btn("✔  Save line widths", "#0e639c")
         _size_action_button(apply_wrap_btn, Geometry.ACTION_WIDE)
         apply_wrap_btn.setToolTip(
-            "Write width / faceWidth / listWidth / noteWidth into .env"
+            "Save width / faceWidth / listWidth / noteWidth with the selected game"
         )
         apply_wrap_btn.clicked.connect(self._apply_wrap_config)
         spins_grid.addWidget(apply_wrap_btn, 1, 4)
@@ -2252,7 +2259,7 @@ class WorkflowTab(QWidget):
 
         load_widths_btn = _make_text_btn(
             "Load saved line widths",
-            "Load width / faceWidth / listWidth / noteWidth from .env",
+            "Load width / faceWidth / listWidth / noteWidth saved with this game",
             min_width=160,
         )
         load_widths_btn.clicked.connect(self._load_rewrap_widths)
@@ -3550,6 +3557,7 @@ class WorkflowTab(QWidget):
         self._update_step6_for_engine(False)
 
         root_path = Path(folder)
+        self.refresh_wrap_widths_for_game()
 
         # ── RPGMaker Ace encrypted: Game.rgss* present (no Data/ yet) ────────
         # Must be checked BEFORE find_data_folder, which returns UNKNOWN for
@@ -4191,55 +4199,71 @@ class WorkflowTab(QWidget):
             self._log(f"❌ Could not copy {filename}: {exc}")
 
     def _load_rewrap_widths(self):
-        """Load the four current wrap widths directly from .env."""
+        """Load the selected game's saved widths into the Rewrap controls."""
         try:
-            values = dotenv_values(Path(".env")) if Path(".env").is_file() else {}
-
-            def _value(key: str, fallback: int) -> int:
-                raw = values.get(key)
-                return int(raw) if raw not in (None, "") else fallback
-
-            dialogue = _value("width", self.wrap_width_spin.value())
-            face = _value("faceWidth", max(1, dialogue - 10))
-            self.rewrap_dialogue_width.setValue(dialogue)
-            self.rewrap_face_width.setValue(min(dialogue, face))
-            self.rewrap_list_width.setValue(
-                _value("listWidth", self.wrap_list_spin.value())
-            )
-            self.rewrap_note_width.setValue(
-                _value("noteWidth", self.wrap_note_spin.value())
-            )
+            values = self._current_game_wrap_widths()
+            self.rewrap_dialogue_width.setValue(values["width"])
+            self.rewrap_face_width.setValue(values["faceWidth"])
+            self.rewrap_list_width.setValue(values["listWidth"])
+            self.rewrap_note_width.setValue(values["noteWidth"])
             if self.rewrap_file_list.count():
-                self.rewrap_status_label.setText("Loaded current widths from .env.")
+                self.rewrap_status_label.setText("Loaded widths saved with this game.")
             else:
                 self.rewrap_status_label.setText(
-                    "Loaded .env widths; no game data JSON files are available yet."
+                    "Loaded this game's widths; no game data JSON files are available yet."
                 )
         except Exception as exc:
-            self.rewrap_status_label.setText(f"Could not load .env widths: {exc}")
+            self.rewrap_status_label.setText(f"Could not load game widths: {exc}")
 
-    def refresh_wrap_widths_from_env(self):
-        """Reload the Phase 1 width controls directly from the current .env file."""
+    def _legacy_env_wrap_widths(self) -> dict[str, int]:
+        """Read global widths as defaults for games without saved settings."""
+        values = dotenv_values(Path(".env")) if Path(".env").is_file() else {}
+        return normalize_wrap_widths(values, defaults=DEFAULT_WRAP_WIDTHS)
+
+    def _current_game_wrap_widths(self) -> dict[str, int]:
+        """Return saved widths for the selected game, or legacy global defaults."""
+        game_root = self.folder_edit.text().strip() if hasattr(self, "folder_edit") else ""
+        if game_root:
+            saved = load_game_wrap_widths(game_root)
+            if saved is not None:
+                return saved
+        return self._legacy_env_wrap_widths()
+
+    def _activate_wrap_widths(self, values: dict[str, int]) -> None:
+        """Make selected-game widths effective for translation in this process."""
+        normalized = normalize_wrap_widths(values)
+        for key, value in normalized.items():
+            os.environ[key] = str(value)
+
+        live_module = sys.modules.get("modules.rpgmakermvmz")
+        if live_module is not None:
+            live_module.WIDTH = normalized["width"]
+            live_module.FACEWIDTH = normalized["faceWidth"]
+            live_module.LISTWIDTH = normalized["listWidth"]
+            live_module.NOTEWIDTH = normalized["noteWidth"]
+
+    def refresh_wrap_widths_for_game(self):
+        """Reload Phase 1 widths from the selected game's settings file."""
         if not hasattr(self, "wrap_width_spin"):
             return
         try:
-            values = dotenv_values(Path(".env")) if Path(".env").is_file() else {}
-
-            def _value(key: str, fallback: int) -> int:
-                raw = values.get(key)
-                try:
-                    return int(raw) if raw not in (None, "") else fallback
-                except (TypeError, ValueError):
-                    return fallback
-
-            dialogue = _value("width", 60)
-            face = _value("faceWidth", 50)
-            self.wrap_width_spin.setValue(dialogue)
-            self.wrap_face_spin.setValue(min(dialogue, face))
-            self.wrap_list_spin.setValue(_value("listWidth", 100))
-            self.wrap_note_spin.setValue(_value("noteWidth", 75))
+            values = self._current_game_wrap_widths()
+        except GameSettingsError as exc:
+            self._log(f"⚠  Could not load this game's line widths: {exc}")
+            values = self._legacy_env_wrap_widths()
         except Exception as exc:
-            self._log(f"⚠  Could not load line widths from .env: {exc}")
+            self._log(f"⚠  Could not load line-width defaults: {exc}")
+            values = dict(DEFAULT_WRAP_WIDTHS)
+
+        self.wrap_width_spin.setValue(values["width"])
+        self.wrap_face_spin.setValue(values["faceWidth"])
+        self.wrap_list_spin.setValue(values["listWidth"])
+        self.wrap_note_spin.setValue(values["noteWidth"])
+        self._activate_wrap_widths(values)
+
+    def refresh_wrap_widths_from_env(self):
+        """Compatibility alias for integrations using the former method name."""
+        self.refresh_wrap_widths_for_game()
 
     def _rewrap_data_directory(self) -> Path | None:
         """Return the Step-0 game data directory used by direct rewrapping."""
@@ -4479,33 +4503,28 @@ class WorkflowTab(QWidget):
         self._rewrap_worker = None
 
     def _apply_wrap_config(self):
-        """Write dialogue, face-dialogue, list, and note widths back into .env."""
-        import re as _re
+        """Save dialogue, face-dialogue, list, and note widths with the game."""
         updates = {
-            "width":     str(self.wrap_width_spin.value()),
-            "faceWidth": str(min(self.wrap_width_spin.value(), self.wrap_face_spin.value())),
-            "listWidth": str(self.wrap_list_spin.value()),
-            "noteWidth": str(self.wrap_note_spin.value()),
+            "width": self.wrap_width_spin.value(),
+            "faceWidth": min(
+                self.wrap_width_spin.value(), self.wrap_face_spin.value()
+            ),
+            "listWidth": self.wrap_list_spin.value(),
+            "noteWidth": self.wrap_note_spin.value(),
         }
-        env_path = Path(".env")
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("❌ Select a game folder before saving line widths.")
+            return
         try:
-            text = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
-            for key, val in updates.items():
-                text, n = _re.subn(
-                    rf"^({_re.escape(key)}\s*=\s*')[^']*(')",
-                    rf"\g<1>{val}\2",
-                    text,
-                    flags=_re.MULTILINE,
-                )
-                if n == 0:
-                    text = text.rstrip("\n") + f"\n{key}='{val}'\n"
-            env_path.write_text(text, encoding="utf-8")
+            path = save_game_wrap_widths(game_root, updates)
+            self._activate_wrap_widths(updates)
             self._log(
-                "✅ .env updated — "
+                f"✅ Line widths saved with {Path(game_root).name} ({path}) — "
                 + ", ".join(f"{k}={v}" for k, v in updates.items())
             )
         except Exception as exc:
-            self._log(f"❌ Could not update .env: {exc}")
+            self._log(f"❌ Could not save this game's line widths: {exc}")
 
     def _populate_speaker_flags(self):
         """Read current module config and pre-tick speaker flag checkboxes."""

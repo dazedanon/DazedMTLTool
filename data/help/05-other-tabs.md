@@ -124,6 +124,6 @@ of its box, lower the text width or use Rewrap in the RPG Maker Workflow.
 | `files` | Working copies of the text you selected |
 | `translated` | Text after translation |
 | `log` | Progress details and error information |
-| `.dazedtl` inside a game | Backups and information DazedTL needs later; keep this folder |
+| `.dazedtl` inside a game | Backups and per-game information such as saved RPG Maker line widths; keep this folder |
 
 You normally do not need to edit these folders by hand.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import unittest
@@ -194,34 +195,73 @@ class WorkflowShellTests(unittest.TestCase):
 
 
 
-    def test_phase_one_widths_reload_live_values_from_env(self):
-        live_values = {
-            "width": "82",
-            "faceWidth": "68",
-            "listWidth": "104",
-            "noteWidth": "91",
-        }
-        with (
-            patch("gui.workflow_tab.Path.is_file", return_value=True),
-            patch("gui.workflow_tab.dotenv_values", return_value=live_values),
-        ):
-            self.workflow._goto_step(3)
-            self.app.processEvents()
+    def test_phase_one_widths_follow_the_selected_game(self):
+        game_b = Path(self.temp.name) / "Game B"
+        game_b.mkdir()
+        cases = (
+            (self.saved_game, (82, 68, 104, 91)),
+            (game_b, (54, 44, 76, 65)),
+        )
 
-        self.assertEqual(self.workflow.wrap_width_spin.value(), 82)
-        self.assertEqual(self.workflow.wrap_face_spin.value(), 68)
-        self.assertEqual(self.workflow.wrap_list_spin.value(), 104)
-        self.assertEqual(self.workflow.wrap_note_spin.value(), 91)
+        with patch.dict(os.environ, {}, clear=False):
+            for game, widths in cases:
+                self.workflow.folder_edit.setText(str(game))
+                for spin, value in zip(
+                    (
+                        self.workflow.wrap_width_spin,
+                        self.workflow.wrap_face_spin,
+                        self.workflow.wrap_list_spin,
+                        self.workflow.wrap_note_spin,
+                    ),
+                    widths,
+                ):
+                    spin.setValue(value)
+                self.workflow._apply_wrap_config()
 
-    def test_phase_one_face_width_is_clamped_to_live_dialogue_width(self):
-        with (
-            patch("gui.workflow_tab.Path.is_file", return_value=True),
-            patch(
-                "gui.workflow_tab.dotenv_values",
-                return_value={"width": "48", "faceWidth": "70"},
-            ),
+            for game, widths in cases:
+                self.workflow.folder_edit.setText(str(game))
+                self.workflow.refresh_wrap_widths_for_game()
+                self.workflow._load_rewrap_widths()
+                self.assertEqual(
+                    (
+                        self.workflow.wrap_width_spin.value(),
+                        self.workflow.wrap_face_spin.value(),
+                        self.workflow.wrap_list_spin.value(),
+                        self.workflow.wrap_note_spin.value(),
+                    ),
+                    widths,
+                )
+                self.assertEqual(
+                    (
+                        self.workflow.rewrap_dialogue_width.value(),
+                        self.workflow.rewrap_face_width.value(),
+                        self.workflow.rewrap_list_width.value(),
+                        self.workflow.rewrap_note_width.value(),
+                    ),
+                    widths,
+                )
+                self.assertEqual(
+                    tuple(
+                        int(os.environ[key])
+                        for key in ("width", "faceWidth", "listWidth", "noteWidth")
+                    ),
+                    widths,
+                )
+                saved = json.loads(
+                    game.joinpath(".dazedtl", "settings.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                self.assertEqual(
+                    tuple(saved["rpgmaker"]["wrapWidths"].values()), widths
+                )
+
+    def test_unsaved_game_widths_fall_back_to_env_and_clamp_face(self):
+        with patch(
+            "gui.workflow_tab.dotenv_values",
+            return_value={"width": "48", "faceWidth": "70"},
         ):
-            self.workflow.refresh_wrap_widths_from_env()
+            self.workflow.refresh_wrap_widths_for_game()
 
         self.assertEqual(self.workflow.wrap_width_spin.value(), 48)
         self.assertEqual(self.workflow.wrap_face_spin.value(), 48)

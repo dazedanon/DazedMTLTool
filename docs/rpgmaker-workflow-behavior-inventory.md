@@ -54,7 +54,7 @@ boundaries, or destinations.
 | Action | Effect |
 |---|---|
 | Translation mode | Selects Normal or Batch for all workflow phase launch actions. |
-| Save line widths | Writes the four measured width values to `.env`. |
+| Save line widths | Writes the four measured width values to `<game>/.dazedtl/settings.json` and activates them for translation. |
 | Code 408 checkbox | Persists the user decision and adds code 408 only to the Phase 1 profile when enabled. |
 | Translate database | Applies the Phase 0 database profile, selects database files, and starts translation. |
 | Translate dialogue | Applies the Phase 1 dialogue/choice profile, selects event files, and starts translation. |
@@ -83,7 +83,7 @@ boundaries, or destinations.
 
 | Action | Effect |
 |---|---|
-| Load saved line widths | Loads current `.env` width defaults without editing game data. |
+| Load saved line widths | Loads the selected game's saved widths without editing game data. |
 | Scope/filter/presets | Change only the in-memory file selection. |
 | Preview rewrap | Runs deterministic rewrap analysis with `apply=False`. |
 | Apply rewrap | Runs the same options with `apply=True` against the resolved game data folder. `_original` remains protected. |
