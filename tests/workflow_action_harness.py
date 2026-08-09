@@ -284,6 +284,14 @@ class WorkflowHarness:
         (js / marker).write_text("", encoding="utf-8")
         return game, data
 
+    def prepare_project(self, game: Path) -> None:
+        """Mark a disposable project as guidance-ready without launching a scan worker."""
+        root = str(game)
+        self.workflow.folder_edit.setText(root)
+        if not self.workflow.setup_editors.reload_all():
+            raise AssertionError(f"Could not prepare disposable project: {root}")
+        self.workflow._prepared_game_root = root
+
     def make_ace_project(self) -> tuple[Path, Path, Path]:
         game = self.root / "GameAce"
         data = game / "Data"

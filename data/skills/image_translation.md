@@ -19,7 +19,7 @@ Use this file as the authoritative glossary for every translation:
 
 `{{VOCAB_FILE}}`
 
-Read the glossary file (`glossary.txt`) before translating any image. Reuse its established names, terms, spelling,
+Read the glossary file (`.dazedtl/glossary.txt`) before translating any image. Reuse its established names, terms, spelling,
 capitalization, and style consistently. If it is missing or does not cover a term, report that
 gap and follow the remaining translation precedence below.
 

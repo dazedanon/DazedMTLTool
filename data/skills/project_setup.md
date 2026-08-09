@@ -22,10 +22,10 @@ schema and exclusivity rules.
 
 | Block | Owns | Must NOT include |
 |-------|------|------------------|
-| `glossary` | Named characters (gender, role, **per-character** speech register) + worldbuilding terms | Global dialect / person rules; honorific policy; speaker-format flags; formatting |
+| `glossary` | Named characters (gender, role, **per-character** speech register) + worldbuilding terms saved at `.dazedtl/glossary.txt` | Global dialect / person rules; honorific policy; speaker-format flags; formatting |
 | `speaker_settings` | Manual tool flag ENABLE/SKIP decisions + short evidence | Character bios; quirks; full glossary |
 | `translation_quirks` | Cross-cutting voice rules (battle-log person, global dialect, item-description style, **unusual** honorific habits) | Per-character register; "always keep -san" (tool base prompt already does); codes/wrap/line counts; speaker flags |
-| `game_skill` | **Translation Frame** for the API (theme / era / register / naming / optional myth) saved at `skills/game.md` | File inventories; quirks bullets; glossary; per-character register; IDE scaffolding; restating base honorific/formatting policy |
+| `game_skill` | **Translation Frame** for the API (theme / era / register / naming / optional myth) saved at `.dazedtl/skills/game.md` | File inventories; quirks bullets; glossary; per-character register; IDE scaffolding; restating base honorific/formatting policy |
 | `rpgmaker_settings` (RPG Maker only) | Manual code-408 decision + measured wrap/font recommendations | Translation prose; glossary; voice rules; speculative settings without evidence |
 
 Hard rules:
@@ -136,11 +136,11 @@ Find translation-only quirks, for example:
 
 Exclude: formatting codes, wrap, line counts, speaker flags, character name lists.
 
-Output as short imperative bullets suitable to paste into `skills/quirks.md`.
+Output as short imperative bullets suitable to paste into `.dazedtl/skills/quirks.md`.
 
 ### Game skill rules (for the paste-ready Game skill section)
 
-Produce the per-game translation skill saved at `skills/game.md`.
+Produce the per-game translation skill saved at `.dazedtl/skills/game.md`.
 DazedTL **merges this file into the translation system prompt** (before quirks).
 
 **Translation Frame only** (one compact line per field; evidence-based):
@@ -157,9 +157,9 @@ Do **not** include:
 - Verbatim quirks or glossary entries
 
 **Paths:**
-- Game skill (API): ``skills/game.md``
-- Quirks (API): ``skills/quirks.md`` (never ``translation_quirks.txt``)
-- Optional custom API overlays: other ``skills/*.md`` except those two
+- Game skill (API): ``.dazedtl/skills/game.md``
+- Quirks (API): ``.dazedtl/skills/quirks.md`` (never ``translation_quirks.txt``)
+- Optional custom API overlays: other ``.dazedtl/skills/*.md`` except those two
 
 ### Phase 1 and layout analysis (for the manual RPG Maker settings section)
 
@@ -167,7 +167,7 @@ Do **not** include:
 
 Code `408` is a continuation of an editor comment. It is normally internal, but plugins can parse
 `108`/`408` comment blocks and display their contents to players. DazedTL extracts code-408 text
-only from recognized player-facing code-108 markers; currently supported: `選択肢ヘルプ`.
+only from recognized player-facing code-108 markers; currently supported: {{SUPPORTED_CODE408_MARKERS}}.
 
 1. Inventory code-408 values and group them with their preceding code-108 command.
 2. Search enabled plugin sources and event-handling code for the discovered comment tags,
@@ -185,7 +185,7 @@ only from recognized player-facing code-108 markers; currently supported: `選�
    code-408 block and line counts, representative map/event locators, and confidence. Tell the user
    to add or request support for each listed marker in DazedTL before translation. If none are found,
    say `No unsupported player-facing code-408 markers found`; never omit this result.
-6. Tell the user to set the **Translate code 408 plugin/comment text** checkbox in Phase 1 to the
+6. Tell the user to set the **Include displayed comment text (code 408)** checkbox in Phase 1 to the
    recommended state. This is a user choice; do not edit tool configuration yourself.
 
 #### Window geometry, wrapping, and fonts
@@ -303,11 +303,11 @@ Find translation-only quirks, for example:
 
 Exclude: wrap geometry, inject layout, `names.json` harvest, speaker LOWCONF checkbox, character name lists.
 
-Output as short imperative bullets suitable to paste into `skills/quirks.md`.
+Output as short imperative bullets suitable to paste into `.dazedtl/skills/quirks.md`.
 
 ### Game skill rules (for the paste-ready Game skill section)
 
-Produce the per-game translation skill saved at `skills/game.md`.
+Produce the per-game translation skill saved at `.dazedtl/skills/game.md`.
 DazedTL **merges this file into the translation system prompt** (before quirks).
 
 **Translation Frame only** (one compact line per field; evidence-based):
@@ -320,9 +320,9 @@ DazedTL **merges this file into the translation system prompt** (before quirks).
 Do **not** include voice-rules pointers, tool-boundary essays, file inventories, per-character register (glossary), or quirks bullets.
 
 **Paths:**
-- Game skill (API): ``skills/game.md``
-- Quirks (API): ``skills/quirks.md``
-- Optional custom API overlays: other ``skills/*.md`` except those two
+- Game skill (API): ``.dazedtl/skills/game.md``
+- Quirks (API): ``.dazedtl/skills/quirks.md``
+- Optional custom API overlays: other ``.dazedtl/skills/*.md`` except those two
 
 <!-- /engine:wolf -->
 
@@ -361,12 +361,12 @@ Japanese (English) - description
 ### 2. Translation quirks - copy/paste into DazedTL > Setup > Translation quirks
 
 Label the fence language as `markdown`. The fence must contain only short imperative bullets for
-`skills/quirks.md`, with no heading or preamble.
+`.dazedtl/skills/quirks.md`, with no heading or preamble.
 
 ### 3. Game skill - copy/paste into DazedTL > Setup > Game skill
 
 Label the fence language as `markdown`. The fence must contain only the Translation Frame saved to
-`skills/game.md`:
+`.dazedtl/skills/game.md`:
 
 ```markdown
 # <Game title> - Translation Frame

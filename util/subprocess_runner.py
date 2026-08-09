@@ -9,11 +9,6 @@ import os
 from pathlib import Path
 import io
 import threading
-from dotenv import load_dotenv
-
-# Load environment variables from .env with override=True to ensure
-# we always use the latest saved config, not inherited/stale values
-load_dotenv(override=True)
 
 # Set UTF-8 encoding for stdout to handle Unicode characters
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
@@ -60,12 +55,18 @@ def run_handler(project_root, module_name, filename, estimate_only):
     # Add project root to path
     project_root = Path(project_root)
     sys.path.insert(0, str(project_root))
-    
-    # Start progress monitoring thread
-    monitor_thread = threading.Thread(target=monitor_progress, daemon=True)
-    monitor_thread.start()
-    
+
     try:
+        # Refresh global config first, then restore the active game's portable
+        # widths before importing any engine-level constants.
+        from util.game_settings import load_translation_runtime_environment
+
+        load_translation_runtime_environment(project_root / ".env")
+
+        # Start progress monitoring only after environment preparation succeeds.
+        monitor_thread = threading.Thread(target=monitor_progress, daemon=True)
+        monitor_thread.start()
+
         # Change to project directory
         os.chdir(str(project_root))
         

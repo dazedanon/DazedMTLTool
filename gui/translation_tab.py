@@ -36,7 +36,13 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QSet
 from PyQt5.QtGui import QFont, QColor, QBrush
 from gui.log_viewer import LogViewer
 from gui import qt_icons
-from util.paths import APP_NAME, ORG_NAME, PROJECT_ROOT
+from util.game_settings import load_game_wrap_widths, normalize_wrap_widths
+from util.paths import (
+    APP_NAME,
+    ORG_NAME,
+    PROJECT_ROOT,
+    prepare_game_translation_context,
+)
 from gui.theme import COLORS, Geometry, Spacing
 from gui.ui_components import (
     CheckableFileList,
@@ -79,15 +85,85 @@ def create_horizontal_line():
 BATCH_MODE_LABEL = "Batch Translate"
 
 
-def _configured_game_root(settings) -> str:
-    """Return the workflow's active game root, with legacy-key fallback."""
+def _configured_game_root(settings, module_name: str = "") -> str:
+    """Return the selected engine's game root, with legacy-key fallback."""
     if settings is None:
         return ""
-    for key in ("workflow/last_game_folder", "last_game_folder"):
+    normalized_module = module_name.casefold()
+    if "wolfdawn" in normalized_module:
+        # The unscoped legacy key belonged to the RPG Maker workflow. Reusing
+        # it here can inject an RPG project's context into a WolfDawn run.
+        keys = ("wolf_workflow/last_game_folder",)
+    elif not normalized_module or "rpg maker mv/mz" in normalized_module:
+        keys = ("workflow/last_game_folder", "last_game_folder")
+    else:
+        # Other translation modules do not have a workflow-backed project
+        # selector. Reusing RPG Maker's last folder would inject unrelated
+        # glossary/skill guidance and can block a run on a stale path.
+        return ""
+    for key in keys:
         value = str(settings.value(key, "") or "").strip()
         if value:
             return value
     return ""
+
+
+def _validate_configured_game_root(game_root: str, module_name: str) -> None:
+    """Reject stale settings before portable guidance can be migrated."""
+    from util.project_scanner import detect_wolf_layout, find_data_folder
+
+    root = Path(game_root)
+    normalized_module = module_name.casefold()
+    if "wolfdawn" in normalized_module:
+        if detect_wolf_layout(root).get("engine") != "WOLF":
+            raise ValueError(
+                f"The configured folder is not a recognized WOLF project: {root}"
+            )
+        return
+
+    if not normalized_module or "rpg maker mv/mz" in normalized_module:
+        if any(root.glob("Game.rgss*")):
+            return
+        data_path, engine = find_data_folder(root)
+        if data_path is None or engine not in {"MVMZ", "ACE"}:
+            raise ValueError(
+                f"The configured folder is not a recognized RPG Maker project: {root}"
+            )
+
+
+def _activate_configured_game_context(
+    settings, module_name: str = ""
+) -> tuple[str, dict[str, int]]:
+    """Activate the selected game's glossary root and wrapping widths."""
+    defaults = (
+        dotenv_values(PROJECT_ROOT / ".env")
+        if (PROJECT_ROOT / ".env").is_file()
+        else {}
+    )
+    widths = normalize_wrap_widths(defaults)
+    game_root = _configured_game_root(settings, module_name)
+    # Invalidate the prior project before attempting a switch. A failed switch
+    # must never leave another game's root or widths active in this process.
+    os.environ.pop("DAZED_GAME_ROOT", None)
+    for key, value in widths.items():
+        os.environ[key] = str(value)
+
+    if not game_root:
+        return "", widths
+    if not Path(game_root).is_dir():
+        raise FileNotFoundError(
+            f"The configured game folder no longer exists: {game_root}"
+        )
+
+    _validate_configured_game_root(game_root, module_name)
+    saved = load_game_wrap_widths(game_root)
+    prepare_game_translation_context(game_root)
+    if saved is not None:
+        widths = saved
+    os.environ["DAZED_GAME_ROOT"] = game_root
+    for key, value in widths.items():
+        os.environ[key] = str(value)
+    return game_root, widths
 
 
 BATCH_MODE_BENEFIT_NOTE = (
@@ -3737,6 +3813,19 @@ class TranslationTab(QWidget):
                 )
             if reply != QMessageBox.Yes:
                 return
+
+        # Translation can be started without ever opening the lazily-created
+        # Workflow page. Activate the selected game's persisted widths here so
+        # every subprocess inherits the correct project context.
+        try:
+            _activate_configured_game_context(self.settings, selected_module[0])
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Game Translation Settings",
+                f"Could not load the selected game's translation settings:\n\n{exc}",
+            )
+            return
         
         if True:
             # Switch to progress view
@@ -3835,19 +3924,6 @@ class TranslationTab(QWidget):
             # Remember which files this run covers so the post-run export button
             # can export exactly those files rather than all active files.
             self._last_run_files = list(selected_files)
-
-            # Export the workflow's game root before the worker starts. Speaker
-            # preflight and every per-file subprocess use this to share the same
-            # persisted glossary. Keep this independent from run-log setup so a
-            # logging failure cannot silently disable glossary resolution.
-            try:
-                game_root = _configured_game_root(self.settings)
-                if game_root and Path(game_root).is_dir():
-                    os.environ["DAZED_GAME_ROOT"] = game_root
-                else:
-                    os.environ.pop("DAZED_GAME_ROOT", None)
-            except Exception:
-                os.environ.pop("DAZED_GAME_ROOT", None)
 
             # Create and start translation worker
             self.translation_worker = TranslationWorker(

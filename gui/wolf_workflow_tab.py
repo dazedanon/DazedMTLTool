@@ -121,6 +121,7 @@ from util.project_scanner import (
     wolf_has_maps,
     wolf_maps_dir,
     wolf_maps_packed,
+    wolf_nested_data_dir,
     wolf_repair_nested_data_dir,
     wolf_unpack_out_dir,
 )
@@ -199,6 +200,8 @@ class WolfWorkflowTab(QWidget):
         self._tl_mode_combos = []
         self._activity_unread = 0
         self._activity_errors = 0
+        self._project_generation = 0
+        self._prepared_game_root = ""
 
         self._init_ui()
 
@@ -726,6 +729,8 @@ class WolfWorkflowTab(QWidget):
             return
         self._set_busy(True)
         self._show_task_progress(0, 0, "Working …")
+        generation = self._project_generation
+        game_root = self._prepared_game_root
         worker = _WolfTaskWorker(task)
         self._worker = worker
         worker.log.connect(self._log)
@@ -734,6 +739,11 @@ class WolfWorkflowTab(QWidget):
         def _finished(ok: bool, msg: str):
             self._hide_task_progress()
             self._set_busy(False)
+            if game_root and not self._project_callback_is_current(generation, game_root):
+                self._log(
+                    "ℹ  Ignored task completion from a project that is no longer active."
+                )
+                return
             if msg:
                 warning = ok and msg.lstrip().startswith("⚠")
                 if warning:
@@ -780,6 +790,7 @@ class WolfWorkflowTab(QWidget):
         self.folder_edit = QLineEdit()
         self.folder_edit.setPlaceholderText("Path to game root folder…")
         self.folder_edit.setText(self._setting("last_game_folder", "") or "")
+        self.folder_edit.textChanged.connect(self._on_folder_path_changed)
         self.folder_edit.returnPressed.connect(self._detect_folder)
         row0.addWidget(self.folder_edit, 1)
         browse_btn = _make_icon_btn("📁", "Browse for a game project folder")
@@ -924,15 +935,106 @@ class WolfWorkflowTab(QWidget):
         for button in self._import_buttons:
             button.setEnabled(enabled)
 
+    def _invalidate_detected_project_state(self) -> None:
+        """Clear every path/action derived from the previously detected game."""
+        self._project_generation += 1
+        self._prepared_game_root = ""
+        self._game_root = ""
+        self._layout = {}
+        self._last_import_signature = None
+        self._pending_import_signature = None
+        self._file_items = []
+        self.file_list.clear()
+        self._set_import_buttons_enabled(False)
+        if hasattr(self, "pp_wolf_json_label"):
+            self.pp_wolf_json_label.setText("(detect a project folder first)")
+        if hasattr(self, "pp_gameupdate_dst_label"):
+            self.pp_gameupdate_dst_label.setText(
+                "(game root folder auto-filled from project)"
+            )
+        if hasattr(self, "git_prepare"):
+            self.git_prepare.set_game_root("")
+        if hasattr(self, "setup_editors"):
+            self.setup_editors.invalidate()
+
+    @staticmethod
+    def _worker_is_running(worker) -> bool:
+        checker = getattr(worker, "isRunning", None)
+        return bool(callable(checker) and checker())
+
+    def _project_task_is_running(self) -> bool:
+        return any(
+            self._worker_is_running(worker)
+            for worker in (self._worker, self._import_worker)
+            if worker is not None
+        )
+
+    def _project_is_prepared(self, game_root: str | None = None) -> bool:
+        root = (
+            self.folder_edit.text().strip()
+            if game_root is None and hasattr(self, "folder_edit")
+            else str(game_root or "").strip()
+        )
+        return bool(
+            root
+            and root == self._prepared_game_root
+            and root == self._game_root
+            and hasattr(self, "setup_editors")
+            and self.setup_editors.is_prepared_for(root)
+        )
+
+    def _prepared_project_or_warn(self) -> str | None:
+        root = self.folder_edit.text().strip()
+        if self._project_is_prepared(root):
+            return root
+        self._log("⚠  Scan this project successfully in Step 1 before continuing.")
+        return None
+
+    def _project_callback_is_current(self, generation: int, game_root: str) -> bool:
+        return bool(
+            generation == self._project_generation
+            and self.folder_edit.text().strip() == game_root
+            and self._project_is_prepared(game_root)
+        )
+
+    def _on_folder_path_changed(self, folder: str) -> None:
+        """Revoke the previous project as soon as the visible path changes."""
+        requested = str(folder or "").strip()
+        if (
+            self._prepared_game_root
+            and requested != self._prepared_game_root
+            and self._project_task_is_running()
+        ):
+            self.folder_edit.blockSignals(True)
+            try:
+                self.folder_edit.setText(self._prepared_game_root)
+            finally:
+                self.folder_edit.blockSignals(False)
+            self._log("⚠  Wait for the active project task to finish before switching games.")
+            return
+        self._invalidate_detected_project_state()
+        self._save_setting("last_game_folder", "")
+        if hasattr(self, "detected_label"):
+            self.detected_label.setText(
+                "Project folder changed. Scan it before continuing."
+            )
+            self.detected_label.setStyleSheet(
+                "color:#f2c94c;font-size:13px;padding:4px 8px;"
+                "background-color:#2b2010;border:1px solid #5a4010;"
+                "border-radius:4px;margin:4px 0;"
+            )
+
     def _browse_folder(self):
+        if self._project_task_is_running():
+            self._log("⚠  Wait for the active project task to finish before switching games.")
+            return
         start = self.folder_edit.text() or self._setting("last_game_folder", "") or str(Path.home())
         folder = QFileDialog.getExistingDirectory(self, "Select Game Root Folder", start)
         if folder:
             self.folder_edit.setText(folder)
-            self._save_setting("last_game_folder", folder)
             self._detected_on_show = True
-            self._ask_clear_old_files()
-            self._detect_folder()
+            if self._detect_folder():
+                self._ask_clear_old_files()
 
     def _ask_clear_old_files(self):
         """Prompt to clear files/ and translated/ when switching games."""
@@ -974,11 +1076,20 @@ class WolfWorkflowTab(QWidget):
         for err in errors:
             self._log(f"⚠  Could not remove {err}")
 
-    def _detect_folder(self):
+    def _detect_folder(self) -> bool:
+        if self._project_task_is_running():
+            self._log("⚠  Wait for the active project task to finish before rescanning.")
+            return False
         folder = self.folder_edit.text().strip()
         if not folder:
+            self._invalidate_detected_project_state()
+            self._save_setting("last_game_folder", "")
             self._log("⚠  No folder path entered.")
-            return
+            return False
+        # Revoke stale persisted roots before validation. Only a fully prepared
+        # supported project is saved again below.
+        self._save_setting("last_game_folder", "")
+        self._invalidate_detected_project_state()
         if not Path(folder).is_dir():
             self.detected_label.setText("❌ Folder not found. Pick a valid game directory.")
             self.detected_label.setStyleSheet(
@@ -986,26 +1097,9 @@ class WolfWorkflowTab(QWidget):
                 "background-color:#2b1a1a;border:1px solid #5a2a2a;"
                 "border-radius:4px;margin:4px 0;"
             )
-            return
-
-        self._save_setting("last_game_folder", folder)
-        self._game_root = folder
-        if hasattr(self, "setup_editors"):
-            self.setup_editors.reload_all()
-        self.detected_label.setText("Scanning…")
-        self.detected_label.setStyleSheet(
-            "color:#9d9d9d;font-size:13px;padding:4px 8px;"
-            "background-color:#252526;border:1px solid #3c3c3c;"
-            "border-radius:4px;margin:4px 0;"
-        )
-        self.file_list.clear()
-        self._set_import_buttons_enabled(False)
-        self._last_import_signature = None
-        self._pending_import_signature = None
+            return False
 
         info = detect_wolf_layout(folder)
-        self._layout = info
-
         if info["engine"] != "WOLF":
             self.detected_label.setText(
                 "⚠  No WOLF layout found (no .wolf archives or loose Data/ with maps/CommonEvent.dat)."
@@ -1016,7 +1110,51 @@ class WolfWorkflowTab(QWidget):
                 "border-radius:4px;margin:4px 0;"
             )
             self._log(f"Detect: no WOLF layout found in {folder}")
-            return
+            return False
+
+        # Validate the engine before migrating guidance or persisting the path.
+        if hasattr(self, "setup_editors"):
+            if not self.setup_editors.reload_all():
+                self.detected_label.setText("Portable guidance needs attention")
+                self.detected_label.setStyleSheet(
+                    "color:#f48771;font-size:13px;padding:4px 8px;"
+                    "background-color:#2b1a1a;border:1px solid #5a2a2a;"
+                    "border-radius:4px;margin:4px 0;"
+                )
+                return False
+
+        # Detection must stay read-only, but a previously botched Data.wolf
+        # unpack still needs repair before archive-gap detection can schedule a
+        # redundant unpack into the existing tree. Guidance validation above is
+        # the last failure point that must not modify the game layout.
+        if info.get("nested_data_dir") is not None:
+            try:
+                repaired = wolf_repair_nested_data_dir(folder)
+            except OSError as exc:
+                repaired = False
+                self._log(f"❌ Could not repair nested WOLF Data folder: {exc}")
+            if not repaired:
+                self.detected_label.setText(
+                    "❌ Nested Data/Data could not be repaired safely."
+                )
+                self.detected_label.setStyleSheet(
+                    "color:#f48771;font-size:13px;padding:4px 8px;"
+                    "background-color:#2b1a1a;border:1px solid #5a2a2a;"
+                    "border-radius:4px;margin:4px 0;"
+                )
+                return False
+            self._log("Repair: moved nested Data/Data contents into Data/.")
+            info = detect_wolf_layout(folder)
+        self._game_root = folder
+        self._layout = info
+        self._prepared_game_root = folder
+        self._save_setting("last_game_folder", folder)
+        self.detected_label.setText("Scanning…")
+        self.detected_label.setStyleSheet(
+            "color:#9d9d9d;font-size:13px;padding:4px 8px;"
+            "background-color:#252526;border:1px solid #3c3c3c;"
+            "border-radius:4px;margin:4px 0;"
+        )
 
         parts = [f"Engine: WOLF   ·   Game root: {folder}"]
         if info.get("unpacked"):
@@ -1032,10 +1170,20 @@ class WolfWorkflowTab(QWidget):
         )
         self._log("Detect: " + " | ".join(parts))
         self._populate_preprocess_paths()
-        QTimer.singleShot(50, self._ensure_wolf_json)
+        generation = self._project_generation
+        QTimer.singleShot(
+            50,
+            lambda g=generation, r=folder: self._ensure_wolf_json(g, r),
+        )
+        return True
 
-    def _ensure_wolf_json(self):
+    def _ensure_wolf_json(
+        self, generation: int | None = None, game_root: str | None = None
+    ):
         """Create wolf_json/ when missing (unpack + extract), then refresh the import list."""
+        if generation is not None and game_root is not None:
+            if not self._project_callback_is_current(generation, game_root):
+                return
         if not self._game_root:
             return
         if self._worker is not None and self._worker.isRunning():
@@ -1191,6 +1339,9 @@ class WolfWorkflowTab(QWidget):
         selected: list[dict] | None = None,
         signature: tuple[str, ...] | None = None,
     ):
+        game_root = self._prepared_project_or_warn()
+        if not game_root:
+            return
         selected = selected if selected is not None else self._selected_import_items()
         if not selected:
             self._log("⚠  No files selected.")
@@ -1207,9 +1358,14 @@ class WolfWorkflowTab(QWidget):
 
         self._set_import_buttons_enabled(False)
         self._pending_import_signature = signature
+        generation = self._project_generation
         worker = _ImportWorker(selected, "files")
         worker.log.connect(self._log)
-        worker.done.connect(self._on_import_done)
+        worker.done.connect(
+            lambda count, errors, g=generation, r=game_root: self._on_import_done(
+                count, errors, g, r
+            )
+        )
         self._import_worker = worker
         worker.start()
 
@@ -1234,7 +1390,18 @@ class WolfWorkflowTab(QWidget):
         )
         return reply == QMessageBox.Yes
 
-    def _on_import_done(self, count: int, errors: list):
+    def _on_import_done(
+        self,
+        count: int,
+        errors: list,
+        generation: int | None = None,
+        game_root: str | None = None,
+    ):
+        if generation is not None and game_root is not None:
+            if not self._project_callback_is_current(generation, game_root):
+                self._pending_import_signature = None
+                self._log("ℹ  Ignored import completion from a project that is no longer active.")
+                return
         self._set_import_buttons_enabled(bool(self.file_list.count()))
         if errors:
             self._log(f"⚠  {len(errors)} error(s) during import:")
@@ -1250,7 +1417,9 @@ class WolfWorkflowTab(QWidget):
             self._refresh_db_discovery()
 
     def _populate_preprocess_paths(self):
-        game_root = self.folder_edit.text().strip()
+        game_root = (
+            self.folder_edit.text().strip() if self._project_is_prepared() else ""
+        )
         work_dir = str(self._work_dir()) if self._game_root else ""
         if hasattr(self, "git_prepare"):
             self.git_prepare.set_game_root(game_root)
@@ -1307,33 +1476,38 @@ class WolfWorkflowTab(QWidget):
 
     def _run_gameupdate(self):
         src = self.pp_gameupdate_edit.text().strip()
-        dst = self.folder_edit.text().strip()
+        dst = self._prepared_project_or_warn()
+        if not dst:
+            return
         if not src:
             self._log("⚠  No gameupdate folder path set.")
-            return
-        if not dst:
-            self._log("⚠  No game root folder set. Complete Step 1 first.")
             return
         if not Path(src).is_dir():
             self._log(f"⚠  gameupdate folder not found: {src}")
             return
         w = _FileCopyWorker(src, dst, skip_names=_GAMEUPDATE_COPY_SKIP_NAMES)
         w.log.connect(self._log)
-        w.done.connect(self._on_gameupdate_done)
+        w.done.connect(
+            lambda count, errors, destination=dst: self._on_gameupdate_done(
+                count, errors, destination
+            )
+        )
         self._import_worker = w  # reuse slot; not WolfTaskWorker
         w.start()
 
-    def _on_gameupdate_done(self, count: int, errors: list):
+    def _on_gameupdate_done(
+        self, count: int, errors: list, destination: str | None = None
+    ):
         self._log(f"✅ gameupdate: copied {count} file(s).")
         for e in errors:
             self._log(f"   ⚠  {e}")
-        dst = self.folder_edit.text().strip()
+        dst = destination or self.folder_edit.text().strip()
         if dst and not errors:
             self._write_gameupdate_patch_config(dst)
 
     def _run_all_preprocess(self):
-        if not self._game_root:
-            self._log("⚠  No game folder set. Complete Step 1 first.")
+        game_root = self._prepared_project_or_warn()
+        if not game_root:
             return
 
         def task(log, progress=None):
@@ -1355,7 +1529,7 @@ class WolfWorkflowTab(QWidget):
                 return False, f"Pre-process: formatted {total} file(s), {len(errors)} error(s)."
 
             src = self.pp_gameupdate_edit.text().strip()
-            dst = self.folder_edit.text().strip()
+            dst = game_root
             if not src or not Path(src).is_dir():
                 log("  ⏭  Skipped gameupdate copy (source not found)")
             elif not dst:
@@ -1435,7 +1609,9 @@ class WolfWorkflowTab(QWidget):
                     progress(done, total, f"Unpacked {len(group)} archive(s)")
                 if not res.ok:
                     return False, f"unpack-all exited {res.returncode}"
-            wolf_repair_nested_data_dir(root)
+            nested = wolf_nested_data_dir(root)
+            if nested is not None and not wolf_repair_nested_data_dir(root):
+                return False, f"Could not safely repair nested WOLF data at {nested}."
             return True, "Unpacked archives into Data/."
 
         self._run_task(task, on_done=on_done)
@@ -1728,7 +1904,6 @@ class WolfWorkflowTab(QWidget):
         )
         review_card.add_widget(self.setup_editors, 1)
         layout.addWidget(review_card, 1)
-        self.setup_editors.reload_all()
 
     def _copy_project_setup_prompt(self):
         """Copy the Wolf Project Setup skill, optionally prepending known vocab speakers."""
@@ -1755,7 +1930,7 @@ class WolfWorkflowTab(QWidget):
     def _read_vocab_speakers(self) -> list[tuple[str, str]]:
         """Parse '# Speakers' (or '# Game Characters') from glossary.txt as (orig, tl) pairs."""
         game_root = self.folder_edit.text().strip() or self._game_root
-        if not game_root:
+        if not self._project_is_prepared(game_root):
             return []
         try:
             vocab_path = ensure_game_glossary(game_root)
@@ -4564,8 +4739,12 @@ class WolfWorkflowTab(QWidget):
     # ── shared guards ──────────────────────────────────────────────────────────
 
     def _require_root(self) -> bool:
-        if not self._game_root or not Path(self._game_root).is_dir():
-            QMessageBox.warning(self, "No game folder", "Choose a game folder in Step 1 first.")
+        if not self._project_is_prepared(self._game_root):
+            QMessageBox.warning(
+                self,
+                "No game folder",
+                "Choose and scan a game folder successfully in Step 1 first.",
+            )
             return False
         return True
 

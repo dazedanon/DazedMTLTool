@@ -59,6 +59,7 @@ from gui.config_tab import API_URL_PRESETS, ConfigComboBox, ConfigMenu, ModelFet
 from gui.theme import COLORS
 from util import api_keys as api_key_vault
 from util import evaluation
+from util.paths import game_glossary_path
 from util.skills import load_clipboard_skill
 
 
@@ -1141,7 +1142,7 @@ class EvaluationTab(QWidget):
         set_status_text(
             self.source_resolution_label,
             f"Game data found: {data_dir}\nTranslation context: {game_root} "
-            f"(glossary: {game_root / 'glossary.txt'})",
+            f"(glossary: {game_glossary_path(game_root, migrate=False)})",
             "success",
         )
 
@@ -2170,7 +2171,7 @@ class EvaluationTab(QWidget):
         set_status_text(
             self.source_resolution_label,
             f"Game data found: {data_dir}\nTranslation context: {game_root} "
-            f"(glossary: {game_root / 'glossary.txt'})",
+            f"(glossary: {game_glossary_path(game_root, migrate=False)})",
             "success",
         )
 

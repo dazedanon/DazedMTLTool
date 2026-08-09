@@ -1,4 +1,4 @@
-"""Shared helpers for the game-specific translation glossary (``<game>/glossary.txt``).
+"""Shared helpers for ``<game>/.dazedtl/glossary.txt``.
 
 ``glossary.txt`` is loaded by the shared translation layer (:mod:`util.translation`)
 and applied to every engine, so a good glossary keeps character names, honorifics,
@@ -166,7 +166,7 @@ def read_game_vocab(game_root=None, *, create: bool = True) -> str:
         path = active_glossary_path(create=False)
         if path is None:
             return _EMPTY_PLACEHOLDER
-        text = read_game_glossary(path.parent, create=False)
+        text = read_game_glossary(path.parents[1], create=False)
     game_part, _base_part = _split_base(text)
     return game_part.rstrip("\n") or _EMPTY_PLACEHOLDER
 

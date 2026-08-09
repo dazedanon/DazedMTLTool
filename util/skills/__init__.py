@@ -12,6 +12,7 @@ from util.skills.system import (
     migrate_game_skill_text,
     quirks_path_for_game,
     sanitize_custom_skill_stem,
+    validate_game_skills_migration,
 )
 
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     "reload_contexts",
     "sanitize_custom_skill_stem",
     "skills_dir",
+    "validate_game_skills_migration",
 ]

@@ -94,9 +94,9 @@ The in-app **Guide** is the canonical user documentation. Its source is kept in
 
 ## Translation context
 
-Each selected game receives its own `<game>/glossary.txt`. Use it for character
-names, recurring terms, and other choices that should remain consistent. Game
-skills live beside the game under `<game>/skills/`:
+Each selected game receives its own `<game>/.dazedtl/glossary.txt`. Use it for
+character names, recurring terms, and other choices that should remain
+consistent. Game skills live under `<game>/.dazedtl/skills/`:
 
 - `game.md` describes the game's setting, register, and naming frame.
 - `quirks.md` records cross-cutting voice and formatting habits.

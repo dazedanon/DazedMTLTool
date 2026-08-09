@@ -29,6 +29,7 @@ from util.skills import (
     quirks_path_for_game,
     sanitize_custom_skill_stem,
 )
+from util.paths import game_glossary_path, prepare_game_translation_context
 from util.vocab import read_game_vocab, write_game_vocab
 from gui.theme import Geometry, Spacing
 
@@ -91,6 +92,7 @@ class SetupSkillsEditors(QWidget):
         self._game_root_fn = game_root_fn
         self._log = log_fn
         self._custom_skill_editors: dict[str, QTextEdit] = {}
+        self._prepared_root = ""
         self.vocab_editor: QTextEdit | None = None
         self.quirks_editor: QTextEdit | None = None
         self.game_skill_editor: QTextEdit | None = None
@@ -123,7 +125,7 @@ class SetupSkillsEditors(QWidget):
 
         editors.addTab(
             self._editor_page(
-                "Glossary file: <game>/glossary.txt  (game section)",
+                "Glossary file: <game>/.dazedtl/glossary.txt  (game section)",
                 "Paste the glossary code block. Format: Japanese (English) - notes",
                 self._save_vocab,
                 self._reload_vocab,
@@ -134,7 +136,7 @@ class SetupSkillsEditors(QWidget):
         )
         editors.addTab(
             self._editor_page(
-                "<game>/skills/quirks.md",
+                "<game>/.dazedtl/skills/quirks.md",
                 "Paste the translation_quirks block. Merged onto the system prompt at translate time.",
                 self._save_quirks,
                 self._reload_quirks,
@@ -177,7 +179,7 @@ class SetupSkillsEditors(QWidget):
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.setMinimumHeight(Geometry.CONTROL)
         add_btn.setToolTip(
-            "Create a custom skills/*.md overlay.\n"
+            "Create a custom .dazedtl/skills/*.md overlay.\n"
             "Merged into the translation system prompt - can hurt quality."
         )
         add_btn.setStyleSheet(
@@ -198,7 +200,7 @@ class SetupSkillsEditors(QWidget):
         self._add_game_skill_page(
             "game",
             self._editor_page(
-                "<game>/skills/game.md",
+                "<game>/.dazedtl/skills/game.md",
                 "Paste the game_skill Translation Frame. Merged into the translation "
                 "system prompt (before quirks) when this game folder is selected.",
                 self._save_game_skill,
@@ -258,29 +260,83 @@ class SetupSkillsEditors(QWidget):
         vl.addLayout(row)
         return page
 
-    def reload_all(self) -> None:
+    def reload_all(self) -> bool:
         """Reload vocab, quirks, game skill, and custom skill tabs from disk."""
+        root = self._game_root()
+        if root:
+            try:
+                prepare_game_translation_context(root, create_glossary=False)
+            except Exception as exc:
+                self._prepared_root = ""
+                self._clear_all()
+                self._log(f"❌ Could not prepare portable game guidance: {exc}")
+                return False
+        self._prepared_root = root
         self._reload_vocab()
         self._reload_quirks()
         self._reload_game_skill()
         self._reload_custom_skills()
+        return True
+
+    def _clear_all(self) -> None:
+        """Remove content from a previous game after context preparation fails."""
+        for editor in (
+            self.vocab_editor,
+            self.quirks_editor,
+            self.game_skill_editor,
+        ):
+            if editor is not None:
+                editor.setPlainText("")
+        self._clear_custom_skill_pages()
+
+    def invalidate(self) -> None:
+        """Clear editors and revoke save/reload access during a project switch."""
+        self._prepared_root = ""
+        self._clear_all()
 
     def _game_root(self) -> str:
         return (self._game_root_fn() or "").strip()
+
+    def is_prepared_for(self, game_root: str | None = None) -> bool:
+        """Return whether editors are safe to read from and write to this root."""
+        root = self._game_root() if game_root is None else str(game_root).strip()
+        return bool(root) and root == self._prepared_root
 
     def _game_root_or_warn(self) -> str | None:
         root = self._game_root()
         if not root:
             self._log("⚠  Select a game folder in Step 0 first.")
             return None
+        if not self.is_prepared_for(root):
+            self._log(
+                "⚠  Portable game guidance is not ready for this folder. "
+                "Resolve the reported path conflict and scan the folder again."
+            )
+            return None
+        return root
+
+    def _reload_root_or_clear(self, editor: QTextEdit | None) -> str | None:
+        """Return the prepared current root, clearing an unsafe reload target."""
+        root = self._game_root()
+        if not root:
+            if editor is not None:
+                editor.setPlainText("")
+            return None
+        if not self.is_prepared_for(root):
+            if editor is not None:
+                editor.setPlainText("")
+            self._log(
+                "⚠  Scan this game folder successfully before reloading its "
+                "portable guidance."
+            )
+            return None
         return root
 
     def _reload_vocab(self) -> None:
         if self.vocab_editor is None:
             return
-        root = self._game_root()
-        if not root:
-            self.vocab_editor.setPlainText("")
+        root = self._reload_root_or_clear(self.vocab_editor)
+        if root is None:
             return
         try:
             self.vocab_editor.setPlainText(read_game_vocab(root, create=False))
@@ -295,44 +351,52 @@ class SetupSkillsEditors(QWidget):
             return
         try:
             write_game_vocab(self.vocab_editor.toPlainText(), root)
-            self._log(f"✅ Glossary saved to {Path(root) / 'glossary.txt'}.")
+            self._log(f"✅ Glossary saved to {game_glossary_path(root)}.")
         except Exception as exc:
             self._log(f"❌ Could not save the game glossary: {exc}")
 
     def _reload_quirks(self) -> None:
         if self.quirks_editor is None:
             return
-        path = quirks_path_for_game(self._game_root())
-        if not path or not path.is_file():
-            self.quirks_editor.setPlainText("")
+        root = self._reload_root_or_clear(self.quirks_editor)
+        if root is None:
             return
         try:
+            path = quirks_path_for_game(root)
+            if not path or not path.is_file():
+                self.quirks_editor.setPlainText("")
+                return
             self.quirks_editor.setPlainText(path.read_text(encoding="utf-8"))
         except Exception as exc:
-            self._log(f"❌ Could not load skills/quirks.md: {exc}")
+            self._log(f"❌ Could not load .dazedtl/skills/quirks.md: {exc}")
 
     def _save_quirks(self) -> None:
         root = self._game_root_or_warn()
         if not root or self.quirks_editor is None:
             return
-        path = quirks_path_for_game(root)
         try:
+            path = quirks_path_for_game(root)
+            if path is None:
+                raise ValueError("No game folder is selected.")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(
                 self.quirks_editor.toPlainText().rstrip() + "\n", encoding="utf-8"
             )
             self._log(f"✅ Saved {path}")
         except Exception as exc:
-            self._log(f"❌ Could not save skills/quirks.md: {exc}")
+            self._log(f"❌ Could not save .dazedtl/skills/quirks.md: {exc}")
 
     def _reload_game_skill(self) -> None:
         if self.game_skill_editor is None:
             return
-        path = game_skill_path_for_game(self._game_root())
-        if not path or not path.is_file():
-            self.game_skill_editor.setPlainText("")
+        root = self._reload_root_or_clear(self.game_skill_editor)
+        if root is None:
             return
         try:
+            path = game_skill_path_for_game(root)
+            if not path or not path.is_file():
+                self.game_skill_editor.setPlainText("")
+                return
             raw = path.read_text(encoding="utf-8")
             fixed = migrate_game_skill_text(raw)
             self.game_skill_editor.setPlainText(fixed)
@@ -348,8 +412,10 @@ class SetupSkillsEditors(QWidget):
         root = self._game_root_or_warn()
         if not root or self.game_skill_editor is None:
             return
-        path = game_skill_path_for_game(root)
         try:
+            path = game_skill_path_for_game(root)
+            if path is None:
+                raise ValueError("No game folder is selected.")
             path.parent.mkdir(parents=True, exist_ok=True)
             text = migrate_game_skill_text(self.game_skill_editor.toPlainText())
             self.game_skill_editor.setPlainText(text)
@@ -383,7 +449,7 @@ class SetupSkillsEditors(QWidget):
         tip.setStyleSheet("color:#c9a227;font-size:12px;")
         vl.addWidget(tip)
 
-        path_lbl = QLabel(f"<game>/skills/{stem}.md")
+        path_lbl = QLabel(f"<game>/.dazedtl/skills/{stem}.md")
         path_lbl.setStyleSheet(
             "color:#75beff;font-size:11px;font-family:Consolas,monospace;"
         )
@@ -423,7 +489,7 @@ class SetupSkillsEditors(QWidget):
         vl.addLayout(row)
         return page
 
-    def _reload_custom_skills(self) -> None:
+    def _clear_custom_skill_pages(self) -> None:
         bar = getattr(self, "_game_skills_bar", None)
         stack = getattr(self, "_game_skills_stack", None)
         if bar is None or stack is None:
@@ -438,7 +504,20 @@ class SetupSkillsEditors(QWidget):
                 w.deleteLater()
         self._custom_skill_editors = {}
 
-        for path in list_custom_skill_paths(self._game_root()):
+    def _reload_custom_skills(self) -> None:
+        self._clear_custom_skill_pages()
+
+        root = self._reload_root_or_clear(None)
+        if root is None:
+            return
+
+        try:
+            paths = list_custom_skill_paths(root)
+        except Exception as exc:
+            self._log(f"❌ Could not load custom game skills: {exc}")
+            return
+
+        for path in paths:
             stem = path.stem
             page = self._custom_skill_editor_page(stem)
             self._add_game_skill_page(stem, page)
@@ -447,36 +526,41 @@ class SetupSkillsEditors(QWidget):
                     path.read_text(encoding="utf-8")
                 )
             except Exception as exc:
-                self._log(f"❌ Could not load skills/{stem}.md: {exc}")
+                self._log(f"❌ Could not load .dazedtl/skills/{stem}.md: {exc}")
 
     def _reload_one_custom_skill(self, stem: str) -> None:
-        path = custom_skill_path_for_game(self._game_root(), stem)
         ed = self._custom_skill_editors.get(stem)
         if ed is None:
             return
-        if not path or not path.is_file():
-            ed.setPlainText("")
+        root = self._reload_root_or_clear(ed)
+        if root is None:
             return
         try:
+            path = custom_skill_path_for_game(root, stem)
+            if not path or not path.is_file():
+                ed.setPlainText("")
+                return
             ed.setPlainText(path.read_text(encoding="utf-8"))
         except Exception as exc:
-            self._log(f"❌ Could not load skills/{stem}.md: {exc}")
+            self._log(f"❌ Could not load .dazedtl/skills/{stem}.md: {exc}")
 
     def _save_custom_skill(self, stem: str) -> None:
         root = self._game_root_or_warn()
         if not root:
             return
-        path = custom_skill_path_for_game(root, stem)
         ed = self._custom_skill_editors.get(stem)
-        if path is None or ed is None:
+        if ed is None:
             self._log("❌ Invalid custom skill.")
             return
         try:
+            path = custom_skill_path_for_game(root, stem)
+            if path is None:
+                raise ValueError("Invalid custom skill.")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(ed.toPlainText().rstrip() + "\n", encoding="utf-8")
             self._log(f"✅ Saved {path}")
         except Exception as exc:
-            self._log(f"❌ Could not save skills/{stem}.md: {exc}")
+            self._log(f"❌ Could not save .dazedtl/skills/{stem}.md: {exc}")
 
     def _add_custom_skill(self) -> None:
         root = self._game_root_or_warn()
@@ -507,7 +591,7 @@ class SetupSkillsEditors(QWidget):
         name, ok = QInputDialog.getText(
             self,
             "New custom skill",
-            "Skill file name (letters, numbers, ._- ; saved as <game>/skills/<name>.md):",
+            "Skill file name (letters, numbers, ._- ; saved as <game>/.dazedtl/skills/<name>.md):",
         )
         if not ok:
             return
@@ -527,15 +611,14 @@ class SetupSkillsEditors(QWidget):
             self._select_game_skill_tab(stem)
             return
 
-        path = custom_skill_path_for_game(root, stem)
-        if path is None:
-            return
-        if path.is_file():
-            self._reload_custom_skills()
-            self._select_game_skill_tab(stem)
-            return
-
         try:
+            path = custom_skill_path_for_game(root, stem)
+            if path is None:
+                raise ValueError("Invalid custom skill.")
+            if path.is_file():
+                self._reload_custom_skills()
+                self._select_game_skill_tab(stem)
+                return
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(
                 f"# {stem}\n\n"
@@ -543,7 +626,7 @@ class SetupSkillsEditors(QWidget):
                 encoding="utf-8",
             )
         except Exception as exc:
-            self._log(f"❌ Could not create skills/{stem}.md: {exc}")
+            self._log(f"❌ Could not create .dazedtl/skills/{stem}.md: {exc}")
             return
 
         page = self._custom_skill_editor_page(stem)
@@ -556,21 +639,21 @@ class SetupSkillsEditors(QWidget):
         root = self._game_root_or_warn()
         if not root:
             return
-        path = custom_skill_path_for_game(root, stem)
         reply = QMessageBox.question(
             self,
             "Delete custom skill",
-            f"Delete skills/{stem}.md from the game folder?",
+            f"Delete .dazedtl/skills/{stem}.md from the game folder?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
         if reply != QMessageBox.Yes:
             return
         try:
+            path = custom_skill_path_for_game(root, stem)
             if path and path.is_file():
                 path.unlink()
             self._log(f"🗑  Deleted {path}")
         except Exception as exc:
-            self._log(f"❌ Could not delete skills/{stem}.md: {exc}")
+            self._log(f"❌ Could not delete .dazedtl/skills/{stem}.md: {exc}")
             return
         self._reload_custom_skills()

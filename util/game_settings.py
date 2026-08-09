@@ -8,6 +8,9 @@ import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+from util.paths import ensure_game_tool_gitignore, game_metadata_dir
 
 GAME_SETTINGS_RELATIVE = Path(".dazedtl") / "settings.json"
 WRAP_WIDTH_KEYS = ("width", "faceWidth", "listWidth", "noteWidth")
@@ -74,7 +77,10 @@ def _read_settings(path: Path) -> dict:
 
 def load_game_wrap_widths(game_root: str | Path) -> dict[str, int] | None:
     """Load saved wrap widths, or return ``None`` when the game has none yet."""
+    game_metadata_dir(game_root)
     path = game_settings_path(game_root)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise GameSettingsError(f"Game settings path is not a regular file: {path}")
     if not path.is_file():
         return None
     data = _read_settings(path)
@@ -87,6 +93,34 @@ def load_game_wrap_widths(game_root: str | Path) -> dict[str, int] | None:
     return normalize_wrap_widths(widths)
 
 
+def load_translation_runtime_environment(
+    dotenv_path: str | Path | None = None,
+) -> dict[str, int] | None:
+    """Load current global config, then restore the active game's widths.
+
+    Translation subprocesses intentionally refresh ``.env`` before importing an
+    engine. Per-game values must be applied afterwards or the refresh silently
+    replaces them with the last global widths.
+    """
+    # DAZED_GAME_ROOT is selected by the GUI for this run. It is runtime state,
+    # not global dotenv configuration, so preserve it across override loading
+    # and ignore an accidental/stale copy in .env.
+    root = (os.getenv("DAZED_GAME_ROOT") or "").strip()
+    load_dotenv(dotenv_path=dotenv_path, override=True)
+    if root:
+        os.environ["DAZED_GAME_ROOT"] = root
+    else:
+        os.environ.pop("DAZED_GAME_ROOT", None)
+    if not root:
+        return None
+    saved = load_game_wrap_widths(root)
+    if saved is None:
+        return None
+    for key, value in saved.items():
+        os.environ[key] = str(value)
+    return saved
+
+
 def save_game_wrap_widths(
     game_root: str | Path,
     values: Mapping,
@@ -96,7 +130,10 @@ def save_game_wrap_widths(
     if not root.is_dir():
         raise GameSettingsError(f"Game folder does not exist: {root}")
 
+    ensure_game_tool_gitignore(root)
     path = game_settings_path(root)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise GameSettingsError(f"Game settings path is not a regular file: {path}")
     data = _read_settings(path) if path.is_file() else {}
     normalized = normalize_wrap_widths(values)
 
@@ -109,7 +146,7 @@ def save_game_wrap_widths(
 
     data["version"] = 1
     rpgmaker["wrapWidths"] = normalized
-    path.parent.mkdir(exist_ok=True)
+    game_metadata_dir(root, create=True)
 
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=".settings-",

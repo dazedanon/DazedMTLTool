@@ -1,4 +1,5 @@
 import tempfile
+import subprocess
 import unittest
 from io import BytesIO
 from pathlib import Path
@@ -53,6 +54,9 @@ class RPGMakerImageTests(unittest.TestCase):
     def test_scan_and_decrypt_mv_image_without_touching_encrypted_original(self):
         encrypted = self._encrypted_asset()
         original = encrypted.read_bytes()
+        self.root.joinpath(".gitignore").write_text(
+            "/.dazedtl/\n", encoding="utf-8"
+        )
 
         assets = scan_image_assets(self.root)
         self.assertEqual([asset.asset_id for asset in assets], ["img/pictures/001.png"])
@@ -69,8 +73,32 @@ class RPGMakerImageTests(unittest.TestCase):
         self.assertEqual(result.errors, [])
         self.assertEqual(assets[0].plain_path.read_bytes(), png_bytes("red"))
         self.assertEqual(encrypted.read_bytes(), original)
-        ignore = self.root.joinpath(".gitignore").read_text(encoding="utf-8")
-        self.assertIn("/.dazedtl/", ignore)
+        self.root.joinpath(".dazedtl/glossary.txt").write_text(
+            "Menu (Menu)\n", encoding="utf-8"
+        )
+        self.root.joinpath(".dazedtl/settings.json").write_text(
+            "{}\n", encoding="utf-8"
+        )
+        skill = self.root / ".dazedtl/skills/game.md"
+        skill.parent.mkdir()
+        skill.write_text("# Translation Frame\n", encoding="utf-8")
+        skill.with_name("private-cache.json").write_text("{}\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(self.root), "init", "-q"],
+            check=True,
+            capture_output=True,
+        )
+        status = subprocess.run(
+            ["git", "-C", str(self.root), "status", "--short", "--untracked-files=all"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        self.assertIn(".dazedtl/glossary.txt", status)
+        self.assertIn(".dazedtl/settings.json", status)
+        self.assertIn(".dazedtl/skills/game.md", status)
+        self.assertNotIn(".dazedtl/skills/private-cache.json", status)
+        self.assertNotIn(".dazedtl/images/", status)
 
     def test_existing_editable_png_is_not_overwritten_by_decrypt_all(self):
         self._encrypted_asset()

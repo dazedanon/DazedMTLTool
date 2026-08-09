@@ -32,7 +32,14 @@ from typing import Any, Callable, Iterable
 
 from util import batch_providers as batch_api
 from util.api_errors import concise_api_error
-from util.paths import read_active_glossary, read_game_glossary
+from util.paths import (
+    GAME_GLOSSARY_RELATIVE,
+    GAME_SKILLS_RELATIVE,
+    LEGACY_GAME_GLOSSARY_RELATIVE,
+    LEGACY_GAME_SKILLS_RELATIVE,
+    read_active_glossary,
+    read_game_glossary,
+)
 from util.provider_costs import cache_write_multiplier
 from util.project_scanner import find_data_folder
 from util.sfx_reference import sfx_reference_identity
@@ -227,7 +234,15 @@ def resolve_evaluation_game_root(
         parent = selected.parent
         return parent.parent if parent.name.casefold() == "www" else parent
 
-    if (selected / "glossary.txt").is_file() or (selected / "skills").is_dir():
+    if any(
+        (selected / relative).exists()
+        for relative in (
+            GAME_GLOSSARY_RELATIVE,
+            GAME_SKILLS_RELATIVE,
+            LEGACY_GAME_GLOSSARY_RELATIVE,
+            LEGACY_GAME_SKILLS_RELATIVE,
+        )
+    ):
         return selected
 
     fallback_text = str(fallback_game_root or "").strip()

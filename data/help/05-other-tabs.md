@@ -124,6 +124,8 @@ of its box, lower the text width or use Rewrap in the RPG Maker Workflow.
 | `files` | Working copies of the text you selected |
 | `translated` | Text after translation |
 | `log` | Progress details and error information |
-| `.dazedtl` inside a game | Backups and per-game information such as saved RPG Maker line widths; keep this folder |
+| `.dazedtl` inside a game | Portable translation guidance plus local backups and tool state; keep this folder |
 
-You normally do not need to edit these folders by hand.
+Git should track `.dazedtl/glossary.txt`, `.dazedtl/settings.json`, and Markdown files under
+`.dazedtl/skills/`. DazedTL keeps the rest of `.dazedtl` ignored because it contains local working
+files, backups, and caches. You normally do not need to edit those local folders by hand.

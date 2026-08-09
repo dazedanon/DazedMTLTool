@@ -21,6 +21,7 @@ from gui.workflow_components import (
     DisclosureSection,
     WorkflowActivityPanel,
 )
+from util.game_settings import GameSettingsError, load_game_wrap_widths
 from util.paths import LEGACY_GLOSSARY_BASE_SEPARATOR
 
 
@@ -63,6 +64,10 @@ class WorkflowShellTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.saved_game = Path(self.temp.name) / "Saved Game"
         self.saved_game.mkdir()
+        self.saved_game.joinpath("data").mkdir()
+        self.saved_game.joinpath("data", "System.json").write_text(
+            "{}", encoding="utf-8"
+        )
         self.saved_game.joinpath("vocab.txt").write_text(
             "# Game Characters\nユウ (Yuu)\n\n"
             + LEGACY_GLOSSARY_BASE_SEPARATOR
@@ -73,10 +78,15 @@ class WorkflowShellTests(unittest.TestCase):
             str(Path(self.temp.name) / "workflow.ini"), QSettings.IniFormat
         )
         self.settings.setValue("workflow/last_game_folder", str(self.saved_game))
-        with patch("gui.workflow_tab.QSettings", return_value=self.settings):
+        with (
+            patch("gui.workflow_tab.QSettings", return_value=self.settings),
+            patch("gui.workflow_tab.QTimer.singleShot"),
+        ):
             from gui.workflow_tab import WorkflowTab
 
             self.workflow = WorkflowTab()
+        self.assertTrue(self.workflow.setup_editors.reload_all())
+        self.workflow._prepared_game_root = str(self.saved_game)
         self.workflow._detected_on_show = True
         self.workflow.resize(1400, 760)
         self.workflow.show()
@@ -89,7 +99,7 @@ class WorkflowShellTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_vertical_step_rail_drives_existing_page_stack(self):
-        glossary = self.saved_game / "glossary.txt"
+        glossary = self.saved_game / ".dazedtl" / "glossary.txt"
         self.assertFalse(glossary.exists())
         self.assertIn("ユウ (Yuu)", self.workflow.setup_editors.vocab_editor.toPlainText())
 
@@ -110,6 +120,175 @@ class WorkflowShellTests(unittest.TestCase):
         self.assertEqual(self.workflow._step_tabs.currentIndex(), 4)
         self.assertEqual(
             self.workflow._step_rail.buttons[3].property("stepState"), "complete"
+        )
+
+        conflict_game = Path(self.temp.name) / "Migration Conflict"
+        conflict_game.joinpath("data").mkdir(parents=True)
+        conflict_game.joinpath("data", "System.json").write_text(
+            "{}", encoding="utf-8"
+        )
+        conflict_game.joinpath("skills").mkdir(parents=True)
+        conflict_game.joinpath(".dazedtl", "skills").mkdir(parents=True)
+        legacy_glossary = conflict_game / "glossary.txt"
+        legacy_glossary.write_text("Legacy (Legacy)\n", encoding="utf-8")
+        self.workflow.file_list.addItem("OldGameMap.json")
+        self.workflow._data_path = "/old/game/data"
+        self.workflow._prepared_game_root = str(self.saved_game)
+        stale_generation = self.workflow._project_generation
+        self.workflow.git_prepare.set_game_root(self.saved_game)
+        self.workflow.rewrap_file_list.addItem("OldGameMap.json")
+        self.workflow.rewrap_scan_btn.setEnabled(True)
+        self.workflow.rewrap_apply_btn.setEnabled(True)
+        for button in self.workflow._import_buttons:
+            button.setEnabled(True)
+        self.workflow.folder_edit.setText(str(conflict_game))
+        self.assertEqual(self.workflow.file_list.count(), 0)
+        self.assertIsNone(self.workflow._data_path)
+        self.assertTrue(
+            all(not button.isEnabled() for button in self.workflow._import_buttons)
+        )
+
+        startup_game = Path(self.temp.name) / "Invalid Saved Game"
+        startup_game.joinpath("skills").mkdir(parents=True)
+        startup_game.joinpath("glossary.txt").write_text(
+            "startup legacy\n", encoding="utf-8"
+        )
+        startup_game.joinpath("skills", "guide.md").write_text(
+            "startup skill\n", encoding="utf-8"
+        )
+        startup_settings = QSettings(
+            str(Path(self.temp.name) / "startup.ini"), QSettings.IniFormat
+        )
+        startup_settings.setValue("workflow/last_game_folder", str(startup_game))
+        with (
+            patch("gui.workflow_tab.QSettings", return_value=startup_settings),
+            patch("gui.workflow_tab.QTimer.singleShot"),
+        ):
+            from gui.workflow_tab import WorkflowTab
+
+            startup_workflow = WorkflowTab()
+        try:
+            self.assertFalse(startup_game.joinpath(".dazedtl").exists())
+            self.assertFalse(startup_game.joinpath(".gitignore").exists())
+            self.assertEqual(
+                startup_workflow.setup_editors.vocab_editor.toPlainText(), ""
+            )
+            self.assertFalse(startup_workflow._detect_folder())
+            self.assertEqual(
+                startup_settings.value("workflow/last_game_folder", ""), ""
+            )
+        finally:
+            startup_workflow.close()
+            startup_workflow.deleteLater()
+        self.assertEqual(self.workflow.git_prepare._game_root, "")
+        self.assertEqual(self.workflow.rewrap_file_list.count(), 0)
+        self.assertFalse(self.workflow.rewrap_scan_btn.isEnabled())
+        self.assertFalse(self.workflow.rewrap_apply_btn.isEnabled())
+        self.workflow._on_scan_done(
+            [
+                {
+                    "name": "LateMap.json",
+                    "path": "/old/LateMap.json",
+                    "size_kb": 1,
+                    "category": "map",
+                    "default": True,
+                }
+            ],
+            stale_generation,
+            str(self.saved_game),
+        )
+        self.assertEqual(self.workflow.file_list.count(), 0)
+        self.assertEqual(self.settings.value("workflow/last_game_folder", ""), "")
+
+        self.assertFalse(self.workflow.setup_editors.reload_all())
+        self.assertTrue(legacy_glossary.is_file())
+        self.assertFalse(
+            conflict_game.joinpath(".dazedtl", "glossary.txt").exists()
+        )
+        self.assertIn(
+            "Could not prepare portable game guidance",
+            self.workflow.log_area.toPlainText(),
+        )
+        self.assertEqual(self.workflow.setup_editors.vocab_editor.toPlainText(), "")
+        self.assertEqual(self.workflow.setup_editors.quirks_editor.toPlainText(), "")
+        self.assertEqual(self.workflow.setup_editors.game_skill_editor.toPlainText(), "")
+
+        self.workflow.setup_editors.vocab_editor.setPlainText("wrong game content")
+        self.workflow.setup_editors._save_vocab()
+        self.assertFalse(
+            conflict_game.joinpath(".dazedtl", "glossary.txt").exists()
+        )
+
+        self.workflow.file_list.addItem("OldGameMap.json")
+        self.workflow._data_path = "/old/game/data"
+        for button in self.workflow._import_buttons:
+            button.setEnabled(True)
+        self.workflow._detect_folder()
+        self.assertEqual(
+            self.workflow.detected_label.text(),
+            "Portable guidance needs attention",
+        )
+        self.assertEqual(self.workflow.file_list.count(), 0)
+        self.assertIsNone(self.workflow._data_path)
+        self.assertTrue(
+            all(not button.isEnabled() for button in self.workflow._import_buttons)
+        )
+
+        self.workflow._apply_wrap_config()
+        self.assertFalse(
+            conflict_game.joinpath(".dazedtl", "settings.json").exists()
+        )
+
+        reload_only_game = Path(self.temp.name) / "Reload Only"
+        reload_only_game.joinpath("skills").mkdir(parents=True)
+        reload_only_game.joinpath("skills", "quirks.md").write_text(
+            "legacy quirks\n", encoding="utf-8"
+        )
+        reload_only_game.joinpath("glossary.txt").write_text(
+            "legacy glossary\n", encoding="utf-8"
+        )
+        self.workflow.folder_edit.setText(str(reload_only_game))
+        self.workflow.setup_editors._reload_quirks()
+        self.assertTrue(reload_only_game.joinpath("skills", "quirks.md").is_file())
+        self.assertFalse(reload_only_game.joinpath(".dazedtl", "skills").exists())
+        self.assertEqual(self.workflow.setup_editors.quirks_editor.toPlainText(), "")
+        self.workflow._detect_folder()
+        self.assertTrue(reload_only_game.joinpath("glossary.txt").is_file())
+        self.assertTrue(reload_only_game.joinpath("skills", "quirks.md").is_file())
+        self.assertFalse(reload_only_game.joinpath(".dazedtl").exists())
+        self.assertFalse(reload_only_game.joinpath(".gitignore").exists())
+        self.assertEqual(self.settings.value("workflow/last_game_folder", ""), "")
+
+        for label, marker_path in (
+            ("WOLF", reload_only_game / "Data.wolf"),
+            ("unknown JSON", reload_only_game / "config" / "settings.json"),
+        ):
+            with self.subTest(label):
+                marker_path.parent.mkdir(parents=True, exist_ok=True)
+                marker_path.write_bytes(
+                    b"" if marker_path.suffix == ".wolf" else b"{}"
+                )
+                self.workflow._detect_folder()
+                self.assertTrue(reload_only_game.joinpath("glossary.txt").is_file())
+                self.assertTrue(
+                    reload_only_game.joinpath("skills", "quirks.md").is_file()
+                )
+                self.assertFalse(reload_only_game.joinpath(".dazedtl").exists())
+                self.assertEqual(
+                    self.settings.value("workflow/last_game_folder", ""), ""
+                )
+                marker_path.unlink()
+
+        self.workflow.file_list.addItem("StillOld.json")
+        self.workflow._data_path = "/still/old/data"
+        for button in self.workflow._import_buttons:
+            button.setEnabled(True)
+        self.workflow.folder_edit.setText("")
+        self.workflow._detect_folder()
+        self.assertEqual(self.workflow.file_list.count(), 0)
+        self.assertIsNone(self.workflow._data_path)
+        self.assertTrue(
+            all(not button.isEnabled() for button in self.workflow._import_buttons)
         )
 
     def test_activity_panel_is_collapsible_and_persisted(self):
@@ -206,6 +385,7 @@ class WorkflowShellTests(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=False):
             for game, widths in cases:
                 self.workflow.folder_edit.setText(str(game))
+                self.assertTrue(self.workflow.setup_editors.reload_all())
                 for spin, value in zip(
                     (
                         self.workflow.wrap_width_spin,
@@ -255,6 +435,17 @@ class WorkflowShellTests(unittest.TestCase):
                 self.assertEqual(
                     tuple(saved["rpgmaker"]["wrapWidths"].values()), widths
                 )
+
+            linked_game = Path(self.temp.name) / "Linked Settings"
+            linked_game.joinpath(".dazedtl").mkdir(parents=True)
+            external = Path(self.temp.name) / "external-settings.json"
+            external.write_text(
+                json.dumps({"rpgmaker": {"wrapWidths": {"width": 99}}}),
+                encoding="utf-8",
+            )
+            linked_game.joinpath(".dazedtl", "settings.json").symlink_to(external)
+            with self.assertRaisesRegex(GameSettingsError, "not a regular file"):
+                load_game_wrap_widths(linked_game)
 
     def test_unsaved_game_widths_fall_back_to_env_and_clamp_face(self):
         with patch(
@@ -334,6 +525,104 @@ class WolfWorkflowShellTests(unittest.TestCase):
         panel.clear_requested.emit()
         self.assertFalse(panel.log.toPlainText())
         self.assertEqual(panel.summary_label.text(), "Activity · Idle")
+
+        unrelated = Path(self.temp.name) / "Not A Wolf Game"
+        unrelated.joinpath("skills").mkdir(parents=True)
+        unrelated.joinpath("glossary.txt").write_text("legacy\n", encoding="utf-8")
+        unrelated.joinpath("skills", "guide.md").write_text(
+            "legacy skill\n", encoding="utf-8"
+        )
+        class RunningWorker:
+            @staticmethod
+            def isRunning():
+                return True
+
+        self.workflow._worker = RunningWorker()
+        generation = self.workflow._project_generation
+        self.assertFalse(self.workflow._detect_folder())
+        self.assertEqual(self.workflow._project_generation, generation)
+        self.workflow._worker = None
+        with (
+            patch(
+                "gui.wolf_workflow_tab.QFileDialog.getExistingDirectory",
+                return_value=str(unrelated),
+            ),
+            patch.object(self.workflow, "_ask_clear_old_files") as clear_old,
+        ):
+            self.workflow._browse_folder()
+        clear_old.assert_not_called()
+        self.assertTrue(unrelated.joinpath("glossary.txt").is_file())
+        self.assertTrue(unrelated.joinpath("skills", "guide.md").is_file())
+        self.assertFalse(unrelated.joinpath(".dazedtl").exists())
+        self.assertFalse(unrelated.joinpath(".gitignore").exists())
+        self.assertEqual(
+            self.settings.value("wolf_workflow/last_game_folder", ""), ""
+        )
+
+        conflict = Path(self.temp.name) / "Conflict"
+        conflict.joinpath("skills").mkdir(parents=True)
+        conflict.joinpath("Data.wolf").write_bytes(b"")
+        conflict.joinpath(".dazedtl", "skills").mkdir(parents=True)
+        self.workflow.file_list.addItem("OldWolfMap.json")
+        self.workflow._layout = {"engine": "WOLF", "data_dir": "/old/data"}
+        for button in self.workflow._import_buttons:
+            button.setEnabled(True)
+        self.workflow.folder_edit.setText(str(conflict))
+        self.assertEqual(self.workflow.file_list.count(), 0)
+        self.assertEqual(self.workflow._layout, {})
+        self.assertTrue(
+            all(not button.isEnabled() for button in self.workflow._import_buttons)
+        )
+        self.assertEqual(
+            self.settings.value("wolf_workflow/last_game_folder", ""), ""
+        )
+        self.workflow.file_list.addItem("OldWolfMap.json")
+        self.workflow._layout = {"engine": "WOLF", "data_dir": "/old/data"}
+        for button in self.workflow._import_buttons:
+            button.setEnabled(True)
+        self.workflow._detect_folder()
+        self.assertEqual(
+            self.workflow.detected_label.text(),
+            "Portable guidance needs attention",
+        )
+        self.assertEqual(self.workflow.file_list.count(), 0)
+        self.assertEqual(self.workflow._layout, {})
+        self.assertTrue(
+            all(not button.isEnabled() for button in self.workflow._import_buttons)
+        )
+
+        nested_game = Path(self.temp.name) / "Nested Data Game"
+        nested_basic = nested_game / "Data" / "Data" / "BasicData"
+        nested_basic.mkdir(parents=True)
+        (nested_basic / "CommonEvent.dat").write_bytes(b"keep")
+        nested_game.joinpath("Data.wolf").write_bytes(b"archive")
+        self.workflow.folder_edit.setText(str(nested_game))
+
+        def validate_guidance_before_repair():
+            self.assertTrue((nested_basic / "CommonEvent.dat").is_file())
+            return True
+
+        with (
+            patch.object(
+                self.workflow.setup_editors,
+                "reload_all",
+                side_effect=validate_guidance_before_repair,
+            ),
+            patch("gui.wolf_workflow_tab.QTimer.singleShot"),
+        ):
+            self.assertTrue(self.workflow._detect_folder())
+        repaired_basic = nested_game / "Data" / "BasicData" / "CommonEvent.dat"
+        self.assertEqual(repaired_basic.read_bytes(), b"keep")
+        self.assertFalse((nested_game / "Data" / "Data").exists())
+        self.assertTrue(self.workflow._layout["unpacked"])
+        self.assertEqual(self.workflow._layout["unpack_gaps"], [])
+        with (
+            patch.object(self.workflow, "_unpack") as unpack,
+            patch.object(self.workflow, "_extract_to_work_dir") as extract,
+        ):
+            self.workflow._ensure_wolf_json()
+        unpack.assert_not_called()
+        extract.assert_called_once()
 
     def test_wolf_check_copies_scoped_ai_repair_skill(self):
         from util.wolfdawn.inject_precheck import InjectIssue

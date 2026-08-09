@@ -13,6 +13,7 @@ import shutil
 import tempfile
 import uuid
 
+from util.paths import ensure_game_tool_gitignore
 
 PROFILE_AUTO = "auto"
 PROFILE_RPGMAKER_MVMZ = "rpgmaker_mvmz"
@@ -168,21 +169,7 @@ def image_manager_state_root(game_root: str | Path) -> Path:
 
 
 def _ensure_workspace_ignore(root: Path) -> None:
-    ignore_path = root / ".gitignore"
-    existing = (
-        ignore_path.read_text(encoding="utf-8", errors="surrogateescape")
-        if ignore_path.exists()
-        else ""
-    )
-    if "/.dazedtl/" in existing.splitlines():
-        return
-    text = existing
-    if text and not text.endswith("\n"):
-        text += "\n"
-    if "# DazedTL image manager working files" not in text:
-        text += "\n# DazedTL image manager working files\n"
-    text += "/.dazedtl/\n"
-    _atomic_write(ignore_path, text.encode("utf-8", errors="surrogateescape"))
+    ensure_game_tool_gitignore(root)
 
 
 def ensure_editable_workspace(game_root: str | Path) -> Path:

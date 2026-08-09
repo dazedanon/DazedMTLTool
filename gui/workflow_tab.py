@@ -22,7 +22,7 @@ import sys
 import threading
 from pathlib import Path
 
-from util.paths import APP_NAME, ORG_NAME, ensure_game_glossary
+from util.paths import APP_NAME, ORG_NAME, ensure_game_glossary, game_glossary_path
 from util.game_settings import (
     DEFAULT_WRAP_WIDTHS,
     GameSettingsError,
@@ -284,7 +284,7 @@ _STEP_HELP: dict[int, str] = {
         "<b>Step 5 - Put translated text into the game</b><br><br>"
         "<b>What to do</b><br>There are two different jobs on this page:<br><br>"
         "<b>Plugin or script text</b><br>"
-        "1. The selected game's <b>glossary.txt</b> is already available in its root folder.<br>"
+        "1. The selected game's <b>.dazedtl/glossary.txt</b> is already available.<br>"
         "2. Copy the plugin or Ruby translation skill and paste it into your AI helper.<br>"
         "3. Review the proposed changes. The helper edits approved plugin or script files "
         "directly inside the game folder, so these changes do not need the Export buttons.<br><br>"
@@ -490,7 +490,9 @@ def _inspect_image_workflow(game_root: str | Path) -> dict:
         "encrypted": 0,
         "editable": 0,
         "misplaced": 0,
-        "vocab": root / "glossary.txt",
+        # Readiness checks must not migrate guidance or rewrite .gitignore.
+        # Project detection owns that state transition and reports conflicts.
+        "vocab": game_glossary_path(root, migrate=False),
         "editable_root": None,
         "key_ok": None,
     }
@@ -584,6 +586,8 @@ class WorkflowTab(QWidget):
         self._last_default_translation_mode = None
         self._activity_unread = 0
         self._activity_errors = 0
+        self._project_generation = 0
+        self._prepared_game_root = ""
 
         self._init_ui()
 
@@ -915,6 +919,124 @@ class WorkflowTab(QWidget):
         for button in self._import_buttons:
             button.setEnabled(enabled)
 
+    def _invalidate_detected_project_state(self) -> None:
+        """Clear every path/action derived from the previously detected game."""
+        self._project_generation += 1
+        self._prepared_game_root = ""
+        self._data_path = None
+        self._engine = "MVMZ"
+        self._plugins_js_path = ""
+        self._ace_encrypted = False
+        self._ace_json_dir = ""
+        self._ace_rvdata_dir = ""
+        self._last_import_signature = None
+        self._pending_import_signature = None
+        self._file_items = []
+        self.file_list.clear()
+        self._set_import_buttons_enabled(False)
+        self._update_step6_for_engine(False)
+        if hasattr(self, "pp_data_path_label"):
+            self.pp_data_path_label.setText("(detect a project folder first)")
+        if hasattr(self, "pp_plugins_edit"):
+            self.pp_plugins_edit.clear()
+        if hasattr(self, "pp_gameupdate_dst_label"):
+            self.pp_gameupdate_dst_label.setText(
+                "(game root folder auto-filled from project)"
+            )
+        if hasattr(self, "git_prepare"):
+            self.git_prepare.set_game_root("")
+        if hasattr(self, "rewrap_file_list"):
+            self.rewrap_file_list.clear()
+        if hasattr(self, "rewrap_results"):
+            self.rewrap_results.clear()
+        if hasattr(self, "rewrap_scope_title"):
+            self.rewrap_scope_title.setText(
+                "Source unavailable · complete Step 0 first"
+            )
+            self.rewrap_scope_title.setToolTip("")
+        if hasattr(self, "rewrap_status_label"):
+            self.rewrap_status_label.setText(
+                "No detected project is available. Complete Step 0 first."
+            )
+        for name in ("rewrap_scan_btn", "rewrap_apply_btn"):
+            button = getattr(self, name, None)
+            if button is not None:
+                button.setEnabled(False)
+        if hasattr(self, "setup_editors"):
+            self.setup_editors.invalidate()
+
+    @staticmethod
+    def _worker_is_running(worker) -> bool:
+        checker = getattr(worker, "isRunning", None)
+        return bool(callable(checker) and checker())
+
+    def _project_task_is_running(self) -> bool:
+        return any(
+            self._worker_is_running(worker)
+            for worker in (self._worker, self._rewrap_worker)
+            if worker is not None
+        )
+
+    def _project_is_prepared(self, game_root: str | None = None) -> bool:
+        root = (
+            self.folder_edit.text().strip()
+            if game_root is None and hasattr(self, "folder_edit")
+            else str(game_root or "").strip()
+        )
+        return bool(
+            root
+            and root == self._prepared_game_root
+            and hasattr(self, "setup_editors")
+            and self.setup_editors.is_prepared_for(root)
+        )
+
+    def _prepared_project_or_warn(self) -> str | None:
+        root = self.folder_edit.text().strip()
+        if self._project_is_prepared(root):
+            return root
+        self._log("⚠  Scan this project successfully in Step 0 before continuing.")
+        return None
+
+    def _project_callback_is_current(self, generation: int, game_root: str) -> bool:
+        return bool(
+            generation == self._project_generation
+            and self.folder_edit.text().strip() == game_root
+            and self._project_is_prepared(game_root)
+        )
+
+    def _log_project_error(
+        self, message: str, generation: int, game_root: str, label: str
+    ) -> None:
+        if self._project_callback_is_current(generation, game_root):
+            self._log(f"❌ {label}: {message}")
+
+    def _on_folder_path_changed(self, folder: str) -> None:
+        """Revoke the previous project as soon as the visible path changes."""
+        requested = str(folder or "").strip()
+        if (
+            self._prepared_game_root
+            and requested != self._prepared_game_root
+            and self._project_task_is_running()
+        ):
+            self.folder_edit.blockSignals(True)
+            try:
+                self.folder_edit.setText(self._prepared_game_root)
+            finally:
+                self.folder_edit.blockSignals(False)
+            self._log("⚠  Wait for the active project task to finish before switching games.")
+            return
+        self._invalidate_detected_project_state()
+        self._save_setting("last_game_folder", "")
+        if hasattr(self, "detected_label"):
+            self.detected_label.setText(
+                "Project folder changed. Scan it before continuing."
+            )
+            self.detected_label.setStyleSheet(
+                "color:#f2c94c;font-size:13px;padding:4px 8px;"
+                "background-color:#2b2010;border:1px solid #5a4010;"
+                "border-radius:4px;margin:4px 0;"
+            )
+
     def _apply_theme(self):
         """Make standalone workflow widgets honor the canonical application theme."""
         self.setStyleSheet(application_stylesheet())
@@ -969,6 +1091,7 @@ class WorkflowTab(QWidget):
         saved = self._setting("last_game_folder", "")
         if saved:
             self.folder_edit.setText(saved)
+        self.folder_edit.textChanged.connect(self._on_folder_path_changed)
         row0.addWidget(self.folder_edit, 1)
         self.folder_edit.returnPressed.connect(self._detect_folder)
 
@@ -1416,7 +1539,6 @@ class WorkflowTab(QWidget):
         )
         guidance_stage.add_widget(self.setup_editors, 1)
         layout.addWidget(guidance_stage, 1)
-        self.setup_editors.reload_all()
 
 
     def _run_parse_speakers(self):
@@ -3139,9 +3261,8 @@ class WorkflowTab(QWidget):
             self._log(f"❌ Could not save playtest settings: {exc}")
 
     def _apply_playtest_settings(self):
-        game_root = self.folder_edit.text().strip()
+        game_root = self._prepared_project_or_warn()
         if not game_root:
-            self._log("⚠  No game folder set. Complete Step 0 first.")
             return
         cfg = self._resolve_playtest_config()
         try:
@@ -3252,9 +3373,8 @@ class WorkflowTab(QWidget):
         label.setStyleSheet(f"color:{color};font-size:13px;")
 
     def _install_tl_inspector(self):
-        game_root = self.folder_edit.text().strip()
+        game_root = self._prepared_project_or_warn()
         if not game_root:
-            self._log("⚠  No game folder set. Complete Step 0 first.")
             return
         cfg = self._resolve_playtest_config()
         try:
@@ -3269,9 +3389,8 @@ class WorkflowTab(QWidget):
         self._refresh_playtest_status()
 
     def _uninstall_tl_inspector(self):
-        game_root = self.folder_edit.text().strip()
+        game_root = self._prepared_project_or_warn()
         if not game_root:
-            self._log("⚠  No game folder set. Complete Step 0 first.")
             return
         reply = QMessageBox.question(
             self,
@@ -3328,9 +3447,8 @@ class WorkflowTab(QWidget):
         label.setStyleSheet(f"color:{color};font-size:13px;")
 
     def _install_forge(self):
-        game_root = self.folder_edit.text().strip()
+        game_root = self._prepared_project_or_warn()
         if not game_root:
-            self._log("⚠  No game folder set. Complete Step 0 first.")
             return
         cfg = self._resolve_playtest_config()
         try:
@@ -3345,9 +3463,8 @@ class WorkflowTab(QWidget):
         self._refresh_playtest_status()
 
     def _install_both_playtest(self):
-        game_root = self.folder_edit.text().strip()
+        game_root = self._prepared_project_or_warn()
         if not game_root:
-            self._log("⚠  No game folder set. Complete Step 0 first.")
             return
         try:
             from util.forge.installer import detect_engine
@@ -3377,9 +3494,8 @@ class WorkflowTab(QWidget):
         self._refresh_playtest_status()
 
     def _uninstall_forge(self):
-        game_root = self.folder_edit.text().strip()
+        game_root = self._prepared_project_or_warn()
         if not game_root:
-            self._log("⚠  No game folder set. Complete Step 0 first.")
             return
         reply = QMessageBox.question(
             self,
@@ -3404,14 +3520,16 @@ class WorkflowTab(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _browse_folder(self):
+        if self._project_task_is_running():
+            self._log("⚠  Wait for the active project task to finish before switching games.")
+            return
         start = self.folder_edit.text() or self._setting("last_game_folder", "")
         folder = QFileDialog.getExistingDirectory(self, "Select Game Root Folder", start)
         if folder:
             self.folder_edit.setText(folder)
-            self._save_setting("last_game_folder", folder)
             self._detected_on_show = True  # new folder chosen — treat as already-shown
-            self._ask_clear_old_files()
-            self._detect_folder()
+            if self._detect_folder():
+                self._ask_clear_old_files()
 
     def _ask_clear_old_files(self):
         """Prompt the user to clear /files and /translated to avoid stale data conflicts."""
@@ -3530,39 +3648,83 @@ class WorkflowTab(QWidget):
         if show_mvmz_tools:
             self._refresh_playtest_status()
 
-    def _detect_folder(self):
+    def _detect_folder(self) -> bool:
+        if self._project_task_is_running():
+            self._log("⚠  Wait for the active project task to finish before rescanning.")
+            return False
         folder = self.folder_edit.text().strip()
         if not folder:
+            self._invalidate_detected_project_state()
+            self._save_setting("last_game_folder", "")
             self._log("⚠  No folder path entered.")
-            return
+            return False
 
-        self._save_setting("last_game_folder", folder)
+        # Revoke stale persisted roots before validation. Only a fully prepared
+        # supported project is saved again below.
+        self._save_setting("last_game_folder", "")
+        self._invalidate_detected_project_state()
+        if not Path(folder).is_dir():
+            self.detected_label.setText("❌ Folder not found. Pick a valid game directory.")
+            self.detected_label.setStyleSheet(
+                "color:#f48771;font-size:13px;padding:4px 8px;"
+                "background-color:#2b1a1a;border:1px solid #5a2a2a;"
+                "border-radius:4px;margin:4px 0;"
+            )
+            return False
+
+        root_path = Path(folder)
+        rgss_files = list(root_path.glob("Game.rgss*"))
+        data_path = None
+        engine = "UNKNOWN"
+        if not rgss_files:
+            try:
+                from util.project_scanner import find_data_folder
+                data_path, engine = find_data_folder(folder)
+            except Exception as exc:
+                self.detected_label.setText(f"Error: {exc}")
+                self.detected_label.setStyleSheet(
+                    "color:#f48771;font-size:13px;padding:4px 8px;"
+                    "background-color:#2b1a1a;border:1px solid #5a2a2a;"
+                    "border-radius:4px;margin:4px 0;"
+                )
+                return False
+
+            if data_path is None or engine not in {"MVMZ", "ACE"}:
+                self.detected_label.setText(
+                    "⚠  No recognised data folder found. "
+                    "Make sure this is a valid RPGMaker game directory."
+                )
+                self.detected_label.setStyleSheet(
+                    "color:#f2c94c;font-size:13px;padding:4px 8px;"
+                    "background-color:#2b2010;border:1px solid #5a4010;"
+                    "border-radius:4px;margin:4px 0;"
+                )
+                return False
+
+        # Validate the engine before migrating guidance or persisting the path.
         if hasattr(self, "setup_editors"):
-            self.setup_editors.reload_all()
+            if not self.setup_editors.reload_all():
+                self.detected_label.setText("Portable guidance needs attention")
+                self.detected_label.setStyleSheet(
+                    "color:#f48771;font-size:13px;padding:4px 8px;"
+                    "background-color:#2b1a1a;border:1px solid #5a2a2a;"
+                    "border-radius:4px;margin:4px 0;"
+                )
+                return False
+        self._prepared_game_root = folder
+        self._save_setting("last_game_folder", folder)
+        self.refresh_wrap_widths_for_game()
+        generation = self._project_generation
         self.detected_label.setText("Scanning…")
         self.detected_label.setStyleSheet(
             "color:#a6a6a6;font-size:13px;padding:4px 8px;"
             "background-color:#252526;border:1px solid #45454a;"
             "border-radius:4px;margin:4px 0;"
         )
-        self.file_list.clear()
-        self._set_import_buttons_enabled(False)
-        self._last_import_signature = None
-        self._pending_import_signature = None
-
-        # Reset ACE state from any previous detection
-        self._ace_encrypted = False
-        self._ace_json_dir = ""
-        self._ace_rvdata_dir = ""
-        self._update_step6_for_engine(False)
-
-        root_path = Path(folder)
-        self.refresh_wrap_widths_for_game()
 
         # ── RPGMaker Ace encrypted: Game.rgss* present (no Data/ yet) ────────
         # Must be checked BEFORE find_data_folder, which returns UNKNOWN for
         # encrypted games (no rvdata2 files exist until the archive is extracted).
-        rgss_files = list(root_path.glob("Game.rgss*"))
         if rgss_files:
             self._ace_encrypted = True
             rgss_name = rgss_files[0].name
@@ -3577,32 +3739,8 @@ class WorkflowTab(QWidget):
             self._log(f"⚠  RPGMaker Ace (encrypted) detected — found: {rgss_name}")
             self._update_step6_for_engine(True)
             self._show_ace_decrypt_notice(folder, str(rgss_files[0]))
-            return
+            return True
         # ─────────────────────────────────────────────────────────────────────
-
-        try:
-            from util.project_scanner import find_data_folder
-            data_path, engine = find_data_folder(folder)
-        except Exception as exc:
-            self.detected_label.setText(f"Error: {exc}")
-            self.detected_label.setStyleSheet(
-                "color:#f48771;font-size:13px;padding:4px 8px;"
-                "background-color:#2b1a1a;border:1px solid #5a2a2a;"
-                "border-radius:4px;margin:4px 0;"
-            )
-            return
-
-        if data_path is None:
-            self.detected_label.setText(
-                "⚠  No recognised data folder found. "
-                "Make sure this is a valid RPGMaker game directory."
-            )
-            self.detected_label.setStyleSheet(
-                "color:#f2c94c;font-size:13px;padding:4px 8px;"
-                "background-color:#2b2010;border:1px solid #5a4010;"
-                "border-radius:4px;margin:4px 0;"
-            )
-            return
 
         self._data_path = str(data_path)
         self._engine = engine
@@ -3630,8 +3768,14 @@ class WorkflowTab(QWidget):
                     "border-radius:4px;margin:4px 0;"
                 )
                 worker = _ScanWorker(self._data_path, "MVMZ")
-                worker.done.connect(self._on_scan_done)
-                worker.error.connect(lambda e: self._log(f"❌ Scan error: {e}"))
+                worker.done.connect(
+                    lambda items, g=generation, r=folder: self._on_scan_done(items, g, r)
+                )
+                worker.error.connect(
+                    lambda e, g=generation, r=folder: self._log_project_error(
+                        e, g, r, "Scan error"
+                    )
+                )
                 self._worker = worker
                 worker.start()
             else:
@@ -3646,7 +3790,7 @@ class WorkflowTab(QWidget):
                     "border-radius:4px;margin:4px 0;"
                 )
                 self._run_rv2json_create()
-            return  # scan continues above or in _on_rv2json_create_done
+            return True  # scan continues above or in _on_rv2json_create_done
         # ─────────────────────────────────────────────────────────────────────
 
         self.detected_label.setText(
@@ -3661,12 +3805,28 @@ class WorkflowTab(QWidget):
         self._update_step6_for_engine(False)
 
         worker = _ScanWorker(self._data_path, self._engine)
-        worker.done.connect(self._on_scan_done)
-        worker.error.connect(lambda e: self._log(f"❌ Scan error: {e}"))
+        worker.done.connect(
+            lambda items, g=generation, r=folder: self._on_scan_done(items, g, r)
+        )
+        worker.error.connect(
+            lambda e, g=generation, r=folder: self._log_project_error(
+                e, g, r, "Scan error"
+            )
+        )
         self._worker = worker
         worker.start()
+        return True
 
-    def _on_scan_done(self, items: list):
+    def _on_scan_done(
+        self,
+        items: list,
+        generation: int | None = None,
+        game_root: str | None = None,
+    ):
+        if generation is not None and game_root is not None:
+            if not self._project_callback_is_current(generation, game_root):
+                self._log("ℹ  Ignored scan results from a project that is no longer active.")
+                return
         self._file_items = items
         self.file_list.clear()
 
@@ -3761,6 +3921,9 @@ class WorkflowTab(QWidget):
         selected: list[dict] | None = None,
         signature: tuple[str, ...] | None = None,
     ):
+        game_root = self._prepared_project_or_warn()
+        if not game_root:
+            return
         selected = selected if selected is not None else self._selected_import_items()
         if not selected:
             self._log("⚠  No files selected.")
@@ -3777,9 +3940,14 @@ class WorkflowTab(QWidget):
 
         self._set_import_buttons_enabled(False)
         self._pending_import_signature = signature
+        generation = self._project_generation
         worker = _ImportWorker(selected, "files")
         worker.log.connect(self._log)
-        worker.done.connect(self._on_import_done)
+        worker.done.connect(
+            lambda count, errors, g=generation, r=game_root: self._on_import_done(
+                count, errors, g, r
+            )
+        )
         self._worker = worker
         worker.start()
 
@@ -3842,7 +4010,18 @@ class WorkflowTab(QWidget):
                 self._log(f"   {e}")
         self._log(f"✅ Cleared {deleted} item(s) from translated/")
 
-    def _on_import_done(self, count: int, errors: list):
+    def _on_import_done(
+        self,
+        count: int,
+        errors: list,
+        generation: int | None = None,
+        game_root: str | None = None,
+    ):
+        if generation is not None and game_root is not None:
+            if not self._project_callback_is_current(generation, game_root):
+                self._pending_import_signature = None
+                self._log("ℹ  Ignored import completion from a project that is no longer active.")
+                return
         self._set_import_buttons_enabled(bool(self.file_list.count()))
         if errors:
             self._log(f"⚠  {len(errors)} error(s) during import:")
@@ -3883,7 +4062,7 @@ class WorkflowTab(QWidget):
     def _read_vocab_speakers(self) -> list[tuple[str, str]]:
         """Parse character names, retaining legacy Speakers compatibility."""
         game_root = self.folder_edit.text().strip()
-        if not game_root:
+        if not self._project_is_prepared(game_root):
             return []
         try:
             vocab_path = ensure_game_glossary(game_root)
@@ -4163,9 +4342,8 @@ class WorkflowTab(QWidget):
     def _copy_translation_qa_prompt(self):
         """Copy the post-export RPG Maker QA skill with this game's paths."""
         try:
-            game_root = self.folder_edit.text().strip()
-            if not game_root or not Path(game_root).is_dir():
-                self._log("⚠  Select and detect a game folder in Step 0 first.")
+            game_root = self._prepared_project_or_warn()
+            if not game_root:
                 return
             game_data = self._data_path
             if not game_data or not Path(game_data).is_dir():
@@ -4174,7 +4352,7 @@ class WorkflowTab(QWidget):
             replacements = {
                 "{{GAME_DATA_FOLDER}}": str(Path(game_data).expanduser().resolve()),
                 "{{GAME_ROOT}}": str(Path(game_root).expanduser().resolve()),
-                "{{VOCAB_FILE}}": str((Path(game_root) / "glossary.txt").expanduser().resolve()),
+                "{{VOCAB_FILE}}": str(ensure_game_glossary(game_root)),
             }
             prompt = load_clipboard_skill("rpgmaker_translation_qa.md")
             missing = [token for token in replacements if token not in prompt]
@@ -4267,18 +4445,11 @@ class WorkflowTab(QWidget):
 
     def _rewrap_data_directory(self) -> Path | None:
         """Return the Step-0 game data directory used by direct rewrapping."""
-        candidates: list[Path] = []
-        if self._data_path:
-            candidates.append(Path(self._data_path))
-        game_root = self.folder_edit.text().strip() if hasattr(self, "folder_edit") else ""
-        if game_root:
-            root = Path(game_root)
-            candidates.extend(
-                (root / "data", root / "www" / "data", root / "ace_json", root / "JSON")
-            )
-        for candidate in candidates:
-            if candidate.is_dir():
-                return candidate.expanduser().resolve()
+        if not self._project_is_prepared() or not self._data_path:
+            return None
+        candidate = Path(self._data_path)
+        if candidate.is_dir():
+            return candidate.expanduser().resolve()
         return None
 
     def _refresh_rewrap_files(self):
@@ -4321,6 +4492,9 @@ class WorkflowTab(QWidget):
             self.rewrap_status_label.setText(
                 "No game data JSON files found. Complete Step 0 and export translations first."
             )
+        enabled = bool(paths and self._project_is_prepared())
+        self.rewrap_scan_btn.setEnabled(enabled)
+        self.rewrap_apply_btn.setEnabled(enabled)
 
     def _filter_rewrap_files(self, text: str):
         needle = str(text or "").strip().casefold()
@@ -4396,6 +4570,8 @@ class WorkflowTab(QWidget):
         )
 
     def _run_rewrap(self, apply: bool):
+        if not self._prepared_project_or_warn():
+            return
         if getattr(self, "_rewrap_worker", None) is not None:
             self._log("⚠  A rewrap scan is already running.")
             return
@@ -4495,8 +4671,9 @@ class WorkflowTab(QWidget):
         self._log(f"❌ Rewrap failed: {message}")
 
     def _release_rewrap_worker(self):
-        self.rewrap_scan_btn.setEnabled(True)
-        self.rewrap_apply_btn.setEnabled(True)
+        enabled = bool(self._rewrap_data_directory() and self.rewrap_file_list.count())
+        self.rewrap_scan_btn.setEnabled(enabled)
+        self.rewrap_apply_btn.setEnabled(enabled)
         worker = getattr(self, "_rewrap_worker", None)
         if worker is not None:
             worker.deleteLater()
@@ -4515,6 +4692,11 @@ class WorkflowTab(QWidget):
         game_root = self.folder_edit.text().strip()
         if not game_root:
             self._log("❌ Select a game folder before saving line widths.")
+            return
+        if not self.setup_editors.is_prepared_for(game_root):
+            self._log(
+                "❌ Scan this game folder successfully before saving its line widths."
+            )
             return
         try:
             path = save_game_wrap_widths(game_root, updates)
@@ -4847,6 +5029,9 @@ class WorkflowTab(QWidget):
 
     def _export_active_files(self):
         """Export only translated files whose names match what is in files/."""
+        game_root = self._prepared_project_or_warn()
+        if not game_root:
+            return
         if self._rewrap_worker is not None and self._rewrap_worker.isRunning():
             QMessageBox.information(
                 self, "Busy", "Wait for the rewrap scan/write to finish before exporting."
@@ -4885,11 +5070,19 @@ class WorkflowTab(QWidget):
 
         w = _ExportWorker(game_data, filter_names=active)
         w.log.connect(self._log)
-        w.done.connect(self._on_export_done)
+        generation = self._project_generation
+        w.done.connect(
+            lambda count, errors, g=generation, r=game_root: self._on_export_done(
+                count, errors, g, r
+            )
+        )
         self._worker = w
         w.start()
 
     def _export_to_game(self):
+        game_root = self._prepared_project_or_warn()
+        if not game_root:
+            return
         if self._rewrap_worker is not None and self._rewrap_worker.isRunning():
             QMessageBox.information(
                 self, "Busy", "Wait for the rewrap scan/write to finish before exporting."
@@ -4912,18 +5105,18 @@ class WorkflowTab(QWidget):
 
         w = _ExportWorker(game_data)
         w.log.connect(self._log)
-        w.done.connect(self._on_export_done)
+        generation = self._project_generation
+        w.done.connect(
+            lambda count, errors, g=generation, r=game_root: self._on_export_done(
+                count, errors, g, r
+            )
+        )
         self._worker = w
         w.start()
 
     def _create_public_release(self):
-        game_root = self.folder_edit.text().strip()
-        if not game_root or not Path(game_root).is_dir():
-            QMessageBox.warning(
-                self,
-                "No game folder",
-                "Select and detect a game folder in Step 0 first.",
-            )
+        game_root = self._prepared_project_or_warn()
+        if not game_root:
             return
         if self._worker is not None and self._worker.isRunning():
             QMessageBox.information(self, "Busy", "A task is already running. Please wait.")
@@ -5051,24 +5244,41 @@ class WorkflowTab(QWidget):
 
     def _run_rv2json_create(self):
         """Run RV2JSON.exe -c to convert rvdata2 → JSON files (run from game root)."""
+        game_root = self._prepared_project_or_warn()
+        if not game_root:
+            return
         if not self._ensure_ace_tools():
             return
         rv2json = self._ace_tool_path("RV2JSON.exe")
         if not rv2json.is_file():
             self._log(f"❌ RV2JSON.exe not found at {rv2json}")
             return
-        game_root = self.folder_edit.text().strip()
+        generation = self._project_generation
         # -c takes no path flags — must be run from the game root so it can
         # find the Data/ folder automatically and creates JSON/ alongside it.
         cmd = [str(rv2json), "-c"]
         self._log(f"$ {' '.join(cmd)}  (cwd: {game_root})")
         w = _SubprocessWorker(cmd, cwd=game_root, label="RV2JSON -c")
         w.log.connect(self._log)
-        w.done.connect(self._on_rv2json_create_done)
+        w.done.connect(
+            lambda ok, msg, g=generation, r=game_root: self._on_rv2json_create_done(
+                ok, msg, g, r
+            )
+        )
         self._worker = w
         w.start()
 
-    def _on_rv2json_create_done(self, ok: bool, msg: str):
+    def _on_rv2json_create_done(
+        self,
+        ok: bool,
+        msg: str,
+        generation: int | None = None,
+        game_root: str | None = None,
+    ):
+        if generation is not None and game_root is not None:
+            if not self._project_callback_is_current(generation, game_root):
+                self._log("ℹ  Ignored RV2JSON results from a project that is no longer active.")
+                return
         self._log(("✅ " if ok else "❌ ") + msg)
         if not ok:
             self.detected_label.setText("❌ RV2JSON -c failed — check log for details.")
@@ -5100,22 +5310,31 @@ class WorkflowTab(QWidget):
             "border-radius:4px;margin:4px 0;"
         )
         worker = _ScanWorker(self._data_path, "MVMZ")
-        worker.done.connect(self._on_scan_done)
-        worker.error.connect(lambda e: self._log(f"❌ Scan error: {e}"))
+        current_generation = self._project_generation
+        current_root = self._prepared_game_root
+        worker.done.connect(
+            lambda items, g=current_generation, r=current_root: self._on_scan_done(
+                items, g, r
+            )
+        )
+        worker.error.connect(
+            lambda e, g=current_generation, r=current_root: self._log_project_error(
+                e, g, r, "Scan error"
+            )
+        )
         self._worker = worker
         worker.start()
 
     def _run_rv2json_update(self):
         """Run RV2JSON.exe -u to write translated JSON back to rvdata2 files."""
+        game_root = self._prepared_project_or_warn()
+        if not game_root:
+            return
         if not self._ensure_ace_tools():
             return
         rv2json = self._ace_tool_path("RV2JSON.exe")
         if not rv2json.is_file():
             self._log(f"❌ RV2JSON.exe not found at {rv2json}")
-            return
-        game_root = self.folder_edit.text().strip()
-        if not game_root:
-            self._log("❌ RV2JSON -u: game root folder not set.")
             return
         # Run without path flags (same as -c): tool finds Data/ and ace_json/
         # relative to the game root automatically.
@@ -5128,7 +5347,17 @@ class WorkflowTab(QWidget):
         self._worker = w
         w.start()
 
-    def _on_export_done(self, count: int, errors: list):
+    def _on_export_done(
+        self,
+        count: int,
+        errors: list,
+        generation: int | None = None,
+        game_root: str | None = None,
+    ):
+        if generation is not None and game_root is not None:
+            if not self._project_callback_is_current(generation, game_root):
+                self._log("ℹ  Ignored export completion from a project that is no longer active.")
+                return
         if errors:
             self._log(f"⚠  {len(errors)} error(s) during export:")
             for e in errors[:10]:
@@ -5148,7 +5377,9 @@ class WorkflowTab(QWidget):
 
     def _populate_preprocess_paths(self):
         """Auto-fill pre-process paths from the detected game root and data path."""
-        game_root = self.folder_edit.text().strip()
+        game_root = (
+            self.folder_edit.text().strip() if self._project_is_prepared() else ""
+        )
         data_path = self._data_path or ""
 
         if hasattr(self, "git_prepare"):
@@ -5240,36 +5471,43 @@ class WorkflowTab(QWidget):
 
     def _run_gameupdate(self):
         src = self.pp_gameupdate_edit.text().strip()
-        dst = self.folder_edit.text().strip()
+        dst = self._prepared_project_or_warn()
+        if not dst:
+            return
         if not src:
             self._log("⚠  No gameupdate folder path set.")
-            return
-        if not dst:
-            self._log("⚠  No game root folder set. Complete Step 0 first.")
             return
         if not Path(src).is_dir():
             self._log(f"⚠  gameupdate folder not found: {src}")
             return
         w = _FileCopyWorker(src, dst, skip_names=_RPG_GAMEUPDATE_COPY_SKIP_NAMES)
         w.log.connect(self._log)
-        w.done.connect(self._on_gameupdate_done)
+        w.done.connect(
+            lambda count, errors, destination=dst: self._on_gameupdate_done(
+                count, errors, destination
+            )
+        )
         self._worker = w
         w.start()
 
-    def _on_gameupdate_done(self, count: int, errors: list):
+    def _on_gameupdate_done(
+        self, count: int, errors: list, destination: str | None = None
+    ):
         self._log(f"✅ gameupdate: copied {count} file(s).")
         for e in errors:
             self._log(f"   ⚠  {e}")
-        dst = self.folder_edit.text().strip()
+        dst = destination or self.folder_edit.text().strip()
         if dst and not errors:
             self._write_gameupdate_patch_config(dst)
 
     def _run_all_preprocess(self):
         """Launch all three pre-process tasks in sequence, chaining via signals."""
+        game_root_dst = self._prepared_project_or_warn()
+        if not game_root_dst:
+            return
         data_path      = self._data_path
         plugins_js     = self.pp_plugins_edit.text().strip()
         gameupdate_src = self.pp_gameupdate_edit.text().strip()
-        game_root_dst  = self.folder_edit.text().strip()
 
         # Build the queue of (label, worker_or_None) pairs
         queue: list[tuple[str, object]] = []
@@ -5305,22 +5543,43 @@ class WorkflowTab(QWidget):
 
         # Keep strong references to all workers so they aren't GC'd mid-run
         self._preprocess_workers = [w for _, w in queue]
+        generation = self._project_generation
 
         def run_next(remaining):
+            if not self._project_callback_is_current(generation, game_root_dst):
+                self._worker = None
+                self._log(
+                    "ℹ  Stopped pre-processing because the active project changed."
+                )
+                return
             if not remaining:
+                self._worker = None
                 self._log("✅  All pre-process tasks finished.")
                 return
             label, worker = remaining[0]
+            self._worker = worker
             self._log(f"► {label} …")
             worker.log.connect(self._log)
 
             def on_done(ok, msg, rest=remaining[1:]):
+                if not self._project_callback_is_current(generation, game_root_dst):
+                    self._worker = None
+                    self._log(
+                        "ℹ  Ignored pre-process completion from a project that is no longer active."
+                    )
+                    return
                 self._log(("✅ " if ok else "❌ ") + msg)
                 run_next(rest)
 
             # _FileCopyWorker emits done(int, list) — wrap it
             if isinstance(worker, _FileCopyWorker):
                 def on_copy_done(count, errors, rest=remaining[1:]):
+                    if not self._project_callback_is_current(generation, game_root_dst):
+                        self._worker = None
+                        self._log(
+                            "ℹ  Ignored pre-process completion from a project that is no longer active."
+                        )
+                        return
                     self._log(f"✅ gameupdate: copied {count} file(s).")
                     for e in errors:
                         self._log(f"   ⚠  {e}")

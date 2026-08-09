@@ -18,6 +18,7 @@ import shutil
 import tempfile
 
 from util.image_manager import ImageActionResult, ImageAsset
+from util.paths import ensure_game_tool_gitignore
 
 
 RPGMV_HEADER = bytes(
@@ -209,23 +210,7 @@ def _atomic_write(path: Path, data: bytes) -> None:
 
 
 def _ensure_image_manager_ignores(game_root: str | Path) -> None:
-    root = Path(game_root).expanduser().resolve()
-    ignore_path = root / ".gitignore"
-    existing = (
-        ignore_path.read_text(encoding="utf-8", errors="surrogateescape")
-        if ignore_path.exists()
-        else ""
-    )
-    rules = ("/.dazedtl/",)
-    additions = [rule for rule in rules if rule not in existing.splitlines()]
-    if additions:
-        text = existing
-        if text and not text.endswith("\n"):
-            text += "\n"
-        if "# DazedTL image manager working files" not in text:
-            text += "\n# DazedTL image manager working files\n"
-        text += "\n".join(additions) + "\n"
-        _atomic_write(ignore_path, text.encode("utf-8", errors="surrogateescape"))
+    ensure_game_tool_gitignore(game_root)
 
 
 def ensure_editable_workspace(game_root: str | Path) -> Path:
@@ -440,6 +425,7 @@ def add_patch_exceptions(
     if not relative_targets:
         return []
 
+    portable_changed = ensure_game_tool_gitignore(root)
     ignore_to_targets: dict[Path, list[Path]] = {root / ".gitignore": relative_targets}
     for relative in relative_targets:
         parent = root
@@ -451,7 +437,7 @@ def add_patch_exceptions(
                     Path(*relative.parts[len(parent.relative_to(root).parts):])
                 )
 
-    changed: list[Path] = []
+    changed: list[Path] = [root / ".gitignore"] if portable_changed else []
     for ignore_path, entries in ignore_to_targets.items():
         existing = (
             ignore_path.read_text(encoding="utf-8", errors="surrogateescape")
@@ -459,8 +445,6 @@ def add_patch_exceptions(
             else ""
         )
         rules: list[str] = []
-        if ignore_path == root / ".gitignore":
-            rules.append("/.dazedtl/")
         for relative in entries:
             for depth in range(1, len(relative.parts)):
                 rules.append(_gitignore_pattern(Path(*relative.parts[:depth]), directory=True))
@@ -476,7 +460,8 @@ def add_patch_exceptions(
         text += "\n".join(additions) + "\n"
         ignore_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(ignore_path, text.encode("utf-8", errors="surrogateescape"))
-        changed.append(ignore_path)
+        if ignore_path not in changed:
+            changed.append(ignore_path)
     return changed
 
 

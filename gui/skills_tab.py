@@ -82,7 +82,8 @@ class SkillsTab(QWidget):
             hint=(
                 "Runtime system prompt for every translation API call. "
                 "Honorifics, formatting, and universal quality rules live here. "
-                "Do not put game-specific voice quirks here - use <game>/skills/quirks.md."
+                "Do not put game-specific voice quirks here - use "
+                "<game>/.dazedtl/skills/quirks.md."
             ),
             is_json=False,
         )

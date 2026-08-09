@@ -151,6 +151,8 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         FakeWorker.reset()
 
     def test_project_selection_and_auto_import_preserve_exact_scope(self):
+        game, _data = self.harness.make_mvmz_project("MZ")
+        self.harness.prepare_project(game)
         items = [
             {"name": "Actors.json", "path": "/fixture/Actors.json", "size_kb": 1, "category": "core", "default": True},
             {"name": "Map001.json", "path": "/fixture/Map001.json", "size_kb": 1, "category": "map", "default": False},
@@ -179,6 +181,8 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         )
 
     def test_import_and_clear_require_explicit_confirmation(self):
+        game, _data = self.harness.make_mvmz_project("MZ")
+        self.harness.prepare_project(game)
         selected = [{"name": "Actors.json", "path": "/fixture/Actors.json"}]
         existing = self.harness.root / "files" / "old.json"
         existing.write_text("{}", encoding="utf-8")
@@ -223,12 +227,38 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         self.assertFalse(self.workflow._step_buttons[7].isVisible())
         self.assertFalse(self.workflow._step_buttons[8].isVisible())
 
+        active_worker = FakeWorker()
+        active_worker.running = True
+        self.workflow._worker = active_worker
+        generation = self.workflow._project_generation
+        self.assertFalse(self.workflow._detect_folder())
+        self.assertIs(self.workflow._worker, active_worker)
+        self.assertEqual(self.workflow._project_generation, generation)
+        active_worker.running = False
+        self.workflow._worker = None
+
+        invalid = self.harness.root / "Not An RPG Maker Game"
+        invalid.mkdir()
+        invalid.joinpath("glossary.txt").write_text("legacy\n", encoding="utf-8")
+        with (
+            patch(
+                "gui.workflow_tab.QFileDialog.getExistingDirectory",
+                return_value=str(invalid),
+            ),
+            patch.object(self.workflow, "_ask_clear_old_files") as clear_old,
+        ):
+            self.workflow._browse_folder()
+        clear_old.assert_not_called()
+        self.assertEqual(self.harness.settings.value("workflow/last_game_folder", ""), "")
+        self.assertTrue(invalid.joinpath("glossary.txt").is_file())
+        self.assertFalse(invalid.joinpath(".dazedtl").exists())
+
     def test_prepare_actions_construct_the_expected_workers(self):
         game, data = self.harness.make_mvmz_project("MZ")
         plugins = game / "js" / "plugins.js"
         gameupdate = self.harness.root / "gameupdate"
         gameupdate.mkdir()
-        self.workflow.folder_edit.setText(str(game))
+        self.harness.prepare_project(game)
         self.workflow._data_path = str(data)
         self.workflow.pp_plugins_edit.setText(str(plugins))
         self.workflow.pp_gameupdate_edit.setText(str(gameupdate))
@@ -244,6 +274,13 @@ class WorkflowHandlerContractTests(unittest.TestCase):
                 action()
             self.assertEqual(FakeWorker.instances[-1].args, expected_args)
             self.assertTrue(FakeWorker.instances[-1].started)
+        copy_worker = FakeWorker.instances[-1]
+        other_game = self.harness.root / "OtherGame"
+        other_game.mkdir()
+        self.workflow.folder_edit.setText(str(other_game))
+        with patch.object(self.workflow, "_write_gameupdate_patch_config") as write_config:
+            copy_worker.done.emit(1, [])
+        write_config.assert_called_once_with(str(game))
 
     def test_phase_actions_apply_exact_profiles_and_translation_presets(self):
         config = MagicMock()
@@ -324,6 +361,7 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         game = self.harness.root / "SetupGame"
         game.mkdir()
         self.workflow.folder_edit.setText(str(game))
+        self.assertTrue(editors.reload_all())
         write_vocab = MagicMock()
         editors.vocab_editor.setPlainText("term")
         with patch("gui.setup_skills_editors.write_game_vocab", write_vocab):
@@ -400,6 +438,7 @@ class WorkflowHandlerContractTests(unittest.TestCase):
     def test_export_active_and_all_route_filters_and_keep_safe_default(self):
         data = self.harness.root / "Game" / "data"
         data.mkdir(parents=True)
+        self.harness.prepare_project(data.parent)
         self.workflow._data_path = str(data)
         for name in ("Actors.json", "Map001.json"):
             (self.harness.root / "files" / name).write_text("{}", encoding="utf-8")
@@ -429,7 +468,8 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         data.mkdir(parents=True)
         (data / "Actors.json").write_text("[]", encoding="utf-8")
         self.workflow._data_path = str(data)
-        self.workflow.folder_edit.setText(str(data.parent))
+        self.harness.prepare_project(data.parent)
+        self.workflow._data_path = str(data)
         self.workflow._refresh_rewrap_files()
 
         with patch("gui.workflow_tab._RpgMakerRewrapWorker", FakeWorker):
@@ -463,7 +503,7 @@ class WorkflowHandlerContractTests(unittest.TestCase):
     def test_public_release_owns_worker_until_finish(self):
         game, _data = self.harness.make_mvmz_project("MZ")
         output = self.harness.root / "release.zip"
-        self.workflow.folder_edit.setText(str(game))
+        self.harness.prepare_project(game)
         with (
             patch("gui.workflow_tab._ReleaseZipWorker", FakeWorker),
             patch(
@@ -484,7 +524,7 @@ class WorkflowHandlerContractTests(unittest.TestCase):
 
     def test_playtest_installers_route_config_and_uninstalls_are_default_safe(self):
         game, _data = self.harness.make_mvmz_project("MZ")
-        self.workflow.folder_edit.setText(str(game))
+        self.harness.prepare_project(game)
         save_config = MagicMock()
         install_tli = MagicMock(return_value=(True, "TLI installed"))
         install_forge = MagicMock(return_value=(True, "Forge installed"))

@@ -3,6 +3,7 @@
 import unittest
 
 from util.skills import load_clipboard_skill, load_project_setup
+from util.rpgmaker_markers import SUPPORTED_CODE408_MARKERS
 
 
 class WorkflowTranslationPromptTests(unittest.TestCase):
@@ -54,6 +55,10 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("list/help: listwidth=", lowered)
         self.assertIn("notes    : notewidth=", lowered)
         self.assertIn("only fills an empty code-101 param[4]", lowered)
+        self.assertIn("include displayed comment text (code 408)", lowered)
+        self.assertNotIn("{{SUPPORTED_CODE408_MARKERS}}", prompt)
+        for marker in SUPPORTED_CODE408_MARKERS:
+            self.assertIn(marker, prompt)
 
         wolf_prompt = load_project_setup("wolf")
         self.assertNotIn("code408 : enable|skip", wolf_prompt.casefold())

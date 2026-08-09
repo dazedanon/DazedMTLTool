@@ -19,6 +19,7 @@ from util.project_scanner import (  # noqa: E402
     wolf_has_maps,
     wolf_maps_dir,
     wolf_maps_packed,
+    wolf_nested_data_dir,
     wolf_repair_nested_data_dir,
     wolf_unpack_out_dir,
     wolf_unpack_target_dir,
@@ -102,6 +103,23 @@ class WolfProjectScannerTests(unittest.TestCase):
             self.assertTrue((outer / "BasicData" / "CommonEvent.dat").is_file())
             self.assertFalse(inner.exists())
 
+            repeated = base / "Repeated" / "Data" / "Data"
+            repeated_basic = repeated / "BasicData"
+            repeated_basic.mkdir(parents=True)
+            (repeated_basic / "CommonEvent.dat").write_bytes(b"keep")
+            repeated_deeper = repeated / "Data"
+            repeated_deeper.mkdir()
+            (repeated_deeper / "nested.dat").write_bytes(b"keep too")
+            repeated_root = base / "Repeated"
+            self.assertEqual(wolf_nested_data_dir(repeated_root), repeated)
+            self.assertFalse(wolf_repair_nested_data_dir(repeated_root))
+            self.assertEqual(
+                (repeated_basic / "CommonEvent.dat").read_bytes(), b"keep"
+            )
+            self.assertEqual(
+                (repeated_deeper / "nested.dat").read_bytes(), b"keep too"
+            )
+
     def test_detect_wolf_layout_after_nested_repair(self):
         with tempfile.TemporaryDirectory() as raw:
             base = Path(raw)
@@ -111,6 +129,15 @@ class WolfProjectScannerTests(unittest.TestCase):
             basic.mkdir(parents=True)
             (basic / "CommonEvent.dat").write_bytes(b"")
             (base / "Data.wolf").write_bytes(b"")
+
+            before = detect_wolf_layout(base)
+            self.assertEqual(before["engine"], "WOLF")
+            self.assertFalse(before["unpacked"])
+            self.assertIsNone(before["data_dir"])
+            self.assertEqual(before["nested_data_dir"], inner)
+            self.assertTrue((inner / "BasicData" / "CommonEvent.dat").is_file())
+
+            self.assertTrue(wolf_repair_nested_data_dir(base))
             info = detect_wolf_layout(base)
             self.assertTrue(info["unpacked"])
             self.assertEqual(info["data_dir"], outer)

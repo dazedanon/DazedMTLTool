@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from util.paths import SKILLS_DIR
+from util.rpgmaker_markers import SUPPORTED_CODE408_MARKERS
 
 _ENGINE_MARKERS = {
     "rpgmaker": ("<!-- engine:rpgmaker -->", "<!-- /engine:rpgmaker -->"),
@@ -53,6 +54,10 @@ def load_project_setup(engine: str = "rpgmaker", *, prepend: str = "") -> str:
     """Load the Project Setup clipboard skill for *engine*."""
     raw = _read_skill_file("project_setup.md")
     body = _extract_engine_section(raw, engine)
+    marker_list = ", ".join(
+        f"`{marker}`" for marker in sorted(SUPPORTED_CODE408_MARKERS)
+    )
+    body = body.replace("{{SUPPORTED_CODE408_MARKERS}}", marker_list or "none")
     if prepend:
         return prepend.rstrip() + "\n\n" + body
     return body

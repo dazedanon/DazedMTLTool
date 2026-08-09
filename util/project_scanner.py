@@ -241,35 +241,73 @@ def wolf_unpack_out_dir(game_root: str | Path, archive: str | Path) -> Path:
     return archive.parent
 
 
+def wolf_nested_data_dir(game_root: str | Path) -> Optional[Path]:
+    """Return a loose ``Data/Data`` repair candidate without changing it."""
+    outer = Path(game_root) / "Data"
+    inner = outer / "Data"
+    if outer.is_symlink() or inner.is_symlink():
+        return None
+    if not inner.is_dir() or not _wolf_dir_has_loose_data(inner):
+        return None
+    try:
+        if any(path.name != "Data" for path in outer.iterdir()):
+            return None
+    except OSError:
+        return None
+    return inner
+
+
 def wolf_repair_nested_data_dir(game_root: str | Path) -> bool:
     """Hoist ``Data/Data/`` to ``Data/`` after a mistaken ``Data.wolf`` unpack.
 
     Returns True when the nested layout was repaired.
     """
     outer = Path(game_root) / "Data"
-    inner = outer / "Data"
-    if not inner.is_dir() or not _wolf_dir_has_loose_data(inner):
+    inner = wolf_nested_data_dir(game_root)
+    if inner is None:
         return False
-    if any(p.name != "Data" for p in outer.iterdir()):
-        return False
-    for child in list(inner.iterdir()):
-        dest = outer / child.name
-        if dest.exists():
-            if dest.is_dir():
-                shutil.rmtree(dest)
-            else:
-                dest.unlink()
-        shutil.move(str(child), str(dest))
+
     try:
-        inner.rmdir()
+        children = list(inner.iterdir())
     except OSError:
+        return False
+
+    planned: list[tuple[Path, Path]] = []
+    for child in children:
+        dest = outer / child.name
+        # A repeated ``Data/Data/Data`` layout makes ``dest`` the directory being
+        # repaired. Never delete or overwrite a collision to complete a repair.
+        if child.is_symlink() or dest == inner or dest.exists() or dest.is_symlink():
+            return False
+        planned.append((child, dest))
+
+    completed: list[tuple[Path, Path]] = []
+    try:
+        for child, dest in planned:
+            child.rename(dest)
+            completed.append((child, dest))
+        inner.rmdir()
+    except OSError as exc:
+        rollback_failures: list[str] = []
+        for child, dest in reversed(completed):
+            try:
+                if (dest.exists() or dest.is_symlink()) and not (
+                    child.exists() or child.is_symlink()
+                ):
+                    dest.rename(child)
+            except OSError as rollback_exc:
+                rollback_failures.append(f"{dest} -> {child}: {rollback_exc}")
+        if rollback_failures:
+            raise OSError(
+                f"Could not repair {inner}: {exc}; rollback also failed: "
+                + "; ".join(rollback_failures)
+            ) from exc
         return False
     return True
 
 
 def _wolf_loose_data_dir(root: Path) -> Optional[Path]:
     """Return the loose (unpacked) WOLF Data/ folder if it looks unpacked."""
-    wolf_repair_nested_data_dir(root)
     for data_dir in (root / "Data", root):
         if _wolf_dir_has_loose_data(data_dir):
             return data_dir
@@ -284,6 +322,7 @@ def detect_wolf_layout(game_root: str | Path) -> dict:
         root       : Path to the game root
         archives   : list[Path] of .wolf archives found (may be empty)
         data_dir   : Path to the loose/unpacked Data/ folder, or None
+        nested_data_dir: repairable Data/Data folder, or None
         unpacked   : bool - True when a usable loose Data/ folder exists
         unpack_gaps: list[Path] of .wolf archives not yet unpacked (empty when
                      there are no archives, or every archive has output on disk)
@@ -297,6 +336,7 @@ def detect_wolf_layout(game_root: str | Path) -> dict:
         "root": root,
         "archives": [],
         "data_dir": None,
+        "nested_data_dir": None,
         "unpacked": False,
         "unpack_gaps": [],
         "unpack_complete": True,
@@ -308,12 +348,14 @@ def detect_wolf_layout(game_root: str | Path) -> dict:
 
     archives = find_wolf_archives(root)
     loose = _wolf_loose_data_dir(root)
+    nested = wolf_nested_data_dir(root)
 
-    if not archives and loose is None:
+    if not archives and loose is None and nested is None:
         return result
 
     result["engine"] = "WOLF"
     result["archives"] = archives
+    result["nested_data_dir"] = nested
     gaps = find_wolf_unpack_gaps(root, archives)
     result["unpack_gaps"] = gaps
     result["unpack_complete"] = not gaps

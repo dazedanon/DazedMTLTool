@@ -227,6 +227,10 @@ class TranslationTabUITests(unittest.TestCase):
                 return_value=QMessageBox.No,
             ) as question,
             mock.patch("gui.translation_tab.QMessageBox.warning") as warning,
+            mock.patch(
+                "gui.translation_tab._activate_configured_game_context",
+                return_value=("", {}),
+            ) as activate_game_context,
             mock.patch.object(TranslationWorker, "start") as start,
         ):
             self.tab.start_translation(skip_confirm=True)
@@ -235,6 +239,9 @@ class TranslationTabUITests(unittest.TestCase):
         question.assert_called_once()
         self.assertLess(len(question.call_args.args[2]), 120)
         self.assertIsNone(self.tab.translation_worker.batch_resume_state)
+        activate_game_context.assert_called_once_with(
+            self.tab.settings, "RPG Maker MV/MZ"
+        )
         start.assert_called_once_with()
 
     def test_noncompletion_batch_outcomes_are_not_rendered_as_complete(self) -> None:

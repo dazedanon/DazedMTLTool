@@ -11,6 +11,11 @@ from unittest.mock import patch
 
 from PyQt5.QtWidgets import QApplication, QLineEdit, QMessageBox, QWidget
 
+from util.paths import (
+    GAME_TOOL_GITIGNORE_BEGIN,
+    GAME_TOOL_GITIGNORE_END,
+    ensure_game_tool_gitignore,
+)
 from util.version_update import (
     GitWorkflowError,
     abort_update,
@@ -166,6 +171,16 @@ class GitVersionUpdateTests(unittest.TestCase):
         legacy = self.translated / ".dazedtl" / "version_update"
         legacy.mkdir(parents=True)
         legacy.joinpath("project.json").write_text('{"legacy":true}\n')
+        portable = {
+            ".dazedtl/glossary.txt": "Hero (Hero)\n",
+            ".dazedtl/settings.json": '{"version":1}\n',
+            ".dazedtl/skills/game.md": "# Translation Frame\n",
+        }
+        for relative, body in portable.items():
+            path = self.translated / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body, encoding="utf-8")
+        ensure_game_tool_gitignore(self.translated)
 
         bootstrap_repository(self.translated, self.old, "1.00")
 
@@ -173,6 +188,14 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertTrue(inspect_repository(self.translated).worktree_clean)
         tracked = self.git(self.translated, "ls-tree", "-r", "--name-only", "main")
         self.assertNotIn(".dazedtl/version_update", tracked)
+        for relative in portable:
+            self.assertIn(relative, tracked)
+        self.assertEqual(
+            self.translated.joinpath(".gitignore")
+            .read_text(encoding="utf-8")
+            .count(GAME_TOOL_GITIGNORE_BEGIN),
+            1,
+        )
 
     def test_bootstrap_formats_both_json_baselines_and_respects_gitignore(self):
         self.old.joinpath("data.json").write_text('{"name":"Japanese","items":[null,1]}')
@@ -185,6 +208,27 @@ class GitVersionUpdateTests(unittest.TestCase):
             folder.joinpath("save").mkdir()
             folder.joinpath("save/slot.dat").write_bytes(b"user save")
             folder.joinpath("debug.log").write_text("runtime log\n")
+
+        current_policy = (
+            Path(__file__).resolve().parents[1]
+            .joinpath("gameupdate", ".gitignore")
+            .read_text(encoding="utf-8")
+        )
+        block_start = current_policy.index(GAME_TOOL_GITIGNORE_BEGIN)
+        block_end = (
+            current_policy.index(GAME_TOOL_GITIGNORE_END, block_start)
+            + len(GAME_TOOL_GITIGNORE_END)
+        )
+        previous_policy = (
+            current_policy[:block_start].rstrip()
+            + "\n\n"
+            + current_policy[block_end:].lstrip()
+        )
+        self.translated.joinpath(".gitignore").write_text(
+            previous_policy.rstrip()
+            + "\n\n# Existing project rules\nsave/\n*.log\n",
+            encoding="utf-8",
+        )
 
         result = bootstrap_repository(self.translated, self.old, "1.00")
 
@@ -211,8 +255,13 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertIn("debug.log", result.ignored_paths)
         self.assertIn("data.json", result.formatted_json_paths)
         combined_ignore = self.translated.joinpath(".gitignore").read_text()
-        self.assertIn("# Ignore all files", combined_ignore)
-        self.assertTrue(combined_ignore.endswith("save/\n*.log\n"))
+        self.assertEqual(combined_ignore.count("# Ignore all files"), 1)
+        self.assertEqual(combined_ignore.count(GAME_TOOL_GITIGNORE_BEGIN), 1)
+        self.assertIn("# Existing project rules\nsave/\n*.log\n", combined_ignore)
+        self.assertGreater(
+            combined_ignore.index(GAME_TOOL_GITIGNORE_BEGIN),
+            combined_ignore.index("# Existing project rules"),
+        )
         diff = self.git(self.translated, "diff", "original", "main", "--", "data.json")
         self.assertIn('"name": "Japanese"', diff)
         self.assertIn('"name": "English"', diff)

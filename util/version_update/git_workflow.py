@@ -23,6 +23,12 @@ from typing import Iterable, Mapping
 
 import jsbeautifier
 
+from util.paths import (
+    GAME_TOOL_GITIGNORE_BEGIN,
+    GAME_TOOL_GITIGNORE_END,
+    ensure_game_tool_gitignore,
+)
+
 
 ORIGINAL_BRANCH = "original"
 TRANSLATION_BRANCH = "main"
@@ -899,11 +905,52 @@ def _install_gameupdate_gitignore(game_root: Path) -> bool:
     def normalized(value: bytes) -> bytes:
         return value.replace(b"\r\n", b"\n").strip()
 
+    def without_portable_blocks(value: bytes) -> bytes:
+        """Remove complete managed blocks and normalize their surrounding gap."""
+        cleaned = value.replace(b"\r\n", b"\n")
+        begin = GAME_TOOL_GITIGNORE_BEGIN.encode("utf-8")
+        end_marker = GAME_TOOL_GITIGNORE_END.encode("utf-8")
+        while True:
+            start = cleaned.find(begin)
+            if start < 0:
+                break
+            end = cleaned.find(end_marker, start)
+            if end < 0:
+                break
+            end += len(end_marker)
+            before = cleaned[:start].rstrip(b"\n")
+            after = cleaned[end:].lstrip(b"\n")
+            separator = b"\n\n" if before and after else b""
+            cleaned = before + separator + after
+        return cleaned.strip()
+
+    def normalize_portable_rules() -> bool:
+        try:
+            return ensure_game_tool_gitignore(game_root)
+        except Exception as exc:
+            raise GitWorkflowError(
+                f"Could not update portable DazedTL .gitignore rules: {exc}"
+            ) from exc
+
     if normalized(template) in normalized(existing):
-        return False
+        return normalize_portable_rules()
+
+    # The previous bundled policy is exactly the current policy without the
+    # newly managed portable-settings block. Replace that installed prefix
+    # instead of preserving it as if it were user-authored project rules.
+    previous_template = without_portable_blocks(template)
+    project_rules = without_portable_blocks(existing)
+    previous_separator = b"\n\n# Existing project rules\n"
+    if project_rules == previous_template:
+        project_rules = b""
+    elif project_rules.startswith(previous_template + previous_separator):
+        project_rules = project_rules[
+            len(previous_template + previous_separator) :
+        ].strip()
+
     combined = template.rstrip(b"\r\n") + b"\n"
-    if existing:
-        combined += b"\n# Existing project rules\n" + existing
+    if project_rules:
+        combined += b"\n# Existing project rules\n" + project_rules + b"\n"
 
     original_mode = destination.stat().st_mode if destination.exists() else 0o100644
     descriptor, temporary_name = tempfile.mkstemp(
@@ -914,6 +961,7 @@ def _install_gameupdate_gitignore(game_root: Path) -> bool:
             handle.write(combined)
         os.chmod(temporary_name, stat.S_IMODE(original_mode))
         os.replace(temporary_name, destination)
+        normalize_portable_rules()
     except Exception:
         try:
             os.close(descriptor)

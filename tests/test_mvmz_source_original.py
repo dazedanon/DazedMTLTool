@@ -813,6 +813,22 @@ class TestMVMZSourceOriginal(unittest.TestCase):
             any("これは選択肢のヘルプです。" in str(payload) for payload in rerun_captured)
         )
 
+        translated_marker = {
+            "list": [
+                {
+                    "code": 108,
+                    "indent": 0,
+                    "parameters": ["Choice Help"],
+                    "_original": "選択肢ヘルプ",
+                },
+                {"code": 408, "indent": 0, "parameters": ["表示する説明です。"]},
+            ]
+        }
+        translated_marker, captured = _run_search_codes(translated_marker)
+        comment = _find_commands(translated_marker, 408)[0]
+        self.assertNotEqual(comment["parameters"][0], "表示する説明です。")
+        self.assertTrue(any("表示する説明です。" in str(item) for item in captured))
+
     def test_unsupported_408_blocks_are_not_translated(self):
         page = {
             "list": [

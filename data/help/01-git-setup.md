@@ -32,8 +32,9 @@ Make sure the working game folder is open in Cursor or VS Code. Paste this into 
 
 > Check whether this game folder is ready for Git. Do not change anything yet. Check whether it
 > already uses Git and review any existing `.gitignore` without replacing it. Look for passwords,
-> API keys, save files, logs, caches, backups, `.dazedtl`, and files larger than 90 MB. Tell me what
-> should not be saved in Git and show any `.gitignore` changes you recommend. Do not delete files,
+> API keys, save files, logs, caches, backups, and files larger than 90 MB. In `.dazedtl`, keep only
+> `glossary.txt`, `settings.json`, and `skills/*.md` visible to Git; all other `.dazedtl` contents
+> should stay ignored. Show any `.gitignore` changes you recommend. Do not delete files,
 > commit, push, rename branches, change remote addresses, or use force commands. Wait for my
 > approval.
 

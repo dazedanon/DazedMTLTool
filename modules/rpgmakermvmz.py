@@ -17,6 +17,7 @@ from util.translation import TranslationConfig, translateAI as sharedtranslateAI
 from util.speakers import SPEAKER_BRACKET_INNER, strip_speaker_prefix
 from util.skills import ctx, load_system_prompt
 from util.paths import active_glossary_path, read_active_glossary
+from util.rpgmaker_markers import SUPPORTED_CODE408_MARKERS
 
 # Globals
 MODEL = os.getenv("model")
@@ -239,7 +240,6 @@ CODE102 = False
 CODE408 = False
 # Code 408 continues an RPG Maker comment started by code 108. Only known
 # player-facing comment blocks should be sent for translation.
-SUPPORTED_CODE408_MARKERS = frozenset({"選択肢ヘルプ"})
 
 # Variables
 CODE122 = False
@@ -736,10 +736,8 @@ def _code408_has_supported_marker(codeList, index: int) -> bool:
     if marker_index < 0 or codeList[marker_index].get("code") != 108:
         return False
 
-    parameters = codeList[marker_index].get("parameters") or []
-    if not parameters:
-        return False
-    return str(parameters[0]).strip() in SUPPORTED_CODE408_MARKERS
+    marker = _param_source(codeList[marker_index], 0).strip()
+    return marker in SUPPORTED_CODE408_MARKERS
 
 
 def _apply_original(cmd, raw_source: str) -> None:

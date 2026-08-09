@@ -262,7 +262,7 @@ class ImageManagerSelectionTests(unittest.TestCase):
 
         self.assertIn(str(self.game_root), prompt)
         self.assertIn(str(self.game_root / ".dazedtl" / "images" / "img"), prompt)
-        self.assertIn(str(self.game_root / "glossary.txt"), prompt)
+        self.assertIn(str(self.game_root / ".dazedtl" / "glossary.txt"), prompt)
         self.assertIn("RPG Maker MV/MZ image profile", prompt)
         self.assertIn("image_translation_log.md", prompt)
         self.assertNotIn("{{GAME_ROOT}}", prompt)
@@ -274,6 +274,20 @@ class ImageManagerSelectionTests(unittest.TestCase):
             "Copied image translation skill for 1 editable PNG",
             self.manager.status_label.text(),
         )
+
+        conflict = Path(self.temp.name) / "Conflict Game"
+        conflict.joinpath("skills").mkdir(parents=True)
+        conflict.joinpath(".dazedtl", "skills").mkdir(parents=True)
+        legacy_glossary = conflict / "glossary.txt"
+        legacy_glossary.write_text("Legacy (Legacy)\n", encoding="utf-8")
+        self.manager.game_root = conflict
+        QApplication.clipboard().setText("unchanged")
+        with patch.object(QMessageBox, "warning") as warning:
+            self.manager._copy_translation_skill()
+        warning.assert_called_once()
+        self.assertEqual(QApplication.clipboard().text(), "unchanged")
+        self.assertTrue(legacy_glossary.is_file())
+        self.assertFalse(conflict.joinpath(".dazedtl", "glossary.txt").exists())
 
     def test_workflow_readiness_detects_editable_and_misplaced_pngs(self):
         asset = self.manager.assets[0]
@@ -290,7 +304,12 @@ class ImageManagerSelectionTests(unittest.TestCase):
         self.assertEqual(report["runtime"], 4)
         self.assertEqual(report["editable"], 1)
         self.assertEqual(report["misplaced"], 1)
-        self.assertTrue(report["vocab"].is_file())
+        self.assertEqual(
+            report["vocab"], self.game_root / ".dazedtl" / "glossary.txt"
+        )
+        self.assertTrue(self.game_root.joinpath("glossary.txt").is_file())
+        self.assertFalse(report["vocab"].exists())
+        self.assertFalse(self.game_root.joinpath(".gitignore").exists())
 
     def test_open_folder_uses_highlighted_images_editable_parent(self):
         self._click(0)
@@ -406,6 +425,9 @@ class RPGMakerWorkflowImageStepTests(unittest.TestCase):
             Image.new("RGBA", (12, 12), "purple").save(image_root / "menu.png")
             data_root.joinpath("System.json").write_text("{}", encoding="utf-8")
             game_root.joinpath("glossary.txt").write_text("Menu (Menu)\n", encoding="utf-8")
+            portable_glossary = game_root / ".dazedtl" / "glossary.txt"
+            portable_glossary.parent.mkdir()
+            portable_glossary.write_text("Portable (Portable)\n", encoding="utf-8")
 
             settings = QSettings(str(root / "settings.ini"), QSettings.IniFormat)
 
@@ -431,6 +453,9 @@ class RPGMakerWorkflowImageStepTests(unittest.TestCase):
                 self.assertEqual(workflow._step_tabs.currentIndex(), 7)
                 self.assertIn("Runtime images:</span> 1", workflow._image_workflow_status.text())
                 self.assertIn("Glossary:</span>", workflow._image_workflow_status.text())
+                self.assertTrue(game_root.joinpath("glossary.txt").is_file())
+                self.assertTrue(portable_glossary.is_file())
+                self.assertFalse(game_root.joinpath(".gitignore").exists())
 
                 workflow._open_image_manager()
 
@@ -462,8 +487,10 @@ class RPGMakerWorkflowRewrapStepTests(unittest.TestCase):
             with patch("gui.workflow_tab.QSettings", return_value=settings):
                 workflow = WorkflowTab()
             try:
-                workflow._data_path = str(game_data)
                 workflow.folder_edit.setText(str(game_data.parent))
+                self.assertTrue(workflow.setup_editors.reload_all())
+                workflow._prepared_game_root = str(game_data.parent)
+                workflow._data_path = str(game_data)
                 workflow._refresh_rewrap_files()
                 names = {
                     workflow.rewrap_file_list.item(index).text()

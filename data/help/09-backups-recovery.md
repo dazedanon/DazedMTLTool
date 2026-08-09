@@ -19,7 +19,9 @@ them.
 ## Keep the hidden DazedTL folder
 
 DazedTL may make a hidden folder named `.dazedtl` inside the working game. Keep it. It contains
-backups and information used to make later work safer.
+portable translation guidance as well as local backups and information used to make later work
+safer. Commit `.dazedtl/glossary.txt`, `.dazedtl/settings.json`, and Markdown files in
+`.dazedtl/skills/`; keep the remaining contents local and ignored.
 
 DazedTL's automatic backups are helpful, but they do not replace your untouched copy of the whole
 game.
