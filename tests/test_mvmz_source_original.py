@@ -137,6 +137,8 @@ def _run_search_codes(
     orig_t = mvmz.translateAI
     orig_s = mvmz.getSpeaker
     orig_122 = mvmz.CODE122
+    orig_122_var_min = mvmz.CODE122_VAR_MIN
+    orig_122_var_max = mvmz.CODE122_VAR_MAX
     orig_408 = mvmz.CODE408
     orig_101 = mvmz.CODE101
     orig_401 = mvmz.CODE401
@@ -153,6 +155,8 @@ def _run_search_codes(
     mvmz.translateAI = translate
     mvmz.getSpeaker = speaker
     mvmz.CODE122 = True
+    mvmz.CODE122_VAR_MIN = 0
+    mvmz.CODE122_VAR_MAX = 2000
     mvmz.CODE408 = True
     mvmz.CODE101 = True
     mvmz.CODE401 = True
@@ -169,6 +173,8 @@ def _run_search_codes(
         mvmz.translateAI = orig_t
         mvmz.getSpeaker = orig_s
         mvmz.CODE122 = orig_122
+        mvmz.CODE122_VAR_MIN = orig_122_var_min
+        mvmz.CODE122_VAR_MAX = orig_122_var_max
         mvmz.CODE408 = orig_408
         mvmz.CODE101 = orig_101
         mvmz.CODE401 = orig_401
