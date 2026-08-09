@@ -3,8 +3,8 @@
 Canonical Forge_MV.js / Forge_MZ.js sources stay untouched under ``upstream/``.
 Patches are applied in memory when installing or applying settings to a game.
 
-MV uses the pre-rewrite legacy plugin (old NW.js / Chrome ~65).
-MZ uses the rewritten unified forge.js bundle.
+MV and MZ use the rewritten unified ``Forge_MZ.js`` bundle.  The pre-rewrite
+``Forge_MV.js`` remains bundled as an explicit fallback.
 """
 
 from __future__ import annotations
@@ -24,9 +24,14 @@ PLUGIN_BY_ENGINE = {
     "MZ": "Forge_MZ",
 }
 
+SOURCE_PLUGIN_BY_ENGINE = {
+    "MV": "Forge_MZ",
+    "MZ": "Forge_MZ",
+}
+
 
 def bundled_plugin_path(engine: str) -> Path:
-    name = PLUGIN_BY_ENGINE.get(engine)
+    name = SOURCE_PLUGIN_BY_ENGINE.get(engine)
     if not name:
         raise ValueError(f"Unsupported engine: {engine}")
     return _PKG_ROOT / "upstream" / f"{name}.js"

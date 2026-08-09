@@ -162,17 +162,36 @@ def _patch_keycode_reads(text: str) -> str:
             "$.currentKey.remove(e.keyCode)",
             "$.currentKey.remove(window.__dazedKeyCode(e))",
         ),
-        (
-            "static fromEvent(t){return Jc.has(t.keyCode)?e._fromCombiningAloneEvent(t):"
-            "new e(t.keyCode,t.ctrlKey,t.altKey,t.shiftKey,t.metaKey)}",
-            "static fromEvent(t){var k=window.__dazedKeyCode(t);return Jc.has(k)?"
-            "e._fromCombiningAloneEvent(t):new e(k,t.ctrlKey,t.altKey,t.shiftKey,t.metaKey)}",
-        ),
     ]
     for old, new in replacements:
         if old not in text:
             raise ValueError(f"Could not patch Forge keyCode read: missing {old!r}")
         text = text.replace(old, new, 1)
+
+    # The minifier changes the key-set and class identifiers between upstream
+    # builds, so patch the stable method shape instead of pinning those names.
+    from_event = re.compile(
+        r"static fromEvent\((?P<event>[A-Za-z_$][\w$]*)\)\{return "
+        r"(?P<body>[^{}]+)\}(?=static _fromCombiningAloneEvent)"
+    )
+
+    def patch_from_event(match: re.Match) -> str:
+        event = match.group("event")
+        body, count = re.subn(
+            rf"\b{re.escape(event)}\.keyCode\b",
+            f"window.__dazedKeyCode({event})",
+            match.group("body"),
+        )
+        if count != 2:
+            raise ValueError(
+                "Could not patch Forge fromEvent keyCode reads: "
+                f"expected 2, found {count}"
+            )
+        return f"static fromEvent({event}){{return {body}}}"
+
+    text, count = from_event.subn(patch_from_event, text, count=1)
+    if count != 1:
+        raise ValueError("Could not patch Forge fromEvent shortcut parser")
     return text
 
 

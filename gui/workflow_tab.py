@@ -2793,7 +2793,7 @@ class WorkflowTab(QWidget):
         self._pt_forge_hotkey_edit.setPlaceholderText("F8")
         self._pt_forge_hotkey_edit.setToolTip(
             "Key to open Forge (e.g. F8, F6, F10).\n"
-            "MV uses the legacy plugin; MZ uses the modern one.\n"
+            "MV and MZ use the unified modern plugin.\n"
             "Under Wine/Linux, F10 is often stolen by the window menu - prefer F8.\n"
             "Click Apply settings to game after changing."
         )

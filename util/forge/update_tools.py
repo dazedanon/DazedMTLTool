@@ -1,17 +1,15 @@
 """Download / update Forge plugins from len's upstream repo (gitgud.io).
 
 Upstream: https://gitgud.io/zero64801/forge-mvmz
-CI builds a unified forge.js plugin (master branch artifacts) for MZ.
-
-RPG Maker MV ships with NW.js / Chrome ~65, which cannot run the rewritten
-Svelte Forge bundle. MV therefore keeps the pre-rewrite legacy plugin as
-``upstream/Forge_MV.js``.
+CI builds a unified forge.js plugin (master branch artifacts) for MV and MZ.
+The pre-rewrite MV plugin remains available as ``upstream/Forge_MV.js`` in
+case the unified build needs to be rolled back.
 
 Canonical offline copies: util/forge/upstream/
 
 End users receive curated copies shipped with DazedTL updates.
 Upstream fetches are maintainer-only (``--refresh-offline`` or ``--force``)
-and only refresh the MZ modern plugin.
+and refresh the unified plugin stored as ``Forge_MZ.js``.
 """
 
 from __future__ import annotations
@@ -97,8 +95,8 @@ def _fetch_plugins(log_fn) -> bytes:
     return _download_bytes(_artifact_url("forge.js"))
 
 
-def _install_modern_mz_bytes(data: bytes) -> None:
-    """Write modern forge.js into the canonical MZ path only (never MV)."""
+def _install_unified_bytes(data: bytes) -> None:
+    """Write unified forge.js without overwriting the legacy MV fallback."""
     UPSTREAM_DIR.mkdir(parents=True, exist_ok=True)
     upstream_plugin_path("MZ").write_bytes(data)
 
@@ -110,7 +108,7 @@ def _download_bytes(url: str) -> bytes:
 
 
 def refresh_forge_plugins(log_fn=print) -> bool:
-    """Download len's latest forge.js and refresh the MZ modern plugin only."""
+    """Download len's latest unified forge.js for both supported engines."""
     try:
         commit = _upstream_commit()
     except Exception as exc:
@@ -127,15 +125,15 @@ def refresh_forge_plugins(log_fn=print) -> bool:
         _log("ERROR: forge.js download did not look like a plugin file.", log_fn)
         return False
 
-    _install_modern_mz_bytes(data)
+    _install_unified_bytes(data)
 
     versions = _load_versions()
     versions["commit"] = commit
     versions["branch"] = FORGE_BRANCH
     _save_versions(versions)
     _log(
-        f"Forge MZ plugin updated ({commit[:12]}). "
-        "MV keeps the legacy Chrome-65-compatible plugin.",
+        f"Unified Forge plugin updated for MV and MZ ({commit[:12]}). "
+        "The legacy MV plugin remains available as a fallback.",
         log_fn,
     )
     return True

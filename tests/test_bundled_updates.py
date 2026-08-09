@@ -751,7 +751,8 @@ class MaintainerRefreshTests(unittest.TestCase):
                     with patch.object(forge, "_fetch_plugins", return_value=plugin):
                         self.assertTrue(forge.refresh_forge_plugins(log_fn=None))
 
-            # Maintainer refresh updates canonical MZ only; MV stays on its legacy bundle.
+            # The unified bundle is stored as MZ and used by both engines. The
+            # legacy MV fallback is not overwritten by a maintainer refresh.
             self.assertEqual((upstream / "Forge_MZ.js").read_bytes(), plugin)
             self.assertFalse((base / "Forge_MV.js").exists())
             self.assertFalse((upstream / "Forge_MV.js").exists())
