@@ -65,7 +65,7 @@ boundaries, or destinations.
 | Action | Effect |
 |---|---|
 | Copy advanced-text audit | Copies the existing risky-code audit skill without changing configuration. |
-| Save range | Writes `CODE122_VAR_MIN/MAX` through config integration. |
+| Save range | Validates compact IDs/ranges and writes `CODE122_VAR_RANGES` through config integration. |
 | Code/plugin/pattern checks | Preserve current auto-apply behavior and exact config keys. |
 | Advanced disclosure | Changes visibility only; checked state is retained. |
 | Translate selected text | Applies the selected Phase 2 configuration, selects event files, and starts translation. |

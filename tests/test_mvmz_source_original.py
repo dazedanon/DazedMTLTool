@@ -121,6 +121,7 @@ def _run_search_codes(
     speaker_fn=None,
     ignore_tl_text=False,
     translate_fn=None,
+    code122_ranges="",
 ):
     """Full Pass 1 -> mock translate -> Pass 2 cycle."""
     captured = []
@@ -137,6 +138,7 @@ def _run_search_codes(
     orig_t = mvmz.translateAI
     orig_s = mvmz.getSpeaker
     orig_122 = mvmz.CODE122
+    orig_122_ranges = mvmz.CODE122_VAR_RANGES
     orig_122_var_min = mvmz.CODE122_VAR_MIN
     orig_122_var_max = mvmz.CODE122_VAR_MAX
     orig_408 = mvmz.CODE408
@@ -155,6 +157,7 @@ def _run_search_codes(
     mvmz.translateAI = translate
     mvmz.getSpeaker = speaker
     mvmz.CODE122 = True
+    mvmz.CODE122_VAR_RANGES = code122_ranges
     mvmz.CODE122_VAR_MIN = 0
     mvmz.CODE122_VAR_MAX = 2000
     mvmz.CODE408 = True
@@ -173,6 +176,7 @@ def _run_search_codes(
         mvmz.translateAI = orig_t
         mvmz.getSpeaker = orig_s
         mvmz.CODE122 = orig_122
+        mvmz.CODE122_VAR_RANGES = orig_122_ranges
         mvmz.CODE122_VAR_MIN = orig_122_var_min
         mvmz.CODE122_VAR_MAX = orig_122_var_max
         mvmz.CODE408 = orig_408
@@ -371,6 +375,34 @@ class TestMVMZSourceOriginal(unittest.TestCase):
         c122 = _find_commands(page, 122)[0]
         self.assertEqual(c122["_original"], "変数テスト")
         self.assertIn("EN_TRANSLATED", c122["parameters"][4])
+
+    def test_code122_compact_ranges_translate_endpoints_but_not_gaps(self):
+        ids = (35, 36, 37, 40, 41, 402)
+        page = {
+            "list": [
+                {
+                    "code": 122,
+                    "indent": 0,
+                    "parameters": [identifier, identifier, 0, 4, f"`表示{identifier}`"],
+                }
+                for identifier in ids
+            ]
+        }
+
+        translated, _ = _run_search_codes(
+            page,
+            code122_ranges="35, 37-40, 402",
+        )
+        by_id = {
+            command["parameters"][0]: command
+            for command in _find_commands(translated, 122)
+        }
+
+        for identifier in (35, 37, 40, 402):
+            self.assertIn("EN_TRANSLATED", by_id[identifier]["parameters"][4])
+        for identifier in (36, 41):
+            self.assertNotIn("_original", by_id[identifier])
+            self.assertEqual(by_id[identifier]["parameters"][4], f"`表示{identifier}`")
 
     def test_skip_translated_uses_current_commands_not_original(self):
         translated, _ = _run_search_codes(

@@ -3,6 +3,7 @@ Configuration Integration Helper
 Updates the actual module files with GUI configuration settings
 """
 
+import ast
 import re
 import os
 import sys
@@ -73,7 +74,12 @@ class ConfigIntegration:
                         comment = "  " + comment
                     
                     # Create the new line with proper formatting
-                    updated_line = f"{config_key} = {config_value}{comment}"
+                    rendered_value = (
+                        repr(config_value)
+                        if isinstance(config_value, str)
+                        else str(config_value)
+                    )
+                    updated_line = f"{config_key} = {rendered_value}{comment}"
                     found_configs.add(config_key)
                     break
                     
@@ -124,6 +130,7 @@ class ConfigIntegration:
                 r'TLSYSTEMSWITCHES|JOIN408|SPEAKERS408|CODE\d+)\s*=\s*(True|False)'
             )
             int_pattern = r'^(CODE122_VAR_MIN|CODE122_VAR_MAX)\s*=\s*(\d+)'
+            ranges_pattern = r'^CODE122_VAR_RANGES\s*=\s*(.+?)(?:\s+#.*)?$'
             
             for line in content.split('\n'):
                 line = line.strip()
@@ -138,6 +145,13 @@ class ConfigIntegration:
                 if match:
                     key = match.group(1)
                     config[key] = int(match.group(2))
+                    continue
+
+                match = re.match(ranges_pattern, line)
+                if match:
+                    value = ast.literal_eval(match.group(1))
+                    if isinstance(value, str):
+                        config["CODE122_VAR_RANGES"] = value
                         
         except Exception as e:
             print(f"Error reading configuration from {module_path}: {e}")

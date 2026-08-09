@@ -7,11 +7,12 @@ from pathlib import Path
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QCheckBox, 
     QPushButton, QGroupBox, QLabel, QMessageBox, QScrollArea,
-    QTextEdit, QSpinBox, QFrame, QGridLayout
+    QTextEdit, QSpinBox, QFrame, QGridLayout, QLineEdit
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from gui.theme import COLORS
 from gui.ui_components import SectionCard, configure_action_button
+from util.id_ranges import legacy_exclusive_range, normalize_id_ranges
 try:
     from .config_integration import ConfigIntegration
 except ImportError:
@@ -66,8 +67,7 @@ class RPGMakerTab(QWidget):
         
         # Variable codes (disabled by default)
         "CODE122": False,  # Control Variables
-        "CODE122_VAR_MIN": 0,  # Minimum variable ID to translate
-        "CODE122_VAR_MAX": 2000,  # Maximum variable ID to translate
+        "CODE122_VAR_RANGES": "0-1999",  # IDs and inclusive ranges to translate
         
         # Other codes (all disabled by default)
         "CODE103": False,  # Input Number
@@ -328,33 +328,24 @@ class RPGMakerTab(QWidget):
         )
         col2.addLayout(layout)
         
-        # Variable Range
+        # Variable IDs and ranges
         var_layout = QHBoxLayout()
         var_layout.setContentsMargins(20, 4, 0, 0)
         var_layout.setSpacing(8)
-        lbl = QLabel("Variables ID Range:")
+        lbl = QLabel("Variable IDs:")
         lbl.setStyleSheet("color: #888; font-size: 10px;")
         var_layout.addWidget(lbl)
-        from PyQt5.QtWidgets import QLineEdit
-        from PyQt5.QtGui import QIntValidator
-        
-        self.code122_var_min_spin = QLineEdit()
-        self.code122_var_min_spin.setValidator(QIntValidator(0, 99999))
-        self.code122_var_min_spin.setText("0")
-        self.code122_var_min_spin.setFixedWidth(60)
-        self.code122_var_min_spin.setAlignment(Qt.AlignCenter)
-        self.code122_var_min_spin.setStyleSheet("QLineEdit { padding: 4px; font-size: 11px; }")
-        var_layout.addWidget(self.code122_var_min_spin)
-        dash_lbl = QLabel("-")
-        dash_lbl.setStyleSheet("font-size: 11px;")
-        var_layout.addWidget(dash_lbl)
-        self.code122_var_max_spin = QLineEdit()
-        self.code122_var_max_spin.setValidator(QIntValidator(1, 99999))
-        self.code122_var_max_spin.setText("2000")
-        self.code122_var_max_spin.setFixedWidth(60)
-        self.code122_var_max_spin.setAlignment(Qt.AlignCenter)
-        self.code122_var_max_spin.setStyleSheet("QLineEdit { padding: 4px; font-size: 11px; }")
-        var_layout.addWidget(self.code122_var_max_spin)
+        self.code122_var_ranges_edit = QLineEdit("0-1999")
+        self.code122_var_ranges_edit.setPlaceholderText("35, 37-40, 402")
+        self.code122_var_ranges_edit.setMinimumWidth(230)
+        self.code122_var_ranges_edit.setToolTip(
+            "Comma-separated variable IDs and inclusive ranges, for example: "
+            "35, 37-40, 402"
+        )
+        self.code122_var_ranges_edit.setStyleSheet(
+            "QLineEdit { padding: 4px; font-size: 11px; }"
+        )
+        var_layout.addWidget(self.code122_var_ranges_edit, 1)
         var_layout.addStretch()
         col2.addLayout(var_layout)
         
@@ -531,8 +522,7 @@ class RPGMakerTab(QWidget):
             
             # Variable codes
             self.code122_cb.stateChanged.disconnect()
-            self.code122_var_min_spin.editingFinished.disconnect()
-            self.code122_var_max_spin.editingFinished.disconnect()
+            self.code122_var_ranges_edit.editingFinished.disconnect()
             
             # Plugins / Scripts / Other codes
             self.code355655_cb.stateChanged.disconnect()
@@ -572,8 +562,9 @@ class RPGMakerTab(QWidget):
         
         # Variable codes
         self.code122_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        self.code122_var_min_spin.editingFinished.connect(lambda: self.apply_to_module(show_messages=False))
-        self.code122_var_max_spin.editingFinished.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code122_var_ranges_edit.editingFinished.connect(
+            lambda: self.apply_to_module(show_messages=False)
+        )
         
         # Plugins / Scripts / Other codes
         self.code355655_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -585,7 +576,27 @@ class RPGMakerTab(QWidget):
         self.code325_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.code111_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.code108_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-            
+
+    def _normalized_code122_ranges(self) -> str:
+        """Validate, normalize, and visually mark the Code 122 ID field."""
+        try:
+            normalized = normalize_id_ranges(self.code122_var_ranges_edit.text())
+        except ValueError as exc:
+            self.code122_var_ranges_edit.setStyleSheet(
+                "QLineEdit { padding: 4px; font-size: 11px; border: 1px solid #d9534f; }"
+            )
+            self.code122_var_ranges_edit.setToolTip(str(exc))
+            raise
+        self.code122_var_ranges_edit.setText(normalized)
+        self.code122_var_ranges_edit.setStyleSheet(
+            "QLineEdit { padding: 4px; font-size: 11px; }"
+        )
+        self.code122_var_ranges_edit.setToolTip(
+            "Comma-separated variable IDs and inclusive ranges, for example: "
+            "35, 37-40, 402"
+        )
+        return normalized
+
     def get_config(self):
         """Get current configuration as dictionary."""
         config = {
@@ -611,8 +622,7 @@ class RPGMakerTab(QWidget):
             
             # Variable codes
             "CODE122": self.code122_cb.isChecked(),
-            "CODE122_VAR_MIN": int(self.code122_var_min_spin.text() or 0),
-            "CODE122_VAR_MAX": int(self.code122_var_max_spin.text() or 2000),
+            "CODE122_VAR_RANGES": self._normalized_code122_ranges(),
             
             # Plugins / Scripts / Other codes
             "CODE355655": self.code355655_cb.isChecked(),
@@ -651,8 +661,13 @@ class RPGMakerTab(QWidget):
         
         # Variable codes
         self.code122_cb.setChecked(config.get("CODE122", False))
-        self.code122_var_min_spin.setText(str(config.get("CODE122_VAR_MIN", 0)))
-        self.code122_var_max_spin.setText(str(config.get("CODE122_VAR_MAX", 2000)))
+        ranges = config.get("CODE122_VAR_RANGES")
+        if not ranges:
+            ranges = legacy_exclusive_range(
+                int(config.get("CODE122_VAR_MIN", 0)),
+                int(config.get("CODE122_VAR_MAX", 2000)),
+            )
+        self.code122_var_ranges_edit.setText(str(ranges))
         
         # Plugins / Scripts / Other codes
         self.code355655_cb.setChecked(config.get("CODE355655", False))
@@ -678,6 +693,11 @@ class RPGMakerTab(QWidget):
         """Validate current configuration."""
         warnings = []
         errors = []
+
+        try:
+            normalize_id_ranges(self.code122_var_ranges_edit.text())
+        except ValueError as exc:
+            errors.append(f"Invalid CODE 122 variable IDs: {exc}")
         
         # Check if any Main Codes are enabled
         main_codes_enabled = (
@@ -720,18 +740,21 @@ class RPGMakerTab(QWidget):
                 report.append(f"• {warning}")
             report.append("")
             
-        # Add enabled codes summary
-        enabled_codes = []
-        config = self.get_config()
-        for key, value in config.items():
-            if key.startswith("CODE") and value:
-                enabled_codes.append(key)
-                
-        if enabled_codes:
-            report.append("<b>Enabled Codes:</b>")
-            report.append(", ".join(enabled_codes))
-        else:
-            report.append("<b>No codes enabled!</b>")
+        # Add the enabled-code summary only after all fields validate. Calling
+        # get_config() with malformed range text would otherwise hide the
+        # useful validation report behind an exception.
+        if not errors:
+            enabled_codes = []
+            config = self.get_config()
+            for key, value in config.items():
+                if key.startswith("CODE") and value:
+                    enabled_codes.append(key)
+
+            if enabled_codes:
+                report.append("<b>Enabled Codes:</b>")
+                report.append(", ".join(enabled_codes))
+            else:
+                report.append("<b>No codes enabled!</b>")
             
         if not report:
             report.append("Configuration is valid with no issues.")
@@ -776,7 +799,7 @@ class RPGMakerTab(QWidget):
             # Update each configuration value
             for key, value in config.items():
                 # Convert boolean to Python boolean string
-                value_str = str(value)
+                value_str = repr(value) if isinstance(value, str) else str(value)
                 
                 # Find and replace the line with this configuration
                 import re

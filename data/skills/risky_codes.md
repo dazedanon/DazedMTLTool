@@ -28,7 +28,7 @@ Collect every code 122 where parameters[3] == 4. For each variable ID found:
 
 Summarise translatable variable IDs as compact numeric ranges,
 e.g. 'Translate IDs: 5, 10-18, 42'. Separately list any DO NOT TRANSLATE IDs
-with the reason. The ranges will be entered as min/max in the translation tool.
+with the reason. This compact string will be pasted directly into the translation tool.
 </audit_1>
 
 <audit_2>
@@ -138,7 +138,7 @@ ENABLE CODES     : <comma-separated CODE* keys to check, e.g. CODE357, CODE356>
 SKIP CODES       : <codes that have no visible text>
 357 PLUGINS      : <comma-separated HEADER_MAPPINGS_357 keys to enable>
 355/655 PATTERNS : <comma-separated PATTERNS_355655 keys to enable>
-122 VAR RANGE    : min=<N>, max=<M>
+122 VARIABLE IDS : <compact ranges, e.g. 5, 10-18, 42>
 
 If a field has nothing to fill in, write NONE.
 </output_format>

@@ -323,15 +323,13 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         code_check.setChecked(True)
         plugin_check.setChecked(True)
         pattern_check.setChecked(True)
-        self.workflow._p2_var_min.setText("12")
-        self.workflow._p2_var_max.setText("345")
+        self.workflow._p2_var_ranges.setText("35, 37-40, 402, 408")
         with patch("gui.config_integration.ConfigIntegration", return_value=config):
             self.workflow._apply_p2_config()
 
         saved_codes = config.update_rpgmaker_config.call_args.args[0]
         self.assertTrue(saved_codes[code_key])
-        self.assertEqual(saved_codes["CODE122_VAR_MIN"], 12)
-        self.assertEqual(saved_codes["CODE122_VAR_MAX"], 345)
+        self.assertEqual(saved_codes["CODE122_VAR_RANGES"], "35, 37-40, 402, 408")
         enabled_plugins, enabled_patterns = config.update_plugin_config.call_args.args
         self.assertIn(plugin_key, enabled_plugins)
         self.assertIn(pattern_key, enabled_patterns)

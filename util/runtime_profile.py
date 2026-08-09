@@ -6,6 +6,8 @@ import copy
 from pathlib import Path
 from typing import Any
 
+from util.id_ranges import normalize_id_ranges
+
 
 RPGMAKER_PROFILE_ENGINE = "rpgmakermvmz"
 RPGMAKER_PROFILE_VERSION = 1
@@ -58,10 +60,15 @@ def normalize_batch_runtime_profile(profile: Any) -> dict[str, Any] | None:
     raw_config = profile.get("config")
     if not isinstance(raw_config, dict) or not raw_config:
         raise ValueError("Batch runtime profile has no RPG Maker configuration")
-    config: dict[str, bool | int] = {}
+    config: dict[str, bool | int | str] = {}
     for key, value in raw_config.items():
         if not isinstance(key, str):
             raise ValueError("Batch runtime profile contains an invalid setting name")
+        if key == "CODE122_VAR_RANGES":
+            if not isinstance(value, str):
+                raise ValueError(f"Batch runtime setting {key} has an invalid value")
+            config[key] = normalize_id_ranges(value) if value.strip() else ""
+            continue
         if not isinstance(value, (bool, int)):
             raise ValueError(f"Batch runtime setting {key} has an invalid value")
         config[key] = value

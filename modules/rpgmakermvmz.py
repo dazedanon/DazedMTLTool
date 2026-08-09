@@ -18,6 +18,7 @@ from util.speakers import SPEAKER_BRACKET_INNER, strip_speaker_prefix
 from util.skills import ctx, load_system_prompt
 from util.paths import active_glossary_path, read_active_glossary
 from util.rpgmaker_markers import SUPPORTED_CODE408_MARKERS
+from util.id_ranges import id_in_ranges
 
 # Globals
 MODEL = os.getenv("model")
@@ -231,10 +232,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = True
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE101 = False
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
 CODE408 = False
@@ -242,19 +243,22 @@ CODE408 = False
 # player-facing comment blocks should be sent for translation.
 
 # Variables
-CODE122 = False
+CODE122 = True
+# Comma-separated IDs and inclusive ranges, e.g. "35, 37-40, 402".
+# Leave blank to use the legacy minimum/maximum pair below.
+CODE122_VAR_RANGES = '35, 37-40, 402, 408, 412, 418, 422, 428, 432, 438'
 CODE122_VAR_MIN = 9
 CODE122_VAR_MAX = 10
 
 # Plugins / Scripts
-CODE355655 = False
-CODE357 = False
+CODE355655 = True
+CODE357 = True
 CODE657 = False
 CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE325 = False
-CODE111 = False
+CODE111 = True
 CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
@@ -287,7 +291,7 @@ HEADER_MAPPINGS_357 = {
     "SceneGlossary": (["category"], None),
 }
 # Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
-ENABLED_PLUGINS_357: set = {"BattleLogOutput", "LogMessage"}
+ENABLED_PLUGINS_357: set = {"QuestSystem", "TextPicture", "TorigoyaMZ_NotifyMessage"}
 
 # All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
 PATTERNS_355655 = {
@@ -328,7 +332,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = {"$gameMessage.show(this,", "BattleManager._logWindow.push('addText'"}
+ENABLED_PATTERNS_355655: set = set()
 
 
 def _pat355655_captured_text(match):
@@ -3061,9 +3065,15 @@ def searchCodes(page, pbar, jobList, filename):
 
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
-                # This is going to be the var being translated.
-                # Only translate variables within the specified range.
-                if codeList[i]["parameters"][0] not in list(range(CODE122_VAR_MIN, CODE122_VAR_MAX)):
+                # Only translate explicitly selected variables. Existing
+                # configurations without a range string retain the former
+                # maximum-exclusive minimum/maximum behavior.
+                variable_id = codeList[i]["parameters"][0]
+                if CODE122_VAR_RANGES.strip():
+                    selected = id_in_ranges(variable_id, CODE122_VAR_RANGES)
+                else:
+                    selected = variable_id in range(CODE122_VAR_MIN, CODE122_VAR_MAX)
+                if not selected:
                     i += 1
                     continue
 

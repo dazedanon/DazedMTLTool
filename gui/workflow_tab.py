@@ -32,6 +32,7 @@ from util.game_settings import (
 )
 from util.skills import load_clipboard_skill, load_project_setup
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
+from util.id_ranges import legacy_exclusive_range, normalize_id_ranges
 
 from dotenv import dotenv_values
 
@@ -1959,7 +1960,7 @@ class WorkflowTab(QWidget):
         clear_codes_btn.clicked.connect(_clear_codes)
         codes_stage.add_widget(toggle_box)
 
-        # Code 122 owns the variable range. Keeping this control beside its
+        # Code 122 owns the variable ID selection. Keeping this control beside its
         # parent checkbox makes the dependency visible and allows the entire
         # row to disable when Variables (122) is off.
         self._p2_var_range_box = QFrame()
@@ -1974,30 +1975,21 @@ class WorkflowTab(QWidget):
         var_row.setSpacing(Spacing.SM)
         var_lbl = _make_form_label("Variable IDs:")
         var_row.addWidget(var_lbl)
-        from PyQt5.QtGui import QIntValidator
-        self._p2_var_min = QLineEdit("0")
-        self._p2_var_min.setValidator(QIntValidator(0, 99999))
-        self._p2_var_min.setFixedWidth(88)
-        self._p2_var_min.setAlignment(Qt.AlignCenter)
-        self._p2_var_min.setToolTip("Minimum variable ID to translate (inclusive)")
-        var_row.addWidget(self._p2_var_min)
-        dash_lbl = QLabel("–")
-        dash_lbl.setStyleSheet("color:#a6a6a6;")
-        var_row.addWidget(dash_lbl)
-        self._p2_var_max = QLineEdit("2000")
-        self._p2_var_max.setValidator(QIntValidator(1, 99999))
-        self._p2_var_max.setFixedWidth(88)
-        self._p2_var_max.setAlignment(Qt.AlignCenter)
-        self._p2_var_max.setToolTip("Maximum variable ID to translate (exclusive)")
-        var_row.addWidget(self._p2_var_max)
+        self._p2_var_ranges = QLineEdit("0-1999")
+        self._p2_var_ranges.setPlaceholderText("35, 37-40, 402")
+        self._p2_var_ranges.setMinimumWidth(300)
+        self._p2_var_ranges.setToolTip(
+            "Comma-separated variable IDs and inclusive ranges, for example: "
+            "35, 37-40, 402"
+        )
+        var_row.addWidget(self._p2_var_ranges, 1)
         apply_range_btn = _make_btn("Save range", "#45454a")
         _size_action_button(apply_range_btn, Geometry.FIELD_COMPACT, maximum=160)
         apply_range_btn.setToolTip("Save the variable range used by Variables (122)")
         apply_range_btn.clicked.connect(self._apply_var_range)
         var_row.addWidget(apply_range_btn)
-        self._p2_var_min.editingFinished.connect(self._schedule_p2_config_apply)
-        self._p2_var_max.editingFinished.connect(self._schedule_p2_config_apply)
-        var_hint = QLabel("Available only when Variables (122) is enabled.")
+        self._p2_var_ranges.editingFinished.connect(self._schedule_p2_config_apply)
+        var_hint = QLabel("Use commas between IDs or inclusive ranges.")
         var_hint.setWordWrap(True)
         var_hint.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
         var_row.addWidget(var_hint, 1)
@@ -4106,28 +4098,28 @@ class WorkflowTab(QWidget):
         )
 
     def _apply_var_range(self):
-        """Write CODE122_VAR_MIN / CODE122_VAR_MAX to the module file."""
+        """Validate and write the Code 122 variable ID selection."""
         try:
-            var_min = int(self._p2_var_min.text() or 0)
-            var_max = int(self._p2_var_max.text() or 2000)
-        except ValueError:
-            self._log("❌ Var range: invalid numbers")
+            ranges = normalize_id_ranges(self._p2_var_ranges.text())
+        except ValueError as exc:
+            self._p2_status_lbl.setText("Invalid Code 122 variable IDs")
+            self._log(f"❌ Code 122 variable IDs: {exc}")
             return
-        cfg = {"CODE122_VAR_MIN": var_min, "CODE122_VAR_MAX": var_max}
+        self._p2_var_ranges.setText(ranges)
+        cfg = {"CODE122_VAR_RANGES": ranges}
         try:
             from gui.config_integration import ConfigIntegration
             ConfigIntegration().update_rpgmaker_config(cfg)
-            self._log(f"✅ Code 122 var range set: {var_min}–{var_max}")
+            self._p2_status_lbl.setText("Code 122 variable IDs saved")
+            self._log(f"✅ Code 122 variable IDs set: {ranges}")
             # Sync to the Settings tab if open
             try:
                 if self.parent_window and hasattr(self.parent_window, "config_tab"):
                     ct = self.parent_window.config_tab
                     if hasattr(ct, "rpgmaker_tab") and ct.rpgmaker_tab:
                         rt = ct.rpgmaker_tab
-                        if hasattr(rt, "code122_var_min_spin"):
-                            rt.code122_var_min_spin.setText(str(var_min))
-                        if hasattr(rt, "code122_var_max_spin"):
-                            rt.code122_var_max_spin.setText(str(var_max))
+                        if hasattr(rt, "code122_var_ranges_edit"):
+                            rt.code122_var_ranges_edit.setText(ranges)
             except Exception:
                 pass
         except Exception as exc:
@@ -4141,10 +4133,13 @@ class WorkflowTab(QWidget):
             ci = ConfigIntegration()
             # Code toggle checkboxes
             cur = ci.read_current_config()
-            if "CODE122_VAR_MIN" in cur:
-                self._p2_var_min.setText(str(cur["CODE122_VAR_MIN"]))
-            if "CODE122_VAR_MAX" in cur:
-                self._p2_var_max.setText(str(cur["CODE122_VAR_MAX"]))
+            ranges = cur.get("CODE122_VAR_RANGES")
+            if not ranges:
+                ranges = legacy_exclusive_range(
+                    int(cur.get("CODE122_VAR_MIN", 0)),
+                    int(cur.get("CODE122_VAR_MAX", 2000)),
+                )
+            self._p2_var_ranges.setText(str(ranges))
             for code_key, cb in getattr(self, "_p2_code_checks", {}).items():
                 if code_key in cur:
                     cb.setChecked(cur[code_key])
@@ -4246,12 +4241,12 @@ class WorkflowTab(QWidget):
     def _apply_p2_config(self):
         """Write Phase 2 code and plugin settings when controls change."""
         try:
-            var_min = int(self._p2_var_min.text() or 0)
-            var_max = int(self._p2_var_max.text() or 2000)
-        except ValueError:
-            self._p2_status_lbl.setText("Invalid Code 122 range")
-            self._log("❌ Phase 2 config not saved: invalid Code 122 range")
+            ranges = normalize_id_ranges(self._p2_var_ranges.text())
+        except ValueError as exc:
+            self._p2_status_lbl.setText("Invalid Code 122 variable IDs")
+            self._log(f"❌ Phase 2 config not saved: {exc}")
             return
+        self._p2_var_ranges.setText(ranges)
 
         try:
             from gui.config_integration import ConfigIntegration
@@ -4262,8 +4257,7 @@ class WorkflowTab(QWidget):
                 for code_key, cb in getattr(self, "_p2_code_checks", {}).items()
             }
             code_cfg.update({
-                "CODE122_VAR_MIN": var_min,
-                "CODE122_VAR_MAX": var_max,
+                "CODE122_VAR_RANGES": ranges,
             })
             ci.update_rpgmaker_config(code_cfg)
 
