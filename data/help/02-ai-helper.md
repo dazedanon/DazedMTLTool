@@ -125,22 +125,23 @@ advanced-text audit**:
 2. Return to your Agent chat.
 3. Paste the copied instructions and send them.
 4. Let the Agent read the game folder and finish the task.
-5. Copy any labeled answers back into the matching boxes in DazedTL.
+5. Copy only fenced paste-ready answers into the matching boxes. Apply unfenced settings manually.
 
 ### Where the Project Setup answers go
 
 The Agent's answer may contain these labels. Put each part in the matching place:
 
-| Label from the Agent | Where it goes in DazedTL |
+| Agent section | What you do in DazedTL |
 |---|---|
-| `glossary` | The **Glossary** box |
-| `speakers` | Use it to set the speaker choices shown above the boxes |
-| `translation_quirks` | The **Translation quirks** box |
-| `game_skill` | The **Game skill** box |
-| `rpgmaker_config` | The RPG Maker choices for code 408, text width, and fonts |
+| **Glossary** | Copy the fenced content into the **Glossary** box |
+| **Translation quirks** | Copy the fenced content into the **Translation quirks** box |
+| **Game skill** | Copy the fenced content into the **Game skill** box |
+| **Manual changes - Speaker settings** | Set the speaker choices shown above the boxes; do not paste this section |
+| **Manual changes - RPG Maker settings** | Set code 408, text widths, and fonts manually; do not paste this section |
 
-The labels are directions, so do not paste the Agent's entire answer into every box. If a label is
-missing or unclear, ask the Agent to show the answer again with those exact labels.
+Code fences mean **copy/paste**. Unfenced sections are instructions, evidence, repairs, or playtests
+and must not be pasted into the guidance boxes. If a section is missing or unclear, ask the Agent to
+show the answer again in the required order.
 
 Read what the Agent plans to do before approving a file change or command. If you are unsure, ask
 it to explain the change in simple language first.

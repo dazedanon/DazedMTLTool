@@ -1380,8 +1380,8 @@ class WorkflowTab(QWidget):
         self.speaker_copy_setup_btn = _make_btn("📋  2  Copy setup instructions", "#555")
         self.speaker_copy_setup_btn.setToolTip(
             "After collecting names, paste these instructions into the AI helper with the game "
-            "folder open. It will recommend any extra speaker options and return glossary, "
-            "translation_quirks, game_skill, and RPG Maker configuration recommendations."
+            "folder open. It returns paste-ready Glossary, Translation quirks, and Game skill "
+            "sections first, followed by speaker and RPG Maker settings to change manually."
         )
         self.speaker_copy_setup_btn.clicked.connect(self._copy_project_setup_prompt)
         _equalize_action_buttons(

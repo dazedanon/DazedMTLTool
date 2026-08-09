@@ -1692,8 +1692,8 @@ class WolfWorkflowTab(QWidget):
         copy_btn = _make_btn("Copy setup skill", "#555")
         copy_btn.setFixedWidth(Geometry.ACTION_WIDE)
         copy_btn.setToolTip(
-            "Clipboard skill for the game repo IDE. Returns glossary, speakers, "
-            "translation_quirks, and game_skill code blocks."
+            "Clipboard skill for the game repo IDE. Returns paste-ready Glossary, "
+            "Translation quirks, and Game skill sections followed by manual speaker settings."
         )
         copy_btn.clicked.connect(self._copy_project_setup_prompt)
         actions.addWidget(copy_btn)

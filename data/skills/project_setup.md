@@ -7,13 +7,13 @@ Work in the game repository. Scan files; do not invent content you did not see.
 
 ## Task
 
-In **one pass**, discover everything needed for translation setup and emit the labeled output blocks below.
+In **one pass**, discover everything needed for translation setup and emit the ordered output sections below.
 Do **not** translate the game or broadly edit its files. The only editing exception is a qualifying
 deterministic micro-repair under the RPG Maker speaker rules below. Recommend formatting and
 pipeline settings only in the designated configuration block.
 
-Default: emit every block specified for the selected engine.
-Regenerate mode: if the user asks for only one block, emit **only** that block using the same
+Default: emit every section specified for the selected engine.
+Regenerate mode: if the user asks for only one section, emit **only** that section using the same
 schema and exclusivity rules.
 
 ---
@@ -23,18 +23,18 @@ schema and exclusivity rules.
 | Block | Owns | Must NOT include |
 |-------|------|------------------|
 | `glossary` | Named characters (gender, role, **per-character** speech register) + worldbuilding terms | Global dialect / person rules; honorific policy; speaker-format flags; formatting |
-| `speakers` | Tool flag ENABLE/SKIP + short evidence | Character bios; quirks; full glossary |
+| `speaker_settings` | Manual tool flag ENABLE/SKIP decisions + short evidence | Character bios; quirks; full glossary |
 | `translation_quirks` | Cross-cutting voice rules (battle-log person, global dialect, item-description style, **unusual** honorific habits) | Per-character register; "always keep -san" (tool base prompt already does); codes/wrap/line counts; speaker flags |
 | `game_skill` | **Translation Frame** for the API (theme / era / register / naming / optional myth) saved at `skills/game.md` | File inventories; quirks bullets; glossary; per-character register; IDE scaffolding; restating base honorific/formatting policy |
-| `rpgmaker_config` (RPG Maker only) | Code-408 Phase 1 decision + measured wrap/font recommendations | Translation prose; glossary; voice rules; speculative settings without evidence |
+| `rpgmaker_settings` (RPG Maker only) | Manual code-408 decision + measured wrap/font recommendations | Translation prose; glossary; voice rules; speculative settings without evidence |
 
 Hard rules:
 1. Per-character voice → `glossary` only.
 2. Category-wide / cross-cutting voice → `translation_quirks` only.
 3. Default honorifics policy is owned by the tool base prompt - only note **unusual** honorific habits in quirks.
 4. `game_skill` is the title's Translation Frame for the translation API - keep it compact; do not reprint quirks or glossary.
-5. `speakers` is config, not lore.
-6. `rpgmaker_config` is measured setup advice, not content to merge into the translation prompt.
+5. `speaker_settings` is manual config, not lore or pasteable guidance.
+6. `rpgmaker_settings` is measured manual setup advice, not content to merge into the translation prompt.
 
 ---
 
@@ -66,7 +66,7 @@ Map / event files can be huge. Do **not** read them sequentially end-to-end.
 
 --- attach your game data files / open the game repo before continuing ---
 
-### Speakers analysis (for `speakers` block)
+### Speakers analysis (for the manual Speaker settings section)
 
 Code `101` opens the text window. Code `401` is a dialogue line. Multiple `401`s form one message box.
 
@@ -117,7 +117,7 @@ face-backed message has an explicit name, choose `FACENAME101: SKIP` and state t
 not needed after the repair. If any identity is ambiguous or the scope exceeds this narrow rule,
 make no edits and report the evidence normally.
 
-### Glossary rules (for `glossary` block)
+### Glossary rules (for the paste-ready Glossary section)
 
 - Separator: plain hyphen-minus `-` only (never em/en dash).
 - Descriptions entirely in English; refer to other characters by English name.
@@ -126,7 +126,7 @@ make no edits and report the evidence normally.
 - Real named actors get full `# Game Characters` entries, not only `\\N[n]` placeholders.
 - Worldbuilding: factions, lore locations, unique systems/titles - exclude skill/item/weapon/armour names and generic RPG words.
 
-### Quirks rules (for `translation_quirks` block)
+### Quirks rules (for the paste-ready Translation quirks section)
 
 Find translation-only quirks, for example:
 - Battle log / system messages consistently 3rd person (or other fixed person)
@@ -138,7 +138,7 @@ Exclude: formatting codes, wrap, line counts, speaker flags, character name list
 
 Output as short imperative bullets suitable to paste into `skills/quirks.md`.
 
-### Game skill rules (for `game_skill` block)
+### Game skill rules (for the paste-ready Game skill section)
 
 Produce the per-game translation skill saved at `skills/game.md`.
 DazedTL **merges this file into the translation system prompt** (before quirks).
@@ -161,7 +161,7 @@ Do **not** include:
 - Quirks (API): ``skills/quirks.md`` (never ``translation_quirks.txt``)
 - Optional custom API overlays: other ``skills/*.md`` except those two
 
-### Phase 1 and layout analysis (for `rpgmaker_config` block)
+### Phase 1 and layout analysis (for the manual RPG Maker settings section)
 
 #### Code 408
 
@@ -221,29 +221,23 @@ geometry rather than generic RPG Maker defaults whenever project code is availab
    current font should remain unchanged, say `keep current` and report its measured size. Cite the
    files/functions/plugin parameters supporting every recommendation and give a confidence level.
 
-Emit this additional RPG Maker-only block:
+Report these recommendations under **Manual changes > RPG Maker settings**. They are settings the
+user must review or change, so do not put them in a code fence:
 
-### Block `rpgmaker_config`
-
-Label the fence language as `rpgmaker_config`. Inside:
-
-```text
-CODE408 : ENABLE|SKIP - <runtime evidence, affected count, and confidence>
-
-Unsupported CODE408 markers:
-- `<exact code-108 marker>` : <plugin/runtime evidence; block and line counts; example locators; confidence; add tool support>
-- `None found` (use only when the scan found no unsupported player-facing markers)
-
-Dialogue : width=<full width> ; faceWidth=<code-101 face width> ; font=<px or keep current (measured px)> ; rows=<count>
-List/Help: listWidth=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count or varies>
-Notes    : noteWidth=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count or varies>
-
-Evidence:
-- <resolution/window/font/plugin locator, horizontal capacity, visible-row limit, and tested fit>
-
-Exceptions / playtests:
-- <variant windows, uncertain plugin behavior, or messages requiring pagination>
-```
+- `CODE408 : ENABLE|SKIP` with runtime evidence, affected count, and confidence.
+- Unsupported CODE408 markers: each exact code-108 marker with plugin/runtime evidence, block and
+  line counts, example locators, confidence, and an explicit request to add tool support; otherwise
+  state that none were found.
+- `Dialogue : width=<full width> ; faceWidth=<code-101 face width> ; font=<px or keep current
+  (measured px)> ; rows=<count>`.
+- `List/Help: listWidth=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count or
+  varies>`.
+- `Notes    : noteWidth=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count or
+  varies>`.
+- Evidence: resolution/window/font/plugin locators, horizontal capacity, visible-row limit, and
+  tested fit.
+- Exceptions/playtests: variant windows, uncertain plugin behavior, or messages requiring manual
+  pagination or reflow.
 
 <!-- /engine:rpgmaker -->
 
@@ -270,7 +264,7 @@ Analyse `source` only.
 
 --- attach the extracted JSON in files/ here before continuing ---
 
-### Speakers analysis (for `speakers` block)
+### Speakers analysis (for the manual Speaker settings section)
 
 WolfDawn already tags who speaks. High-confidence nameplates (`literal_line1`) are always reshaped - nothing to decide.
 
@@ -284,20 +278,13 @@ Inspect a sample of those entries in maps / CommonEvent:
 
 Do **not** emit RPG Maker flags (`INLINE401SPEAKERS`, `FIRSTLINESPEAKERS`, `FACENAME101`).
 
-**Wolf `speakers` schema (use this instead of the shared RPG Maker flag list):**
+**Wolf speaker-settings schema (use this instead of the shared RPG Maker flag list):**
 
-```
-Patterns detected:
-- ...
+Report the detected patterns, the `LOWCONF_FIRSTLINE: ENABLE|SKIP` decision with a one-line reason,
+and representative examples under **Manual changes > Speaker settings**. These are findings and a
+manual checkbox decision, so do not put them in a code fence.
 
-Flag decisions:
-LOWCONF_FIRSTLINE : ENABLE|SKIP - <one-line reason>
-
-Examples:
-- ...
-```
-
-### Glossary rules (for `glossary` block)
+### Glossary rules (for the paste-ready Glossary section)
 
 - Separator: plain hyphen-minus `-` only (never em/en dash).
 - Descriptions entirely in English; refer to other characters by English name.
@@ -306,7 +293,7 @@ Examples:
 - Worldbuilding: factions, lore locations (mentioned in dialogue but not map labels), unique systems/titles.
 - Exclude: skill / item / weapon / armour names from `names.json`, generic RPG words, unnamed NPCs.
 
-### Quirks rules (for `translation_quirks` block)
+### Quirks rules (for the paste-ready Translation quirks section)
 
 Find translation-only quirks, for example:
 - Battle log / system messages with a fixed person or register
@@ -318,7 +305,7 @@ Exclude: wrap geometry, inject layout, `names.json` harvest, speaker LOWCONF che
 
 Output as short imperative bullets suitable to paste into `skills/quirks.md`.
 
-### Game skill rules (for `game_skill` block)
+### Game skill rules (for the paste-ready Game skill section)
 
 Produce the per-game translation skill saved at `skills/game.md`.
 DazedTL **merges this file into the translation system prompt** (before quirks).
@@ -343,14 +330,27 @@ Do **not** include voice-rules pointers, tool-boundary essays, file inventories,
 
 ## Output format
 
-Emit **only** labeled fenced code blocks (plus a one-line heading before each block for navigation).
-No essay outside the blocks.
+Use this exact top-level order:
 
-### Block `glossary`
+1. **Glossary**
+2. **Translation quirks**
+3. **Game skill**
+4. **Manual changes**
+5. **Evidence, repairs, and playtests**
 
-Label the fence language as `glossary`. Inside:
+The first three sections are content the user must copy and paste. Put only the pasteable content
+inside their code fences; put the destination in the heading immediately above each fence. Do not
+put explanations, evidence, instructions, or destination paths inside those fences.
 
-```
+Everything after Game skill requires review, a manual setting change, or no user action. It must
+remain ordinary Markdown outside code fences. **Never fence manual settings, evidence, repairs,
+exceptions, or playtests.**
+
+### 1. Glossary - copy/paste into DazedTL > Setup > Glossary
+
+Label the fence language as `glossary`. The fence must contain only:
+
+```glossary
 # Game Characters
 Japanese (English) - description
 
@@ -358,36 +358,15 @@ Japanese (English) - description
 Japanese (English) - description
 ```
 
-### Block `speakers`
+### 2. Translation quirks - copy/paste into DazedTL > Setup > Translation quirks
 
-Label the fence language as `speakers`. Inside:
+Label the fence language as `markdown`. The fence must contain only short imperative bullets for
+`skills/quirks.md`, with no heading or preamble.
 
-```
-Patterns detected:
-- ...
+### 3. Game skill - copy/paste into DazedTL > Setup > Game skill
 
-Flag decisions:
-INLINE401SPEAKERS : ENABLE|SKIP — <one-line reason>
-FIRSTLINESPEAKERS : ENABLE|SKIP — <one-line reason>
-FACENAME101       : ENABLE|SKIP — <one-line reason>
-
-Examples:
-- ...
-
-Repairs applied (only if any):
-- <file + event/list locator> - filled code-101 param[4] with <speaker>; FACENAME101 is not needed after rescan.
-
-Face filename mappings (only if FACENAME101 ENABLE):
-- <filename> -> <speaker> - <one-line evidence that the filename is unique to this speaker>
-```
-
-### Block `translation_quirks`
-
-Label the fence language as `translation_quirks`. Inside: imperative bullet list only (no preamble).
-
-### Block `game_skill`
-
-Label the fence language as `game_skill`. Inside: markdown for `skills/game.md` (Translation Frame only).
+Label the fence language as `markdown`. The fence must contain only the Translation Frame saved to
+`skills/game.md`:
 
 ```markdown
 # <Game title> - Translation Frame
@@ -400,4 +379,32 @@ Label the fence language as `game_skill`. Inside: markdown for `skills/game.md` 
 神話・伝承 (Myth / folklore basis) - <one compact line, or omit this line entirely if unsupported>
 ```
 
-If known speakers were prepended in a `<known_speakers>` block above this skill, prefer those names in the glossary, then cross-check Actors.json for other major named actors.
+### 4. Manual changes
+
+Do not use a code fence in this section. State each action as **Change** or **Keep**, name the exact
+DazedTL control or setting, give the target value, and append a short reason.
+
+For RPG Maker, include **Speaker settings** first:
+
+- `INLINE401SPEAKERS`: ENABLE or SKIP.
+- `FIRSTLINESPEAKERS`: ENABLE or SKIP.
+- `FACENAME101`: ENABLE or SKIP. When enabled, list only proven filename-to-speaker mappings.
+
+Then include **RPG Maker settings** with the code-408 decision, unsupported marker support requests,
+and Dialogue, List/Help, and Notes wrap/font values specified above.
+
+For Wolf, include **Speaker settings** with `LOWCONF_FIRSTLINE: ENABLE|SKIP` and representative
+examples. Do not emit RPG Maker settings.
+
+### 5. Evidence, repairs, and playtests
+
+Do not use a code fence in this section. Keep it brief and include only applicable items:
+
+- Patterns and representative examples supporting the manual speaker decisions.
+- Deterministic speaker repairs already applied, with file and event/list locators and the value
+  written to code-101 param[4]. Clearly label these **Already applied - no manual action**.
+- Runtime/window/font/plugin evidence supporting RPG Maker settings.
+- Exceptions, uncertainty, unsupported features, and exact playtests the user should perform.
+
+If known speakers were prepended in a `<known_speakers>` block above this skill, prefer those names
+in the glossary, then cross-check Actors.json for other major named actors.
