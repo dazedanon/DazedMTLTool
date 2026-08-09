@@ -21,7 +21,11 @@ from gui.workflow_components import (
     DisclosureSection,
     WorkflowActivityPanel,
 )
-from util.game_settings import GameSettingsError, load_game_wrap_widths
+from util.game_settings import (
+    GameSettingsError,
+    load_game_wrap_widths,
+    save_game_wrap_widths,
+)
 from util.paths import LEGACY_GLOSSARY_BASE_SEPARATOR
 
 
@@ -446,6 +450,18 @@ class WorkflowShellTests(unittest.TestCase):
             linked_game.joinpath(".dazedtl", "settings.json").symlink_to(external)
             with self.assertRaisesRegex(GameSettingsError, "not a regular file"):
                 load_game_wrap_widths(linked_game)
+
+            linked_metadata_game = Path(self.temp.name) / "Linked Metadata"
+            linked_metadata_game.mkdir()
+            external_metadata = Path(self.temp.name) / "external-metadata"
+            external_metadata.mkdir()
+            linked_metadata_game.joinpath(".dazedtl").symlink_to(
+                external_metadata,
+                target_is_directory=True,
+            )
+            with self.assertRaisesRegex(GameSettingsError, "not a normal folder"):
+                save_game_wrap_widths(linked_metadata_game, {"width": 80})
+            self.assertFalse(linked_metadata_game.joinpath(".gitignore").exists())
 
     def test_unsaved_game_widths_fall_back_to_env_and_clamp_face(self):
         with patch(

@@ -27,6 +27,7 @@ from util.paths import (
     GAME_TOOL_GITIGNORE_BEGIN,
     GAME_TOOL_GITIGNORE_END,
     ensure_game_tool_gitignore,
+    normalize_game_tool_gitignore_text,
 )
 
 
@@ -932,6 +933,22 @@ def _install_gameupdate_gitignore(game_root: Path) -> bool:
                 f"Could not update portable DazedTL .gitignore rules: {exc}"
             ) from exc
 
+    def canonical_portable_rules(value: bytes) -> bytes:
+        try:
+            return normalize_game_tool_gitignore_text(
+                value.decode("utf-8", errors="surrogateescape"),
+                path_label=str(destination),
+            ).encode("utf-8", errors="surrogateescape")
+        except Exception as exc:
+            raise GitWorkflowError(
+                f"Could not update portable DazedTL .gitignore rules: {exc}"
+            ) from exc
+
+    # Validate the original bytes before stripping complete blocks. Otherwise
+    # a nested BEGIN marker can be consumed by the outer block and hide an
+    # incomplete managed section along with project-owned rules.
+    canonical_portable_rules(existing)
+
     if normalized(template) in normalized(existing):
         return normalize_portable_rules()
 
@@ -952,6 +969,8 @@ def _install_gameupdate_gitignore(game_root: Path) -> bool:
     if project_rules:
         combined += b"\n# Existing project rules\n" + project_rules + b"\n"
 
+    combined = canonical_portable_rules(combined)
+
     original_mode = destination.stat().st_mode if destination.exists() else 0o100644
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=".gitignore.dazedtl-", dir=game_root
@@ -959,9 +978,10 @@ def _install_gameupdate_gitignore(game_root: Path) -> bool:
     try:
         with os.fdopen(descriptor, "wb") as handle:
             handle.write(combined)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.chmod(temporary_name, stat.S_IMODE(original_mode))
         os.replace(temporary_name, destination)
-        normalize_portable_rules()
     except Exception:
         try:
             os.close(descriptor)

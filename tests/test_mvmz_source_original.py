@@ -774,6 +774,63 @@ class TestMVMZSourceOriginal(unittest.TestCase):
             ]
         }
         source_page = copy.deepcopy(page)
+        with patch.object(mvmz, "CODE408", True), patch.object(
+            mvmz, "JOIN408", False
+        ):
+            self.assertEqual(mvmz._code408_progress_units(page["list"]), 2)
+        with patch.object(mvmz, "CODE408", True), patch.object(
+            mvmz, "JOIN408", True
+        ):
+            self.assertEqual(mvmz._code408_progress_units(page["list"]), 1)
+        with patch.object(mvmz, "CODE408", False):
+            self.assertEqual(mvmz._code408_progress_units(page["list"]), 0)
+
+        bars = []
+
+        class RecordingBar:
+            def __init__(self, total, **_kwargs):
+                self.total = total
+                self.n = 0
+                bars.append(self)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def update(self, amount=1):
+                self.n += amount
+
+            def write(self, *_args, **_kwargs):
+                pass
+
+            def refresh(self):
+                pass
+
+        def progress_translate(text, *_args, **_kwargs):
+            if mvmz.PBAR is not None:
+                mvmz.PBAR.update(len(text) if isinstance(text, list) else 1)
+            return _mock_translate(text, "")
+
+        progress_data = {
+            "displayName": "試験地図",
+            "events": [None, {"note": "", "pages": [copy.deepcopy(source_page)]}],
+        }
+        with (
+            patch.object(mvmz, "tqdm", RecordingBar),
+            patch.object(mvmz, "translateAI", progress_translate),
+            patch.object(mvmz, "checkSave"),
+            patch.object(mvmz, "CODE408", True),
+            patch.object(mvmz, "JOIN408", True),
+            patch.object(mvmz, "CODE108", False),
+            patch.object(mvmz, "IGNORETLTEXT", True),
+            patch.object(mvmz, "PBAR", None),
+        ):
+            parse_result = mvmz.parseMap(progress_data, "Map001.json")
+        self.assertIsNone(parse_result[2])
+        self.assertEqual([(bar.total, bar.n) for bar in bars], [(2, 2)])
+
         page, captured = _run_search_codes(page)
         comments = _find_commands(page, 408)
         self.assertEqual(
@@ -813,6 +870,20 @@ class TestMVMZSourceOriginal(unittest.TestCase):
             any("これは選択肢のヘルプです。" in str(payload) for payload in rerun_captured)
         )
 
+        skipped_page = {
+            "list": [
+                {"code": 108, "indent": 0, "parameters": ["選択肢ヘルプ"]},
+                {"code": 408, "indent": 0, "parameters": [""]},
+                {"code": 408, "indent": 0, "parameters": ["Already translated"]},
+            ]
+        }
+        with patch.object(mvmz, "CODE408", True), patch.object(
+            mvmz, "JOIN408", False
+        ):
+            self.assertEqual(
+                mvmz._code408_progress_units(skipped_page["list"]), 0
+            )
+
         translated_marker = {
             "list": [
                 {
@@ -839,6 +910,9 @@ class TestMVMZSourceOriginal(unittest.TestCase):
                 {"code": 408, "indent": 0, "parameters": ["この行も内部用。"]},
             ]
         }
+
+        with patch.object(mvmz, "CODE408", True):
+            self.assertEqual(mvmz._code408_progress_units(page["list"]), 0)
 
         page, captured = _run_search_codes(page)
         comments = _find_commands(page, 408)

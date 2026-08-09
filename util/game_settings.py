@@ -130,7 +130,10 @@ def save_game_wrap_widths(
     if not root.is_dir():
         raise GameSettingsError(f"Game folder does not exist: {root}")
 
-    ensure_game_tool_gitignore(root)
+    try:
+        game_metadata_dir(root)
+    except Exception as exc:
+        raise GameSettingsError(str(exc)) from exc
     path = game_settings_path(root)
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise GameSettingsError(f"Game settings path is not a regular file: {path}")
@@ -146,7 +149,11 @@ def save_game_wrap_widths(
 
     data["version"] = 1
     rpgmaker["wrapWidths"] = normalized
-    game_metadata_dir(root, create=True)
+    ensure_game_tool_gitignore(root)
+    try:
+        game_metadata_dir(root, create=True)
+    except Exception as exc:
+        raise GameSettingsError(str(exc)) from exc
 
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=".settings-",

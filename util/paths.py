@@ -119,6 +119,56 @@ def migrate_app_settings() -> None:
     new.setValue("_migrated_from_legacy_app", "1")
 
 
+def normalize_game_tool_gitignore_text(
+    existing: str,
+    *,
+    path_label: str = ".gitignore",
+) -> str:
+    """Return content with one canonical managed block, without writing it."""
+    pieces: list[str] = []
+    cursor = 0
+    while True:
+        start = existing.find(GAME_TOOL_GITIGNORE_BEGIN, cursor)
+        stray_end = existing.find(GAME_TOOL_GITIGNORE_END, cursor)
+        if start < 0:
+            if stray_end >= 0:
+                raise GameProjectPathError(
+                    f"DazedTL's managed .gitignore block is incomplete in {path_label}"
+                )
+            pieces.append(existing[cursor:])
+            break
+        if 0 <= stray_end < start:
+            raise GameProjectPathError(
+                f"DazedTL's managed .gitignore block is incomplete in {path_label}"
+            )
+        end = existing.find(GAME_TOOL_GITIGNORE_END, start)
+        if end < 0:
+            raise GameProjectPathError(
+                f"DazedTL's managed .gitignore block is incomplete in {path_label}"
+            )
+        nested_start = existing.find(
+            GAME_TOOL_GITIGNORE_BEGIN,
+            start + len(GAME_TOOL_GITIGNORE_BEGIN),
+        )
+        if 0 <= nested_start < end:
+            raise GameProjectPathError(
+                f"DazedTL's managed .gitignore block is incomplete in {path_label}"
+            )
+        pieces.append(existing[cursor:start])
+        cursor = end + len(GAME_TOOL_GITIGNORE_END)
+        if cursor < len(existing) and existing[cursor] == "\r":
+            cursor += 1
+        if cursor < len(existing) and existing[cursor] == "\n":
+            cursor += 1
+
+    prefix = "".join(pieces)
+    if prefix and not prefix.endswith("\n"):
+        prefix += "\n"
+    if prefix and not prefix.endswith("\n\n"):
+        prefix += "\n"
+    return prefix + GAME_TOOL_GITIGNORE_BLOCK
+
+
 def ensure_game_tool_gitignore(game_root: str | Path) -> bool:
     """Allowlist portable translation settings while ignoring other tool state.
 
@@ -140,40 +190,7 @@ def ensure_game_tool_gitignore(game_root: str | Path) -> bool:
     except OSError as exc:
         raise GameProjectPathError(f"Could not read {path}: {exc}") from exc
 
-    pieces: list[str] = []
-    cursor = 0
-    while True:
-        start = existing.find(GAME_TOOL_GITIGNORE_BEGIN, cursor)
-        stray_end = existing.find(GAME_TOOL_GITIGNORE_END, cursor)
-        if start < 0:
-            if stray_end >= 0:
-                raise GameProjectPathError(
-                    f"DazedTL's managed .gitignore block is incomplete in {path}"
-                )
-            pieces.append(existing[cursor:])
-            break
-        if 0 <= stray_end < start:
-            raise GameProjectPathError(
-                f"DazedTL's managed .gitignore block is incomplete in {path}"
-            )
-        end = existing.find(GAME_TOOL_GITIGNORE_END, start)
-        if end < 0:
-            raise GameProjectPathError(
-                f"DazedTL's managed .gitignore block is incomplete in {path}"
-            )
-        pieces.append(existing[cursor:start])
-        cursor = end + len(GAME_TOOL_GITIGNORE_END)
-        if cursor < len(existing) and existing[cursor] == "\r":
-            cursor += 1
-        if cursor < len(existing) and existing[cursor] == "\n":
-            cursor += 1
-
-    prefix = "".join(pieces)
-    if prefix and not prefix.endswith("\n"):
-        prefix += "\n"
-    if prefix and not prefix.endswith("\n\n"):
-        prefix += "\n"
-    updated = prefix + GAME_TOOL_GITIGNORE_BLOCK
+    updated = normalize_game_tool_gitignore_text(existing, path_label=str(path))
     if updated == existing:
         return False
 

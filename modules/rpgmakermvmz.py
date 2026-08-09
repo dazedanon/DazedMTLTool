@@ -740,6 +740,71 @@ def _code408_has_supported_marker(codeList, index: int) -> bool:
     return marker in SUPPORTED_CODE408_MARKERS
 
 
+def _code408_progress_units(codeList) -> int:
+    """Count the batches that the 408 translation pass will actually submit."""
+    if CODE408 is not True:
+        return 0
+
+    count = 0
+    index = 0
+    while index < len(codeList):
+        command = codeList[index]
+        if not command or command.get("code") != 408:
+            index += 1
+            continue
+        if not _code408_has_supported_marker(codeList, index):
+            index += 1
+            continue
+        if not command.get("parameters"):
+            index += 1
+            continue
+        if not _param_source(command, 0).strip():
+            index += 1
+            continue
+
+        group_end = (
+            _text_group_end(codeList, index, (408,)) if JOIN408 is True else index
+        )
+        if _text_needs_translation(_group_current(codeList, index, group_end)):
+            count += 1
+        index = group_end + 1
+    return count
+
+
+def _code108_match(text: str):
+    """Return the player-facing portion selected by the code-108 pass."""
+    patterns = (
+        ("info:", r"info:([^,]+)"),
+        ("ActiveMessage:", r"<ActiveMessage:(.*)>?"),
+        ("event_text", r"event_text\s*:\s*(.*)"),
+        ("Menu Name", r"Menu\sName\s*:\s*(.*)>"),
+        ("text_indicator", r"text_indicator\s?:\s?(.+)"),
+        ("NW名前指定", r"NW名前指定\s+(.+)"),
+        ("<namePop:", r"<namePop:\s*([^>]+)>"),
+    )
+    for marker, pattern in patterns:
+        if marker in text:
+            return re.search(pattern, text)
+    return None
+
+
+def _code108_progress_units(codeList) -> int:
+    """Count only code-108 entries that the translation pass will submit."""
+    if CODE108 is not True:
+        return 0
+
+    count = 0
+    for command in codeList:
+        if not command or command.get("code") != 108:
+            continue
+        current = _param_current(command, 0)
+        if IGNORETLTEXT and not _has_japanese_text(current):
+            continue
+        if _code108_match(current) is not None:
+            count += 1
+    return count
+
+
 def _apply_original(cmd, raw_source: str) -> None:
     """Set scalar _original only when not already present (re-run safe)."""
     if not PRESERVEORIGINAL:
@@ -1291,27 +1356,19 @@ def parseMap(data, filename):
                 for page in (evt.get("pages", []) or []):
                     if page and "list" in page:
                         # Count translatable codes
-                        for cmd in page.get("list", []):
+                        commands = page.get("list", [])
+                        for cmd in commands:
                             if cmd and "code" in cmd:
                                 code = cmd["code"]
                                 # Count common translatable codes
-                                if code in [401, 405, 102, 122, 408, 355, 655, 356, 357, 320, 324, 325, 111, 108, 657]:
+                                if code in [401, 405, 102, 122, 355, 655, 356, 357, 320, 324, 325, 111, 657]:
                                     count += 1
+                        count += _code408_progress_units(commands)
+                        count += _code108_progress_units(commands)
 
             return count if count > 0 else 1
         except Exception:
             return 1
-
-    # Translate displayName for Map files
-    if "Map" in filename:
-        response = translateAI(
-            data["displayName"],
-            ctx("names.location"),
-            False,
-        )
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        data["displayName"] = response[0].replace('"', "")
 
     # Compute accurate total using preflight (includes speakers, choices, groups, and notes)
     totalLines = _estimate_map_units(data, filename)
@@ -1330,6 +1387,17 @@ def parseMap(data, filename):
     # Process each page synchronously with progress updates
     with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
         PBAR = pbar
+
+        # Translate the map name only after its progress bar is active.
+        if "Map" in filename:
+            response = translateAI(
+                data["displayName"],
+                ctx("names.location"),
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            data["displayName"] = response[0].replace('"', "")
         
         # Batch translate <LB> event names
         lbTokens = translateLBNames(events)
@@ -3926,7 +3994,6 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 groupStart408 = i
-                j = i
                 source408Parts = []
                 current408Parts = []
                 rawSource = _param_source(codeList[i], 0)
@@ -3940,21 +4007,21 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Join Up 408's into single string
-                if len(codeList) > i + 1 and JOIN408 is True:
-                    while codeList[i + 1]["code"] in [408] and len(codeList[i]["parameters"]) > 0 and len(codeList[i + 1]["parameters"]) > 0 and not re.match(r"^(\s*[\\]+[aAbBdDeEfFgGhHjJlLmMoOpPqQrRsStTuUwWxXyYzZ]+\[[\w\d\[\]\\]+\])", codeList[i+1]["parameters"][0]):
-                        if not setData:
-                            codeList[i]["parameters"] = []
-                            codeList[i]["code"] = -1
-                        i += 1
-                        j = i
+                groupEnd408 = (
+                    _text_group_end(codeList, i, (408,))
+                    if JOIN408 is True
+                    else i
+                )
+                while i < groupEnd408:
+                    if not setData:
+                        codeList[i]["parameters"] = []
+                        codeList[i]["code"] = -1
+                    i += 1
 
-                        lineSource = _param_source(codeList[i], 0)
-                        current408Parts.append(_param_current(codeList[i], 0))
-                        if lineSource.strip() and not anchor408HasOrig:
-                            source408Parts.append(lineSource)
-
-                        if len(codeList) <= i + 1:
-                            break
+                    lineSource = _param_source(codeList[i], 0)
+                    current408Parts.append(_param_current(codeList[i], 0))
+                    if lineSource.strip() and not anchor408HasOrig:
+                        source408Parts.append(lineSource)
 
                 rawSource = _group_raw_source(codeList, groupStart408, source408Parts)
                 if not _text_needs_translation("\n".join(current408Parts)):
@@ -3991,34 +4058,19 @@ def searchCodes(page, pbar, jobList, filename):
 
             ## Event Code: 108 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 108) and CODE108 is True:
-                jaString = codeList[i]["parameters"][0]
+                jaString = _param_current(codeList[i], 0)
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
                 if IGNORETLTEXT and not _has_japanese_text(jaString):
                     i += 1
                     continue
 
-                # Translate
-                if "info:" in jaString:
-                    regex = r"info:([^,]+)"
-                elif "ActiveMessage:" in jaString:
-                    regex = r"<ActiveMessage:(.*)>?"
-                elif "event_text" in jaString:
-                    regex = r"event_text\s*:\s*(.*)"
-                elif "Menu Name" in jaString:
-                    regex = r"Menu\sName\s*:\s*(.*)>"
-                elif "text_indicator" in jaString:
-                    regex = r"text_indicator\s?:\s?(.+)"
-                elif "NW名前指定" in jaString:
-                    regex = r"NW名前指定\s+(.+)"
-                elif "<namePop:" in jaString:
-                    regex = r"<namePop:\s*([^>]+)>"
-                else:
+                match = _code108_match(jaString)
+                if match is None:
                     i += 1
                     continue
 
                 # Need to remove outside code and put it back later
-                match = re.search(regex, jaString)
                 if match:
                     # Pass 1
                     if setData:

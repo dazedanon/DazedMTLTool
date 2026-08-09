@@ -8,6 +8,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
@@ -50,6 +51,22 @@ class TestMVMZCode108(unittest.TestCase):
             translated_page["list"][0]["parameters"][0],
             " <namePop:Floor_Movement>",
         )
+        with patch.object(mvmz, "CODE108", True):
+            self.assertEqual(mvmz._code108_progress_units(page["list"]), 1)
+            self.assertEqual(
+                mvmz._code108_progress_units(
+                    [
+                        {
+                            "code": 108,
+                            "indent": 0,
+                            "parameters": ["選択肢ヘルプ"],
+                        }
+                    ]
+                ),
+                0,
+            )
+        with patch.object(mvmz, "CODE108", False):
+            self.assertEqual(mvmz._code108_progress_units(page["list"]), 0)
 
 
 if __name__ == "__main__":

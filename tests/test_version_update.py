@@ -28,6 +28,7 @@ from util.version_update import (
     record_version_metadata,
     register_translation_branch,
 )
+from util.version_update.git_workflow import _install_gameupdate_gitignore
 
 
 class GitVersionUpdateTests(unittest.TestCase):
@@ -266,6 +267,35 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertIn('"name": "Japanese"', diff)
         self.assertIn('"name": "English"', diff)
         self.assertNotIn('{"name":', diff)
+
+        malformed_cases = {
+            "missing end": (
+                "custom-rule/\n\n"
+                f"{GAME_TOOL_GITIGNORE_BEGIN}\n"
+                "!/.dazedtl/settings.json\n"
+            ),
+            "nested begin": (
+                "custom-before/\n"
+                f"{GAME_TOOL_GITIGNORE_BEGIN}\n"
+                "keep-me/\n"
+                f"{GAME_TOOL_GITIGNORE_BEGIN}\n"
+                "!/.dazedtl/settings.json\n"
+                f"{GAME_TOOL_GITIGNORE_END}\n"
+                "custom-after/\n"
+            ),
+        }
+        for label, malformed_text in malformed_cases.items():
+            with self.subTest(label=label):
+                malformed = self.root / f"Malformed managed block {label}"
+                malformed.mkdir()
+                malformed_ignore = malformed / ".gitignore"
+                malformed_before = malformed_text.encode("utf-8")
+                malformed_ignore.write_bytes(malformed_before)
+                with self.assertRaisesRegex(
+                    GitWorkflowError, "managed .gitignore block"
+                ):
+                    _install_gameupdate_gitignore(malformed)
+                self.assertEqual(malformed_ignore.read_bytes(), malformed_before)
 
     def test_bootstrap_normalizes_crlf_so_eol_noise_cannot_wipe_translations(self):
         # Pretty JSON that only differs by CRLF must become LF in Git. Otherwise a
