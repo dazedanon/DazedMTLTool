@@ -51,6 +51,10 @@ class TestMVMZCode108(unittest.TestCase):
             translated_page["list"][0]["parameters"][0],
             " <namePop:Floor_Movement>",
         )
+        self.assertEqual(
+            translated_page["list"][0]["_original"],
+            f" <namePop:{source}>",
+        )
         with patch.object(mvmz, "CODE108", True):
             self.assertEqual(mvmz._code108_progress_units(page["list"]), 1)
             self.assertEqual(

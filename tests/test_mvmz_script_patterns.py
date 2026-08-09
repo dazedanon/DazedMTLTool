@@ -81,6 +81,10 @@ class TestMVMZScriptPatterns(unittest.TestCase):
             [entry["parameters"][0] for entry in translated_page["list"][2:4]],
             [f"テキスト-{status}" for status in translated_statuses],
         )
+        self.assertEqual(
+            [entry["_original"] for entry in translated_page["list"][2:4]],
+            [f"テキスト-{status}" for status in source_statuses],
+        )
         self.assertEqual(translated_page["list"][4], page["list"][4])
 
     def test_cbr_text_replacement_does_not_modify_matching_marker_text(self):

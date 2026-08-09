@@ -258,7 +258,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE325 = False
-CODE111 = True
+CODE111 = False
 CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
@@ -291,7 +291,13 @@ HEADER_MAPPINGS_357 = {
     "SceneGlossary": (["category"], None),
 }
 # Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
-ENABLED_PLUGINS_357: set = {"QuestSystem", "TextPicture", "TorigoyaMZ_NotifyMessage"}
+ENABLED_PLUGINS_357: set = {
+    "LogMessage",
+    "Mano_CurrencyUnit",
+    "QuestSystem",
+    "TextPicture",
+    "TorigoyaMZ_NotifyMessage",
+}
 
 # All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
 PATTERNS_355655 = {
@@ -332,7 +338,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = set()
+ENABLED_PATTERNS_355655: set = {"CBR-エロステータス"}
 
 
 def _pat355655_captured_text(match):
@@ -599,9 +605,168 @@ def saveProgress(data, filename):
 def _scalar_original(cmd) -> str | None:
     """Return scalar _original on an event command, or None if absent/empty."""
     orig = cmd.get("_original")
-    if orig is not None and not isinstance(orig, list) and str(orig).strip():
+    if isinstance(orig, str) and orig.strip():
         return str(orig)
     return None
+
+
+_NO_ORIGINAL = object()
+
+
+def _sparse_changed_strings(before, after):
+    """Return a path-mirrored tree containing changed, non-empty strings only."""
+    if isinstance(before, str):
+        if before.strip() and before != after:
+            return before
+        return _NO_ORIGINAL
+
+    if isinstance(before, list) and isinstance(after, list):
+        changed = {}
+        for index, value in enumerate(before):
+            current = after[index] if index < len(after) else _NO_ORIGINAL
+            nested = _sparse_changed_strings(value, current)
+            if nested is not _NO_ORIGINAL:
+                changed[str(index)] = nested
+        return changed if changed else _NO_ORIGINAL
+
+    if isinstance(before, dict) and isinstance(after, dict):
+        changed = {}
+        for key, value in before.items():
+            nested = _sparse_changed_strings(value, after.get(key, _NO_ORIGINAL))
+            if nested is not _NO_ORIGINAL:
+                changed[str(key)] = nested
+        return changed if changed else _NO_ORIGINAL
+
+    return _NO_ORIGINAL
+
+
+def _merge_original_tree(target: dict, source: dict) -> None:
+    """Merge new sparse original paths without replacing preserved values."""
+    for key, value in source.items():
+        existing = target.get(key, _NO_ORIGINAL)
+        if isinstance(value, dict):
+            if existing is _NO_ORIGINAL:
+                existing = {}
+                target[key] = existing
+            if isinstance(existing, dict):
+                _merge_original_tree(existing, value)
+        elif existing is _NO_ORIGINAL:
+            target[key] = value
+
+
+def _overlay_original_tree(current, original):
+    """Overlay a sparse _original tree on a current list/dict value."""
+    if not isinstance(original, dict):
+        return copy.deepcopy(original)
+
+    if isinstance(current, list):
+        result = copy.deepcopy(current)
+        for key, value in original.items():
+            try:
+                index = int(key)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= index < len(result):
+                result[index] = _overlay_original_tree(result[index], value)
+        return result
+
+    if isinstance(current, dict):
+        result = copy.deepcopy(current)
+        for key, value in original.items():
+            if key in result:
+                result[key] = _overlay_original_tree(result[key], value)
+        return result
+
+    return copy.deepcopy(current)
+
+
+def _source_parameters(cmd) -> list:
+    """Return parameters with sparse structured originals overlaid by path."""
+    current = cmd.get("parameters") or []
+    orig = cmd.get("_original")
+    if not isinstance(orig, dict):
+        return copy.deepcopy(current)
+    original_params = orig.get("parameters")
+    if not isinstance(original_params, dict):
+        return copy.deepcopy(current)
+    return _overlay_original_tree(current, original_params)
+
+
+_SCALAR_ORIGINAL_PARAMETER_BY_CODE = {
+    108: 0,
+    320: 1,
+    324: 1,
+    325: 1,
+    355: 0,
+    356: 0,
+    655: 0,
+    657: 0,
+}
+_STRUCTURED_ORIGINAL_CODES = {111, 357}
+
+
+def _capture_event_parameter_sources(code_list) -> list[tuple[dict, list]]:
+    """Capture source parameters for event codes lacking legacy preservation."""
+    if not PRESERVEORIGINAL:
+        return []
+    supported = set()
+    if CODE108:
+        supported.add(108)
+    if CODE111:
+        supported.add(111)
+    if CODE320:
+        supported.add(320)
+    if CODE324:
+        supported.add(324)
+    if CODE325:
+        supported.add(325)
+    if CODE355655:
+        supported.update((355, 655))
+    if CODE356:
+        supported.add(356)
+    if CODE357:
+        supported.add(357)
+    if CODE657:
+        supported.add(657)
+    snapshots = []
+    for command in code_list:
+        if isinstance(command, dict) and command.get("code") in supported:
+            snapshots.append((command, _source_parameters(command)))
+    return snapshots
+
+
+def _apply_event_parameter_originals(snapshots: list[tuple[dict, list]]) -> None:
+    """Preserve only source string leaves whose live parameters were changed."""
+    if not PRESERVEORIGINAL:
+        return
+    for command, source_params in snapshots:
+        current_params = command.get("parameters") or []
+        code = command.get("code")
+        scalar_index = _SCALAR_ORIGINAL_PARAMETER_BY_CODE.get(code)
+        if scalar_index is not None:
+            if scalar_index >= len(source_params) or scalar_index >= len(current_params):
+                continue
+            source = source_params[scalar_index]
+            if isinstance(source, str) and source != current_params[scalar_index]:
+                _apply_original(command, source)
+            continue
+
+        if code not in _STRUCTURED_ORIGINAL_CODES:
+            continue
+        changed = _sparse_changed_strings(source_params, current_params)
+        if changed is _NO_ORIGINAL:
+            continue
+        original = command.get("_original")
+        if original is None:
+            original = {"parameters": {}}
+            command["_original"] = original
+        if not isinstance(original, dict):
+            continue
+        original_params = original.get("parameters")
+        if not isinstance(original_params, dict):
+            original_params = {}
+            original["parameters"] = original_params
+        _merge_original_tree(original_params, changed)
 
 
 def _has_japanese_text(text) -> bool:
@@ -652,11 +817,11 @@ def _param_current(cmd, index: int) -> str:
 
 
 def _param_source(cmd, index: int) -> str:
-    """Prefer scalar _original; else parameters[index] (401/405 dialogue lines)."""
+    """Prefer scalar/path-mirrored _original; else parameters[index]."""
     orig = _scalar_original(cmd)
     if orig is not None:
         return orig
-    params = cmd.get("parameters") or []
+    params = _source_parameters(cmd)
     if index < len(params) and params[index] is not None:
         return str(params[index])
     return ""
@@ -2538,6 +2703,10 @@ def searchCodes(page, pbar, jobList, filename):
         else:
             codeList = page
 
+        parameterSourceSnapshots = (
+            _capture_event_parameter_sources(codeList) if setData else []
+        )
+
         # Iterate through page
         i = 0
         while i < len(codeList):
@@ -2928,6 +3097,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if finalJAString == "":
                         if nametag and match:
                             codeList[j]["parameters"][0] = codeList[j]["parameters"][0].replace(match.group(2), tledSpeaker)
+                            _apply_original(codeList[j], oldjaString)
                         i += 1
                         continue
 
@@ -3536,6 +3706,7 @@ def searchCodes(page, pbar, jobList, filename):
                                             codeList[i]["parameters"][4] = codeList[i]["parameters"][4].replace(additionalText, translatedAdditionalText)
                                         else:
                                             codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(additionalText, translatedAdditionalText)
+                                        _apply_original(codeList[i], jaString)
                         except Exception as e:
                             # If there's any error loading actors, just extract what's in the brackets
                             speaker = apMatch.group(1)
@@ -4694,6 +4865,9 @@ def searchCodes(page, pbar, jobList, filename):
 
         # Start Pass 2
         if setData:
+            # Direct (non-batched) handlers can write during pass 1. Preserve
+            # those sources before pass 2 so nested handlers can consult them.
+            _apply_event_parameter_originals(parameterSourceSnapshots)
             searchCodes(
                 page,
                 pbar,
@@ -4711,6 +4885,9 @@ def searchCodes(page, pbar, jobList, filename):
                 ],
                 filename,
             )
+            # Batch handlers write during pass 2. Compare against the same
+            # pristine source snapshot so _original never captures a TL value.
+            _apply_event_parameter_originals(parameterSourceSnapshots)
 
         # Delete all -1 codes
         codeListFinal = []

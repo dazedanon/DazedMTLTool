@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -204,6 +205,144 @@ def _has_japanese(s: str) -> bool:
 
 
 class TestMVMZSourceOriginal(unittest.TestCase):
+    def test_optional_event_codes_preserve_changed_sources_without_changing_shapes(self):
+        """Risky handlers retain exact sources while leaving runtime parameters intact."""
+        page = {
+            "list": [
+                {"code": 108, "indent": 0, "parameters": ["<namePop:案内>"]},
+                {
+                    "code": 355,
+                    "indent": 0,
+                    "parameters": ['var text1 = "スクリプト表示"'],
+                },
+                {"code": 356, "indent": 0, "parameters": ["D_TEXT ポップアップ"]},
+                {
+                    "code": 357,
+                    "indent": 0,
+                    "parameters": [
+                        "LogMessage",
+                        "add",
+                        "メッセージ追加",
+                        {"text": "ログ表示", "internalId": 7},
+                    ],
+                },
+                {
+                    "code": 657,
+                    "indent": 0,
+                    "parameters": ["'メッセージ = 注釈表示'"],
+                },
+                {
+                    "code": 111,
+                    "indent": 0,
+                    "parameters": [
+                        12,
+                        '$gameVariables.value(1) === "変数の中身"',
+                    ],
+                },
+                {"code": 320, "indent": 0, "parameters": [1, "名前変更"]},
+                {"code": 324, "indent": 0, "parameters": [1, "職業変更"]},
+                {"code": 325, "indent": 0, "parameters": [1, "プロフィール変更"]},
+            ]
+        }
+        original_parameters = {
+            command["code"]: copy.deepcopy(command["parameters"])
+            for command in page["list"]
+        }
+
+        translation_calls = []
+        speaker_calls = []
+
+        def translate(text, _history, _batch=False):
+            translation_calls.append(copy.deepcopy(text))
+            if isinstance(text, list):
+                return [["EN_TRANSLATED" for _ in text], [0, 0]]
+            return ["EN_TRANSLATED", [0, 0]]
+
+        def speaker(source):
+            speaker_calls.append(source)
+            return [f"Speaker_{source}", [0, 0]]
+
+        flags = {
+            "CODE108": True,
+            "CODE355655": True,
+            "CODE356": True,
+            "CODE357": True,
+            "CODE657": True,
+            "CODE111": True,
+            "CODE320": True,
+            "CODE324": True,
+            "CODE325": True,
+            "PRESERVEORIGINAL": True,
+            "IGNORETLTEXT": True,
+        }
+        with ExitStack() as stack:
+            for name, value in flags.items():
+                stack.enter_context(patch.object(mvmz, name, value))
+            stack.enter_context(
+                patch.object(mvmz, "ENABLED_PATTERNS_355655", {"var text"})
+            )
+            stack.enter_context(
+                patch.object(mvmz, "ENABLED_PLUGINS_357", {"LogMessage"})
+            )
+            stack.enter_context(patch.object(mvmz, "translateAI", side_effect=translate))
+            stack.enter_context(patch.object(mvmz, "getSpeaker", side_effect=speaker))
+            stack.enter_context(
+                patch.object(
+                    mvmz,
+                    "get_var_translation",
+                    return_value="Variable contents",
+                )
+            )
+            translated = copy.deepcopy(page)
+            mvmz.searchCodes(translated, None, [], "TestMap.json")
+
+            translation_calls.clear()
+            speaker_calls.clear()
+            rerun = copy.deepcopy(translated)
+            mvmz.searchCodes(rerun, None, [], "TestMap.json")
+
+        by_code = {command["code"]: command for command in translated["list"]}
+        for code in (108, 355, 356, 657):
+            with self.subTest(code=code):
+                self.assertEqual(
+                    by_code[code]["_original"],
+                    original_parameters[code][0],
+                )
+        for code in (320, 324, 325):
+            with self.subTest(code=code):
+                self.assertEqual(
+                    by_code[code]["_original"],
+                    original_parameters[code][1],
+                )
+        self.assertEqual(
+            by_code[357]["_original"],
+            {"parameters": {"3": {"text": "ログ表示"}}},
+        )
+        self.assertEqual(
+            by_code[111]["_original"],
+            {
+                "parameters": {
+                    "1": '$gameVariables.value(1) === "変数の中身"'
+                }
+            },
+        )
+
+        # RPG Maker consumes only code/indent/parameters. Preservation must not
+        # move values, alter container types, or add anything inside parameters.
+        for command in translated["list"]:
+            source = next(
+                item for item in page["list"] if item["code"] == command["code"]
+            )
+            self.assertEqual(command["code"], source["code"])
+            self.assertEqual(command["indent"], source["indent"])
+            self.assertEqual(len(command["parameters"]), len(source["parameters"]))
+            self.assertEqual(type(command["parameters"]), type(source["parameters"]))
+
+        self.assertEqual(translation_calls, [])
+        self.assertEqual(speaker_calls, [])
+        self.assertEqual(rerun, translated)
+        self.assertEqual(json.loads(json.dumps(translated)), translated)
+
     def test_code101_face_detection_supports_mv_and_mz_shapes(self):
         self.assertTrue(
             mvmz._101_has_face_graphic(

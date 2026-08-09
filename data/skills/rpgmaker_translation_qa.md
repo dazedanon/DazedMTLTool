@@ -224,12 +224,14 @@ automatically treat lexical matches as defects; verify their source meaning and 
 Preserve a stable locator for every pair: relative filename plus JSON path, and event code when
 present.
 
-- For database objects with an `_original` object, pair each string leaf with the value at the
-  same path on the owning object. Numeric string keys in `_original` usually address list indexes
-  in the live object, as in `System.json` lists and `terms` arrays.
+- For database objects and event codes 111/357 with an `_original` object, pair each string leaf
+  with the value at the same path on the owning object. Numeric string keys in `_original` usually
+  address list indexes in the live object, as in `System.json` lists, `terms` arrays, and event
+  command `parameters` arrays. These event-command objects are sparse: only translated paths are
+  present.
 - For event code 102, pair each `_original[index]` choice with `parameters[0][index]`.
 - For scalar event-command `_original` values, resolve the live value by command shape:
-  - 401, 405, 657, 356, 108: visible text in `parameters[0]`.
+  - 401, 405, 657, 356, 108, 355, 655: visible text or containing script in `parameters[0]`.
   - 408: comment continuation in `parameters[0]`; classify its runtime visibility from the
     preceding 108 block and enabled plugin code before treating it as internal or player-facing.
   - 101: visible name field in `parameters[4]`, or `parameters[0]` for the variable-name form.
