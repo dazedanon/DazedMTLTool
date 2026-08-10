@@ -33,9 +33,11 @@ from util.game_settings import (
 )
 from util.skills import (
     RPGMAKER_QA_FOCUSES,
+    game_skill_path_for_game,
     load_clipboard_skill,
     load_project_setup,
     load_rpgmaker_qa_skill,
+    quirks_path_for_game,
 )
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
 from util.id_ranges import legacy_exclusive_range, normalize_id_ranges
@@ -4387,6 +4389,8 @@ class WorkflowTab(QWidget):
                 "{{GAME_DATA_FOLDER}}": str(Path(game_data).expanduser().resolve()),
                 "{{GAME_ROOT}}": str(Path(game_root).expanduser().resolve()),
                 "{{VOCAB_FILE}}": str(ensure_game_glossary(game_root)),
+                "{{QUIRKS_FILE}}": str(quirks_path_for_game(game_root)),
+                "{{GAME_SKILL_FILE}}": str(game_skill_path_for_game(game_root)),
             }
             focus = self._qa_focus_combo.currentData() or "dialogue"
             prompt = load_rpgmaker_qa_skill(str(focus))

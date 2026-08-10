@@ -10,13 +10,28 @@ for source-versus-translation comparisons. Use other records in the same folder 
 nearby event context.
 
 Use the rest of this game folder as read-only evidence for scripts, enabled plugins, event flow,
-assets, per-game skills, and runtime behavior:
+assets, and runtime behavior:
 
 `{{GAME_ROOT}}`
+
+Before reviewing any translation, load all three selected-game context files below. Do not infer
+their contents from translated JSON or substitute similarly named files elsewhere in the game.
 
 Use this glossary as authoritative for applicable names and terminology:
 
 `{{VOCAB_FILE}}`
+
+Use these translation quirks as project-specific voice, style, and formatting rules:
+
+`{{QUIRKS_FILE}}`
+
+Use this game skill as the project's setting, register, characterization, and naming frame:
+
+`{{GAME_SKILL_FILE}}`
+
+If any context file is missing, unreadable, or empty, record that exact status before continuing.
+Apply every usable rule during semantic review. If the context files conflict with each other or
+with authoritative Japanese/runtime evidence, report the conflict and do not guess silently.
 
 This prompt contains one selected QA focus at the end. Audit only that focus. Other JSON values and
 game files are context, not additional review scope. During discovery, do not edit translations or
@@ -88,12 +103,17 @@ short-lived helpers when useful.
 - Display compact panes of roughly 75–150 rows with ordinal, locator count, risk reasons, source,
   and translation. Escape embedded newlines. Expand full locators and context only for candidates.
 
-## Glossary and evidence rules
+## Project context and evidence rules
 
 Load `{{VOCAB_FILE}}` before terminology review. Report whether it loaded, its usable deduplicated
 entry count, and confirmed violations. Reject substring collisions and contextually different
 senses. Treat approved project-specific exceptions as non-findings and record them in the focus
 checkpoint so they do not recur.
+
+Load `{{QUIRKS_FILE}}` and `{{GAME_SKILL_FILE}}` before semantic review. Use their applicable voice,
+style, formatting, setting, register, characterization, and naming guidance when judging each
+translation. Record both paths, load status, and whether each file supplied usable guidance. Do not
+claim either file was considered merely because its parent game folder was inspected.
 
 Preserve live text unless concrete evidence shows a defect and supports a correction. Evidence may
 come from the Japanese source, glossary, runtime token rules, surrounding context, related database
@@ -146,6 +166,8 @@ tool, or evidence blocker that prevents it from finishing:
 - Per-wave history, overlap, new signatures/affected values, clean-wave count, and convergence state
 - Checkpoint location, schema/version or helper hash, manifest checksum, and blind spots
 - Glossary path, load status, usable entry count, and confirmed violations
+- Translation quirks path, load status, and whether usable rules were applied
+- Game skill path, load status, and whether usable guidance was applied
 
 ### Findings summary
 

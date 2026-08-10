@@ -174,7 +174,19 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         self.assertNotIn("Selected focus: Dialogue", prompt)
         self.assertIn(str(data.resolve()), prompt)
         self.assertIn(str(game.resolve()), prompt)
+        self.assertIn(
+            str(game.resolve() / ".dazedtl" / "glossary.txt"), prompt
+        )
+        self.assertIn(
+            str(game.resolve() / ".dazedtl" / "skills" / "quirks.md"), prompt
+        )
+        self.assertIn(
+            str(game.resolve() / ".dazedtl" / "skills" / "game.md"), prompt
+        )
         self.assertNotIn("{{GAME_DATA_FOLDER}}", prompt)
+        self.assertNotIn("{{VOCAB_FILE}}", prompt)
+        self.assertNotIn("{{QUIRKS_FILE}}", prompt)
+        self.assertNotIn("{{GAME_SKILL_FILE}}", prompt)
         items = [
             {"name": "Actors.json", "path": "/fixture/Actors.json", "size_kb": 1, "category": "core", "default": True},
             {"name": "Map001.json", "path": "/fixture/Map001.json", "size_kb": 1, "category": "map", "default": False},

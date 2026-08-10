@@ -76,8 +76,17 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                     "{{GAME_DATA_FOLDER}}",
                     "{{GAME_ROOT}}",
                     "{{VOCAB_FILE}}",
+                    "{{QUIRKS_FILE}}",
+                    "{{GAME_SKILL_FILE}}",
                 ):
                     self.assertIn(placeholder, prompt)
+                self.assertIn(
+                    "load all three selected-game context files", lowered
+                )
+                self.assertIn(
+                    "translation quirks path, load status", lowered
+                )
+                self.assertIn("game skill path, load status", lowered)
                 if focus == "dialogue":
                     self.assertIn("while tools remain callable", flattened)
                     self.assertIn("review every frozen dialogue cluster", lowered)
