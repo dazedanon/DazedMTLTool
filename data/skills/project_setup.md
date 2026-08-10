@@ -22,9 +22,9 @@ schema and exclusivity rules.
 
 | Block | Owns | Must NOT include |
 |-------|------|------------------|
-| `glossary` | Named characters (gender, role, **per-character** speech register) + worldbuilding terms saved at `.dazedtl/glossary.txt` | Global dialect / person rules; honorific policy; speaker-format flags; formatting |
+| `glossary` | Named characters (gender, role, **per-character** speech register) + worldbuilding terms and stable translation-relevant facts saved at `.dazedtl/glossary.txt` | Global dialect / person rules; honorific policy; speaker-format flags; formatting; speculative plot interpretation |
 | `speaker_settings` | Manual tool flag ENABLE/SKIP decisions + short evidence | Character bios; quirks; full glossary |
-| `translation_quirks` | Cross-cutting voice rules (battle-log person, global dialect, item-description style, **unusual** honorific habits) | Per-character register; "always keep -san" (tool base prompt already does); codes/wrap/line counts; speaker flags |
+| `translation_quirks` | Cross-cutting voice rules (battle-log person, global dialect, item-description style, recurring humor/wordplay policy, **unusual** honorific habits) | Per-character register; one-off jokes; "always keep -san" (tool base prompt already does); codes/wrap/line counts; speaker flags |
 | `game_skill` | **Translation Frame** for the API (theme / era / register / naming / optional myth) saved at `.dazedtl/skills/game.md` | File inventories; quirks bullets; glossary; per-character register; IDE scaffolding; restating base honorific/formatting policy |
 | `rpgmaker_settings` (RPG Maker only) | Manual code-408 decision + measured wrap/font recommendations | Translation prose; glossary; voice rules; speculative settings without evidence |
 
@@ -124,7 +124,7 @@ make no edits and report the evidence normally.
 - Commit to one spelling - never `Sylfia / Sylphia`.
 - Characters: gender, role, speech register, personality, player-chosen name (Actors.json ID 1).
 - Real named actors get full `# Game Characters` entries, not only `\\N[n]` placeholders.
-- Worldbuilding: factions, lore locations, unique systems/titles - exclude skill/item/weapon/armour names and generic RPG words.
+- Worldbuilding: factions, lore locations, unique systems/titles, and concise stable facts needed to disambiguate their translations - exclude speculative plot interpretation, skill/item/weapon/armour names, and generic RPG words.
 
 ### Quirks rules (for the paste-ready Translation quirks section)
 
@@ -132,9 +132,11 @@ Find translation-only quirks, for example:
 - Battle log / system messages consistently 3rd person (or other fixed person)
 - Global dialect (old-timer speech, archaic narration)
 - Recurring item/skill description style
+- Recurring humor mode, catchphrase treatment, or wordplay strategy when several source examples support one cross-cutting rule
 - Unusual honorific habits (who uses what with whom)
 
-Exclude: formatting codes, wrap, line counts, speaker flags, character name lists.
+Exclude: formatting codes, wrap, line counts, speaker flags, character name lists, and one-off jokes
+that should be localized from their own context instead of becoming global policy.
 
 Output as short imperative bullets suitable to paste into `.dazedtl/skills/quirks.md`.
 
@@ -290,7 +292,8 @@ manual checkbox decision, so do not put them in a code fence.
 - Descriptions entirely in English; refer to other characters by English name.
 - Commit to one spelling - never `Sylfia / Sylphia`.
 - Characters: gender, role, speech register, personality; note player-chosen names (variable / input).
-- Worldbuilding: factions, lore locations (mentioned in dialogue but not map labels), unique systems/titles.
+- Worldbuilding: factions, lore locations (mentioned in dialogue but not map labels), unique systems/titles, and concise stable facts needed to disambiguate their translations.
+- Exclude speculative plot interpretation from glossary descriptions.
 - Exclude: skill / item / weapon / armour names from `names.json`, generic RPG words, unnamed NPCs.
 
 ### Quirks rules (for the paste-ready Translation quirks section)
@@ -299,9 +302,11 @@ Find translation-only quirks, for example:
 - Battle log / system messages with a fixed person or register
 - Global dialect (archaic narration, cute speech markers game-wide)
 - Recurring item/skill description style
+- Recurring humor mode, catchphrase treatment, or wordplay strategy when several source examples support one cross-cutting rule
 - Unusual honorific habits
 
-Exclude: wrap geometry, inject layout, `names.json` harvest, speaker LOWCONF checkbox, character name lists.
+Exclude: wrap geometry, inject layout, `names.json` harvest, speaker LOWCONF checkbox, character name lists,
+and one-off jokes that should be localized from their own context instead of becoming global policy.
 
 Output as short imperative bullets suitable to paste into `.dazedtl/skills/quirks.md`.
 

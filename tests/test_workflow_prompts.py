@@ -78,11 +78,15 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                     "{{VOCAB_FILE}}",
                     "{{QUIRKS_FILE}}",
                     "{{GAME_SKILL_FILE}}",
+                    "{{GAME_SKILLS_FOLDER}}",
                 ):
                     self.assertIn(placeholder, prompt)
                 self.assertIn(
-                    "load all three selected-game context files", lowered
+                    "load all three required selected-game context files", lowered
                 )
+                self.assertIn("optional custom-skills folder", lowered)
+                self.assertIn("lost intentional ambiguity", lowered)
+                self.assertIn("functional english adaptation is valid", flattened)
                 self.assertIn(
                     "translation quirks path, load status", lowered
                 )
@@ -97,8 +101,18 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                         "`consumed queue entries / total queue entries`", prompt
                     )
                     self.assertIn("score the entire unreviewed frozen suffix", prompt)
+                    self.assertIn("dialogue-narrative-wordplay-v1", prompt)
+                    self.assertIn("narrative anchors", lowered)
+                    self.assertIn("wordplay candidates", lowered)
+                    self.assertIn("reconcile both ledgers", lowered)
+                    self.assertIn("no narrative/wordplay signal", lowered)
+                    self.assertIn("dialogue context fingerprint", lowered)
                 if focus == "database":
                     self.assertIn("zero unreviewed clusters", lowered)
+                if focus == "release":
+                    self.assertIn("dialogue-narrative-wordplay-v1", prompt)
+                    self.assertIn("narrative-anchor and wordplay ledgers", lowered)
+                    self.assertIn("context fingerprint matching", lowered)
         with self.assertRaises(ValueError):
             load_rpgmaker_qa_skill("everything")
 
@@ -113,12 +127,21 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("notes    : notewidth=", lowered)
         self.assertIn("only fills an empty code-101 param[4]", lowered)
         self.assertIn("include displayed comment text (code 408)", lowered)
+        self.assertIn("recurring humor mode", lowered)
+        self.assertIn("one-off jokes", lowered)
         self.assertNotIn("{{SUPPORTED_CODE408_MARKERS}}", prompt)
         for marker in SUPPORTED_CODE408_MARKERS:
             self.assertIn(marker, prompt)
 
         wolf_prompt = load_project_setup("wolf")
-        self.assertNotIn("code408 : enable|skip", wolf_prompt.casefold())
+        wolf_lowered = wolf_prompt.casefold()
+        self.assertNotIn("code408 : enable|skip", wolf_lowered)
+        self.assertIn("recurring humor mode", wolf_lowered)
+        self.assertIn("one-off jokes", wolf_lowered)
+
+        system_prompt = load_clipboard_skill("system.md").casefold()
+        self.assertIn("preserve established lore facts", system_prompt)
+        self.assertIn("natural english adaptation", system_prompt)
 
     def test_wrap_prompt_accounts_for_code101_faces_and_font_changes(self):
         prompt = load_clipboard_skill("wrap_config.md").casefold()

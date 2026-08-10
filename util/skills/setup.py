@@ -15,7 +15,7 @@ _ENGINE_MARKERS = {
 RPGMAKER_QA_FOCUSES = (
     ("database", "1  Database files"),
     ("risky-codes", "2  Risky event codes"),
-    ("dialogue", "3  Dialogue, choices & scrolling text"),
+    ("dialogue", "3  Dialogue, choices, lore & wordplay"),
     ("release", "4  Coverage & release gate"),
 )
 

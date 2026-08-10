@@ -125,7 +125,8 @@ class SkillsTab(QWidget):
             hint=(
                 "Shared post-export rules plus four independently copied QA focus sections. "
                 "Keep every qa-focus marker and the {{GAME_DATA_FOLDER}}, {{GAME_ROOT}}, and "
-                "{{VOCAB_FILE}} placeholders."
+                "selected-game context placeholders, including {{VOCAB_FILE}} and "
+                "{{GAME_SKILLS_FOLDER}}."
             ),
             is_json=False,
         )

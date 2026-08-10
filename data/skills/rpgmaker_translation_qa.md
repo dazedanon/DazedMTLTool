@@ -14,8 +14,9 @@ assets, and runtime behavior:
 
 `{{GAME_ROOT}}`
 
-Before reviewing any translation, load all three selected-game context files below. Do not infer
-their contents from translated JSON or substitute similarly named files elsewhere in the game.
+Before reviewing any translation, load all three required selected-game context files below. Do
+not infer their contents from translated JSON or substitute similarly named files elsewhere in the
+game.
 
 Use this glossary as authoritative for applicable names and terminology:
 
@@ -28,6 +29,15 @@ Use these translation quirks as project-specific voice, style, and formatting ru
 Use this game skill as the project's setting, register, characterization, and naming frame:
 
 `{{GAME_SKILL_FILE}}`
+
+Translation also uses optional custom Markdown overlays from this selected-game skills folder:
+
+`{{GAME_SKILLS_FOLDER}}`
+
+Enumerate regular `*.md` files directly in that folder, excluding `game.md`, `quirks.md`, and the
+legacy reserved name `translation.md`, and load every non-empty custom overlay before semantic
+review. Treat a missing folder or no custom overlays as `none`, not as an error. Record an
+unreadable, unsafe, or conflicting custom overlay exactly instead of silently ignoring it.
 
 If any context file is missing, unreadable, or empty, record that exact status before continuing.
 Apply every usable rule during semantic review. If the context files conflict with each other or
@@ -42,7 +52,7 @@ Complete all four QA passes; none is optional. Run them in this order:
 
 1. Database files
 2. Risky event codes
-3. Dialogue, choices, and scrolling text
+3. Dialogue, choices, lore, and wordplay
 4. Coverage and release gate
 
 Carry each pass's checkpoint or final report forward as evidence for the final gate. Do not skip any
@@ -95,11 +105,14 @@ short-lived helpers when useful.
   `SHA-256("rpgmaker-qa-focus-v1\0" + focus name + "\0" + representative identity)`.
 - Interleave files and the focus-specific strata named below so one large file or shape does not
   consume the wave. Do not reshuffle on resume or after editing English.
-- Save the ordered identities, locators, source hashes, dispositions, issue signatures, and wave
-  position in a checkpoint outside `{{GAME_ROOT}}`. Record the helper version or content hash and
-  manifest checksum. Never place generated QA artifacts in the game folder or data folder.
+- Save the ordered identities, locators, source hashes, dispositions, issue signatures, applicable
+  focus-specific review-contract ID, and wave position in a checkpoint outside `{{GAME_ROOT}}`.
+  Record the helper version or content hash and manifest checksum. Never place generated QA
+  artifacts in the game folder or data folder.
 - Reuse a valid checkpoint for this focus. Reject it and explain why if the focus, source hashes,
-  or manifest checksum no longer match. Keep checkpoints from other focuses separate.
+  manifest checksum, or applicable focus-specific review contract no longer matches. A selected
+  focus may explicitly allow reuse of older mechanical inventory while requiring its semantic
+  dispositions to restart. Keep checkpoints from other focuses separate.
 - Display compact panes of roughly 75–150 rows with ordinal, locator count, risk reasons, source,
   and translation. Escape embedded newlines. Expand full locators and context only for candidates.
 
@@ -115,10 +128,26 @@ style, formatting, setting, register, characterization, and naming guidance when
 translation. Record both paths, load status, and whether each file supplied usable guidance. Do not
 claim either file was considered merely because its parent game folder was inspected.
 
+Load every optional custom overlay discovered under `{{GAME_SKILLS_FOLDER}}` as project guidance
+used during translation. Record the folder, filenames, load status, and whether each supplied an
+applicable rule. Japanese source and verified runtime evidence remain authoritative when an overlay
+conflicts with them.
+
 Preserve live text unless concrete evidence shows a defect and supports a correction. Evidence may
 come from the Japanese source, glossary, runtime token rules, surrounding context, related database
 records, or enabled plugin code. Report changed or missing meaning, wrong names/terms, source
 residue, broken structure/tokens, wrong polarity/number/referent, or demonstrable display damage.
+Also report a source-supported lore contradiction, lost intentional ambiguity, erased joke or
+wordplay function, or broken callback in the focus that owns the live target. Functional English
+adaptation is valid and need not reproduce the Japanese mechanism when it preserves the semantic
+payload, character voice, intended effect, and any dependent payoff.
+
+Use this evidence order for narrative or wordplay decisions: authoritative Japanese and its event
+context; applicable glossary/project guidance; corroborating Japanese occurrences, database
+records, and verified runtime behavior; then the current English as the text being evaluated, never
+as proof of canon. Do not promote an interpretation to lore merely because several English lines
+repeat it. Leave genuinely ambiguous evidence unchanged and report the specific gap when it blocks
+a safe disposition.
 
 Do not report preference-only rewrites. Valid transliteration, honorific, dialect, punctuation,
 loanword, register, literal-versus-localized phrasing, or metadata differences are not findings when
@@ -168,15 +197,18 @@ tool, or evidence blocker that prevents it from finishing:
 - Glossary path, load status, usable entry count, and confirmed violations
 - Translation quirks path, load status, and whether usable rules were applied
 - Game skill path, load status, and whether usable guidance was applied
+- Optional custom-skills folder, discovered files, load status, and applicable guidance
 
 ### Findings summary
 
 Count only actionable findings:
 
 - **Critical**: invalid JSON/structure or runtime-breaking token/script corruption.
-- **High**: clear mistranslation, missing content, source residue, wrong control-code scope, or
-  glossary/name failure.
-- **Medium**: evidence-backed context, consistency, fluency, tone, or overflow defect.
+- **High**: clear mistranslation, missing content, source residue, wrong control-code scope,
+  glossary/name failure, altered lore/plot fact, broken foreshadowing, or wordplay required by a
+  choice, puzzle, clue, or later payoff.
+- **Medium**: evidence-backed context, consistency, fluency, tone, overflow, or demonstrably
+  flattened humor/callback defect where the basic meaning remains sound.
 
 Do not create Low findings for optional polish.
 
@@ -217,7 +249,23 @@ do not count regression as a new semantic wave.
 Report fixes and remaining risks, then stop.
 
 <!-- qa-focus:dialogue -->
-## Selected focus: Dialogue, choices, and scrolling text
+## Selected focus: Dialogue, choices, lore, and wordplay
+
+Dialogue semantic review contract: `dialogue-narrative-wordplay-v1`.
+
+A checkpoint or report without this exact contract ID does not establish semantic completion for
+this focus. When its focus, source hashes, and manifest checksum still match, its frozen manifest
+and completed mechanical results may be reused, but reset semantic dispositions to unreviewed and
+rebuild the narrative and wordplay ledgers from the start. Do not invalidate checkpoints from the
+other three focuses solely because this dialogue contract changed.
+
+Compute and store a dialogue context fingerprint from the exact UTF-8 contents or explicit
+missing/empty status of `{{VOCAB_FILE}}`, `{{QUIRKS_FILE}}`, `{{GAME_SKILL_FILE}}`, and every loaded
+custom overlay, ordered by resolved path. Reuse prior dialogue semantic dispositions only when this
+fingerprint also matches. If project guidance changed while the source manifest remained valid,
+reuse the frozen manifest and mechanical results but reset all dialogue semantic dispositions and
+both ledgers; new guidance can change lore, voice, and wordplay judgments even when Japanese and
+English text are unchanged.
 
 Audit only event commands 101, 102, 401, and 405 in `Map*.json`, `CommonEvents.json`, and
 `Troops.json`.
@@ -245,6 +293,52 @@ kinship, negation, conditions, quantities, choice polarity, choice/branch mismat
 errors, control-code scope, and page/wrap damage. Review adjacent 101/401 groups and full choice
 blocks together when meaning depends on them.
 
+### Narrative continuity and wordplay protocol
+
+Assess every frozen dialogue cluster for narrative continuity and wordplay while performing its
+ordinary semantic review. This is an additional disposition lens, not a heuristic sample and not a
+second set of translation targets.
+
+For each reviewed cluster, record either `no narrative/wordplay signal` or the applicable compact
+ledger entries:
+
+- **Narrative anchors:** translation-sensitive identities, relationships, forms of address,
+  factions, titles, geography, chronology, quantities, world rules, revelations, foreshadowing,
+  denials, and deliberate ambiguity. Store the Japanese-supported proposition, entities, certainty
+  or story-state qualifier, English rendering, evidence locators, and any cross-focus dependency.
+- **Wordplay candidates:** puns, homophones or double meanings, name jokes, twisted idioms,
+  cultural references, comedic misunderstandings, catchphrases, reaction lines that signal a joke,
+  and later callbacks. Store the source mechanism when knowable, required semantic payload,
+  intended effect, speaker/voice, English localization strategy, linked locators, and disposition.
+
+Do not record every mundane statement as lore. Record facts whose mistranslation could change the
+reader's understanding or make another translation inconsistent. Do not assume Japanese map/event
+order is story chronology; use transfers, conditions, nearby commands, and corroborating source as
+evidence, and keep story-state variants distinct.
+
+After every frozen cluster has a semantic disposition, reconcile both ledgers before this focus can
+be complete:
+
+1. Group narrative anchors by canonical entity/concept and compare polarity, identity,
+   relationship, title, place, quantity, chronology, and story-state qualifiers across distant
+   files and context classes.
+2. Group wordplay by source expression, shared mechanism, catchphrase, response/callback, and
+   dependent clue or choice. Inspect every linked occurrence needed to judge whether the English
+   setup and payoff still work together.
+3. Search the entire dialogue scope for each confirmed contradiction or broken-joke signature and
+   propagate findings as required by the common contract.
+4. When the live dependency belongs to Database, Risky codes, or other translated game-data text,
+   keep it read-only, record the exact cross-focus dependency, and carry it to the release gate.
+
+A different English joke is acceptable when it preserves meaning, voice, comedic/rhetorical
+function, and downstream dependencies. Literal wording that erases a demonstrable joke is not
+automatically acceptable. Conversely, do not flag subjective funniness, an unproven possible pun,
+or a preference for another localization strategy.
+
+Report static blind spots explicitly, including wordplay dependent on omitted readings/furigana,
+voice acting, images, animation, timing, or route order that the available files cannot prove.
+Convert those blind spots into targeted playtests rather than guessed edits.
+
 ### Large-corpus semantic protocol
 
 Complete the full mechanical scan before the first semantic wave. On an unchanged resumed corpus,
@@ -264,10 +358,11 @@ Construct one frozen dialogue order before Wave 1:
 Before each wave, score the entire unreviewed frozen suffix with a high-recall risk overlay. Include
 mechanical flags plus cues for negation, quantities, conditions, temporal order, pronouns,
 referents, kinship, glossary terms, short ambiguous Japanese, large length changes, inconsistent
-clusters, choice polarity, speaker changes, and control-code placement. Inspect the highest-risk
-members of the current wave first, then review every remaining member in frozen order. Risk ranking
-must not change wave membership, substitute for review, or allow any member to be skipped. Record an
-explicit reviewed disposition for every representative.
+clusters, choice polarity, speaker changes, lore-bearing assertions, deliberate ambiguity,
+wordplay/joke reactions, catchphrases/callbacks, and control-code placement. Inspect the
+highest-risk members of the current wave first, then review every remaining member in frozen order.
+Risk ranking must not change wave membership, substitute for review, or allow any member to be
+skipped. Record an explicit reviewed disposition for every representative.
 
 Review every frozen dialogue cluster across consecutive resumable waves:
 
@@ -290,7 +385,9 @@ coverage; they do not inflate the unique-cluster count or replace a frozen wave 
 
 Dialogue status may be `complete - exhaustive` only when all frozen clusters were reviewed.
 Report the exact reviewed count, zero unreviewed count, represented strata, context-class coverage,
-wave history, issue-propagation totals, and manifest checksum.
+wave history, issue-propagation totals, manifest checksum, dialogue review-contract ID, narrative
+anchor count and reconciliation result, wordplay candidate/disposition counts, cross-focus
+dependencies, dialogue context fingerprint, and static blind spots.
 <!-- /qa-focus:dialogue -->
 
 <!-- qa-focus:database -->
@@ -323,7 +420,9 @@ those belong to other focuses.
 Stratify the wave by filename, entity type, field name, record identity, and short/medium/long
 length band. Prioritize glossary entities, similarly named levels/variants, battle terminology,
 menu labels, parameter names, state messages, actor identity, number/element/type mismatches, and
-inconsistent translations of one database term.
+inconsistent translations of one database term. Also prioritize lore-bearing profiles or
+descriptions, paired or joke names, myth/folklore references, and database text required by a
+dialogue setup, clue, or callback.
 
 Review every frozen database cluster in consecutive waves before reporting this focus complete or
 asking for fix approval.
@@ -416,11 +515,22 @@ evidence for those surfaces when relevant to release, without absorbing their wo
 
 ### Release decision
 
-Reconcile the Database, Risky-code, and Dialogue focus reports/checkpoints. If any required report
-or valid checkpoint is unavailable or incomplete, independently report that focus's exact inventory
-count when possible and block release for missing semantic-completion evidence. Never treat the
-final coverage pass as a substitute for one of the first three required passes. Static release
-approval requires:
+Reconcile the Database, Risky-code, and Dialogue focus reports/checkpoints. Require the Dialogue
+evidence to declare `dialogue-narrative-wordplay-v1` and a context fingerprint matching the current
+selected-game glossary, quirks, game skill, and custom overlays; an older or context-stale dialogue
+report may supply matching mechanical inventory but not semantic-completion evidence. If any
+required report or valid checkpoint is unavailable or incomplete, independently report that
+focus's exact inventory count when possible and block release for missing semantic-completion
+evidence. Never treat the final coverage pass as a substitute for one of the first three required
+passes.
+
+Reconcile the Dialogue narrative-anchor and wordplay ledgers against Database, Risky-code, and
+class-4 findings. Verify that every recorded cross-focus dependency has a compatible disposition,
+that source-supported lore facts do not conflict across classes, and that linked joke/clue setups
+and payoffs still function. This is evidence reconciliation, not permission to repeat or silently
+replace the owning focus's semantic review.
+
+Static release approval requires:
 
 - complete mechanical coverage and no unresolved/double-classified `_original` leaves;
 - exhaustive completion or valid focus-specific semantic convergence for all four game-data classes;
@@ -429,7 +539,8 @@ approval requires:
 
 Recommend a focused playtest for repaired events, representative messages/choices/scrolling text,
 name boxes, database menus and battle messages, risky plugin/script displays, control codes,
-wrapping/pagination assumptions, and plugin-derived class-4 text. State whether release is blocked,
-conditionally allowed after named fixes/evidence, or statically allowed with targeted runtime
-checks remaining.
+wrapping/pagination assumptions, plugin-derived class-4 text, and lore/wordplay blind spots that
+depend on route order, omitted readings/furigana, voice acting, images, animation, or timing. State
+whether release is blocked, conditionally allowed after named fixes/evidence, or statically allowed
+with targeted runtime checks remaining.
 <!-- /qa-focus:release -->

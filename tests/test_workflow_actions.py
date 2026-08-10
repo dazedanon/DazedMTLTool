@@ -162,6 +162,11 @@ class WorkflowHandlerContractTests(unittest.TestCase):
             ],
             ["database", "risky-codes", "dialogue", "release"],
         )
+        dialogue_index = self.workflow._qa_focus_combo.findData("dialogue")
+        self.assertIn(
+            "lore & wordplay",
+            self.workflow._qa_focus_combo.itemText(dialogue_index),
+        )
         database_index = self.workflow._qa_focus_combo.findData("database")
         self.assertGreaterEqual(database_index, 0)
         self.workflow._qa_focus_combo.setCurrentIndex(database_index)
@@ -183,10 +188,14 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         self.assertIn(
             str(game.resolve() / ".dazedtl" / "skills" / "game.md"), prompt
         )
+        self.assertIn(
+            str(game.resolve() / ".dazedtl" / "skills"), prompt
+        )
         self.assertNotIn("{{GAME_DATA_FOLDER}}", prompt)
         self.assertNotIn("{{VOCAB_FILE}}", prompt)
         self.assertNotIn("{{QUIRKS_FILE}}", prompt)
         self.assertNotIn("{{GAME_SKILL_FILE}}", prompt)
+        self.assertNotIn("{{GAME_SKILLS_FOLDER}}", prompt)
         items = [
             {"name": "Actors.json", "path": "/fixture/Actors.json", "size_kb": 1, "category": "core", "default": True},
             {"name": "Map001.json", "path": "/fixture/Map001.json", "size_kb": 1, "category": "map", "default": False},

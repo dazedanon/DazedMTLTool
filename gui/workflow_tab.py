@@ -325,7 +325,7 @@ _STEP_HELP: dict[int, str] = {
         "<b>What to do (all four passes are required)</b><br>"
         "1. Copy and complete <b>Database files</b> QA.<br>"
         "2. Copy and complete <b>Risky event codes</b> QA.<br>"
-        "3. Copy and complete <b>Dialogue, choices & scrolling text</b> QA.<br>"
+        "3. Copy and complete <b>Dialogue, choices, lore & wordplay</b> QA.<br>"
         "4. Copy and complete <b>Coverage & release gate</b> QA.<br><br>"
         "Use a separate AI chat for each pass. Finish the current pass and save its checkpoint "
         "or report before starting the next one; do not run the four passes concurrently. Carry "
@@ -4391,12 +4391,14 @@ class WorkflowTab(QWidget):
             if not game_data or not Path(game_data).is_dir():
                 self._log("⚠  No game data folder detected. Complete Step 0 first.")
                 return
+            game_skill_file = game_skill_path_for_game(game_root)
             replacements = {
                 "{{GAME_DATA_FOLDER}}": str(Path(game_data).expanduser().resolve()),
                 "{{GAME_ROOT}}": str(Path(game_root).expanduser().resolve()),
                 "{{VOCAB_FILE}}": str(ensure_game_glossary(game_root)),
                 "{{QUIRKS_FILE}}": str(quirks_path_for_game(game_root)),
-                "{{GAME_SKILL_FILE}}": str(game_skill_path_for_game(game_root)),
+                "{{GAME_SKILL_FILE}}": str(game_skill_file),
+                "{{GAME_SKILLS_FOLDER}}": str(game_skill_file.parent),
             }
             focus = self._qa_focus_combo.currentData() or "dialogue"
             prompt = load_rpgmaker_qa_skill(str(focus))
