@@ -325,8 +325,10 @@ _STEP_HELP: dict[int, str] = {
         "2. Copy and complete <b>Risky event codes</b> QA.<br>"
         "3. Copy and complete <b>Dialogue, choices & scrolling text</b> QA.<br>"
         "4. Copy and complete <b>Coverage & release gate</b> QA.<br><br>"
-        "Carry each pass's checkpoint or report into the final gate. Do not continue because "
-        "only one pass was clean; the release check requires evidence from every pass."
+        "Use a separate AI chat for each pass. Finish the current pass and save its checkpoint "
+        "or report before starting the next one; do not run the four passes concurrently. Carry "
+        "all three earlier reports into the final gate. Do not continue because only one pass "
+        "was clean; the release check requires evidence from every pass."
     ),
     8: (
         "<b>Step 8 - Translate text inside images</b><br><br>"
@@ -2535,12 +2537,12 @@ class WorkflowTab(QWidget):
         qa_stage = WorkflowStageCard(
             1,
             "Complete all translation QA passes",
-            "Run every focused pass in order after rewrapping, then carry its evidence into the final gate.",
+            "Use a separate AI chat for each pass, complete them in order, and carry every report into the final gate.",
         )
         self._qa_finish_stage = qa_stage
         self._qa_ai_help_banner = StatusBanner(
-            "Complete all four required QA passes in order. Each copied prompt audits one bounded "
-            "surface; the final coverage pass checks their evidence and blocks release on gaps.",
+            "Complete all four required QA passes in order, using a separate chat for each pass. "
+            "Finish each pass before starting the next; the final gate blocks release on missing evidence.",
             "info",
         )
         qa_stage.add_widget(self._qa_ai_help_banner)
@@ -3663,7 +3665,7 @@ class WorkflowTab(QWidget):
             qa_stage.description_label.setText(
                 "Complete all four QA passes, then build the Ace release."
                 if is_ace else
-                "Run every focused pass in order after rewrapping, then carry its evidence into the final gate."
+                "Use a separate AI chat for each pass, complete them in order, and carry every report into the final gate."
             )
         if is_ace and self._step_tabs.currentIndex() in tool_indices:
             self._goto_step(7)

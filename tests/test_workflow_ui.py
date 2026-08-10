@@ -116,6 +116,10 @@ class WorkflowShellTests(unittest.TestCase):
             [button.accessibleName() for button in self.workflow._step_rail.buttons[7:10]],
             ["Step 8: QA", "Step 9: Images", "Step 10: Playtest"],
         )
+        qa_help = self.workflow._qa_ai_help_banner.text_label.text()
+        self.assertIn("all four required QA passes", qa_help)
+        self.assertIn("separate chat for each pass", qa_help)
+        self.assertIn("before starting the next", qa_help)
 
         self.workflow._goto_step(3)
         self.app.processEvents()
