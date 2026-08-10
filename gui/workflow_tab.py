@@ -550,9 +550,15 @@ def _inspect_image_workflow(game_root: str | Path) -> dict:
 
         if workspace.is_dir():
             misplaced = 0
+            backup_root = workspace / "backups"
             for path in workspace.rglob("*"):
                 if not path.is_file() or path.suffix.casefold() != ".png":
                     continue
+                try:
+                    path.relative_to(backup_root)
+                    continue
+                except ValueError:
+                    pass
                 try:
                     path.relative_to(expected_root)
                 except ValueError:

@@ -289,7 +289,7 @@ class ImageManagerSelectionTests(unittest.TestCase):
         self.assertTrue(legacy_glossary.is_file())
         self.assertFalse(conflict.joinpath(".dazedtl", "glossary.txt").exists())
 
-    def test_workflow_readiness_detects_editable_and_misplaced_pngs(self):
+    def test_workflow_readiness_detects_misplaced_pngs_but_ignores_backups(self):
         asset = self.manager.assets[0]
         asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
         asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
@@ -297,6 +297,9 @@ class ImageManagerSelectionTests(unittest.TestCase):
         misplaced = self.game_root / ".dazedtl" / "images" / "img (2)" / "pictures"
         misplaced.mkdir(parents=True)
         misplaced.joinpath("menu.png").write_bytes(asset.runtime_plain_path.read_bytes())
+        backup = self.game_root / ".dazedtl" / "images" / "backups" / "before-edit"
+        backup.mkdir(parents=True)
+        backup.joinpath("menu.png").write_bytes(asset.runtime_plain_path.read_bytes())
 
         report = _inspect_image_workflow(self.game_root)
 
