@@ -50,8 +50,14 @@ Keep this pass independent and measurable instead of widening it into a whole-ga
   After each wave, persist the checkpoint and continue immediately with the next non-overlapping
   wave from the same frozen manifest in the same invocation.
   Do not stop merely because one wave completed or was clean.
+  Anticipated context-window pressure, token or response-length concerns, wall-clock concerns,
+  corpus size, wave count, or a desire to hand work off are not runtime or tool limits. Context
+  compaction is continuation, not interruption. If you can still call tools, write the checkpoint,
+  or continue reasoning, continue in the same invocation instead of returning an incomplete report.
   If an actual runtime or tool limit prevents continuing, report the focus as incomplete with the
-  exact unreviewed count and resume from the checkpoint on the next invocation.
+  exact unreviewed count and resume from the checkpoint on the next invocation. Use this status
+  only after a concrete tool failure, timeout, hard platform termination, or equivalent enforced
+  limit actually prevents the next wave or checkpoint; record that evidence in the report.
 - Put every mechanically flagged, glossary-bearing, short ambiguous, and context-sensitive cluster
   in the mandatory-review queue. Mandatory status changes attention order inside the current wave;
   it must not silently increase the wave or count as semantic review by itself.
@@ -248,6 +254,9 @@ Review every frozen dialogue cluster across consecutive resumable waves:
   partial wave until the frozen manifest is exhausted.
 - Persist the checkpoint after each wave, but continue automatically in the same invocation.
   Resume in a later invocation only after a genuine runtime or tool interruption.
+- Never treat anticipated context compaction, token usage, response size, elapsed time, corpus size,
+  or remaining wave count as a genuine interruption. Continue across compaction and keep invoking
+  the next wave while tools remain callable.
 - Track clean-wave history as diagnostic evidence, not as permission to leave clusters unreviewed.
 - Do not impose an arbitrary total-wave cap.
   If an actual runtime or tool limit prevents the next wave or checkpoint, report incomplete status

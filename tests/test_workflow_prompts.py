@@ -49,12 +49,16 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             with self.subTest(focus=focus):
                 prompt = load_rpgmaker_qa_skill(focus)
                 lowered = prompt.casefold()
+                flattened = " ".join(lowered.split())
                 self.assertIn(
                     "review every frozen cluster before this focus may end", lowered
                 )
                 self.assertIn(
                     "continue immediately with the next non-overlapping", lowered
                 )
+                self.assertIn("anticipated context-window pressure", flattened)
+                self.assertIn("context compaction is continuation", flattened)
+                self.assertIn("concrete tool failure", flattened)
                 self.assertIn(
                     "ask for fix approval only when zero frozen clusters remain", lowered
                 )
@@ -75,6 +79,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 ):
                     self.assertIn(placeholder, prompt)
                 if focus == "dialogue":
+                    self.assertIn("while tools remain callable", flattened)
                     self.assertIn("review every frozen dialogue cluster", lowered)
                     self.assertIn("partial wave until the frozen manifest", lowered)
                     self.assertIn("complete - exhaustive", lowered)
