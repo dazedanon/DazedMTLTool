@@ -26,6 +26,7 @@ from util.paths import read_active_glossary
 from util.provider_costs import cache_write_multiplier, has_billed_cache_writes
 from util import request_debug
 from util.sfx_reference import build_sfx_reference_text
+from util.vocab import decorative_glossary_alias
 
 
 def _batch_freeze_glossary_text(fallback=""):
@@ -3290,6 +3291,15 @@ def _vocab_term_in_text(term, text):
     return False
 
 
+def _render_decorative_vocab_alias(line: str, source_alias: str,
+                                   target_alias: str) -> str:
+    """Render the first ``source (target)`` pair without its label marker."""
+    match = re.match(r'^(.+?)\s*\(([^()]*)\)', line)
+    if match is None:
+        return line
+    return f"{source_alias} ({target_alias}){line[match.end():]}"
+
+
 def _collect_json_string_values(value):
     """Collect only translatable string values from a parsed JSON payload."""
     if isinstance(value, str):
@@ -3342,6 +3352,15 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
     """Build formatted vocabulary text for terms found in the current batch."""
     matchedCategories = {}
 
+    # Explicit prose entries are authoritative over aliases inferred from
+    # decorated database labels.  This lets a project override or enrich the
+    # clean spelling without having to remove generated ``▼Term`` rows.
+    literal_pair_sources = {
+        term[0]
+        for term, _line, _category in vocabPairs
+        if isinstance(term, tuple) and len(term) == 2
+    }
+
     # Legacy # Speakers entries can overlap hand-curated character entries.
     # Keep only the highest-authority spelling for each character source.
     character_authority = {}
@@ -3391,6 +3410,8 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
     for term, line, category in vocabPairs:
         # Check if term is a tuple (Japanese, English) or a single term
         term_found = False
+        exact_match = False
+        matched_lines = []
         if isinstance(term, tuple):
             # Check both Japanese and English terms
             japanese_term, english_term = term
@@ -3460,17 +3481,50 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
                 )
             ):
                 japanese_match = True
-            if japanese_match or _vocab_term_in_text(english_term, textToSearch):
+            english_match = _vocab_term_in_text(english_term, textToSearch)
+            exact_match = japanese_match or english_match
+            if exact_match:
                 term_found = True
+
+            # A generated label such as ``▼ルドゥレンス (▼Ludurens)`` also
+            # supplies ``ルドゥレンス (Ludurens)`` to ordinary prose.  Remove
+            # exact decorated occurrences before testing the clean alias so a
+            # marked-only payload retains the original row rather than being
+            # mistaken for a bare occurrence.
+            decorative_alias = decorative_glossary_alias(
+                japanese_term, english_term
+            )
+            if decorative_alias is not None:
+                source_alias, target_alias = decorative_alias
+                alias_is_explicit = source_alias in literal_pair_sources
+                alias_source_text = textToSearch.replace(japanese_term, "")
+                alias_target_text = textToSearch.replace(english_term, "")
+                alias_found = (
+                    not alias_is_explicit
+                    and (
+                        _vocab_term_in_text(source_alias, alias_source_text)
+                        or _vocab_term_in_text(target_alias, alias_target_text)
+                    )
+                )
+                if alias_found:
+                    matched_lines.append(_render_decorative_vocab_alias(
+                        line, source_alias, target_alias
+                    ))
+                    term_found = True
         else:
             # Single term check
             if _vocab_term_in_text(term, textToSearch):
+                exact_match = True
                 term_found = True
         
         if term_found:
             if category not in matchedCategories:
                 matchedCategories[category] = []
-            matchedCategories[category].append(line)
+            if exact_match:
+                matched_lines.insert(0, line)
+            for matched_line in matched_lines:
+                if matched_line not in matchedCategories[category]:
+                    matchedCategories[category].append(matched_line)
 
     # Format matched vocabulary with categories
     if matchedCategories:

@@ -232,10 +232,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = False
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE101 = True
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE408 = False
@@ -243,7 +243,7 @@ CODE408 = False
 # player-facing comment blocks should be sent for translation.
 
 # Variables
-CODE122 = True
+CODE122 = False
 # Comma-separated IDs and inclusive ranges, e.g. "35, 37-40, 402".
 # Leave blank to use the legacy minimum/maximum pair below.
 CODE122_VAR_RANGES = '35, 37-40, 402, 408, 412, 418, 422, 428, 432, 438'
@@ -251,8 +251,8 @@ CODE122_VAR_MIN = 9
 CODE122_VAR_MAX = 10
 
 # Plugins / Scripts
-CODE355655 = True
-CODE357 = True
+CODE355655 = False
+CODE357 = False
 CODE657 = False
 CODE356 = False
 CODE320 = False

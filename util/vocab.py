@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+import unicodedata
 from pathlib import Path
 
 from util.paths import (
@@ -193,6 +194,53 @@ _SECTION_PAIR_RE = re.compile(
     r"^(.+?)\s+\((.+)\)\s*$",
 )
 
+_DECORATIVE_GLOSSARY_PUNCTUATION = frozenset({"•", "‣", "⁃", "※"})
+
+
+def split_glossary_decorative_prefix(term: str) -> tuple[str, str]:
+    """Return a leading label marker and the usable term behind it.
+
+    Unicode ``So`` characters cover geometric markers such as ``▼``, ``■``,
+    and ``★`` without classifying parentheses or percent signs as decoration.
+    The explicit punctuation set covers common bullet and note markers used by
+    game databases.
+    """
+    text = str(term or "").strip()
+    marker_end = 0
+    while marker_end < len(text):
+        char = text[marker_end]
+        if (
+            unicodedata.category(char) == "So"
+            or char in _DECORATIVE_GLOSSARY_PUNCTUATION
+        ):
+            marker_end += 1
+            continue
+        break
+    if marker_end == 0:
+        return "", text
+    return text[:marker_end], text[marker_end:].lstrip()
+
+
+def decorative_glossary_alias(source: str, target: str):
+    """Return a clean alias when an existing row uses the same paired marker."""
+    source_marker, source_alias = split_glossary_decorative_prefix(source)
+    target_marker, target_alias = split_glossary_decorative_prefix(target)
+    if (
+        not source_marker
+        or source_marker != target_marker
+        or not source_alias
+        or not target_alias
+    ):
+        return None
+    return source_alias, target_alias
+
+
+def normalize_generated_glossary_pair(source: str, target: str) -> tuple[str, str]:
+    """Remove leading database-label decoration from a generated pair."""
+    _source_marker, clean_source = split_glossary_decorative_prefix(source)
+    _target_marker, clean_target = split_glossary_decorative_prefix(target)
+    return clean_source, clean_target
+
 
 def _parse_section_pairs(section_body: str) -> dict[str, str]:
     """Parse ``src (dst)`` lines from a vocab section body (no header)."""
@@ -221,7 +269,8 @@ def update_vocab_section(
     - ``category``: section header text, e.g. ``"Weapon · 武器"``.
     - ``pairs``: iterable of ``(source, translated)``. Deduped by source (last
       wins); no-ops (empty translation or unchanged after normalisation) are
-      dropped. When nothing survives filtering the file is left untouched.
+      dropped. Leading database-label decoration is removed from generated
+      rows. When nothing survives filtering the file is left untouched.
     - ``merge``: when True, keep existing entries for this category and only add
       sources that are not already present (names.json stays authoritative).
 
@@ -230,6 +279,7 @@ def update_vocab_section(
     """
     dedup: dict[str, str] = {}
     for src, dst in pairs:
+        src, dst = normalize_generated_glossary_pair(src, dst)
         if not src:
             continue
         if dst is None or _norm(dst) == "" or _norm(dst) == _norm(src):

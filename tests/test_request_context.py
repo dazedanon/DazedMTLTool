@@ -68,6 +68,55 @@ class RequestContextSerializationTests(unittest.TestCase):
             if isinstance(block, dict)
         )
 
+    def test_decorated_glossary_labels_supply_clean_prose_aliases(self):
+        """Database grouping markers must not hide an approved prose spelling."""
+        for marker in ("▼", "■", "★"):
+            with self.subTest(marker=marker):
+                vocab = (
+                    "# Enemies\n"
+                    f"{marker}ルドゥレンス ({marker}Ludurens) - Region label.\n"
+                )
+                config = T.TranslationConfig(
+                    model="test",
+                    language="English",
+                    prompt="Translate to English.",
+                    vocab=vocab,
+                    useSfxReference=False,
+                )
+
+                _system, glossary, _sfx, _user = T.createContextParts(
+                    config, '{"Line1":"ルドゥレンスに赴く。"}', "json"
+                )
+
+                self.assertIn(
+                    "ルドゥレンス (Ludurens) - Region label.", glossary
+                )
+                self.assertNotIn(marker, glossary)
+
+        pairs = T.parseVocabWithCategories(
+            "# Worldbuilding Terms\n"
+            "ルドゥレンス (Ludurens) - Canonical prose entry.\n"
+            "# Enemies\n"
+            "▼ルドゥレンス (▼Ludulence) - Generated label.\n"
+            "※注意 (Note)\n"
+        )
+
+        bare = T.buildMatchedVocabText(pairs, "ルドゥレンスに赴く。")
+        marked = T.buildMatchedVocabText(
+            T.parseVocabWithCategories(
+                "# Enemies\n"
+                "▼ルドゥレンス (▼Ludurens) - Generated label.\n"
+            ),
+            "▼ルドゥレンス",
+        )
+        meaningful_punctuation = T.buildMatchedVocabText(pairs, "注意")
+
+        self.assertIn("ルドゥレンス (Ludurens)", bare)
+        self.assertNotIn("Ludulence", bare)
+        self.assertIn("▼ルドゥレンス (▼Ludurens)", marked)
+        self.assertNotIn("\nルドゥレンス (Ludurens)", marked)
+        self.assertEqual(meaningful_punctuation, "")
+
     def test_openai_source_context_is_not_assistant_history(self):
         params = T.buildOpenAIRequest(
             "Translate Japanese to English.",

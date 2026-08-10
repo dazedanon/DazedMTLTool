@@ -313,11 +313,28 @@ class TestUpdateVocabSection(unittest.TestCase):
         self.assertEqual(before, after)
 
     def test_dedupes_by_source_last_wins(self):
-        vocab.update_vocab_section("Skill · 技能", [("ヒール", "Heal"), ("ヒール", "Cure")], game_root=self.tmp.name)
+        vocab.update_vocab_section(
+            "Skill · 技能",
+            [
+                ("ヒール", "Heal"),
+                ("ヒール", "Cure"),
+                ("▼ルドゥレンス", "▼Ludurens"),
+                ("※注意", "※Note"),
+                ("カフェ", "Café"),
+                ("成功率%", "Success Rate %"),
+            ],
+            game_root=self.tmp.name,
+        )
 
         text = self.vocab_path.read_text(encoding="utf-8")
         self.assertIn("ヒール (Cure)", text)
         self.assertNotIn("ヒール (Heal)", text)
+        self.assertIn("ルドゥレンス (Ludurens)", text)
+        self.assertIn("注意 (Note)", text)
+        self.assertIn("カフェ (Café)", text)
+        self.assertIn("成功率% (Success Rate %)", text)
+        self.assertNotIn("▼", text)
+        self.assertNotIn("※", text)
 
     def test_merge_keeps_existing_and_adds_new(self):
         vocab.update_vocab_section("Map Setting · マップ設定", [("礼拝堂", "Chapel")], game_root=self.tmp.name)
