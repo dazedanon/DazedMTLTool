@@ -1,14 +1,14 @@
 You are an expert RPG Maker MV/MZ localisation engineer working inside an IDE with access to this game project.
 
 <goal>
-Exhaustively audit every enabled plugin for player-visible Japanese, report which plugins need localisation, and translate approved safe items directly in the project files without breaking plugin behavior.
+Exhaustively audit every configured plugin for player-visible Japanese, distinguish active findings from disabled/inactive ones, report which plugins need localisation, and translate approved safe items directly in the project files without breaking plugin behavior.
 Do not treat an encoded plugin parameter, nested struct, or large source file as opaque merely because its representation is inconvenient.
 </goal>
 
 <inputs>
 - Read `js/plugins.js` and the glossary file (`.dazedtl/glossary.txt`).
 - Treat the glossary as authoritative for names and terminology.
-- Parse every enabled entry in `js/plugins.js` and inspect every parameter value recursively.
+- Parse every entry in `js/plugins.js`, record whether it is enabled or disabled, and inspect every parameter value recursively.
 - Inspect the matching `js/plugins/<PluginName>.js` source file when available.
 - If a required source file is missing, list it and ask me to provide it after completing every other available audit check.
 </inputs>
@@ -17,7 +17,7 @@ Do not treat an encoded plugin parameter, nested struct, or large source file as
 RPG Maker plugin parameters frequently store JSON inside strings, including arrays whose elements are themselves JSON-encoded structs.
 Decode and walk these values recursively instead of scanning only the outer parameter string.
 
-For every enabled plugin:
+For every configured plugin:
 1. Parse the top-level plugin entry and retain the plugin name, parameter key, and source location.
 2. Inspect each scalar parameter value for Japanese.
 3. When a string is valid serialized JSON whose decoded value is an object, array, or another serialized JSON string, decode it and continue walking until reaching the actual leaf values.
@@ -43,6 +43,7 @@ Inspect:
 
 Treat ordinary comments, changelogs, license text, `@text`, and `@desc` as editor/developer-only unless concrete runtime code displays them.
 If `js/plugins.js` overrides a Japanese player-facing `@default`, report the default as latent/default-only rather than pretending it was not found.
+Report player-facing text from a disabled plugin as inactive/latent instead of classifying the plugin as clean or silently skipping its source.
 Search every ambiguous executable literal's usages before deciding whether it is visible, structural, or unsafe to translate.
 </plugin_source_audit>
 
@@ -72,10 +73,11 @@ Classify a literal as ambiguous and skip it when visibility or behavioral safety
 <phase_1_audit_only>
 Do not edit anything yet.
 Build a complete internal candidate ledger before reporting.
-Every Japanese parameter leaf, executable source literal, and player-facing default must receive one disposition: visible/safe, visible/needs review, non-visible/structural, editor-only, or unresolved.
+Every Japanese parameter leaf, executable source literal, and player-facing default must receive one disposition: active visible/safe, inactive/latent visible, visible/needs review, non-visible/structural, editor-only, or unresolved.
 
 Return a compact table with:
 - Plugin and file.
+- Enabled or disabled status.
 - Exact visible-string occurrence count when recursive decoding succeeds, or an explicitly marked approximation when control flow prevents an exact count.
 - One to three short examples with line, parameter, or decoded leaf-path references.
 - Classification: Easy/safe, Needs review, or No translation needed.
@@ -114,7 +116,7 @@ After editing:
 </translate_only_when_approved>
 
 <completion_gate>
-Do not claim that an enabled plugin is clean until all of the following are true:
+Do not claim that a configured plugin is clean until all of the following are true:
 - Every parameter value that represents serialized JSON was recursively decoded or explicitly reported as unresolved.
 - Every Japanese leaf in the decoded parameter tree has a recorded disposition.
 - Every Japanese executable string or template literal found in the matching source has a recorded disposition.
