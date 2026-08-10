@@ -346,7 +346,8 @@ class RpgMakerRewrapTests(unittest.TestCase):
                 "id": 1,
                 "description": "A long item description that needs a narrower help window.",
                 "note": (
-                    "<infowindow:This note body is player facing and needs its own narrower wrap.>"
+                    "<infowindow:This note body is player facing and needs its own narrower wrap.>\n"
+                    "<dPlnText:This second player-facing note also needs narrower wrapping.>"
                 ),
                 "_original": source,
             },
@@ -358,13 +359,14 @@ class RpgMakerRewrapTests(unittest.TestCase):
             apply=True,
         )
         self.assertEqual(result.by_category[LIST_HELP], 1)
-        self.assertEqual(result.by_category[NOTES], 1)
+        self.assertEqual(result.by_category[NOTES], 2)
         updated = json.loads(path.read_text(encoding="utf-8"))[1]
         self.assertIn("\n", updated["description"])
         self.assertIn("\n", updated["note"])
         self.assertEqual(updated["_original"], source)
         self.assertTrue(updated["note"].startswith("<infowindow:"))
         self.assertTrue(updated["note"].endswith(">"))
+        self.assertIn("<dPlnText:", updated["note"])
 
     def test_file_and_event_code_filters_limit_scope(self):
         map1 = self.root / "Map001.json"

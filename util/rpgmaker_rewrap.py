@@ -48,6 +48,7 @@ _NOTE_BODY_PATTERNS: tuple[tuple[re.Pattern[str], bool], ...] = (
     ),
     (re.compile(r"<sub_[123]:([^>]+)", re.DOTALL), False),
     (re.compile(r"<infowindow:(.*?)>", re.DOTALL), False),
+    (re.compile(r"<dPlnText:(.*?)>", re.DOTALL), False),
     (re.compile(r"<ExtendDesc:(.*?)>", re.DOTALL), False),
     (re.compile(r"<ClassMessage>\n?(.*?)</ClassMessage>", re.DOTALL), False),
     (re.compile(r"<コメント:\n?(.*?)>", re.DOTALL), False),

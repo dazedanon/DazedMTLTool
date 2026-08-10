@@ -172,6 +172,39 @@ class TestActorsOriginal(unittest.TestCase):
 
 
 class TestItemsOriginal(unittest.TestCase):
+    def test_multiline_dplntext_note_translates_across_database_tables(self):
+        body = (
+            "回復効果がある液体\n"
+            "曙光を浴びた植物から得られる\n"
+            "　\n"
+            "万人に効果はなく、使者やその導き\n"
+            "あるいは虚ろ渡りが恩恵に与る"
+        )
+        note = f"<dPlnText:{body}>"
+
+        for context in (
+            "Actors",
+            "Armors",
+            "Weapons",
+            "Classes",
+            "Enemies",
+            "Items",
+            "MapInfos",
+            "Skills",
+        ):
+            with self.subTest(context=context):
+                result, captured = _run_search_names(
+                    [None, {"name": "", "note": note}],
+                    context,
+                    f"{context}.json",
+                )
+                self.assertEqual(captured, [[body]])
+                self.assertEqual(result[1]["note"], "<dPlnText:EN_TRANSLATED>")
+
+        state, captured = _run_search_ss({"name": "", "note": note})
+        self.assertEqual(captured, [[body]])
+        self.assertEqual(state["note"], "<dPlnText:EN_TRANSLATED>")
+
     def test_first_pass_writes_original(self):
         data = json.loads((FIXTURES / "Items_original_fixture.json").read_text(encoding="utf-8"))
         result, _ = _run_search_names(data, "Items", "Items.json")

@@ -1898,6 +1898,7 @@ def parseNames(data, filename, context):
                 (r"<sub_2:([^>]+)", True),
                 (r"<sub_3:([^>]+)", True),
                 (r"<infowindow:(.*?)>", True),
+                (r"<dPlnText:(.*?)>", True),
                 (r"<ExtendDesc:(.*?)>", True),
                 (r"<desc\d:(.*?)>", False),
                 (r"<拡張説明:(.+?)>", False),
@@ -2248,6 +2249,7 @@ def searchNames(data, pbar, context, filename):
         (r"<sub_2:([^>]+)", True),
         (r"<sub_3:([^>]+)", True),
         (r"<infowindow:(.*?)>", True),
+        (r"<dPlnText:(.*?)>", True),
         (r"<ExtendDesc:(.*?)>", True),
         (r"<desc\d:(.*?)>", False),
         (r"<拡張説明:(.+?)>", False),
@@ -4991,6 +4993,7 @@ def searchSS(state, pbar):
         (r"<ShowHoverState:\s?(.+?)>", False),
         (r"<Detail:\s?(.+?)>", False),
         (r"<説明:([^>]*)>", False),
+        (r"<dPlnText:(.*?)>", True),
     ]
     notesBatch = []
     notesBatchMap = []
