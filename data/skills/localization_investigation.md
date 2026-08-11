@@ -65,13 +65,15 @@ Return these sections in order:
 
 ### 1. Executive result
 
-Summarize only the strongest confirmed families and the highest-value unresolved lead.
+Separate confirmed actionable defects, verified-clean families, and the highest-value unresolved
+leads. Never count a verified-clean family as an inconsistency, defect, or correction family.
 
 ### 2. Confirmed families
 
 For each family report priority, source mechanism, Japanese anchors, occurrence and file/map counts,
 representative locators, current-English assessment when applicable, and the recommended English
-strategy. Separate genuine exceptions from missed family members.
+strategy. Label its outcome `Actionable` or `Verified clean`, and separate genuine exceptions from
+missed family members.
 
 ### 3. Translation quirks updates applied
 

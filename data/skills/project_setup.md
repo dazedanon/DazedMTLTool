@@ -399,8 +399,10 @@ blocker; do not substitute a copy/paste block.
 
 Summarize the Phase 2 result without duplicating the written Glossary or Translation quirks:
 
-- **Confirmed families** - priority, source mechanism, Japanese anchors, occurrence and file/map
-  counts, representative locators, and the chosen English mechanism or canonical term.
+- **Confirmed actionable defects** - families with current text requiring correction, including
+  priority, counts, representative locators, and correction strategy.
+- **Verified-clean families** - investigated families whose current handling is already sound;
+  never count these as inconsistencies, defects, or correction families.
 - **Research backlog** - plausible but unresolved hypotheses, confidence, evidence, and the exact
   next search or context needed. This is not a QA clearance.
 - **Coverage** - file classes and map ranges searched, independently recounted occurrence totals,
