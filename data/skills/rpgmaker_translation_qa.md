@@ -72,8 +72,9 @@ Keep this pass independent and measurable instead of widening it into a whole-ga
 - Review every frozen cluster before this focus may end or request approval.
   Use 500 pairs as the routine wave size and follow a selected focus's explicit small-corpus rule
   when it requires reviewing up to 750 pairs.
-  After each wave, persist the checkpoint and continue immediately with the next non-overlapping
-  wave from the same frozen manifest in the same invocation.
+  After each locally completed wave or validated worker shard, persist the checkpoint.
+  Continue immediately with the next non-overlapping wave from the same frozen manifest, locally
+  or by dispatching it to a worker in the same invocation.
   Do not stop merely because one wave completed or was clean.
   Anticipated context-window pressure, token or response-length concerns, wall-clock concerns,
   corpus size, wave count, or a desire to hand work off are not runtime or tool limits. Context
@@ -115,6 +116,102 @@ short-lived helpers when useful.
   dispositions to restart. Keep checkpoints from other focuses separate.
 - Display compact panes of roughly 75–150 rows with ordinal, locator count, risk reasons, source,
   and translation. Escape embedded newlines. Expand full locators and context only for candidates.
+
+## Durable goal and parallel semantic review
+
+This prompt explicitly authorizes a durable goal and subagent delegation for the selected focus.
+When the host provides durable goals, create one whose stopping condition is this focus's exhaustive
+coverage and required report. Do not mark the goal complete until the focus-specific completion gate
+passes. A missing goal feature is not a blocker; continue with the checkpoint contract.
+
+Keep the master checkpoint, worker shards, helper scripts, registry, and merge log in one persistent
+task directory outside `{{GAME_ROOT}}`. Do not use an operating-system temporary directory for the
+authoritative copies; temporary paths are suitable only for disposable validation runs. Preserve a
+recoverable master snapshot before every accepted batch merge.
+Store one immutable master snapshot and one compact, read-only registry snapshot per revision.
+Do not clone the full master or full registry into every worker shard. A shard is a lightweight
+review delta containing assignment metadata, assigned identity/ordinal keys, pane commits,
+dispositions, evidence, ledger additions, and local proposals. The coordinator materializes those
+deltas into the master only after validation.
+
+After freezing the manifest and completing the full mechanical scan, use subagents by default when
+more than 750 semantic clusters remain and subagent tools are available. Keep one agent as the
+coordinator and fill the remaining concurrency slots with workers. The number of workers is
+capability-driven rather than hardcoded.
+
+Start a fresh subagent for every shard assignment. Never reuse a completed worker for another
+ordinal range, even when the host supports follow-up tasks or restarting an existing agent. Retire
+the worker after it closes and returns its shard, then spawn a fresh replacement when the next
+assignment is ready. Preserve project continuity in the durable context fingerprint, immutable
+snapshot, registry, checkpoint, and assignment packet rather than in accumulated worker memory.
+Fresh workers must independently load the required context paths; do not pass prior workers'
+reasoning or summaries as substitute context.
+
+The coordinator owns the manifest, master checkpoint, issue propagation, cross-shard reconciliation,
+approval gate, and final report. Partition the frozen order into consecutive, disjoint semantic
+shards using the applicable routine wave size. Give each worker one explicit assignment containing
+the focus and review-contract ID, manifest checksum, context fingerprint when applicable, inclusive
+ordinal range, baseline master revision and SHA-256, canonical issue-registry revision and SHA-256,
+required context paths, output schema, and read-only game paths. Use snapshot isolation: every worker
+in one batch receives the same immutable master and registry revision, and only the coordinator may
+merge a newer revision. Workers must load the required context themselves and may inspect adjacent
+or distant read-only evidence when meaning requires it.
+
+Run a coordinator scheduling loop while work remains. Validate and retire each returned worker
+immediately. At a registry-epoch boundary, reconcile all returned proposals, publish the next compact
+registry snapshot, atomically merge accepted deltas, and immediately fill every open slot with fresh
+workers. Do useful coordinator reconciliation while waiting for a straggler. Never dispatch against
+a mutable or partially reconciled registry merely to keep a slot busy.
+
+Maintain one coordinator-owned canonical issue registry in the master checkpoint and publish its
+current compact snapshot for workers as a separate read-only artifact. Give each entry a stable ID,
+severity, canonical signature, proposed correction, affected ordinals and live-value count,
+propagation status, and reconciliation status. A worker must classify a candidate as either a match
+to an existing registry ID or a locally named new proposal with evidence; workers must not allocate
+canonical IDs. Reconcile duplicate proposals across the whole returned batch, assign or reuse the
+canonical ID centrally, and propagate it across the full focus before dispatching the next batch.
+
+Workers must not edit game files, write the master checkpoint, change helpers, request user approval,
+publish a focus status, or spawn further agents. A worker may write only a uniquely named shard
+artifact outside `{{GAME_ROOT}}` when the coordinator requests one. Each returned shard must record:
+
+- its assignment ID, focus, contract ID, manifest checksum, context fingerprint when applicable,
+  and exact ordinal range;
+- one explicit semantic disposition for every assigned representative, with stable identity and any
+  issue signature;
+- expanded context evidence for findings and materially distinct repeated occurrences;
+- applicable narrative anchors, wordplay candidates, cross-focus dependencies, unresolved evidence,
+  and proposed corrections required by the selected focus.
+
+Review and persist each shard incrementally. Use consecutive panes of at most 100 assigned ordinals;
+after actually reviewing a pane, atomically save its explicit semantic, narrative, and wordplay
+dispositions plus its next ordinal in the worker shard before reading the next pane. Never keep all
+500 dispositions only in agent memory or bulk-mark the whole shard at the end. On interruption,
+resume from the shard's first uncommitted ordinal with a fresh replacement worker and do not repeat
+or infer the missing pane. Give the replacement only the immutable assignment packet and committed
+shard delta, not the interrupted worker's accumulated conversation.
+
+Treat worker output as untrusted review evidence until validated. Confirm matching fingerprints and
+contract, exact assigned identity coverage, no missing or extra representatives, no overlap with
+accepted shards, valid dispositions, and no unauthorized writes. Reject a partial summary or invalid
+shard without marking its range reviewed, then reassign the original range. Merge accepted shards
+into the master checkpoint in deterministic ordinal order, record each wave exactly once, and persist
+the merge before dispatching work from a newer registry epoch. Retire every returned worker whether
+its shard is accepted or rejected; reassignment always goes to a fresh worker.
+
+Before reporting completion, run a machine-verifiable gate that rejects any non-final disposition,
+unreviewed cluster, missing/duplicate/gapped/overlapping wave, stale registry total, unreconciled
+proposal or issue propagation, unaccounted unresolved source shape, unreconciled narrative or
+wordplay ledger, stale source/mechanical evidence, or unauthorized game-file modification. For a
+large corpus, require the exact expected sequence of 500-pair waves plus the final partial wave.
+Completion requires the gate to pass, not merely a worker summary or stored reviewed count.
+
+Delegation does not replace whole-scope reasoning. The coordinator must propagate every confirmed
+issue signature across the entire focus, reconcile terminology and context classes across shards,
+and perform the selected focus's global narrative, wordplay, dependency, or release reconciliation.
+If subagents are unavailable, finish the same frozen shards sequentially. Subagent unavailability,
+worker failure, or a full worker queue is not permission to stop while coordinator tools remain
+callable.
 
 ## Project context and evidence rules
 
