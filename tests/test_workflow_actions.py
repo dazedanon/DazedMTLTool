@@ -67,6 +67,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (2, "clear_translated", {"text": "Clear translated"}),
             (2, "run_parse_speakers", {"text": "1  Collect names"}),
             (2, "copy_project_setup_prompt", {"text": "2  Copy setup instructions"}),
+            (2, "reload_setup_guidance", {"text": "Reload and review guidance"}),
             (3, "apply_wrap_config", {"text": "Save line widths"}),
             (3, "run_phase", {"text": "Translate database"}),
             (3, "run_phase", {"text": "Translate dialogue"}),
@@ -85,6 +86,8 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (6, "load_rewrap_widths", {"text": "Load saved line widths"}),
             (6, "run_rewrap", {"text": "Preview rewrap"}),
             (6, "run_rewrap", {"text": "Apply rewrap"}),
+            (7, "copy_localization_investigation_prompt", {"text": "Copy investigation skill"}),
+            (7, "reload_investigation_guidance", {"text": "Reload and review guidance"}),
             (7, "prepare_translation_qa", {"text": "Prepare / resume QA"}),
             (8, "refresh_image_workflow_status", {"text": "Refresh readiness"}),
             (8, "open_image_manager", {"text": "Open Image Manager"}),
@@ -100,7 +103,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (9, "install_both_playtest", {"text": "Install both plugins"}),
             (9, "refresh_playtest_status", {"text": "Refresh plugin status"}),
         )
-        self.assertEqual(len(cases), 47)
+        self.assertEqual(len(cases), 50)
         for step, endpoint, locator in cases:
             with self.subTest(step=step, endpoint=endpoint, locator=locator):
                 if endpoint == "apply_var_range":

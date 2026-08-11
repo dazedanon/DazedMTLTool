@@ -103,9 +103,10 @@ class SetupSkillsEditors(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        editors = QTabWidget()
-        editors.setObjectName("setupEditors")
-        editors.setDocumentMode(False)
+        self._editors = QTabWidget()
+        self._editors.setObjectName("setupEditors")
+        self._editors.setDocumentMode(False)
+        editors = self._editors
         tab_bar = editors.tabBar()
         tab_bar.setExpanding(False)
         tab_bar.setElideMode(Qt.ElideNone)
@@ -126,7 +127,7 @@ class SetupSkillsEditors(QWidget):
         editors.addTab(
             self._editor_page(
                 "Glossary file: <game>/.dazedtl/glossary.txt  (game section)",
-                "Paste the glossary code block. Format: Japanese (English) - notes",
+                "Review or edit the generated glossary. Format: Japanese (English) - notes",
                 self._save_vocab,
                 self._reload_vocab,
                 "vocab_editor",
@@ -137,7 +138,7 @@ class SetupSkillsEditors(QWidget):
         editors.addTab(
             self._editor_page(
                 "<game>/.dazedtl/skills/quirks.md",
-                "Paste the translation_quirks block. Merged onto the system prompt at translate time.",
+                "Review or edit generated translation guidance. Merged onto the system prompt at translate time.",
                 self._save_quirks,
                 self._reload_quirks,
                 "quirks_editor",
@@ -201,7 +202,7 @@ class SetupSkillsEditors(QWidget):
             "game",
             self._editor_page(
                 "<game>/.dazedtl/skills/game.md",
-                "Paste the game_skill Translation Frame. Merged into the translation "
+                "Review or edit the generated Translation Frame. Merged into the translation "
                 "system prompt (before quirks) when this game folder is selected.",
                 self._save_game_skill,
                 self._reload_game_skill,
@@ -211,6 +212,22 @@ class SetupSkillsEditors(QWidget):
         )
         editors.addTab(game_skills_page, "Game skill")
         root.addWidget(editors, 1)
+
+    def show_editor(self, section: str) -> None:
+        """Open one of the primary setup guidance editors without reloading it."""
+        indices = {"glossary": 0, "quirks": 1, "game": 2}
+        try:
+            index = indices[section]
+        except KeyError as exc:
+            raise ValueError(f"Unknown setup editor section: {section}") from exc
+        self._editors.setCurrentIndex(index)
+        editor = {
+            "glossary": self.vocab_editor,
+            "quirks": self.quirks_editor,
+            "game": self.game_skill_editor,
+        }[section]
+        if editor is not None:
+            editor.setFocus(Qt.OtherFocusReason)
 
     def _editor_page(
         self,

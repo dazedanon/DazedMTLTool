@@ -120,9 +120,40 @@ class WorkflowShellTests(unittest.TestCase):
         self.assertIn("full-game release gate once", qa_help)
         self.assertIn("Targeted modes are optional", qa_help)
         self.assertIn("DazedTL owns coverage", qa_help)
+        investigation_help = self.workflow._investigation_help_banner.text_label.text()
+        self.assertIn("compare English against", investigation_help)
+        self.assertIn("directly maintaining confirmed", investigation_help)
+        self.assertIn("Reload the existing Setup editors", investigation_help)
+        self.assertEqual(
+            self.workflow._investigation_copy_btn.text(), "Copy investigation skill"
+        )
+        self.assertEqual(
+            self.workflow._investigation_review_guidance_btn.text(),
+            "Reload and review guidance",
+        )
         self.assertEqual(
             self.workflow._qa_prepare_btn.text(), "Prepare / resume QA"
         )
+
+        self.workflow._goto_step(7)
+        existing_glossary = glossary.read_text(encoding="utf-8")
+        glossary.write_text(
+            existing_glossary.replace("ユウ (Yuu)", "ユウ (Yu)"),
+            encoding="utf-8",
+        )
+        quirks = self.saved_game / ".dazedtl" / "skills" / "quirks.md"
+        quirks.parent.mkdir(parents=True, exist_ok=True)
+        quirks.write_text("- Preserve the confirmed running joke.\n", encoding="utf-8")
+        self.workflow.setup_editors.quirks_editor.setPlainText("stale editor content")
+        self.workflow._reload_investigation_guidance()
+        self.app.processEvents()
+        self.assertEqual(self.workflow._step_tabs.currentIndex(), 2)
+        self.assertEqual(self.workflow.setup_editors._editors.currentIndex(), 1)
+        self.assertEqual(
+            self.workflow.setup_editors.quirks_editor.toPlainText(),
+            "- Preserve the confirmed running joke.\n",
+        )
+        self.assertIn("ユウ (Yu)", self.workflow.setup_editors.vocab_editor.toPlainText())
 
         self.workflow._goto_step(3)
         self.app.processEvents()

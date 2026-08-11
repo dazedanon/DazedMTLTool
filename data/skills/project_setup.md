@@ -1,21 +1,22 @@
 # DazedTL — Project Setup
 
-You are analysing a Japanese game project to produce configuration artifacts for DazedTL.
-Work in the game repository. Scan files; do not invent content you did not see.
+You are analysing a Japanese game project to produce and maintain configuration artifacts for
+DazedTL. Work in the game repository. Scan files; do not invent content you did not see.
 
 ---
 
 ## Task
 
-In **one user-facing run**, complete the two internal phases below, then emit one final set of
-translation-setup outputs. Do not stop after Phase 1 or ask the user to launch another skill.
-Do **not** translate the game or broadly edit its files. The only editing exception is a qualifying
-deterministic micro-repair under the RPG Maker speaker rules below. Recommend formatting and
-pipeline settings only in the designated configuration block.
+In **one user-facing run**, complete the two internal phases below, write the final Glossary,
+Translation quirks, and Game skill to their DazedTL paths, then report what changed. Do not stop
+after Phase 1 or ask the user to launch another skill. Do **not** translate the game or broadly edit
+its files. The only editing exceptions are those three guidance files and a qualifying deterministic
+micro-repair under the RPG Maker speaker rules below. Recommend formatting and pipeline settings
+only in the designated configuration block.
 
-Default: emit every section specified for the selected engine.
-Regenerate mode: if the user asks for only one section, emit **only** that section using the same
-schema and exclusivity rules.
+Default: update every guidance file and report section specified for the selected engine.
+Regenerate mode: if the user asks for only one guidance artifact, update **only** its destination
+file and report that result using the same ownership rules; do not touch the other guidance files.
 
 ---
 
@@ -27,7 +28,7 @@ schema and exclusivity rules.
 | `speaker_settings` | Manual tool flag ENABLE/SKIP decisions + short evidence | Character bios; quirks; full glossary |
 | `translation_quirks` | Cross-cutting voice rules (battle-log person, global dialect, item-description style, recurring humor/wordplay policy, **unusual** honorific habits) | Per-character register; one-off jokes; "always keep -san" (tool base prompt already does); codes/wrap/line counts; speaker flags |
 | `game_skill` | **Translation Frame** for the API (theme / era / register / naming / optional myth) saved at `.dazedtl/skills/game.md` | File inventories; quirks bullets; glossary; per-character register; IDE scaffolding; restating base honorific/formatting policy |
-| `investigation_report` | Confirmed editorial families, unresolved research backlog, and searched coverage | Pasteable glossary/quirks content; generic categories; QA clearance; proposed game-file edits |
+| `investigation_report` | Confirmed editorial families, unresolved research backlog, and searched coverage | Duplicated glossary/quirks content; generic categories; QA clearance; proposed game-file edits |
 | `rpgmaker_settings` (RPG Maker only) | Manual code-408 decision + measured wrap/font recommendations | Translation prose; glossary; voice rules; speculative settings without evidence |
 
 Hard rules:
@@ -136,7 +137,7 @@ face-backed message has an explicit name, choose `FACENAME101: SKIP` and state t
 not needed after the repair. If any identity is ambiguous or the scope exceeds this narrow rule,
 make no edits and report the evidence normally.
 
-### Glossary rules (for the paste-ready Glossary section)
+### Glossary rules (for the written Glossary)
 
 - Separator: plain hyphen-minus `-` only (never em/en dash).
 - Descriptions entirely in English; refer to other characters by English name.
@@ -145,7 +146,7 @@ make no edits and report the evidence normally.
 - Real named actors get full `# Game Characters` entries, not only `\\N[n]` placeholders.
 - Worldbuilding: factions, lore locations, unique systems/titles, and concise stable facts needed to disambiguate their translations - exclude speculative plot interpretation, skill/item/weapon/armour names, and generic RPG words.
 
-### Quirks rules (for the paste-ready Translation quirks section)
+### Quirks rules (for the written Translation quirks)
 
 Find translation-only quirks, for example:
 - Battle log / system messages consistently 3rd person (or other fixed person)
@@ -157,13 +158,13 @@ Find translation-only quirks, for example:
 Exclude: formatting codes, wrap, line counts, speaker flags, character name lists, and one-off jokes
 that should be localized from their own context instead of becoming global policy.
 
-Output as short imperative bullets suitable to paste into `.dazedtl/skills/quirks.md`.
+Write short imperative bullets to `.dazedtl/skills/quirks.md`.
 For every recurring joke, catchphrase, or wordplay rule, include one or more distinctive Japanese
 source anchors from that game in the same bullet. QA uses those literal anchors to gather the
 complete motif family deterministically; do not use a generic grammatical fragment that would
 match unrelated dialogue.
 
-### Game skill rules (for the paste-ready Game skill section)
+### Game skill rules (for the written Game skill)
 
 Produce the per-game translation skill saved at `.dazedtl/skills/game.md`.
 DazedTL **merges this file into the translation system prompt** (before quirks).
@@ -309,7 +310,7 @@ Report the detected patterns, the `LOWCONF_FIRSTLINE: ENABLE|SKIP` decision with
 and representative examples under **Manual changes > Speaker settings**. These are findings and a
 manual checkbox decision, so do not put them in a code fence.
 
-### Glossary rules (for the paste-ready Glossary section)
+### Glossary rules (for the written Glossary)
 
 - Separator: plain hyphen-minus `-` only (never em/en dash).
 - Descriptions entirely in English; refer to other characters by English name.
@@ -319,7 +320,7 @@ manual checkbox decision, so do not put them in a code fence.
 - Exclude speculative plot interpretation from glossary descriptions.
 - Exclude: skill / item / weapon / armour names from `names.json`, generic RPG words, unnamed NPCs.
 
-### Quirks rules (for the paste-ready Translation quirks section)
+### Quirks rules (for the written Translation quirks)
 
 Find translation-only quirks, for example:
 - Battle log / system messages with a fixed person or register
@@ -331,13 +332,13 @@ Find translation-only quirks, for example:
 Exclude: wrap geometry, inject layout, `names.json` harvest, speaker LOWCONF checkbox, character name lists,
 and one-off jokes that should be localized from their own context instead of becoming global policy.
 
-Output as short imperative bullets suitable to paste into `.dazedtl/skills/quirks.md`.
+Write short imperative bullets to `.dazedtl/skills/quirks.md`.
 For every recurring joke, catchphrase, or wordplay rule, include one or more distinctive Japanese
 source anchors from that game in the same bullet. QA uses those literal anchors to gather the
 complete motif family deterministically; do not use a generic grammatical fragment that would
 match unrelated dialogue.
 
-### Game skill rules (for the paste-ready Game skill section)
+### Game skill rules (for the written Game skill)
 
 Produce the per-game translation skill saved at `.dazedtl/skills/game.md`.
 DazedTL **merges this file into the translation system prompt** (before quirks).
@@ -362,62 +363,41 @@ Do **not** include voice-rules pointers, tool-boundary essays, file inventories,
 
 ---
 
-## Output format
+## Apply guidance files and report
 
-Use this exact top-level order:
+Before responding, directly update these files without asking for approval:
 
-1. **Glossary**
-2. **Translation quirks**
-3. **Game skill**
-4. **Localization investigation**
-5. **Manual changes**
-6. **Evidence, repairs, and playtests**
+1. `.dazedtl/glossary.txt` - update only the game-specific section. Preserve the auto-appended base
+   separator and everything below it byte-for-byte. Preserve unrelated and user-authored entries.
+2. `.dazedtl/skills/quirks.md` - merge the final cross-cutting guidance, preserving unrelated and
+   user-authored rules.
+3. `.dazedtl/skills/game.md` - merge the compact Translation Frame, preserving unrelated compatible
+   material and removing only content that conflicts with the evidence or this skill's ownership rules.
 
-The first three sections are content the user must copy and paste. Put only the pasteable content
-inside their code fences; put the destination in the heading immediately above each fence. Do not
-put explanations, evidence, instructions, or destination paths inside those fences.
+Create missing `.dazedtl/skills/` directories and guidance files when necessary. Use surgical edits,
+not wholesale replacement of an existing file. Reread all three files after writing and verify that
+the intended guidance is present, unrelated content remains, and the Glossary base section is intact.
+Do not tell the user to copy or paste generated blocks.
 
-Everything after Game skill is a report, a manual setting change, or no user action. It must remain
-ordinary Markdown outside code fences. **Never fence investigation results, manual settings,
-evidence, repairs, exceptions, or playtests.**
+In default mode, use this exact top-level report order in ordinary Markdown without code fences:
 
-### 1. Glossary - copy/paste into DazedTL > Setup > Glossary
+1. **Guidance files updated**
+2. **Localization investigation**
+3. **Manual changes**
+4. **Evidence, repairs, and playtests**
 
-Label the fence language as `glossary`. The fence must contain only:
+In regenerate mode, report **Guidance files updated** for the requested artifact plus only directly
+relevant investigation or evidence; do not repeat unrelated setup analysis.
 
-```glossary
-# Game Characters
-Japanese (English) - description
+### 1. Guidance files updated
 
-# Worldbuilding Terms
-Japanese (English) - description
-```
+For each of the three paths, state `Created`, `Updated`, or `Unchanged`, summarize the entries or
+sections affected, and confirm reread verification. If a file could not be written, report the exact
+blocker; do not substitute a copy/paste block.
 
-### 2. Translation quirks - copy/paste into DazedTL > Setup > Translation quirks
+### 2. Localization investigation
 
-Label the fence language as `markdown`. The fence must contain only short imperative bullets for
-`.dazedtl/skills/quirks.md`, with no heading or preamble.
-
-### 3. Game skill - copy/paste into DazedTL > Setup > Game skill
-
-Label the fence language as `markdown`. The fence must contain only the Translation Frame saved to
-`.dazedtl/skills/game.md`:
-
-```markdown
-# <Game title> - Translation Frame
-
-## Translation Frame
-世界観 (Theme / setting) - <one compact line>
-時代感 (Era / technology level) - <one compact line>
-文体方針 (Register policy) - <one compact line>
-固有名詞方針 (Naming policy) - <one compact line>
-神話・伝承 (Myth / folklore basis) - <one compact line, or omit this line entirely if unsupported>
-```
-
-### 4. Localization investigation
-
-Do not use a code fence. Summarize the Phase 2 result without duplicating the paste-ready Glossary
-or Translation quirks:
+Summarize the Phase 2 result without duplicating the written Glossary or Translation quirks:
 
 - **Confirmed families** - priority, source mechanism, Japanese anchors, occurrence and file/map
   counts, representative locators, and the chosen English mechanism or canonical term.
@@ -429,7 +409,7 @@ or Translation quirks:
 If no systemic family is confirmed or no backlog remains, state that explicitly. Do not claim the
 game is fully reviewed or clean.
 
-### 5. Manual changes
+### 3. Manual changes
 
 Do not use a code fence in this section. State each action as **Change** or **Keep**, name the exact
 DazedTL control or setting, give the target value, and append a short reason.
@@ -448,7 +428,7 @@ game and reloads them automatically when switching projects.
 For Wolf, include **Speaker settings** with `LOWCONF_FIRSTLINE: ENABLE|SKIP` and representative
 examples. Do not emit RPG Maker settings.
 
-### 6. Evidence, repairs, and playtests
+### 4. Evidence, repairs, and playtests
 
 Do not use a code fence in this section. Keep it brief and include only applicable items:
 

@@ -259,12 +259,12 @@ _STEP_HELP: dict[int, str] = {
         "Glossary; it does not translate dialogue.<br>"
         "2. Click <b>Copy setup instructions</b>, paste them into your AI helper, and let it "
         "inspect the game folder. The same setup run researches recurring jokes, terms, callbacks, "
-        "and other global patterns before returning final guidance.<br>"
+        "and other global patterns before writing final guidance files.<br>"
         "3. Turn on a speaker option only when the helper marks it <b>ENABLE</b>. Many games "
         "need no extra options.<br>"
         "4. If you enabled an option, click <b>Collect names</b> again.<br>"
-        "5. Put the final labeled results into their matching tabs: <b>Glossary</b>, "
-        "<b>Translation quirks</b>, or <b>Game skill</b>, then save it.<br><br>"
+        "5. Click <b>Reload and review guidance</b> to inspect the files in <b>Glossary</b>, "
+        "<b>Translation quirks</b>, and <b>Game skill</b>. Edit and save only if desired.<br><br>"
         "Keep the Glossary short and useful. Character names, places, and recurring terms "
         "belong there; long general instructions do not."
     ),
@@ -330,9 +330,16 @@ _STEP_HELP: dict[int, str] = {
         "<b>Step 7 - Run translation QA</b><br><br>"
         "Complete Rewrap in Step 6 before using this page.<br><br>"
         "<b>What to do</b><br>"
-        "1. For final QA, select <b>Full game - coverage & release gate</b> and prepare the task.<br>"
-        "2. Paste the copied handoff into your AI helper and let it complete the local bundles.<br>"
-        "3. Review its stable finding IDs and approve only the corrections you want applied.<br><br>"
+        "1. Optional: click <b>Copy investigation skill</b> when you want a global editorial pass "
+        "over recurring jokes, callbacks, or terminology. Paste it into your AI helper with the "
+        "translated game folder open; it updates confirmed Glossary and Translation quirks "
+        "guidance directly.<br>"
+        "2. Click <b>Reload and review guidance</b> when investigation finishes.<br>"
+        "3. For final QA, select <b>Full game - coverage & release gate</b> and prepare the task.<br>"
+        "4. Paste the copied QA handoff into your AI helper and let it complete the local bundles.<br>"
+        "5. Review its stable finding IDs and approve only the translation corrections you want applied.<br><br>"
+        "Investigation is hypothesis-led and optional; it maintains guidance but does not edit "
+        "translated game text or replace QA. "
         "The full-game mode exhaustively covers every supported translated source once. The "
         "targeted modes are optional reruns after changing one area; stacking all four would "
         "repeat work and is not required. DazedTL owns the inventory, checkpoints, correction "
@@ -1475,7 +1482,7 @@ class WorkflowTab(QWidget):
         self.speaker_setup_hint = StatusBanner(
             "Always start with “1  Collect names” so recognized speakers are added to the "
             "Glossary. The setup instructions include a global localization investigation before "
-            "they return final guidance. If setup marks an option ENABLE, turn it on and collect "
+            "they write final guidance. If setup marks an option ENABLE, turn it on and collect "
             "names again. Many games need none.",
             "info",
         )
@@ -1550,7 +1557,7 @@ class WorkflowTab(QWidget):
         self.speaker_copy_setup_btn.setToolTip(
             "After collecting names, paste these instructions into the AI helper with the game "
             "folder open. One run performs baseline setup plus a global localization investigation, "
-            "then returns final Glossary, Translation quirks, Game skill, and manual settings."
+            "writes final Glossary, Translation quirks, and Game skill files, then reports manual settings."
         )
         self.speaker_copy_setup_btn.clicked.connect(self._copy_project_setup_prompt)
         _equalize_action_buttons(
@@ -1567,9 +1574,30 @@ class WorkflowTab(QWidget):
 
         guidance_stage = WorkflowStageCard(
             3,
-            "Edit glossary, translation quirks, and game skill",
-            "Keep the Glossary concise, record translation quirks, and review the generated game skill.",
+            "Review glossary, translation quirks, and game skill",
+            "Setup and investigation write these files directly; reload them here to review or edit.",
         )
+        self._setup_guidance_help_banner = StatusBanner(
+            "No copy/paste is needed. After the AI helper finishes, reload the guidance files, "
+            "review them in these tabs, and save only if you make additional edits.",
+            "info",
+        )
+        guidance_stage.add_widget(self._setup_guidance_help_banner)
+        guidance_actions = QHBoxLayout()
+        guidance_actions.setSpacing(Spacing.SM)
+        self._setup_reload_guidance_btn = _make_btn(
+            "↺  Reload and review guidance", "#555"
+        )
+        self._setup_reload_guidance_btn.setToolTip(
+            "Reload Glossary, Translation quirks, and Game skill from the selected game folder."
+        )
+        self._setup_reload_guidance_btn.clicked.connect(
+            self._reload_setup_guidance
+        )
+        _size_action_button(self._setup_reload_guidance_btn, Geometry.ACTION_WIDE)
+        guidance_actions.addWidget(self._setup_reload_guidance_btn)
+        guidance_actions.addStretch()
+        guidance_stage.add_layout(guidance_actions)
         self.setup_editors = SetupSkillsEditors(
             self,
             game_root_fn=lambda: self.folder_edit.text().strip(),
@@ -2550,8 +2578,54 @@ class WorkflowTab(QWidget):
     def _build_step7_qa(self, layout: QVBoxLayout):
         self._add_step_header(layout, "Step 7 — Translation QA", 7)
 
-        qa_stage = WorkflowStageCard(
+        investigation_stage = WorkflowStageCard(
             1,
+            "Investigate recurring localization patterns",
+            "Optional editorial research for jokes, callbacks, coined words, terminology, and suspicious transliterations.",
+        )
+        self._investigation_help_banner = StatusBanner(
+            "Use this after translation when you want the AI helper to compare English against "
+            "the original Japanese across the whole game. It reports families and proposed "
+            "translation corrections while directly maintaining confirmed Glossary and Translation "
+            "quirks guidance. Reload the existing Setup editors afterward; this does not replace QA.",
+            "info",
+        )
+        investigation_stage.add_widget(self._investigation_help_banner)
+        investigation_actions = QHBoxLayout()
+        investigation_actions.setSpacing(Spacing.SM)
+        self._investigation_copy_btn = _make_btn(
+            "📋  Copy investigation skill", "#555"
+        )
+        self._investigation_copy_btn.setToolTip(
+            "Copy the optional hypothesis-led editorial prompt. Paste it into your AI helper "
+            "with the translated game folder open and `_original` source text available."
+        )
+        self._investigation_copy_btn.clicked.connect(
+            self._copy_localization_investigation_prompt
+        )
+        investigation_actions.addWidget(self._investigation_copy_btn)
+        self._investigation_review_guidance_btn = _make_btn(
+            "↺  Reload and review guidance", "#555"
+        )
+        self._investigation_review_guidance_btn.setToolTip(
+            "Reload the guidance files written by investigation, then open Translation quirks "
+            "in Setup for review."
+        )
+        self._investigation_review_guidance_btn.clicked.connect(
+            self._reload_investigation_guidance
+        )
+        investigation_actions.addWidget(self._investigation_review_guidance_btn)
+        _equalize_action_buttons(
+            self._investigation_copy_btn,
+            self._investigation_review_guidance_btn,
+            width=Geometry.ACTION_WIDE,
+        )
+        investigation_actions.addStretch()
+        investigation_stage.add_layout(investigation_actions)
+        layout.addWidget(investigation_stage)
+
+        qa_stage = WorkflowStageCard(
+            2,
             "Prepare and complete translation QA",
             "DazedTL builds immutable review bundles and checkpoints; your AI helper only reviews the prepared text.",
         )
@@ -4111,7 +4185,10 @@ class WorkflowTab(QWidget):
                     + "\n</known_speakers>\n"
                 )
             prompt = load_project_setup("rpgmaker", prepend=prepend)
-            self._copy_to_clipboard(prompt, "Project Setup skill copied.")
+            self._copy_to_clipboard(
+                prompt,
+                "Project Setup skill copied. It will write the selected game's guidance files directly.",
+            )
         except Exception as exc:
             self._log(f"❌ Could not load Project Setup skill: {exc}")
 
@@ -4534,6 +4611,27 @@ class WorkflowTab(QWidget):
             self._log(success_message)
         except Exception as exc:
             self._log(f"❌ Could not copy {filename}: {exc}")
+
+    def _copy_localization_investigation_prompt(self):
+        """Copy the optional standalone editorial investigation prompt."""
+        self._copy_clipboard_skill(
+            "localization_investigation.md",
+            "Localization Investigation skill copied. It will update this game's Glossary and Translation quirks directly.",
+        )
+
+    def _reload_setup_guidance(self):
+        """Reload guidance files written by the external setup helper."""
+        if self.setup_editors.reload_all():
+            self._log("Reloaded Glossary, Translation quirks, and Game skill from disk.")
+
+    def _reload_investigation_guidance(self):
+        """Reload investigation updates and open the existing guidance workspace."""
+        self._goto_step(2)
+        if self.setup_editors.reload_all():
+            self.setup_editors.show_editor("quirks")
+            self._log(
+                "Reloaded investigation guidance. Review Glossary and Translation quirks."
+            )
 
     def _load_rewrap_widths(self):
         """Load the selected game's saved widths into the Rewrap controls."""

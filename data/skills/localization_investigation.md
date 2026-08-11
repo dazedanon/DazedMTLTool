@@ -1,8 +1,8 @@
 # DazedTL — Localization Investigation
 
-You are investigating a Japanese game for systemic localization decisions. Work in the game
-repository and treat Japanese source text as authoritative. Use existing English only as evidence
-when a translation is already present.
+You are investigating a Japanese game for systemic localization decisions and maintaining its
+localization guidance. Work in the game repository and treat Japanese source text as authoritative.
+Use existing English only as evidence when a translation is already present.
 
 This standalone skill reruns the same hypothesis-led editorial phase used inside Project Setup.
 Use it when new questions arise after setup, when translated English already exists, or when one
@@ -17,7 +17,8 @@ families into preventive guidance before translation or bounded correction work 
 
 ## Boundaries
 
-- Do not edit game or translation files.
+- Do not edit runtime game data or translated text as part of investigation.
+- Follow the containing workflow's explicit guidance-file write contract.
 - Do not certify the game as fully reviewed or clean.
 - Read the current `.dazedtl/glossary.txt`, `.dazedtl/skills/quirks.md`, and
   `.dazedtl/skills/game.md` when present.
@@ -53,7 +54,8 @@ families into preventive guidance before translation or bounded correction work 
    - one recognizable English mechanism or canonical term;
    - whether the rule belongs in Translation quirks, the Glossary, or a bounded correction list.
 7. When the project is untranslated, emphasize preventive guidance. When English already exists,
-   additionally identify inconsistent members and propose corrections, but do not apply them.
+   additionally identify inconsistent members and propose translation corrections, but do not
+   apply those corrections. Still apply the confirmed guidance-file updates defined below.
 
 <!-- /investigation-phase -->
 
@@ -71,17 +73,22 @@ For each family report priority, source mechanism, Japanese anchors, occurrence 
 representative locators, current-English assessment when applicable, and the recommended English
 strategy. Separate genuine exceptions from missed family members.
 
-### 3. Translation quirks
+### 3. Translation quirks updates applied
 
-Provide short paste-ready additions or replacements for `.dazedtl/skills/quirks.md`. Every humor,
-callback, catchphrase, or wordplay rule must include distinctive Japanese source anchors so later QA
-can gather the family deterministically. If the current complete quirks content is available,
-return one merged replacement block; otherwise return additions only and label them clearly.
+Directly apply confirmed `ADD`, `REPLACE`, or `REMOVE` changes to
+`.dazedtl/skills/quirks.md`; do not wait for approval and do not return a replacement block for the
+user to paste. Preserve unrelated and user-authored guidance. Every humor, callback, catchphrase,
+or wordplay rule must include distinctive Japanese source anchors so later QA can gather the family
+deterministically. Report the exact bullets changed and verify the saved file by rereading it.
 
-### 4. Glossary decisions
+### 4. Glossary updates applied
 
-Provide only confirmed canonical names, titles, locations, and world terms that should be added or
-changed in `.dazedtl/glossary.txt`. Do not put joke-family strategy or per-character prose style here.
+Directly apply confirmed `ADD`, `REPLACE`, or `REMOVE` changes to the game-specific section of
+`.dazedtl/glossary.txt`; do not wait for approval and do not return a replacement block for the user
+to paste. Preserve unrelated entries and preserve the auto-appended base separator and everything
+below it byte-for-byte. Include only confirmed canonical names, titles, locations, and world terms.
+Do not put joke-family strategy or per-character prose style here. Report the exact Japanese entry
+keys changed and verify the saved file by rereading it.
 
 ### 5. Correction families
 
