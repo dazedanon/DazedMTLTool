@@ -23,7 +23,13 @@ import sys
 import threading
 from pathlib import Path
 
-from util.paths import APP_NAME, ORG_NAME, ensure_game_glossary, game_glossary_path
+from util.paths import (
+    APP_NAME,
+    ORG_NAME,
+    PROJECT_ROOT,
+    ensure_game_glossary,
+    game_glossary_path,
+)
 from util.game_settings import (
     DEFAULT_WRAP_WIDTHS,
     GameSettingsError,
@@ -4399,6 +4405,8 @@ class WorkflowTab(QWidget):
                 "{{QUIRKS_FILE}}": str(quirks_path_for_game(game_root)),
                 "{{GAME_SKILL_FILE}}": str(game_skill_file),
                 "{{GAME_SKILLS_FOLDER}}": str(game_skill_file.parent),
+                "{{QA_TOOL_ROOT}}": str(PROJECT_ROOT),
+                "{{QA_FOCUS}}": str(self._qa_focus_combo.currentData() or "dialogue"),
             }
             focus = self._qa_focus_combo.currentData() or "dialogue"
             prompt = load_rpgmaker_qa_skill(str(focus))

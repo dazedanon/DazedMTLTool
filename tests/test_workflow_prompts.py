@@ -282,6 +282,9 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             "throughput-evidence",
             "coordinator-only-apply",
             "post-fix-regression",
+            "deterministic-manifest-gate",
+            "independent-manifest-validation",
+            "no-generated-extractors",
         }
         focus_signatures = {
             "dialogue": "Audit only event commands 101, 102, 401, and 405",
@@ -294,7 +297,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 prompt = load_rpgmaker_qa_skill(focus)
                 lowered = prompt.casefold()
                 contract = re.search(
-                    r"<!-- qa-contract:rpgmaker-qa-v3\s+(.*?)-->",
+                    r"<!-- qa-contract:rpgmaker-qa-v4\s+(.*?)-->",
                     prompt,
                     re.DOTALL,
                 )
@@ -313,8 +316,13 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                     "{{QUIRKS_FILE}}",
                     "{{GAME_SKILL_FILE}}",
                     "{{GAME_SKILLS_FOLDER}}",
+                    "{{QA_TOOL_ROOT}}",
+                    "{{QA_FOCUS}}",
                 ):
                     self.assertIn(placeholder, prompt)
+                self.assertIn("build_rpgmaker_qa_manifest.py", prompt)
+                self.assertIn("validate_rpgmaker_qa_manifest.py", prompt)
+                self.assertIn('must say `"valid": true`', prompt)
                 if focus == "dialogue":
                     self.assertIn("complete - exhaustive", lowered)
                     self.assertIn("dialogue-narrative-wordplay-v1", prompt)

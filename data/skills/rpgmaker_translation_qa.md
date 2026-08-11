@@ -1,12 +1,13 @@
 # QA Exported RPG Maker Translations — Focused Pass
 
-<!-- qa-contract:rpgmaker-qa-v3
+<!-- qa-contract:rpgmaker-qa-v4
 focus-isolation exhaustive-coverage approval-before-edit preserve-original durable-artifacts
 fresh-shard-workers immutable-context-pack indexed-mechanical-preprocessing
 affected-identity-revalidation batched-registry-epochs parallel-component-propagation
 adversarial-closing-validation semantic-first-layout-last threshold-only-nonfinding
 family-consistency-validation offline-quality-benchmark throughput-evidence
 coordinator-only-apply post-fix-regression
+deterministic-manifest-gate independent-manifest-validation no-generated-extractors
 -->
 
 <task_context>
@@ -42,6 +43,12 @@ Use this game skill as the project's setting, register, characterization, and na
 Translation also uses optional custom Markdown overlays from this selected-game skills folder:
 
 `{{GAME_SKILLS_FOLDER}}`
+
+Use the shipped deterministic QA tooling from this exact DazedTL checkout:
+
+`{{QA_TOOL_ROOT}}`
+
+The selected mechanical focus key is `{{QA_FOCUS}}`.
 
 Enumerate regular `*.md` files directly in that folder, excluding `game.md`, `quirks.md`, and the
 legacy reserved name `translation.md`, and load every non-empty custom overlay before semantic
@@ -112,8 +119,35 @@ Keep this pass independent and measurable instead of widening it into a whole-ga
 
 ## Reproducible inventory and checkpoint
 
-Do not stream thousands of raw JSON lines into the conversation. Build a compact manifest and use
-short-lived helpers when useful.
+Do not stream thousands of raw JSON lines into the conversation. Before semantic review, choose the
+resolved durable task directory outside `{{GAME_ROOT}}`, then run these shipped commands with that
+directory substituted for `<durable-task-dir>`:
+
+```text
+python "{{QA_TOOL_ROOT}}/scripts/build_rpgmaker_qa_manifest.py" --game-root "{{GAME_ROOT}}" --data "{{GAME_DATA_FOLDER}}" --focus "{{QA_FOCUS}}" --output "<durable-task-dir>/inventory.json"
+python "{{QA_TOOL_ROOT}}/scripts/validate_rpgmaker_qa_manifest.py" --game-root "{{GAME_ROOT}}" --data "{{GAME_DATA_FOLDER}}" --manifest "<durable-task-dir>/inventory.json" --report "<durable-task-dir>/inventory-validation.json"
+```
+
+The validation report must say `"valid": true` before semantic review begins. Any unresolved
+source shape makes validation invalid and must be fixed and regression-tested in DazedTL before the
+inventory can be rebuilt. Treat the valid manifest's records,
+clusters, unresolved list, file hashes, identities, speaker facets, and `review_sequence` as the
+frozen mechanical authority. An unresolved locator may not be omitted, waived, or counted as
+coverage by a worker. Preserve both files and their hashes in the task manifest.
+
+Each record already contains independently validated live mapping, focus classification,
+source/live lengths, length band, display shape, runtime-token and visible-number evidence, static
+mechanical flags, and applicable speaker, choice-branch, database-entity, or risky-code context.
+Exact clusters and the frozen review order are also precomputed. Query these fields; do not reparse
+the corpus or generate a competing mechanical index for the same facts.
+
+Do not ask an AI worker to write, replace, patch, or reinterpret the extractor or validator during
+a live audit. Do not use an improvised script, filtered command stream, prior audit helper, or model-
+generated manifest as a substitute. If the shipped tool lacks a source shape, stop preprocessing,
+record the exact unsupported locator, and fix and regression-test DazedTL itself before restarting
+the affected mechanical inventory. Semantic workers may write only review/checkpoint helpers that
+consume the validated manifest without changing its identities, pair mappings, context facets, or
+order.
 
 - Identify a location by `relative file + canonical JSON path + SHA-256 of exact UTF-8 source`.
   Version the helper's canonical JSON-path grammar, normalization rules, and short/medium/long length
@@ -121,9 +155,10 @@ short-lived helpers when useful.
 - Freeze the in-scope cluster universe before the first wave. Choose the lexicographically lowest
   stable identity as each cluster representative and order representatives by
   `SHA-256("rpgmaker-qa-focus-v1\0" + focus name + "\0" + representative identity)`.
-- Interleave files and the focus-specific strata named below so one large file or shape does not
-  consume the wave. A selected focus's explicit ordering algorithm overrides this common ordering
-  summary. Do not reshuffle on resume or after editing English.
+- Use the shipped manifest's `review_sequence` exactly. It is the versioned deterministic ordering
+  algorithm for every focus; focus-specific strata affect attention and context checks inside a
+  wave, never membership or order. Do not recompute, interleave, or reshuffle it on resume or after
+  editing English.
 - Save the ordered identities, locators, source hashes, dispositions, issue signatures, applicable
   focus-specific review-contract ID, and wave position in a checkpoint outside `{{GAME_ROOT}}`.
   Record the helper version or content hash and manifest checksum. Never place generated QA
@@ -701,19 +736,16 @@ Complete the full mechanical scan before the first semantic wave. On an unchange
 verify file/source checksums and reuse the completed mechanical result; after any edit or corpus
 change, reparse and rerun the full scan before closing the next wave.
 
-Construct one frozen dialogue order before Wave 1:
+Use the validated manifest's frozen dialogue `review_sequence` before Wave 1:
 
 For a representative spanning several context classes, use the lexicographically selected
 representative locator's file/code/speaker/display-shape/length fields for queue ownership while
 retaining and reviewing every other context facet as occurrence evidence.
 
-1. Group representatives by relative file. Within each file, group by event code, speaker or empty,
-   display shape, and length band.
-2. Sort each sub-stratum by mandatory-review status first and the stable selection key second, then
-   interleave its sub-strata round-robin to create one deterministic queue per file.
-3. Build the global order by repeatedly choosing the non-exhausted file with the smallest
-   `consumed queue entries / total queue entries` ratio, breaking ties by relative filename, and
-   taking its next representative. This keeps large maps from crowding out smaller files.
+Do not rebuild the queue from prose, a worker helper, filtered commands, strata, or risk scores.
+Group by relative file, event code, speaker or empty, display shape, and length band only when
+measuring context-class coverage or prioritizing attention within the current frozen wave. These
+facets never change queue ownership, wave membership, or ordinal identity.
 
 Compute the high-recall static risk features once during deterministic preprocessing. Include
 mechanical flags plus cues for negation, quantities, conditions, temporal order, pronouns,

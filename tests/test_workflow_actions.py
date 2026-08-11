@@ -196,6 +196,10 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         self.assertNotIn("{{QUIRKS_FILE}}", prompt)
         self.assertNotIn("{{GAME_SKILL_FILE}}", prompt)
         self.assertNotIn("{{GAME_SKILLS_FOLDER}}", prompt)
+        self.assertNotIn("{{QA_TOOL_ROOT}}", prompt)
+        self.assertNotIn("{{QA_FOCUS}}", prompt)
+        self.assertIn("scripts/build_rpgmaker_qa_manifest.py", prompt)
+        self.assertIn('--focus "database"', prompt)
         items = [
             {"name": "Actors.json", "path": "/fixture/Actors.json", "size_kb": 1, "category": "core", "default": True},
             {"name": "Map001.json", "path": "/fixture/Map001.json", "size_kb": 1, "category": "map", "default": False},
