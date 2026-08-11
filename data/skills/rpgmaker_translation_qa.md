@@ -1,10 +1,11 @@
 # QA Exported RPG Maker Translations — Local Task Handoff
 
-<!-- qa-contract:rpgmaker-qa-local-v4
+<!-- qa-contract:rpgmaker-qa-local-v5
 app-owned-inventory immutable-review-bundles scene-affine-semantic-screen
 evidence-preserving-deep-handoff motif-family-receipts selective-risk-escalation
 validated-checkpoints honest-global-coverage grouped-finding-families
-approval-before-edit preserve-original atomic-apply post-fix-regression no-provider-api
+final-editorial-pass approval-before-edit preserve-original atomic-apply post-fix-regression
+no-provider-api
 -->
 
 <task_context>
@@ -72,6 +73,20 @@ context, or screen-bundle checksums differ.
 If only final-report rules change after deep review completes, use
 `rebuild-final --task "<completed-task>"`; compatible screen and deep receipts are
 checksum-validated and replayed into a new task without invoking semantic review again.
+
+After finalization and before showing findings to the user, perform a final editorial pass over
+every actionable correction. Prefer a reviewer who did not author the correction when another
+reviewer is available. Compare the source, current translation, proposed correction, evidence,
+and supplied scene context. Confirm that each correction is publication-ready, not merely
+semantically defensible: it must read naturally, preserve speaker voice and register, follow the
+project's terminology and honorific policy, retain required runtime controls, and fit the relevant
+dialogue or UI constraints. Keep this pass scoped to the proposed findings; do not reopen clean
+inventory records.
+
+Do not show or apply a correction that fails this pass. Do not edit `findings.json` directly.
+Revise its corresponding deep result receipt, run `rebuild-final` into a separate output root, and
+repeat the editorial pass on the returned task. Only present stable finding IDs for approval after
+every actionable correction has passed.
 
 Do not edit until the user approves specific stable finding IDs. Never modify or remove
 `_original`. After approval, use the generated README's correction-map, dry-run, atomic-apply, and

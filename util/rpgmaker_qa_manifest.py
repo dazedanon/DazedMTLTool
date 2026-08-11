@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 from collections import Counter
@@ -335,8 +336,12 @@ def _display_shape(code: int | None, classification: str) -> str:
 def _mechanical_evidence(source: str, live: str) -> dict[str, Any]:
     source_tokens = _RUNTIME_TOKEN_RE.findall(source)
     live_tokens = _RUNTIME_TOKEN_RE.findall(live)
-    source_visible = _RUNTIME_TOKEN_RE.sub("", source)
-    live_visible = _RUNTIME_TOKEN_RE.sub("", live)
+    source_visible = unicodedata.normalize(
+        "NFKC", _RUNTIME_TOKEN_RE.sub("", source)
+    )
+    live_visible = unicodedata.normalize(
+        "NFKC", _RUNTIME_TOKEN_RE.sub("", live)
+    )
     source_numbers = _VISIBLE_NUMBER_RE.findall(source_visible)
     live_numbers = _VISIBLE_NUMBER_RE.findall(live_visible)
     flags = []

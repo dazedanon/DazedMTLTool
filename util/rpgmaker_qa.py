@@ -63,7 +63,7 @@ FINDING_CATEGORIES = frozenset({
     "other",
 })
 
-QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-v4"
+QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-v5"
 FORCED_DEEP_MECHANICAL_FLAGS = frozenset({
     "empty-live",
     "unchanged-source",
@@ -310,6 +310,18 @@ def _record_maps(manifest: dict[str, Any]) -> tuple[dict[str, dict], dict[str, d
     records = {record["identity"]: record for record in manifest["records"]}
     clusters = {cluster["representative"]: cluster for cluster in manifest["clusters"]}
     return records, clusters
+
+
+def _semantic_manifest_sha256(manifest: dict[str, Any]) -> str:
+    """Hash inventory semantics while excluding recomputable detector evidence."""
+    projection = {
+        key: value for key, value in manifest.items() if key != "content_sha256"
+    }
+    projection["records"] = [
+        {key: value for key, value in record.items() if key != "mechanical"}
+        for record in manifest.get("records") or []
+    ]
+    return _sha256(_canonical_bytes(projection))
 
 
 def _risk_reasons(
@@ -801,7 +813,17 @@ redistribute a scene outside the claim/release commands.
 6. Continue until `next` says the current stage is complete, then run
    `python "{cli}" advance --task "{task_dir}"` and continue the next stage.
 7. When every deep bundle is accepted, run `python "{cli}" finalize --task "{task_dir}"`.
-8. Show `findings.json` to the user and wait for explicit approval. The helper must never choose
+8. Before showing findings to the user, perform a final editorial pass over every actionable
+   correction in `findings.json`. Prefer a reviewer who did not author the correction when another
+   reviewer is available. Compare the source, current translation, correction, evidence, and
+   supplied scene context. Confirm publication-ready meaning, natural English, speaker voice,
+   terminology and honorific policy, runtime controls, line breaks, and dialogue or UI fit. Keep
+   this pass scoped to the proposed findings; do not reopen clean inventory records. Do not edit
+   `findings.json` directly. If a correction needs revision, revise its corresponding deep result
+   receipt, run `python "{cli}" rebuild-final --task "{task_dir}" --output-root
+   "<separate-output-root>"`, and repeat this pass on the returned task.
+9. Only after every actionable correction passes, show `findings.json` to the user and wait for
+   explicit approval. The helper must never choose
    approvals itself. After approval, create and validate a correction map with
    `python "{cli}" corrections --task "{task_dir}" --approve QA-0001 ...` and
    `python "{cli}" dry-run --task "{task_dir}"`. Only then may the approved map be applied with
@@ -1819,6 +1841,30 @@ def rebuild_findings_from_results(
     ):
         raise ValueError("The source task must have a fully accepted deep stage")
 
+    current_manifest = build_manifest(source_task["data_root"], source_task["focus"])
+    validation = verify_manifest(source_task["data_root"], current_manifest)
+    if not validation["valid"]:
+        raise ValueError(
+            "Current QA inventory validation failed: "
+            + "; ".join(validation.get("errors") or [])
+        )
+    source_manifest = _read_json(source / "inventory.json")
+    current_context = _context_pack(Path(source_task["game_root"]))
+    mechanical_only_change = (
+        current_manifest["content_sha256"] != source_task.get("manifest_sha256")
+        and _semantic_manifest_sha256(current_manifest)
+        == _semantic_manifest_sha256(source_manifest)
+        and current_context["content_sha256"] == source_task.get("context_sha256")
+    )
+    if mechanical_only_change:
+        return _rebuild_final_from_frozen_semantics(
+            source,
+            source_task,
+            source_checkpoint,
+            current_manifest,
+            output_root,
+        )
+
     destination_root = (
         Path(output_root).expanduser().resolve()
         if output_root is not None
@@ -1861,6 +1907,120 @@ def rebuild_findings_from_results(
             raise ValueError(f"Source deep result checksum is invalid: {row['id']}")
         _validate_deep_result(bundle, result)
         accept_result(rebuilt, result_path)
+    return rebuilt, finalize(rebuilt)
+
+
+def _validate_completed_receipts(
+    source: Path, checkpoint: dict[str, Any]
+) -> list[str]:
+    """Validate immutable bundles/results and return their content fingerprints."""
+    fingerprints = []
+    for stage in ("screen", "deep"):
+        for row in checkpoint[stage]["bundles"]:
+            bundle_path = source / "bundles" / stage / f"{row['id']}.json"
+            result_path = source / "results" / stage / f"{row['id']}.json"
+            if bundle_path.is_symlink() or result_path.is_symlink():
+                raise ValueError(f"QA receipt cannot be a symbolic link: {row['id']}")
+            bundle = _read_json(bundle_path)
+            checksum_value = dict(bundle)
+            claimed = checksum_value.pop("content_sha256", "")
+            if (
+                bundle.get("schema") != BUNDLE_SCHEMA
+                or bundle.get("stage") != stage
+                or bundle.get("bundle_id") != row["id"]
+                or claimed != row.get("sha256")
+                or claimed != _sha256(_canonical_bytes(checksum_value))
+            ):
+                raise ValueError(f"Source {stage} bundle checksum is invalid: {row['id']}")
+            result = _read_json(result_path)
+            if result.get("bundle_sha256") != claimed:
+                raise ValueError(f"Source {stage} result checksum is invalid: {row['id']}")
+            if stage == "screen":
+                _validate_screen_result(bundle, result)
+            else:
+                _validate_deep_result(bundle, result)
+            fingerprints.append(_sha256(result_path.read_bytes()))
+    return fingerprints
+
+
+def _rebuild_final_from_frozen_semantics(
+    source: Path,
+    source_task: dict[str, Any],
+    source_checkpoint: dict[str, Any],
+    current_manifest: dict[str, Any],
+    output_root: str | Path | None,
+) -> tuple[Path, dict[str, Any]]:
+    """Re-finalize after a detector-only change without replaying semantic review."""
+    receipt_fingerprints = _validate_completed_receipts(source, source_checkpoint)
+    game = Path(source_task["game_root"]).resolve()
+    destination_root = (
+        Path(output_root).expanduser().resolve()
+        if output_root is not None
+        else source.parents[2]
+    )
+    storage = _safe_task_root(destination_root, game)
+    engine_fingerprint = _engine_fingerprint()
+    migration_key = _sha256(_canonical_bytes({
+        "kind": "mechanical-evidence-only-final-rebuild-v1",
+        "engine_fingerprint": engine_fingerprint,
+        "source_task_sha256": source_checkpoint["task_sha256"],
+        "current_manifest_sha256": current_manifest["content_sha256"],
+        "receipt_fingerprints": receipt_fingerprints,
+    }))[:16]
+    task_parent = storage / _slug(game.name) / source_task["focus"]
+    task_parent.mkdir(parents=True, exist_ok=True)
+    rebuilt = task_parent / migration_key
+    with _task_lock(task_parent):
+        if (rebuilt / "task.json").is_file():
+            return rebuilt, status(rebuilt)
+        staging = Path(tempfile.mkdtemp(prefix=f".{migration_key}.", dir=task_parent))
+        try:
+            for name in (
+                "inventory.json",
+                "inventory-validation.json",
+                "context.json",
+                "screen-index.json",
+            ):
+                path = source / name
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError(f"Invalid frozen QA task file: {path}")
+                shutil.copy2(path, staging / name)
+            for name in ("bundles", "results"):
+                folder = source / name
+                if any(path.is_symlink() for path in folder.rglob("*")):
+                    raise ValueError(f"Frozen QA task contains a symbolic link: {folder}")
+                shutil.copytree(folder, staging / name)
+
+            task = dict(source_task)
+            task["created_at"] = _utc_now()
+            task["engine_fingerprint"] = engine_fingerprint
+            task["rebuilt_from"] = {
+                "kind": "mechanical-evidence-only-final-rebuild-v1",
+                "source_task": str(source),
+                "source_task_sha256": source_checkpoint["task_sha256"],
+                "current_manifest_sha256": current_manifest["content_sha256"],
+            }
+            checkpoint = json.loads(json.dumps(source_checkpoint))
+            checkpoint["stage"] = "ready-finalize"
+            checkpoint["findings_file"] = ""
+            checkpoint["updated_at"] = _utc_now()
+            for stage in ("screen", "deep"):
+                for row in checkpoint[stage]["bundles"]:
+                    row["path"] = str(
+                        rebuilt / "bundles" / stage / f"{row['id']}.json"
+                    )
+                    row["result_path"] = str(
+                        rebuilt / "results" / stage / f"{row['id']}.json"
+                    )
+            checkpoint["task_sha256"] = _sha256(_canonical_bytes(task))
+            _atomic_write_json(staging / "task.json", task)
+            _atomic_write_json(staging / "checkpoint.json", checkpoint)
+            _atomic_write_text(staging / "README.md", _task_instructions(rebuilt))
+            staging.replace(rebuilt)
+        except Exception:
+            if staging.is_dir() and not staging.is_symlink():
+                shutil.rmtree(staging)
+            raise
     return rebuilt, finalize(rebuilt)
 
 
@@ -2131,10 +2291,17 @@ def regression_check(task_dir: str | Path) -> dict[str, Any]:
             record = after_records.get(operation["identity"])
             if record is None or record["live"] != operation["replacement"]:
                 errors.append(f"approved correction is missing: {operation['identity']}")
-            elif record.get("mechanical", {}).get("flags"):
+                continue
+            before_record = before_records.get(operation["identity"], {})
+            before_flags = set(
+                before_record.get("mechanical", {}).get("flags") or []
+            )
+            after_flags = set(record.get("mechanical", {}).get("flags") or [])
+            introduced_flags = sorted(after_flags - before_flags)
+            if introduced_flags:
                 errors.append(
-                    f"approved correction has mechanical flags: {operation['identity']} "
-                    + ", ".join(record["mechanical"]["flags"])
+                    "approved correction introduced mechanical flags: "
+                    f"{operation['identity']} " + ", ".join(introduced_flags)
                 )
     return {
         "schema": REGRESSION_SCHEMA,

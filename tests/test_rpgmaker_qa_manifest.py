@@ -240,6 +240,26 @@ class TestRPGMakerQAManifest(unittest.TestCase):
         self.assertEqual(CODE357_TEXT_ARGUMENTS, translator_schema)
         self.assertEqual(VERIFIED_CODE357_TEXT_ARGUMENTS, translator_schema)
 
+    def test_visible_numbers_ignore_ascii_and_fullwidth_digit_width(self):
+        items_path = self.data / "Items.json"
+        items = json.loads(items_path.read_text(encoding="utf-8"))
+        items.append({
+            "id": 2,
+            "name": "Pattern 1",
+            "_original": {"name": "パターン１"},
+        })
+        _write_json(items_path, items)
+
+        manifest = build_manifest(self.data, "database")
+        record = next(
+            item for item in manifest["records"] if item["source"] == "パターン１"
+        )
+
+        self.assertEqual(record["mechanical"]["source_visible_numbers"], ["1"])
+        self.assertEqual(record["mechanical"]["live_visible_numbers"], ["1"])
+        self.assertNotIn("visible-number-mismatch", record["mechanical"]["flags"])
+        self.assertTrue(verify_manifest(self.data, manifest)["valid"])
+
     def test_focus_partition_and_risky_inner_string(self):
         database = build_manifest(self.data, "database")
         risky = build_manifest(self.data, "risky-codes")

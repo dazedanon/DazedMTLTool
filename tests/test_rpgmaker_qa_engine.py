@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from util import rpgmaker_qa
 
@@ -441,10 +442,43 @@ class RPGMakerQAEngineTests(unittest.TestCase):
         )
         self.assertEqual(len(final_motif["deep_reconciliation"]["finding_ids"]), 1)
 
-        refinalized, state = rpgmaker_qa.rebuild_findings_from_results(
-            rebuilt, self.root / "refinalized-tasks"
-        )
+        real_build_manifest = rpgmaker_qa.build_manifest
+
+        def build_with_new_detector_evidence(*args, **kwargs):
+            manifest = real_build_manifest(*args, **kwargs)
+            manifest["records"][0]["mechanical"]["flags"].append(
+                "new-detector-evidence"
+            )
+            unhashed = dict(manifest)
+            unhashed.pop("content_sha256", None)
+            manifest["content_sha256"] = rpgmaker_qa._sha256(
+                rpgmaker_qa._canonical_bytes(unhashed)
+            )
+            return manifest
+
+        with (
+            patch.object(
+                rpgmaker_qa,
+                "build_manifest",
+                side_effect=build_with_new_detector_evidence,
+            ),
+            patch.object(
+                rpgmaker_qa,
+                "verify_manifest",
+                return_value={"valid": True, "errors": []},
+            ),
+        ):
+            refinalized, state = rpgmaker_qa.rebuild_findings_from_results(
+                rebuilt, self.root / "refinalized-tasks"
+            )
         self.assertEqual(state["stage"], "complete")
+        refinalized_task = json.loads(
+            (refinalized / "task.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            refinalized_task["rebuilt_from"]["kind"],
+            "mechanical-evidence-only-final-rebuild-v1",
+        )
         self.assertEqual(
             json.loads((refinalized / "findings.json").read_text(encoding="utf-8"))[
                 "motif_families"
@@ -467,6 +501,13 @@ class RPGMakerQAEngineTests(unittest.TestCase):
     def test_deep_finding_applies_only_after_map_and_preserves_original(self):
         items_path = self.data / "Items.json"
         items = json.loads(items_path.read_text(encoding="utf-8"))
+        verbose_current = (
+            "This overly verbose description says that the item restores health completely."
+        )
+        verbose_correction = (
+            "This clearer description says that the item restores magical power."
+        )
+        items[1]["description"] = verbose_current
         items.append({
             "id": 3,
             "name": "Potion Plus",
@@ -499,7 +540,7 @@ class RPGMakerQAEngineTests(unittest.TestCase):
                     "category": "meaning" if actionable else "",
                     "family_key": "source:体力を回復する。" if actionable else "",
                     "evidence": "The source says it restores MP." if actionable else "",
-                    "correction": "Restores MP." if actionable else None,
+                    "correction": verbose_correction if actionable else None,
                     "apply_identities": [],
                 })
             result = self.root / f"{assignment['id']}-deep.json"
@@ -522,7 +563,14 @@ class RPGMakerQAEngineTests(unittest.TestCase):
         )
         approved = next(
             item["id"] for item in findings["findings"]
-            if item["current"] == "Restores health."
+            if item["current"] == verbose_current
+        )
+        baseline = json.loads((task / "inventory.json").read_text(encoding="utf-8"))
+        baseline_record = next(
+            item for item in baseline["records"] if item["live"] == verbose_current
+        )
+        self.assertIn(
+            "suspicious-length-ratio", baseline_record["mechanical"]["flags"]
         )
         rpgmaker_qa.create_correction_map(task, [approved])
         preview = rpgmaker_qa.dry_run_correction_map(task)
@@ -535,7 +583,7 @@ class RPGMakerQAEngineTests(unittest.TestCase):
         self.assertTrue(updated_raw.startswith(b"\xef\xbb\xbf"))
         updated_text = updated_raw.decode("utf-8-sig")
         updated = json.loads(updated_text)
-        self.assertEqual(updated[1]["description"], "Restores MP.")
+        self.assertEqual(updated[1]["description"], verbose_correction)
         self.assertEqual(updated[1]["_original"]["description"], actionable_source)
         self.assertEqual(updated[3]["description"], "Heals health.")
         self.assertIn('\n    {\n        "id": 1,', updated_text)

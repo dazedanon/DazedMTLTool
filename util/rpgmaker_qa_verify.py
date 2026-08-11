@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -179,8 +180,14 @@ def _decode_pointer(json_pointer: str) -> list[str]:
 def _mechanical(source: str, live: str) -> dict[str, Any]:
     source_tokens = _RUNTIME_TOKEN_RE.findall(source)
     live_tokens = _RUNTIME_TOKEN_RE.findall(live)
-    source_numbers = _VISIBLE_NUMBER_RE.findall(_RUNTIME_TOKEN_RE.sub("", source))
-    live_numbers = _VISIBLE_NUMBER_RE.findall(_RUNTIME_TOKEN_RE.sub("", live))
+    source_visible = unicodedata.normalize(
+        "NFKC", _RUNTIME_TOKEN_RE.sub("", source)
+    )
+    live_visible = unicodedata.normalize(
+        "NFKC", _RUNTIME_TOKEN_RE.sub("", live)
+    )
+    source_numbers = _VISIBLE_NUMBER_RE.findall(source_visible)
+    live_numbers = _VISIBLE_NUMBER_RE.findall(live_visible)
     flags = []
     if not live.strip():
         flags.append("empty-live")

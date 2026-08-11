@@ -272,6 +272,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             "validated-checkpoints",
             "honest-global-coverage",
             "grouped-finding-families",
+            "final-editorial-pass",
             "approval-before-edit",
             "preserve-original",
             "atomic-apply",
@@ -289,7 +290,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 prompt = load_rpgmaker_qa_skill(focus)
                 lowered = prompt.casefold()
                 contract = re.search(
-                    r"<!-- qa-contract:rpgmaker-qa-local-v4\s+(.*?)-->",
+                    r"<!-- qa-contract:rpgmaker-qa-local-v5\s+(.*?)-->",
                     prompt,
                     re.DOTALL,
                 )
