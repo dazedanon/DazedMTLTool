@@ -1,5 +1,14 @@
 # QA Exported RPG Maker Translations — Focused Pass
 
+<!-- qa-contract:rpgmaker-qa-v3
+focus-isolation exhaustive-coverage approval-before-edit preserve-original durable-artifacts
+fresh-shard-workers immutable-context-pack indexed-mechanical-preprocessing
+affected-identity-revalidation batched-registry-epochs parallel-component-propagation
+adversarial-closing-validation semantic-first-layout-last threshold-only-nonfinding
+family-consistency-validation offline-quality-benchmark throughput-evidence
+coordinator-only-apply post-fix-regression
+-->
+
 <task_context>
 Audit the translated RPG Maker JSON files in this detected game data folder:
 
@@ -57,6 +66,8 @@ Complete all four QA passes; none is optional. Run them in this order:
 
 Carry each pass's checkpoint or final report forward as evidence for the final gate. Do not skip any
 pass because it appears low-risk or because its mechanical scan was clean.
+Run the four passes as separate selected-focus invocations in the listed order; do not widen one
+invocation beyond the selected focus merely to satisfy the overall four-pass requirement.
 </task_context>
 
 ## Bounded review contract
@@ -67,8 +78,9 @@ Keep this pass independent and measurable instead of widening it into a whole-ga
   uncertain, report the leaf as an unresolved scope/shape warning; do not silently absorb another
   pass.
 - Mechanically check 100% of resolvable in-scope source/translation pairs.
-- Deduplicate identical source/translation pairs for semantic review while retaining every locator
-  and materially distinct context class.
+- Deduplicate pairs by exact UTF-8 source and translation equality for semantic review, using one
+  representative that retains every locator and materially distinct context class. Context-class
+  occurrence checks do not create extra frozen representatives.
 - Review every frozen cluster before this focus may end or request approval.
   Use 500 pairs as the routine wave size and follow a selected focus's explicit small-corpus rule
   when it requires reviewing up to 750 pairs.
@@ -93,6 +105,9 @@ Keep this pass independent and measurable instead of widening it into a whole-ga
 - Never imply that a partial semantic wave covered every line.
   Readiness requires 100% mechanical coverage, zero unresolved Critical/High findings, and an
   explicit reviewed disposition for every frozen cluster.
+  Here `unresolved` means lacking adequate evidence, propagation, reconciliation, or a supported
+  proposed correction; a confirmed actionable finding awaiting user approval is resolved for
+  discovery-gate purposes and remains pending action.
   Sampling, risk ranking, or consecutive clean waves cannot substitute for exhaustive coverage.
 
 ## Reproducible inventory and checkpoint
@@ -101,15 +116,23 @@ Do not stream thousands of raw JSON lines into the conversation. Build a compact
 short-lived helpers when useful.
 
 - Identify a location by `relative file + canonical JSON path + SHA-256 of exact UTF-8 source`.
+  Version the helper's canonical JSON-path grammar, normalization rules, and short/medium/long length
+  thresholds in the task manifest so identities and strata reproduce across resumes.
 - Freeze the in-scope cluster universe before the first wave. Choose the lexicographically lowest
   stable identity as each cluster representative and order representatives by
   `SHA-256("rpgmaker-qa-focus-v1\0" + focus name + "\0" + representative identity)`.
 - Interleave files and the focus-specific strata named below so one large file or shape does not
-  consume the wave. Do not reshuffle on resume or after editing English.
+  consume the wave. A selected focus's explicit ordering algorithm overrides this common ordering
+  summary. Do not reshuffle on resume or after editing English.
 - Save the ordered identities, locators, source hashes, dispositions, issue signatures, applicable
   focus-specific review-contract ID, and wave position in a checkpoint outside `{{GAME_ROOT}}`.
   Record the helper version or content hash and manifest checksum. Never place generated QA
   artifacts in the game folder or data folder.
+- Create the persistent task directory before generating the first helper, checkpoint, registry,
+  worker assignment, correction plan, or regression artifact. Authoritative artifacts must never
+  originate in an operating-system temporary directory and later depend on an end-of-task copy for
+  durability. Record every authoritative artifact path and SHA-256 in a task manifest; use temporary
+  paths only for disposable validation outputs that can be regenerated from the durable copies.
 - Reuse a valid checkpoint for this focus. Reject it and explain why if the focus, source hashes,
   manifest checksum, or applicable focus-specific review contract no longer matches. A selected
   focus may explicitly allow reuse of older mechanical inventory while requiring its semantic
@@ -124,15 +147,46 @@ When the host provides durable goals, create one whose stopping condition is thi
 coverage and required report. Do not mark the goal complete until the focus-specific completion gate
 passes. A missing goal feature is not a blocker; continue with the checkpoint contract.
 
-Keep the master checkpoint, worker shards, helper scripts, registry, and merge log in one persistent
-task directory outside `{{GAME_ROOT}}`. Do not use an operating-system temporary directory for the
-authoritative copies; temporary paths are suitable only for disposable validation runs. Preserve a
-recoverable master snapshot before every accepted batch merge.
-Store one immutable master snapshot and one compact, read-only registry snapshot per revision.
+Keep the immutable corpus master, versioned coordinator state/checkpoint, worker shards, helper
+scripts, registry, and merge log in one persistent task directory outside `{{GAME_ROOT}}`. Do not use
+an operating-system temporary directory for the authoritative copies; temporary paths are suitable
+only for disposable validation runs. Preserve a recoverable coordinator-state snapshot before every
+accepted batch merge. Store one immutable frozen corpus master for the task plus immutable
+coordinator-state and compact, read-only registry snapshots for every published revision/epoch.
+Choose and record the resolved durable path before creating artifacts, using a stable hierarchy such
+as `<durable-qa-root>/<game-id>/<focus>/<contract-or-schema-id>/`; reuse that exact path on resume.
 Do not clone the full master or full registry into every worker shard. A shard is a lightweight
 review delta containing assignment metadata, assigned identity/ordinal keys, pane commits,
 dispositions, evidence, ledger additions, and local proposals. The coordinator materializes those
 deltas into the master only after validation.
+
+Run one deterministic preprocessing pass over the frozen corpus. Persist content-addressed indexes
+for exact and normalized source/live text, glossary candidates, runtime tokens, visible numerals,
+source residue, event/field/speaker/context facets, same-source classes, and known callback or
+narrative edges. Compute static mechanical flags and risk features once. Propagation helpers must
+query these immutable indexes instead of repeatedly reparsing every JSON file or asking workers to
+rediscover mechanical candidates. A helper hit remains a candidate until semantic/context review
+disposes it; preprocessing never substitutes for exhaustive review.
+
+Build one immutable context pack from the exact bytes or explicit missing/empty status of the
+glossary, quirks, game skill, custom overlays, applicable runtime/plugin evidence, and the versions
+of the review contract, helper, path grammar, and schema. Preserve resolved provenance paths and
+individual hashes in the pack. The pack may contain deterministic extracts and canonical tables but
+must not contain prior workers' conclusions or interpretive summaries. Record its SHA-256 and derive
+the focus context fingerprint from its inputs and generator revision.
+
+Treat the frozen corpus master and the live issue registry as separate authorities. Never mutate
+the frozen master to make a finding appear propagated. Publish each accepted registry revision as
+an immutable epoch snapshot plus an append-only delta from the preceding epoch, then atomically
+advance a small current-epoch pointer. Workers receive the exact master revision/hash and registry
+epoch/hash in their assignment; they must not resolve work through a mutable pointer. Registry epoch
+inequality alone does not invalidate completed semantic review. For every changed family, compute a
+deterministic affected-identity set from the old and new selectors, candidate queries, confirmed
+members, changed invariants/corrections/exclusions, same-source/context expansion, and transitive
+callback/narrative dependency closure. Accept unaffected identities from an otherwise valid stale
+worker delta and assign only its intersection with that set to a fresh revalidation worker. If the
+impact query or dependency closure is unavailable or inconclusive, conservatively mark the entire
+focus affected. Persist each impact proof and the family revisions revalidated per identity.
 
 After freezing the manifest and completing the full mechanical scan, use subagents by default when
 more than 750 semantic clusters remain and subagent tools are available. Keep one agent as the
@@ -144,32 +198,55 @@ ordinal range, even when the host supports follow-up tasks or restarting an exis
 the worker after it closes and returns its shard, then spawn a fresh replacement when the next
 assignment is ready. Preserve project continuity in the durable context fingerprint, immutable
 snapshot, registry, checkpoint, and assignment packet rather than in accumulated worker memory.
-Fresh workers must independently load the required context paths; do not pass prior workers'
-reasoning or summaries as substitute context.
+Fresh workers must independently load and hash-check the immutable context pack. They may inspect
+its hash-verified provenance files and read-only game evidence when meaning requires more context;
+do not pass prior workers' reasoning or summaries as substitute context or make every worker rebuild
+deterministic glossary/runtime tables from mutable origin paths.
 
 The coordinator owns the manifest, master checkpoint, issue propagation, cross-shard reconciliation,
 approval gate, and final report. Partition the frozen order into consecutive, disjoint semantic
 shards using the applicable routine wave size. Give each worker one explicit assignment containing
 the focus and review-contract ID, manifest checksum, context fingerprint when applicable, inclusive
-ordinal range, baseline master revision and SHA-256, canonical issue-registry revision and SHA-256,
-required context paths, output schema, and read-only game paths. Use snapshot isolation: every worker
-in one batch receives the same immutable master and registry revision, and only the coordinator may
-merge a newer revision. Workers must load the required context themselves and may inspect adjacent
-or distant read-only evidence when meaning requires it.
+ordinal range, immutable corpus-master revision and SHA-256, coordinator-state revision and SHA-256,
+canonical issue-registry epoch and snapshot SHA-256, registry delta-chain SHA-256, helper SHA-256,
+immutable context-pack revision and SHA-256, provenance paths, output schema, and read-only game
+paths. Use snapshot isolation: every worker in one batch receives the same immutable master,
+coordinator state, registry epoch, delta chain, helper revision, and context pack, and only the
+coordinator may publish a newer revision.
 
 Run a coordinator scheduling loop while work remains. Validate and retire each returned worker
 immediately. At a registry-epoch boundary, reconcile all returned proposals, publish the next compact
-registry snapshot, atomically merge accepted deltas, and immediately fill every open slot with fresh
-workers. Do useful coordinator reconciliation while waiting for a straggler. Never dispatch against
-a mutable or partially reconciled registry merely to keep a slot busy.
+registry snapshot, and atomically merge accepted deltas. Dispatch only against a fully published
+immutable epoch, but do not idle worker slots merely because a newer epoch is being reconciled or
+challenged. Older in-flight outputs may finish and merge through affected-identity validation.
+Reconcile proposals at fixed ordinal scheduling-batch boundaries rather than worker completion order,
+then publish one epoch containing the batch's canonicalized changes. A scheduling batch is the
+complete set of assignments selected together from the frozen order; record every closed,
+interrupted, and superseded assignment before reconciling it. Propagation and affected-locator
+revalidation must converge before approval or correction-map finalization, not before unrelated
+semantic review proceeds. Never dispatch against a mutable or partially published registry.
+Treat any change to a family's selectors, invariants, canonical correction, severity, confirmed
+membership, callback links, or exclusions as material.
 
-Maintain one coordinator-owned canonical issue registry in the master checkpoint and publish its
-current compact snapshot for workers as a separate read-only artifact. Give each entry a stable ID,
-severity, canonical signature, proposed correction, affected ordinals and live-value count,
-propagation status, and reconciliation status. A worker must classify a candidate as either a match
-to an existing registry ID or a locally named new proposal with evidence; workers must not allocate
-canonical IDs. Reconcile duplicate proposals across the whole returned batch, assign or reuse the
-canonical ID centrally, and propagate it across the full focus before dispatching the next batch.
+Maintain one coordinator-owned canonical issue registry as a versioned durable artifact alongside,
+not inside, the immutable corpus master. The coordinator state records only its current epoch and
+hash. Publish each compact snapshot for workers as a separate read-only artifact. Give each entry a
+stable ID, severity, canonical signature, proposed correction, affected ordinals and live-value
+count, propagation status, and reconciliation status. A worker must classify a candidate as either
+a match to an existing registry ID or a locally named new proposal with evidence; workers must not
+allocate canonical IDs. Reconcile duplicate proposals across the whole returned batch, assign or
+reuse the canonical ID centrally, and propagate it across the full focus before the next approval or
+completion gate. Canonicalize signatures and allocate IDs in stable sorted order so worker return
+timing cannot change the registry.
+
+Give every actionable registry entry a machine-readable propagation contract. Include source-side
+selectors and normalized variants, known-bad English selectors, required canonical terms or
+semantic invariants, same-source and context-class expansion rules, setup/payoff or callback links,
+runtime/display constraints, explicit evidence-backed exclusions, and deterministic verification
+queries. Track the contract's revision, last challenged corpus hash, candidate count, confirmed live
+locator count, excluded-candidate count with reasons, and state (`open`, `searching`, `challenged`,
+or `converged`). Counts copied from a finding table are not proof of propagation; only the current
+contract queries and an independent challenge may establish convergence.
 
 Workers must not edit game files, write the master checkpoint, change helpers, request user approval,
 publish a focus status, or spawn further agents. A worker may write only a uniquely named shard
@@ -183,28 +260,83 @@ artifact outside `{{GAME_ROOT}}` when the coordinator requests one. Each returne
 - applicable narrative anchors, wordplay candidates, cross-focus dependencies, unresolved evidence,
   and proposed corrections required by the selected focus.
 
-Review and persist each shard incrementally. Use consecutive panes of at most 100 assigned ordinals;
-after actually reviewing a pane, atomically save its explicit semantic, narrative, and wordplay
-dispositions plus its next ordinal in the worker shard before reading the next pane. Never keep all
-500 dispositions only in agent memory or bulk-mark the whole shard at the end. On interruption,
-resume from the shard's first uncommitted ordinal with a fresh replacement worker and do not repeat
-or infer the missing pane. Give the replacement only the immutable assignment packet and committed
-shard delta, not the interrupted worker's accumulated conversation.
+Review and persist each shard incrementally. Before dispatch, freeze a deterministic shard review
+sequence that applies the required risk ordering with stable ordinal tie-breaks. Use consecutive
+panes of at most 100 positions in that sequence; after actually reviewing a pane, atomically save its
+explicit semantic, narrative, and wordplay dispositions plus its next sequence position in the worker
+shard before reading the next pane. Never keep all 500 dispositions only in agent memory or bulk-mark
+the whole shard at the end. On interruption, resume from the shard's first uncommitted sequence
+position with a fresh replacement worker and do not repeat or infer the missing pane. Give the
+replacement only the immutable assignment packet and committed shard delta, not the interrupted
+worker's accumulated conversation.
 
 Treat worker output as untrusted review evidence until validated. Confirm matching fingerprints and
 contract, exact assigned identity coverage, no missing or extra representatives, no overlap with
 accepted shards, valid dispositions, and no unauthorized writes. Reject a partial summary or invalid
 shard without marking its range reviewed, then reassign the original range. Merge accepted shards
-into the master checkpoint in deterministic ordinal order, record each wave exactly once, and persist
-the merge before dispatching work from a newer registry epoch. Retire every returned worker whether
-its shard is accepted or rejected; reassignment always goes to a fresh worker.
+into the master checkpoint in deterministic ordinal order and record each wave exactly once. The
+coordinator may slice a complete valid delta into unaffected accepted identities and an
+affected-identity revalidation microshard; this is not permission to accept an incomplete worker
+summary. Store revalidation results as ledger deltas without changing the original frozen 500-pair
+wave membership or history. Retire every returned worker whether its shard is accepted or rejected;
+reassignment always goes to a fresh worker.
+
+For every published batch epoch that adds or materially changes finding families, build a
+deterministic dependency graph from shared candidates, terms/entities, context predicates, and
+callback/narrative links. Partition it into stably sorted connected components after the
+coordinator's indexed full-corpus propagation pass. Start one fresh adversarial propagation worker
+per independent component in parallel when slots are available. Give each worker the immutable
+corpus master, indexes, context pack, current registry snapshot, component contracts, and read-only
+game evidence, but not earlier workers' reasoning or a claimed complete locator list. Require it to
+challenge exact-source matches, lexical and normalized variants, context-resolved references,
+same-event siblings, repeated prompts/prerequisites, and setup/payoff or joke callbacks as applicable.
+It must return either evidence-backed new candidates or a machine-readable report stating
+`zero new confirmed locators`, with every rejected candidate and exclusion reason. A confirmed
+locator reopens and rechallenges only its dependency component and adds its impact set to the
+affected-locator revalidation queue. Use a separate fresh component closer when one component was
+split into candidate chunks.
+
+After all issue families report convergence, start a different fresh closing validator that has not
+performed semantic review, correction planning, or the preceding propagation challenge. Have it
+rebuild the full-corpus searches from the immutable artifacts, validate registry totals and
+exclusions, compare canonical renderings and context-justified variants within every terminology,
+title, pronoun/referent, catchphrase, callback, and other linked family, and challenge cross-family or
+cross-component misses. Do not ask for approval, apply fixes, or report completion until this
+validator also returns zero new confirmed locators and zero unexplained family inconsistencies. A
+miss invalidates the completion hash and reopens the affected family plus its dependency-component
+closure; unrelated converged components remain valid when corpus, context-pack, and contract hashes
+are unchanged.
 
 Before reporting completion, run a machine-verifiable gate that rejects any non-final disposition,
 unreviewed cluster, missing/duplicate/gapped/overlapping wave, stale registry total, unreconciled
 proposal or issue propagation, unaccounted unresolved source shape, unreconciled narrative or
 wordplay ledger, stale source/mechanical evidence, or unauthorized game-file modification. For a
 large corpus, require the exact expected sequence of 500-pair waves plus the final partial wave.
-Completion requires the gate to pass, not merely a worker summary or stored reviewed count.
+Also require every propagation contract to be `converged`, its current-epoch verification queries to
+reproduce the stored counts, the latest fresh adversarial challenge and closing validation to report
+zero new confirmed locators, and every exclusion to remain reproducible. Accept an older per-locator
+disposition only with a reproducible proof that no intervening changed family's affected set contains
+it. Require the supplemental revalidation queue to be empty. Completion requires the gate to pass,
+not merely a worker summary, registry count, or stored reviewed count.
+
+## Quality and throughput evidence
+
+Measure speed as completed verified work, never as permission to sample or skip review. Record per
+scheduling batch and for the whole focus: elapsed time; unique clusters and occurrence contexts
+reviewed; deterministic candidates generated; actionable findings and affected locators;
+revalidation identities; rejected shard identities; propagation component/challenge counts; and,
+when the host exposes them, input/output tokens. Report clusters per elapsed hour and revalidation
+percentage, but do not impose a flaky wall-clock completion threshold.
+
+When a committed or previously user-approved QA calibration oracle exists for the same benchmark
+contract, run it once per review-contract, helper, context-pack generator, or orchestration revision.
+Record the oracle hash, locator/family precision and recall, F1, propagation completeness, correction
+exactness, per-focus coverage, focus/severity accuracy, false positives, and elapsed/throughput
+metadata. Never derive expected answers from the run being scored. A missing project oracle does not
+block a live audit; after approval and closing validation, preserve a candidate calibration pack of
+confirmed findings plus verified hard negatives for explicit user approval and future revisions.
+Accept a speed optimization only when exhaustive coverage and completion gates remain unchanged and
+available calibration quality does not regress.
 
 Delegation does not replace whole-scope reasoning. The coordinator must propagate every confirmed
 issue signature across the entire focus, reconcile terminology and context classes across shards,
@@ -257,6 +389,37 @@ signature. Verify lexical matches in source and runtime context, group confirmed
 finding ID, and repeat propagation until a full search adds no affected live values. Do not limit
 propagation to an identical Japanese sentence or the current semantic wave.
 
+## Review priority and layout policy
+
+Use this default priority for risk scoring, shard scheduling, finding review, and correction
+planning; it does not reduce exhaustive cluster coverage:
+
+1. Factual and semantic correctness, including omissions, polarity, conditions, and wrong
+   subjects, objects, speakers, or actions.
+2. Identity and referents, including pronouns, kinship, titles, roles, quantities, and who is doing
+   or receiving an action.
+3. Canonical glossary names, terminology, factions, places, abilities, and consistent propagation
+   across every applicable occurrence.
+4. Context-dependent callbacks, setup/payoff relationships, deliberate ambiguity, wordplay, and
+   character voice.
+5. Runtime integrity, including structure, controls, placeholders, visible numbers, choices,
+   bullets, alignment, and other behavior-bearing formatting.
+6. Fluency and demonstrable display/layout damage where the basic meaning remains sound.
+
+Treat a raw or plugin-stripped visible character count as a triage signal, not an actionable
+finding by itself. A configured threshold such as 55 characters does not prove that the runtime
+clips, truncates, overlaps, or paginates the line incorrectly. Register a standalone display/layout
+finding only when engine/plugin rules, a reproducible render, a screenshot, or another concrete
+runtime artifact proves player-visible damage or a hard display constraint violation. Keep an
+explicitly requested layout audit's threshold-only candidate inventory separate from actionable
+findings.
+
+When an approved substantive or runtime-integrity correction already changes a locator, rewrap that
+locator safely as a companion transform when needed. Preserve meaning, controls, message shape, and
+intentional pacing, and do not allocate a separate overflow finding ID unless the display defect is
+independently proven. Leave an untouched threshold-only locator unchanged and out of correction
+maps and propagation counts.
+
 ## Mechanical checks for every in-scope pair
 
 1. Parse the containing JSON and verify the live counterpart, type, list/object shape, and non-empty
@@ -266,16 +429,30 @@ propagation to an identical Japanese sentence or the current semantic wave.
 3. Compare runtime tokens and placeholders for loss, addition, duplication, malformed escaping,
    unsafe reordering, or changed scope. Include RPG Maker codes such as `\C[n]`, `\N[n]`, `\V[n]`,
    `\I[n]`, `\{`, `\}`, `\.`, `\|`, `\!`, `\>`, `\<`, and `\^`; custom backslash codes;
-   `__PROTECTED_n__`; printf placeholders; interpolation; and meaningful HTML/plugin tags.
+   `__PROTECTED_n__`; printf placeholders; interpolation; and meaningful HTML/plugin tags. Derive
+   custom escape parsing and token scope from the enabled engine/plugin code when generic RPG Maker
+   parsing is insufficient. Treat numeric control arguments such as the `0` in `\C[0]` as runtime
+   syntax, not visible numbers, and test any inserted delimiter against the runtime parser rather
+   than assuming a regex-safe spelling is display-safe.
 4. Verify semantic placement, not only token counts. Colors and font scopes must wrap the translated
    equivalent; icons and variables must remain beside what they modify; waits and pauses must keep
    their intended beat. Natural English word order does not require identical offsets.
 5. Flag concrete number, quantity, polarity, pronoun, subject, speaker, terminology, quote, and
    punctuation damage; suspicious length changes; unrelated sources collapsed to generic output;
-   or one source translated inconsistently where context does not justify it.
-6. Check actual display constraints applicable to this focus. Use configured wrap widths and
-   enabled plugin behavior when available. Record a proven auto-wrap or pagination exception once;
-   do not keep raising overflow-only findings for that shape.
+   or one source translated inconsistently where context does not justify it. Compare semantic,
+   player-visible numbers separately from control arguments, record IDs, filenames, script literals,
+   and other structural numerals; normalize only forms proven equivalent for the active runtime.
+6. Check actual display constraints applicable to this focus without treating a character threshold
+   as proof of failure. Use configured wrap widths and enabled plugin behavior when available.
+   Measure raw serialized length and rendered visible width separately with a plugin-aware control
+   stripper; record threshold hits as mechanical candidates only. A raw-width flag caused only by
+   verified zero-width runtime controls is not a visible overflow. Conversely, do not hide a proven
+   overflow by stripping a control whose plugin renders text, an icon, spacing, or changes the
+   effective width. Record a proven auto-wrap, pagination, or control-inflation exception once;
+   persist its selector, runtime evidence path and hash, candidate count, exclusion reason, and
+   visible maximum so the closing validator can reproduce it as a narrow predicate. An exclusion
+   may suppress only the proven mechanical false positive, never semantic placement or another
+   check. Do not raise or propagate threshold-only findings.
 
 ## Required report and approval gate
 
@@ -290,6 +467,8 @@ tool, or evidence blocker that prevents it from finishing:
 - Unique clusters, semantically reviewed this wave, previously reviewed, and remaining
 - Context classes found/reviewed and represented files/codes/fields/speakers/length bands
 - Per-wave history, overlap, new signatures/affected values, clean-wave count, and convergence state
+- Elapsed time, clusters per hour, revalidation percentage, rejected shard identities, propagation
+  component/challenge counts, and available input/output token totals
 - Checkpoint location, schema/version or helper hash, manifest checksum, and blind spots
 - Glossary path, load status, usable entry count, and confirmed violations
 - Translation quirks path, load status, and whether usable rules were applied
@@ -304,8 +483,8 @@ Count only actionable findings:
 - **High**: clear mistranslation, missing content, source residue, wrong control-code scope,
   glossary/name failure, altered lore/plot fact, broken foreshadowing, or wordplay required by a
   choice, puzzle, clue, or later payoff.
-- **Medium**: evidence-backed context, consistency, fluency, tone, overflow, or demonstrably
-  flattened humor/callback defect where the basic meaning remains sound.
+- **Medium**: evidence-backed context, consistency, fluency, tone, demonstrable player-visible
+  display damage, or flattened humor/callback defect where the basic meaning remains sound.
 
 Do not create Low findings for optional polish.
 
@@ -320,6 +499,8 @@ signatures while retaining representative locators and affected counts. Never du
 State `complete`, `incomplete - execution interrupted with clusters remaining`, or
 `blocked - unresolved evidence or findings`.
 Only the Coverage & release gate focus may make a whole-game release recommendation.
+Use `blocked` only for an evidence gap or unresolved condition that prevents a safe disposition;
+confirmed actionable findings with supported corrections may proceed to the approval gate.
 Ask for fix approval only when zero frozen clusters remain unreviewed.
 If execution was interrupted or blocked, provide the checkpoint and exact resume position instead
 of presenting a normal completion approval gate.
@@ -330,6 +511,10 @@ When coverage is complete, end with one focused approval question offering the r
 - Make no edits after the completed review.
 - Stop with no edits.
 
+`High-confidence` means the source/runtime/context evidence supports both the finding and its exact
+correction, its propagation contract has converged, and no material ambiguity remains; it is not a
+severity synonym.
+
 Do not edit until the user approves.
 
 ## After approval
@@ -339,10 +524,83 @@ Never modify or remove `_original`. Preserve JSON types, event commands, non-tex
 codes, placeholders, indentation, and encoding. Make the smallest supported change and do not edit
 plugin/script source under `{{GAME_ROOT}}` from this game-data QA prompt.
 
+Before changing a game file, create a durable fix revision under the persistent task directory.
+Freeze an immutable approved-fix manifest containing the approved finding IDs, propagation-contract
+IDs/revisions, canonical corrections, exclusions, and approval evidence/hash. Correction planning
+and supplemental-locator decisions must resolve against that manifest rather than the latest mutable
+registry pointer.
+Use fresh one-shot correction workers for disjoint semantic, identity, terminology, wordplay, and
+independently proven runtime/display categories when subagents are available; workers may propose
+entries but must not edit game files. Do not create a correction category or worker shard solely for
+character-threshold hits. Every entry must carry stable identity, file and live path, source
+path/hash, exact old and new values, issue IDs, propagation-contract IDs/revisions, evidence,
+constraints, composition trace, and worker/base-registry hashes. Revalidate every old value against
+the live JSON immediately before composition.
+
+Compose overlaps centrally and deterministically instead of accepting last-writer-wins output.
+Accept and apply correction categories in this fixed order: factual/semantic meaning; identity,
+referent, pronoun, and quantity; canonical names/terminology/titles; wordplay/voice; then layout.
+Apply bullet restoration, wrapping, alignment delimiters, and other layout transforms only in the
+final layout tier. Limit that tier to independently proven runtime/display findings and companion
+transforms on locators already changing for an approved substantive or runtime-integrity finding;
+never add untouched threshold-only locators to the map.
+Preserve the union of issue IDs and runtime constraints. If two semantic proposals disagree or a
+layout transform cannot preserve the semantic result, fail that target for coordinator resolution
+rather than selecting a worker by completion order. Record the composition rule and result in the
+merge log so the closing validator can reproduce all overlaps.
+
+After composing all approved correction categories in the fixed order, publish one correction-map
+revision and one fix-registry epoch containing every materially changed family or expanded target set.
+Build the family dependency graph and run fresh adversarial propagation challenges for independent
+components in parallel under the same `zero new confirmed locators` rule used during discovery. A
+miss rebuilds and rechallenges its affected component; unchanged components remain valid while their
+corpus, context-pack, contract, and proposal hashes match. After every component converges, publish
+one immutable hashed final correction map with a SHA-256 and start a different fresh closing validator
+against that exact hash. Require it to validate every registry locator, every supplemental locator,
+all propagation contracts and exclusions, exact live old values/source hashes, deterministic overlap
+compositions, family-level consistency and justified variants, runtime tokens, visible numbers,
+hearts, message shapes, and display constraints. Any new confirmed locator or changed map invalidates
+the whole-map hash and requires a rebuilt map plus another fresh closing validation.
+Family-level approval covers supplemental locators found after approval only when they satisfy the
+same approved propagation contract and canonical correction. A materially different correction or
+an entirely new issue family requires renewed user approval and must stay out of the current map.
+
+Only the coordinator may write game files, and it may do so once, from the closing-validated
+immutable correction map, after a complete dry run passes. The dry run must prove that every
+registered locator is changed or explicitly already correct, every supplemental locator belongs to
+the frozen corpus and an existing finding contract, `_original` source hashes match, no proposal is
+a no-op, and all structural/runtime/display gates pass. Do not let correction workers, propagation
+workers, or validators perform partial writes.
+Here `once` means one coordinator-controlled application phase or atomic multi-file transaction;
+multiple affected files are expected, but no worker writes or interleaved partial application is
+allowed.
+
 Reparse every affected JSON file, rerun this focus's complete mechanical checks, rescan each
 approved issue signature across all in-scope pairs until no new affected values appear, and confirm
 no residue, token, display, or structural regression. Put edited identities in a regression queue;
 do not count regression as a new semantic wave.
+Rebuild the complete selected-focus post-fix corpus, verify every in-scope string-valued `_original`
+against the frozen source hashes, account for every in-scope unresolved non-string source shape,
+reproduce every propagation
+contract and false-positive exclusion, and rerun the fresh closing validator's signature searches
+against the written files. Start a fresh post-fix validator, distinct from all review, correction,
+propagation, and pre-write closing workers, and require it to return zero new confirmed locators and
+zero structural/runtime/display regressions from the rebuilt on-disk corpus. It must also regroup the
+written values by terminology, title, identity/referent, catchphrase, callback, and issue family and
+return zero unexplained inconsistencies between canonical renderings and context-justified variants.
+Persist the immutable final map, merge log, post-fix corpus/checkpoint, compact regression report,
+hashes, and validator reports in the durable task directory from the start; temporary copies are not
+authoritative.
+Report raw mechanical flags separately from plugin-aware visible failures so control-token
+inflation cannot masquerade as a regression. A pre-existing untouched threshold-only candidate is
+not a post-fix regression and cannot fail the correction gate; validate edited locators against
+their approved constraints and fail actual newly introduced display damage.
+If the post-fix validator fails, mark that application revision failed and do not make an ad hoc
+edit. For a regression or missed locator still covered by the approved-fix manifest, build a new
+immutable repair-map revision, repeat adversarial propagation, dry run, and fresh pre-write closing
+validation, then execute one new coordinator-controlled application phase. A different correction
+or new family still requires renewed approval. Completion remains blocked until a fresh post-fix
+validator passes.
 Report fixes and remaining risks, then stop.
 
 <!-- qa-focus:dialogue -->
@@ -358,11 +616,12 @@ other three focuses solely because this dialogue contract changed.
 
 Compute and store a dialogue context fingerprint from the exact UTF-8 contents or explicit
 missing/empty status of `{{VOCAB_FILE}}`, `{{QUIRKS_FILE}}`, `{{GAME_SKILL_FILE}}`, and every loaded
-custom overlay, ordered by resolved path. Reuse prior dialogue semantic dispositions only when this
-fingerprint also matches. If project guidance changed while the source manifest remained valid,
-reuse the frozen manifest and mechanical results but reset all dialogue semantic dispositions and
-both ledgers; new guidance can change lore, voice, and wordplay judgments even when Japanese and
-English text are unchanged.
+custom overlay, ordered by resolved path, together with the immutable context-pack generator
+revision. Reuse prior dialogue semantic dispositions only when this fingerprint and context-pack hash
+also match. If project guidance changed while the source manifest remained valid, reuse the frozen
+manifest and mechanical results but reset all dialogue semantic dispositions and both ledgers; new
+guidance can change lore, voice, and wordplay judgments even when Japanese and English text are
+unchanged.
 
 Audit only event commands 101, 102, 401, and 405 in `Map*.json`, `CommonEvents.json`, and
 `Troops.json`.
@@ -444,6 +703,10 @@ change, reparse and rerun the full scan before closing the next wave.
 
 Construct one frozen dialogue order before Wave 1:
 
+For a representative spanning several context classes, use the lexicographically selected
+representative locator's file/code/speaker/display-shape/length fields for queue ownership while
+retaining and reviewing every other context facet as occurrence evidence.
+
 1. Group representatives by relative file. Within each file, group by event code, speaker or empty,
    display shape, and length band.
 2. Sort each sub-stratum by mandatory-review status first and the stable selection key second, then
@@ -452,14 +715,16 @@ Construct one frozen dialogue order before Wave 1:
    `consumed queue entries / total queue entries` ratio, breaking ties by relative filename, and
    taking its next representative. This keeps large maps from crowding out smaller files.
 
-Before each wave, score the entire unreviewed frozen suffix with a high-recall risk overlay. Include
+Compute the high-recall static risk features once during deterministic preprocessing. Include
 mechanical flags plus cues for negation, quantities, conditions, temporal order, pronouns,
 referents, kinship, glossary terms, short ambiguous Japanese, large length changes, inconsistent
 clusters, choice polarity, speaker changes, lore-bearing assertions, deliberate ambiguity,
-wordplay/joke reactions, catchphrases/callbacks, and control-code placement. Inspect the
-highest-risk members of the current wave first, then review every remaining member in frozen order.
-Risk ranking must not change wave membership, substitute for review, or allow any member to be
-skipped. Record an explicit reviewed disposition for every representative.
+wordplay/joke reactions, catchphrases/callbacks, and control-code placement. Before each wave, overlay
+only registry-dependent affected-family features and rank that wave's members; do not rescore the
+entire unreviewed suffix. Inspect the highest-risk members of the current wave first, then review
+every remaining member in frozen order. Risk ranking must not change wave membership, substitute for
+review, or allow any member to be skipped. Record an explicit reviewed disposition for every
+representative.
 
 Review every frozen dialogue cluster across consecutive resumable waves:
 
@@ -632,6 +897,8 @@ Static release approval requires:
 - complete mechanical coverage and no unresolved/double-classified `_original` leaves;
 - exhaustive completion or valid focus-specific semantic convergence for all four game-data classes;
 - no unresolved Critical/High findings and no approved fix awaiting regression;
+- for every focus that applied fixes, matching immutable final-map, registry-epoch, zero-new-locator
+  propagation/validator, rebuilt-corpus, and durable post-fix regression evidence;
 - explicit separation between static QA and runtime/playthrough confidence.
 
 Recommend a focused playtest for repaired events, representative messages/choices/scrolling text,

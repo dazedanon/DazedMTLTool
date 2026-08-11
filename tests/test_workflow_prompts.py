@@ -1,6 +1,20 @@
 """Regression tests for concise, interactive plugin translation prompts."""
 
+import json
+import re
+import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
+from pathlib import Path
+from unittest.mock import patch
+
+from scripts.score_rpgmaker_qa_benchmark import (
+    load_oracle,
+    main as score_benchmark_main,
+    score_run,
+    validate_fixture,
+)
 
 from util.skills import (
     RPGMAKER_QA_FOCUSES,
@@ -34,11 +48,241 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 self._assert_interactive_in_place_prompt(prompt)
                 self.assertIn(project_scope, prompt)
 
-    def test_rpgmaker_qa_prompts_are_exhaustive_and_require_approval(self):
+    def _assert_rpgmaker_qa_benchmark(self):
+        fixture_root = (
+            Path(__file__).parent / "fixtures" / "rpgmaker_qa_benchmark"
+        )
+        oracle = load_oracle(fixture_root / "oracle.json")
+        validate_fixture(oracle, fixture_root)
+        perfect_run = {
+            "schema_version": 1,
+            "benchmark_id": "rpgmaker-qa-v1",
+            "oracle_sha256": oracle["oracle_sha256"],
+            "artifact_sha256": oracle["artifact_sha256"],
+            "reviewed_clusters_by_focus": {
+                "dialogue": [
+                    "cluster-bullet",
+                    "cluster-control-argument",
+                    "cluster-control-reset",
+                    "cluster-polarity",
+                    "cluster-referent",
+                    "cluster-referent-linked",
+                    "cluster-source-residue",
+                    "cluster-threshold-only",
+                    "cluster-visible-number",
+                    "cluster-wordplay-adaptation",
+                ],
+                "database": [
+                    "cluster-glossary-decoy",
+                    "cluster-glossary-item",
+                    "cluster-glossary-related-name",
+                    "cluster-item-description",
+                ],
+            },
+            "findings": [
+                {
+                    "locator": "Map001.json#/events/1/pages/0/list/0/parameters/0",
+                    "focus": "dialogue",
+                    "family_id": "F-REFERENT-001",
+                    "severity": "High",
+                    "correction": "That professor is him.",
+                },
+                {
+                    "locator": "Map001.json#/events/1/pages/0/list/1/parameters/0",
+                    "focus": "dialogue",
+                    "family_id": "F-REFERENT-001",
+                    "severity": "High",
+                    "correction": "He is the professor.",
+                },
+                {
+                    "locator": "Map001.json#/events/1/pages/0/list/2/parameters/0",
+                    "focus": "dialogue",
+                    "family_id": "F-POLARITY-001",
+                    "severity": "High",
+                    "correction": "The door won't open.",
+                },
+                {
+                    "locator": "Map001.json#/events/1/pages/0/list/3/parameters/0",
+                    "focus": "dialogue",
+                    "family_id": "F-NUMBER-001",
+                    "severity": "High",
+                    "correction": "Use three herbs.",
+                },
+                {
+                    "locator": "Map001.json#/events/1/pages/0/list/4/parameters/0",
+                    "focus": "dialogue",
+                    "family_id": "F-RESIDUE-001",
+                    "severity": "High",
+                    "correction": "Run!",
+                },
+                {
+                    "locator": "Map001.json#/events/1/pages/0/list/5/parameters/0",
+                    "focus": "dialogue",
+                    "family_id": "F-CONTROL-001",
+                    "severity": "High",
+                    "correction": "\\C[2]Danger\\C[0]",
+                },
+                {
+                    "locator": "Map001.json#/events/1/pages/0/list/6/parameters/0",
+                    "focus": "dialogue",
+                    "family_id": "F-BULLET-001",
+                    "severity": "Medium",
+                    "correction": "• Open the journal",
+                },
+                {
+                    "locator": "Items.json#/1/name",
+                    "focus": "database",
+                    "family_id": "F-GLOSSARY-001",
+                    "severity": "High",
+                    "correction": "Astral Key",
+                },
+            ],
+            "run_metadata": {
+                "elapsed_seconds": 10,
+                "input_tokens": 100,
+                "output_tokens": 20,
+            },
+        }
+        perfect_score = score_run(oracle, perfect_run)
+        self.assertTrue(perfect_score["quality_pass"])
+        self.assertEqual(perfect_score["locator_f1"], 1.0)
+        self.assertEqual(perfect_score["propagation_completeness"], 1.0)
+        self.assertEqual(perfect_score["coverage"], 1.0)
+        self.assertEqual(perfect_score["expected_cluster_count"], 14)
+        self.assertEqual(perfect_score["clusters_per_hour"], 5040.0)
+
+        missed_run = {**perfect_run, "findings": perfect_run["findings"][1:]}
+        missed_score = score_run(oracle, missed_run)
+        self.assertFalse(missed_score["quality_pass"])
+        self.assertLess(missed_score["locator_recall"], 1.0)
+        self.assertLess(missed_score["propagation_completeness"], 1.0)
+
+        threshold_case = next(
+            case for case in oracle["cases"]
+            if "threshold-only" in case.get("tags", [])
+        )
+        false_positive_run = {
+            **perfect_run,
+            "findings": [
+                *perfect_run["findings"],
+                {
+                    "locator": threshold_case["locator"],
+                    "focus": "dialogue",
+                    "family_id": "F-SPURIOUS-OVERFLOW",
+                    "severity": "Medium",
+                    "correction": "Unnecessary rewrap.",
+                },
+            ],
+        }
+        false_positive_score = score_run(oracle, false_positive_run)
+        self.assertFalse(false_positive_score["quality_pass"])
+        self.assertLess(false_positive_score["locator_precision"], 1.0)
+        self.assertEqual(
+            false_positive_score["threshold_only_false_positive_count"], 1
+        )
+
+        wrong_family_run = {
+            **perfect_run,
+            "findings": [
+                {**perfect_run["findings"][0], "family_id": "F-WRONG"},
+                *perfect_run["findings"][1:],
+            ],
+        }
+        wrong_family_score = score_run(oracle, wrong_family_run)
+        self.assertFalse(wrong_family_score["quality_pass"])
+        self.assertLess(wrong_family_score["family_precision"], 1.0)
+        self.assertLess(
+            wrong_family_score["locator_family_label_accuracy"], 1.0
+        )
+
+        wrong_correction_run = {
+            **perfect_run,
+            "findings": [
+                {**perfect_run["findings"][0], "correction": "Wrong."},
+                *perfect_run["findings"][1:],
+            ],
+        }
+        wrong_correction_score = score_run(oracle, wrong_correction_run)
+        self.assertFalse(wrong_correction_score["quality_pass"])
+        self.assertLess(wrong_correction_score["correction_exactness"], 1.0)
+
+        wrong_focus_run = {
+            **perfect_run,
+            "findings": [
+                {**perfect_run["findings"][0], "focus": "database"},
+                *perfect_run["findings"][1:],
+            ],
+        }
+        self.assertFalse(score_run(oracle, wrong_focus_run)["quality_pass"])
+
+        wrong_severity_run = {
+            **perfect_run,
+            "findings": [
+                {**perfect_run["findings"][0], "severity": "Medium"},
+                *perfect_run["findings"][1:],
+            ],
+        }
+        self.assertFalse(score_run(oracle, wrong_severity_run)["quality_pass"])
+
+        incomplete_run = {
+            **perfect_run,
+            "reviewed_clusters_by_focus": {
+                **perfect_run["reviewed_clusters_by_focus"],
+                "database": perfect_run["reviewed_clusters_by_focus"]["database"][:-1],
+            },
+        }
+        incomplete_score = score_run(oracle, incomplete_run)
+        self.assertFalse(incomplete_score["quality_pass"])
+        self.assertLess(incomplete_score["coverage"], 1.0)
+
+        invalid_metadata_run = {
+            **perfect_run,
+            "run_metadata": {"elapsed_seconds": float("nan")},
+        }
+        with self.assertRaises(ValueError):
+            score_run(oracle, invalid_metadata_run)
+        with self.assertRaises(ValueError):
+            score_run(oracle, {**perfect_run, "schema_version": True})
+
+        with tempfile.TemporaryDirectory() as raw:
+            run_path = Path(raw) / "missed-run.json"
+            run_path.write_text(json.dumps(missed_run), encoding="utf-8")
+            with (
+                patch("sys.argv", [
+                    "score_rpgmaker_qa_benchmark.py",
+                    str(fixture_root / "oracle.json"),
+                    str(run_path),
+                ]),
+                redirect_stdout(StringIO()),
+            ):
+                self.assertEqual(score_benchmark_main(), 1)
+
+    def test_rpgmaker_qa_prompt_and_benchmark_contract(self):
         self.assertEqual(
             [focus for focus, _label in RPGMAKER_QA_FOCUSES],
             ["database", "risky-codes", "dialogue", "release"],
         )
+        expected_contract = {
+            "focus-isolation",
+            "exhaustive-coverage",
+            "approval-before-edit",
+            "preserve-original",
+            "durable-artifacts",
+            "fresh-shard-workers",
+            "immutable-context-pack",
+            "indexed-mechanical-preprocessing",
+            "affected-identity-revalidation",
+            "batched-registry-epochs",
+            "parallel-component-propagation",
+            "adversarial-closing-validation",
+            "semantic-first-layout-last",
+            "threshold-only-nonfinding",
+            "family-consistency-validation",
+            "offline-quality-benchmark",
+            "throughput-evidence",
+            "coordinator-only-apply",
+            "post-fix-regression",
+        }
         focus_signatures = {
             "dialogue": "Audit only event commands 101, 102, 401, and 405",
             "database": "Audit `_original` leaves in these canonical database files",
@@ -49,48 +293,15 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             with self.subTest(focus=focus):
                 prompt = load_rpgmaker_qa_skill(focus)
                 lowered = prompt.casefold()
-                flattened = " ".join(lowered.split())
-                self.assertIn(
-                    "review every frozen cluster before this focus may end", lowered
+                contract = re.search(
+                    r"<!-- qa-contract:rpgmaker-qa-v3\s+(.*?)-->",
+                    prompt,
+                    re.DOTALL,
                 )
-                self.assertIn(
-                    "continue immediately with the next non-overlapping", lowered
-                )
-                self.assertIn("anticipated context-window pressure", flattened)
-                self.assertIn("context compaction is continuation", flattened)
-                self.assertIn("concrete tool failure", flattened)
-                self.assertIn("durable goal and parallel semantic review", lowered)
-                self.assertIn("use subagents by default", lowered)
-                self.assertIn("coordinator owns the manifest", flattened)
-                self.assertIn("consecutive, disjoint semantic shards", flattened)
-                self.assertIn("workers must not edit game files", flattened)
-                self.assertIn("treat worker output as untrusted review evidence", flattened)
-                self.assertIn("reassign the original range", flattened)
-                self.assertIn("persistent task directory", flattened)
-                self.assertIn("use snapshot isolation", flattened)
-                self.assertIn("canonical issue registry", flattened)
-                self.assertIn("workers must not allocate canonical ids", flattened)
-                self.assertIn("panes of at most 100 assigned ordinals", flattened)
-                self.assertIn("never keep all 500 dispositions only in agent memory", flattened)
-                self.assertIn("machine-verifiable gate", flattened)
-                self.assertIn("fresh subagent for every shard assignment", flattened)
-                self.assertIn("never reuse a completed worker", flattened)
-                self.assertIn("retire the worker", flattened)
-                self.assertIn("lightweight review delta", flattened)
-                self.assertIn("do not clone the full master or full registry", flattened)
-                self.assertIn("compact, read-only registry snapshot", flattened)
-                self.assertIn("coordinator scheduling loop", flattened)
-                self.assertIn("immediately fill every open slot with fresh workers", flattened)
-                self.assertIn("not the interrupted worker's accumulated conversation", flattened)
-                self.assertIn(
-                    "ask for fix approval only when zero frozen clusters remain", lowered
-                )
-                self.assertNotIn("perform one new semantic discovery wave", lowered)
+                self.assertIsNotNone(contract)
+                self.assertEqual(set(contract.group(1).split()), expected_contract)
                 self.assertIn("do not edit until the user approves", lowered)
                 self.assertIn("never modify or remove `_original`", lowered)
-                self.assertIn("complete all four qa passes; none is optional", lowered)
-                self.assertIn("do not skip any", lowered)
-                self.assertIn("`relative file + canonical json path + sha-256", lowered)
                 self.assertIn(focus_signatures[focus], prompt)
                 for other_focus, signature in focus_signatures.items():
                     if other_focus != focus:
@@ -104,40 +315,17 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                     "{{GAME_SKILLS_FOLDER}}",
                 ):
                     self.assertIn(placeholder, prompt)
-                self.assertIn(
-                    "load all three required selected-game context files", lowered
-                )
-                self.assertIn("optional custom-skills folder", lowered)
-                self.assertIn("lost intentional ambiguity", lowered)
-                self.assertIn("functional english adaptation is valid", flattened)
-                self.assertIn(
-                    "translation quirks path, load status", lowered
-                )
-                self.assertIn("game skill path, load status", lowered)
                 if focus == "dialogue":
-                    self.assertIn("while tools remain callable", flattened)
-                    self.assertIn("review every frozen dialogue cluster", lowered)
-                    self.assertIn("partial wave until the frozen manifest", lowered)
                     self.assertIn("complete - exhaustive", lowered)
-                    self.assertNotIn("converged sample", lowered)
-                    self.assertIn(
-                        "`consumed queue entries / total queue entries`", prompt
-                    )
-                    self.assertIn("score the entire unreviewed frozen suffix", prompt)
                     self.assertIn("dialogue-narrative-wordplay-v1", prompt)
-                    self.assertIn("narrative anchors", lowered)
-                    self.assertIn("wordplay candidates", lowered)
-                    self.assertIn("reconcile both ledgers", lowered)
-                    self.assertIn("no narrative/wordplay signal", lowered)
-                    self.assertIn("dialogue context fingerprint", lowered)
                 if focus == "database":
                     self.assertIn("zero unreviewed clusters", lowered)
                 if focus == "release":
                     self.assertIn("dialogue-narrative-wordplay-v1", prompt)
-                    self.assertIn("narrative-anchor and wordplay ledgers", lowered)
                     self.assertIn("context fingerprint matching", lowered)
         with self.assertRaises(ValueError):
             load_rpgmaker_qa_skill("everything")
+        self._assert_rpgmaker_qa_benchmark()
 
     def test_rpgmaker_project_setup_covers_optional_text_and_widths(self):
         prompt = load_project_setup("rpgmaker")

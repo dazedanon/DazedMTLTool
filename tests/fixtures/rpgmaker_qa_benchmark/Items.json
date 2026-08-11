@@ -1,0 +1,21 @@
+[
+  null,
+  {
+    "id": 1,
+    "name": "Star Key",
+    "description": "Opens the observatory.",
+    "_original": {
+      "name": "星の鍵",
+      "description": "天文台を開く。"
+    }
+  },
+  {
+    "id": 2,
+    "name": "Star Fragment",
+    "description": "The star shines.",
+    "_original": {
+      "name": "星の欠片",
+      "description": "星が光る。"
+    }
+  }
+]

@@ -1,0 +1,81 @@
+{
+  "displayName": "QA Benchmark",
+  "events": [
+    null,
+    {
+      "id": 1,
+      "name": "QA Cases",
+      "pages": [
+        {
+          "list": [
+            {
+              "code": 401,
+              "indent": 0,
+              "parameters": ["That professor is her."],
+              "_original": "その先生は彼だ。"
+            },
+            {
+              "code": 401,
+              "indent": 0,
+              "parameters": ["She is the professor."],
+              "_original": "彼は先生だ。"
+            },
+            {
+              "code": 401,
+              "indent": 0,
+              "parameters": ["The door will open."],
+              "_original": "扉は開かない。"
+            },
+            {
+              "code": 401,
+              "indent": 0,
+              "parameters": ["Use two herbs."],
+              "_original": "薬草を3個使う。"
+            },
+            {
+              "code": 401,
+              "indent": 0,
+              "parameters": ["逃げろ！"],
+              "_original": "逃げろ！"
+            },
+            {
+              "code": 401,
+              "indent": 0,
+              "parameters": ["\\C[2]Danger"],
+              "_original": "\\C[2]危険\\C[0]"
+            },
+            {
+              "code": 401,
+              "indent": 0,
+              "parameters": ["Open the journal"],
+              "_original": "・日記を開く"
+            },
+            {
+              "code": 401,
+              "indent": 0,
+              "parameters": ["This healthy line is deliberately longer than fifty-five characters."],
+              "_original": "この文章は長いが、ゲーム内では問題なく表示される。"
+            },
+            {
+              "code": 401,
+              "indent": 0,
+              "parameters": ["\\C[0]Ready."],
+              "_original": "\\C[0]準備完了。"
+            },
+            {
+              "code": 401,
+              "indent": 0,
+              "parameters": ["Curry on—you earned it!"],
+              "_original": "おつカレー！"
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
