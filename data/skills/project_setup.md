@@ -400,13 +400,14 @@ blocker; do not substitute a copy/paste block.
 Summarize the Phase 2 result without duplicating the written Glossary or Translation quirks:
 
 - **Confirmed actionable defects** - families with current text requiring correction, including
-  priority, counts, representative locators, and correction strategy.
+  priority, discovery agreement, counts, representative locators, and correction strategy.
 - **Verified-clean families** - investigated families whose current handling is already sound;
-  never count these as inconsistencies, defects, or correction families.
+  include discovery agreement and never count these as inconsistencies, defects, or correction
+  families.
 - **Research backlog** - plausible but unresolved hypotheses, confidence, evidence, and the exact
   next search or context needed. This is not a QA clearance.
 - **Coverage** - file classes and map ranges searched, independently recounted occurrence totals,
-  and inaccessible or intentionally excluded material.
+  completion of all three isolated passes, and inaccessible or intentionally excluded material.
 
 If no systemic family is confirmed or no backlog remains, state that explicitly. Do not claim the
 game is fully reviewed or clean.
