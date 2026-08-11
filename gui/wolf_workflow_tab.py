@@ -1868,8 +1868,8 @@ class WolfWorkflowTab(QWidget):
         copy_btn = _make_btn("Copy setup skill", "#555")
         copy_btn.setFixedWidth(Geometry.ACTION_WIDE)
         copy_btn.setToolTip(
-            "Clipboard skill for the game repo IDE. Returns paste-ready Glossary, "
-            "Translation quirks, and Game skill sections followed by manual speaker settings."
+            "Clipboard skill for the game repo IDE. Performs baseline setup plus a global "
+            "localization investigation before returning final guidance and speaker settings."
         )
         copy_btn.clicked.connect(self._copy_project_setup_prompt)
         actions.addWidget(copy_btn)
@@ -1877,9 +1877,9 @@ class WolfWorkflowTab(QWidget):
         helper_card.add_layout(actions)
 
         self._setup_ai_help_banner = StatusBanner(
-            "How to use this: click Copy setup skill, paste the copied instructions into "
-            "your AI helper with the game folder open, then copy each labeled result into "
-            "the matching Glossary, Translation quirks, or Game skill tab below.",
+            "How to use this: run Project Setup once. It performs the global investigation "
+            "internally, then returns final labeled results for the matching Glossary, "
+            "Translation quirks, or Game skill tab below.",
             "info",
         )
         helper_card.add_widget(self._setup_ai_help_banner)

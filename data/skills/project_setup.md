@@ -7,7 +7,8 @@ Work in the game repository. Scan files; do not invent content you did not see.
 
 ## Task
 
-In **one pass**, discover everything needed for translation setup and emit the ordered output sections below.
+In **one user-facing run**, complete the two internal phases below, then emit one final set of
+translation-setup outputs. Do not stop after Phase 1 or ask the user to launch another skill.
 Do **not** translate the game or broadly edit its files. The only editing exception is a qualifying
 deterministic micro-repair under the RPG Maker speaker rules below. Recommend formatting and
 pipeline settings only in the designated configuration block.
@@ -26,6 +27,7 @@ schema and exclusivity rules.
 | `speaker_settings` | Manual tool flag ENABLE/SKIP decisions + short evidence | Character bios; quirks; full glossary |
 | `translation_quirks` | Cross-cutting voice rules (battle-log person, global dialect, item-description style, recurring humor/wordplay policy, **unusual** honorific habits) | Per-character register; one-off jokes; "always keep -san" (tool base prompt already does); codes/wrap/line counts; speaker flags |
 | `game_skill` | **Translation Frame** for the API (theme / era / register / naming / optional myth) saved at `.dazedtl/skills/game.md` | File inventories; quirks bullets; glossary; per-character register; IDE scaffolding; restating base honorific/formatting policy |
+| `investigation_report` | Confirmed editorial families, unresolved research backlog, and searched coverage | Pasteable glossary/quirks content; generic categories; QA clearance; proposed game-file edits |
 | `rpgmaker_settings` (RPG Maker only) | Manual code-408 decision + measured wrap/font recommendations | Translation prose; glossary; voice rules; speculative settings without evidence |
 
 Hard rules:
@@ -35,16 +37,33 @@ Hard rules:
 4. `game_skill` is the title's Translation Frame for the translation API - keep it compact; do not reprint quirks or glossary.
 5. `speaker_settings` is manual config, not lore or pasteable guidance.
 6. `rpgmaker_settings` is measured manual setup advice, not content to merge into the translation prompt.
+7. Phase 1 may collect candidate hypotheses but must not confirm systemic editorial families.
+   Phase 2 alone owns their global research and final disposition.
 
 ---
 
-## Shared scan strategy
+## Phase 1 — Baseline setup
+
+Establish characters, world terms, speaker handling, the Translation Frame, and engine settings.
+While scanning for those responsibilities, collect concrete candidate hypotheses for Phase 2.
+Do not globally research them yet and do not place an unverified recurring-humor or systemic-term
+rule in the final Glossary or Translation quirks.
+
+### Shared scan strategy
 
 Map / event files can be huge. Do **not** read them sequentially end-to-end.
 
 1. Read small DB files in full first (richest, always small).
-2. For large event/map files: **search/grep**; sample early story maps; stop when patterns stabilize.
+2. For large event/map files: **search/grep**; take a distributed sample from early, middle, and
+   late maps plus common events; stop ordinary setup sampling when patterns stabilize.
 3. One scan feeds every output block - do not rescan from scratch per block.
+
+Do not review every line. Use cheap corpus-wide frequency/alternative summaries, recurring
+speakers, and distributed scene samples to harvest concrete candidates involving systemic humor,
+callbacks, coined words, titles, common nouns mistaken for names, or other patterns isolated
+translation could mishandle. Pass candidates internally to Phase 2 with their Japanese anchors or
+recognizable scene pattern and a specific next search. Generic prompts such as “check for jokes”
+are not candidates.
 
 <!-- engine:rpgmaker -->
 
@@ -313,6 +332,10 @@ Exclude: wrap geometry, inject layout, `names.json` harvest, speaker LOWCONF che
 and one-off jokes that should be localized from their own context instead of becoming global policy.
 
 Output as short imperative bullets suitable to paste into `.dazedtl/skills/quirks.md`.
+For every recurring joke, catchphrase, or wordplay rule, include one or more distinctive Japanese
+source anchors from that game in the same bullet. QA uses those literal anchors to gather the
+complete motif family deterministically; do not use a generic grammatical fragment that would
+match unrelated dialogue.
 
 ### Game skill rules (for the paste-ready Game skill section)
 
@@ -335,6 +358,8 @@ Do **not** include voice-rules pointers, tool-boundary essays, file inventories,
 
 <!-- /engine:wolf -->
 
+{{LOCALIZATION_INVESTIGATION_PHASE}}
+
 ---
 
 ## Output format
@@ -344,16 +369,17 @@ Use this exact top-level order:
 1. **Glossary**
 2. **Translation quirks**
 3. **Game skill**
-4. **Manual changes**
-5. **Evidence, repairs, and playtests**
+4. **Localization investigation**
+5. **Manual changes**
+6. **Evidence, repairs, and playtests**
 
 The first three sections are content the user must copy and paste. Put only the pasteable content
 inside their code fences; put the destination in the heading immediately above each fence. Do not
 put explanations, evidence, instructions, or destination paths inside those fences.
 
-Everything after Game skill requires review, a manual setting change, or no user action. It must
-remain ordinary Markdown outside code fences. **Never fence manual settings, evidence, repairs,
-exceptions, or playtests.**
+Everything after Game skill is a report, a manual setting change, or no user action. It must remain
+ordinary Markdown outside code fences. **Never fence investigation results, manual settings,
+evidence, repairs, exceptions, or playtests.**
 
 ### 1. Glossary - copy/paste into DazedTL > Setup > Glossary
 
@@ -388,7 +414,22 @@ Label the fence language as `markdown`. The fence must contain only the Translat
 神話・伝承 (Myth / folklore basis) - <one compact line, or omit this line entirely if unsupported>
 ```
 
-### 4. Manual changes
+### 4. Localization investigation
+
+Do not use a code fence. Summarize the Phase 2 result without duplicating the paste-ready Glossary
+or Translation quirks:
+
+- **Confirmed families** - priority, source mechanism, Japanese anchors, occurrence and file/map
+  counts, representative locators, and the chosen English mechanism or canonical term.
+- **Research backlog** - plausible but unresolved hypotheses, confidence, evidence, and the exact
+  next search or context needed. This is not a QA clearance.
+- **Coverage** - file classes and map ranges searched, independently recounted occurrence totals,
+  and inaccessible or intentionally excluded material.
+
+If no systemic family is confirmed or no backlog remains, state that explicitly. Do not claim the
+game is fully reviewed or clean.
+
+### 5. Manual changes
 
 Do not use a code fence in this section. State each action as **Change** or **Keep**, name the exact
 DazedTL control or setting, give the target value, and append a short reason.
@@ -407,7 +448,7 @@ game and reloads them automatically when switching projects.
 For Wolf, include **Speaker settings** with `LOWCONF_FIRSTLINE: ENABLE|SKIP` and representative
 examples. Do not emit RPG Maker settings.
 
-### 5. Evidence, repairs, and playtests
+### 6. Evidence, repairs, and playtests
 
 Do not use a code fence in this section. Keep it brief and include only applicable items:
 

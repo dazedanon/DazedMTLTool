@@ -258,11 +258,12 @@ _STEP_HELP: dict[int, str] = {
         "1. Click <b>Collect names</b>. This finds likely speaker names and adds them to the "
         "Glossary; it does not translate dialogue.<br>"
         "2. Click <b>Copy setup instructions</b>, paste them into your AI helper, and let it "
-        "inspect the game folder.<br>"
+        "inspect the game folder. The same setup run researches recurring jokes, terms, callbacks, "
+        "and other global patterns before returning final guidance.<br>"
         "3. Turn on a speaker option only when the helper marks it <b>ENABLE</b>. Many games "
         "need no extra options.<br>"
         "4. If you enabled an option, click <b>Collect names</b> again.<br>"
-        "5. Put each labeled result into its matching tab: <b>Glossary</b>, "
+        "5. Put the final labeled results into their matching tabs: <b>Glossary</b>, "
         "<b>Translation quirks</b>, or <b>Game skill</b>, then save it.<br><br>"
         "Keep the Glossary short and useful. Character names, places, and recurring terms "
         "belong there; long general instructions do not."
@@ -1473,8 +1474,9 @@ class WorkflowTab(QWidget):
 
         self.speaker_setup_hint = StatusBanner(
             "Always start with “1  Collect names” so recognized speakers are added to the "
-            "Glossary. Next, run the setup instructions with your AI helper. If it marks an "
-            "option ENABLE, turn that option on and collect names again. Many games need none.",
+            "Glossary. The setup instructions include a global localization investigation before "
+            "they return final guidance. If setup marks an option ENABLE, turn it on and collect "
+            "names again. Many games need none.",
             "info",
         )
         speaker_stage.add_widget(self.speaker_setup_hint)
@@ -1547,8 +1549,8 @@ class WorkflowTab(QWidget):
         self.speaker_copy_setup_btn = _make_btn("📋  2  Copy setup instructions", "#555")
         self.speaker_copy_setup_btn.setToolTip(
             "After collecting names, paste these instructions into the AI helper with the game "
-            "folder open. It returns paste-ready Glossary, Translation quirks, and Game skill "
-            "sections first, followed by speaker and RPG Maker settings to change manually."
+            "folder open. One run performs baseline setup plus a global localization investigation, "
+            "then returns final Glossary, Translation quirks, Game skill, and manual settings."
         )
         self.speaker_copy_setup_btn.clicked.connect(self._copy_project_setup_prompt)
         _equalize_action_buttons(

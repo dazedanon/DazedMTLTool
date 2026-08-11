@@ -23,6 +23,7 @@ _SHIPPED_DATA_FILES = (
     "data/translation_contexts.json",
     "data/skills/system.md",
     "data/skills/project_setup.md",
+    "data/skills/localization_investigation.md",
     "data/skills/wrap_config.md",
     "data/skills/plugin_translation.md",
     "data/skills/ace_script_translation.md",

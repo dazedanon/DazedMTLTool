@@ -20,6 +20,12 @@ RPGMAKER_QA_FOCUSES = (
 )
 
 _RPGMAKER_QA_FILENAME = "rpgmaker_translation_qa.md"
+_LOCALIZATION_INVESTIGATION_FILENAME = "localization_investigation.md"
+_INVESTIGATION_PHASE_MARKERS = (
+    "<!-- investigation-phase -->",
+    "<!-- /investigation-phase -->",
+)
+_INVESTIGATION_PHASE_PLACEHOLDER = "{{LOCALIZATION_INVESTIGATION_PHASE}}"
 
 
 def _read_skill_file(name: str) -> str:
@@ -59,10 +65,34 @@ def _extract_engine_section(text: str, engine: str) -> str:
     return "".join(result_parts).strip() + "\n"
 
 
+def _extract_required_section(text: str, markers: tuple[str, str]) -> str:
+    """Return one marked section or reject an ambiguous skill."""
+    start_marker, end_marker = markers
+    start = text.find(start_marker)
+    if start == -1 or text.find(start_marker, start + len(start_marker)) != -1:
+        raise ValueError(f"Skill must contain exactly one marker: {start_marker}")
+    end = text.find(end_marker, start + len(start_marker))
+    if end == -1 or text.find(end_marker, end + len(end_marker)) != -1:
+        raise ValueError(f"Skill must contain exactly one marker: {end_marker}")
+    body = text[start + len(start_marker) : end].strip()
+    if not body:
+        raise ValueError(f"Skill section is empty: {start_marker}")
+    return body
+
+
 def load_project_setup(engine: str = "rpgmaker", *, prepend: str = "") -> str:
-    """Load the Project Setup clipboard skill for *engine*."""
+    """Load one Setup prompt with its shared investigation phase for *engine*."""
     raw = _read_skill_file("project_setup.md")
     body = _extract_engine_section(raw, engine)
+    if body.count(_INVESTIGATION_PHASE_PLACEHOLDER) != 1:
+        raise ValueError(
+            "Project Setup skill must contain exactly one investigation phase placeholder"
+        )
+    investigation = _extract_required_section(
+        _read_skill_file(_LOCALIZATION_INVESTIGATION_FILENAME),
+        _INVESTIGATION_PHASE_MARKERS,
+    )
+    body = body.replace(_INVESTIGATION_PHASE_PLACEHOLDER, investigation)
     marker_list = ", ".join(
         f"`{marker}`" for marker in sorted(SUPPORTED_CODE408_MARKERS)
     )

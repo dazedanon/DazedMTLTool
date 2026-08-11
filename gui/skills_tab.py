@@ -92,8 +92,20 @@ class SkillsTab(QWidget):
             tab_title="Project Setup",
             path=SKILLS_DIR / "project_setup.md",
             hint=(
-                "Clipboard skill copied from Workflow. "
-                "Returns paste-ready glossary, quirks, and game skill sections followed by manual settings."
+                "Clipboard skill copied from Workflow. Runs baseline setup and the shared global "
+                "investigation phase before returning final guidance and manual settings. Keep "
+                "the {{LOCALIZATION_INVESTIGATION_PHASE}} placeholder."
+            ),
+            is_json=False,
+        )
+        self._add_file_page(
+            key="localization_investigation",
+            tab_title="Investigation",
+            path=SKILLS_DIR / "localization_investigation.md",
+            hint=(
+                "Standalone rerun of Setup's hypothesis-led investigation phase for new questions "
+                "or post-translation follow-up. It never edits game files. Keep both "
+                "investigation-phase markers so Setup can embed the shared method."
             ),
             is_json=False,
         )
