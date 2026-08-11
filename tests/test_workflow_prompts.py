@@ -260,51 +260,44 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
     def test_rpgmaker_qa_prompt_and_benchmark_contract(self):
         self.assertEqual(
             [focus for focus, _label in RPGMAKER_QA_FOCUSES],
-            ["database", "risky-codes", "dialogue", "release"],
+            ["release", "database", "risky-codes", "dialogue"],
         )
         expected_contract = {
-            "focus-isolation",
-            "exhaustive-coverage",
+            "app-owned-inventory",
+            "immutable-review-bundles",
+            "scene-affine-semantic-screen",
+            "evidence-preserving-deep-handoff",
+            "motif-family-receipts",
+            "selective-risk-escalation",
+            "validated-checkpoints",
+            "honest-global-coverage",
+            "grouped-finding-families",
             "approval-before-edit",
             "preserve-original",
-            "durable-artifacts",
-            "fresh-shard-workers",
-            "immutable-context-pack",
-            "indexed-mechanical-preprocessing",
-            "affected-identity-revalidation",
-            "batched-registry-epochs",
-            "parallel-component-propagation",
-            "adversarial-closing-validation",
-            "semantic-first-layout-last",
-            "threshold-only-nonfinding",
-            "family-consistency-validation",
-            "offline-quality-benchmark",
-            "throughput-evidence",
-            "coordinator-only-apply",
+            "atomic-apply",
             "post-fix-regression",
-            "deterministic-manifest-gate",
-            "independent-manifest-validation",
-            "no-generated-extractors",
+            "no-provider-api",
         }
         focus_signatures = {
-            "dialogue": "Audit only event commands 101, 102, 401, and 405",
-            "database": "Audit `_original` leaves in these canonical database files",
-            "risky-codes": "Audit translated or translation-sensitive event commands",
-            "release": "Inventory every `_original` leaf in every JSON file",
+            "dialogue": "Dialogue focus. Review each prepared scene",
+            "database": "Database focus. The local manifest owns",
+            "risky-codes": "Risky event-code focus. The local manifest owns",
+            "release": "Coverage and release focus. The local manifest inventories",
         }
         for focus, _label in RPGMAKER_QA_FOCUSES:
             with self.subTest(focus=focus):
                 prompt = load_rpgmaker_qa_skill(focus)
                 lowered = prompt.casefold()
                 contract = re.search(
-                    r"<!-- qa-contract:rpgmaker-qa-v4\s+(.*?)-->",
+                    r"<!-- qa-contract:rpgmaker-qa-local-v4\s+(.*?)-->",
                     prompt,
                     re.DOTALL,
                 )
                 self.assertIsNotNone(contract)
                 self.assertEqual(set(contract.group(1).split()), expected_contract)
                 self.assertIn("do not edit until the user approves", lowered)
-                self.assertIn("never modify or remove `_original`", lowered)
+                self.assertIn("never modify or remove", lowered)
+                self.assertIn("`_original`", lowered)
                 self.assertIn(focus_signatures[focus], prompt)
                 for other_focus, signature in focus_signatures.items():
                     if other_focus != focus:
@@ -320,17 +313,20 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                     "{{QA_FOCUS}}",
                 ):
                     self.assertIn(placeholder, prompt)
-                self.assertIn("build_rpgmaker_qa_manifest.py", prompt)
-                self.assertIn("validate_rpgmaker_qa_manifest.py", prompt)
-                self.assertIn('must say `"valid": true`', prompt)
+                self.assertIn("scripts/rpgmaker_qa.py", prompt)
+                self.assertIn("do not call a model-provider api", lowered)
+                self.assertIn("do not create a replacement manifest", lowered)
+                self.assertIn("the screen stage keeps every dialogue", lowered)
+                self.assertIn("one worker only", lowered)
+                self.assertIn("family receipt even when preserved", lowered)
+                self.assertIn("complete scene", lowered)
+                self.assertIn("rebuild-deep", lowered)
+                self.assertIn("themselves mandate deep review", lowered)
+                self.assertIn("correction-map, dry-run, atomic-apply", lowered)
                 if focus == "dialogue":
-                    self.assertIn("complete - exhaustive", lowered)
-                    self.assertIn("dialogue-narrative-wordplay-v1", prompt)
-                if focus == "database":
-                    self.assertIn("zero unreviewed clusters", lowered)
+                    self.assertIn("related evidence supplied in the", lowered)
                 if focus == "release":
-                    self.assertIn("dialogue-narrative-wordplay-v1", prompt)
-                    self.assertIn("context fingerprint matching", lowered)
+                    self.assertIn("exhaustive screen and deep-review denominators", lowered)
         with self.assertRaises(ValueError):
             load_rpgmaker_qa_skill("everything")
         self._assert_rpgmaker_qa_benchmark()

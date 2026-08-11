@@ -121,6 +121,40 @@ class RpgMakerRewrapWorker(QThread):
             self.failed.emit(str(exc))
 
 
+class RpgMakerQAPrepareWorker(QThread):
+    """Build or reuse one local AI-helper QA task off the UI thread."""
+
+    done = pyqtSignal(str, object)
+    failed = pyqtSignal(str)
+
+    def __init__(
+        self,
+        game_root: str,
+        data_root: str,
+        focus: str,
+        output_root: str,
+    ):
+        super().__init__()
+        self.game_root = game_root
+        self.data_root = data_root
+        self.focus = focus
+        self.output_root = output_root
+
+    def run(self):
+        try:
+            from util.rpgmaker_qa import prepare_task
+
+            task_dir, task_status = prepare_task(
+                self.game_root,
+                self.data_root,
+                self.focus,
+                self.output_root,
+            )
+            self.done.emit(str(task_dir), task_status)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
 class SubprocessWorker(QThread):
     done = pyqtSignal(bool, str)
     log = pyqtSignal(str)

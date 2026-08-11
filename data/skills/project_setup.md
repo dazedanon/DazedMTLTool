@@ -139,6 +139,10 @@ Exclude: formatting codes, wrap, line counts, speaker flags, character name list
 that should be localized from their own context instead of becoming global policy.
 
 Output as short imperative bullets suitable to paste into `.dazedtl/skills/quirks.md`.
+For every recurring joke, catchphrase, or wordplay rule, include one or more distinctive Japanese
+source anchors from that game in the same bullet. QA uses those literal anchors to gather the
+complete motif family deterministically; do not use a generic grammatical fragment that would
+match unrelated dialogue.
 
 ### Game skill rules (for the paste-ready Game skill section)
 

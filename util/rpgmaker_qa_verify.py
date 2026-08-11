@@ -62,7 +62,9 @@ _RUNTIME_TOKEN_RE = re.compile(
     r"|%(?:\d+\$)?[-+#0 ]*(?:\d+|\*)?(?:\.\d+)?[A-Za-z]"
 )
 _JAPANESE_RE = re.compile(r"[一-龠々〆〤ぁ-ゔァ-ヴー]")
-_VISIBLE_NUMBER_RE = re.compile(r"(?<![\w])[-+]?\d+(?:[.,]\d+)?(?![\w])")
+_VISIBLE_NUMBER_RE = re.compile(
+    r"(?<![A-Za-z0-9_])[-+]?\d+(?:[.,]\d+)?(?![A-Za-z0-9_])"
+)
 
 
 def _hash(value: bytes | str) -> str:

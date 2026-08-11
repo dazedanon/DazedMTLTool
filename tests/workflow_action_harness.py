@@ -162,7 +162,7 @@ for _method_name in (
     "_refresh_rewrap_files",
     "_load_rewrap_widths",
     "_run_rewrap",
-    "_copy_translation_qa_prompt",
+    "_prepare_translation_qa",
     "_create_public_release",
     "_copy_plugins_js_translate_prompt",
     "_export_active_files",

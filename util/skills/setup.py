@@ -13,10 +13,10 @@ _ENGINE_MARKERS = {
 }
 
 RPGMAKER_QA_FOCUSES = (
-    ("database", "1  Database files"),
-    ("risky-codes", "2  Risky event codes"),
-    ("dialogue", "3  Dialogue, choices, lore & wordplay"),
-    ("release", "4  Coverage & release gate"),
+    ("release", "Full game — coverage & release gate"),
+    ("database", "Targeted — database files"),
+    ("risky-codes", "Targeted — risky event codes"),
+    ("dialogue", "Targeted — dialogue, lore & wordplay"),
 )
 
 _RPGMAKER_QA_FILENAME = "rpgmaker_translation_qa.md"
@@ -86,7 +86,7 @@ def load_clipboard_skill(name: str) -> str:
 
 
 def load_rpgmaker_qa_skill(focus: str) -> str:
-    """Load the shared RPG Maker QA rules plus one bounded focus section."""
+    """Load the shared RPG Maker QA rules plus one exhaustive-screen focus."""
     valid_focuses = {key for key, _label in RPGMAKER_QA_FOCUSES}
     if focus not in valid_focuses:
         raise ValueError(f"Unknown RPG Maker QA focus: {focus!r}")

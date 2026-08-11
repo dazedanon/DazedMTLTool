@@ -85,7 +85,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (6, "load_rewrap_widths", {"text": "Load saved line widths"}),
             (6, "run_rewrap", {"text": "Preview rewrap"}),
             (6, "run_rewrap", {"text": "Apply rewrap"}),
-            (7, "copy_translation_qa_prompt", {"text": "Copy selected QA pass"}),
+            (7, "prepare_translation_qa", {"text": "Prepare / resume QA"}),
             (8, "refresh_image_workflow_status", {"text": "Refresh readiness"}),
             (8, "open_image_manager", {"text": "Open Image Manager"}),
             (9, "detect_tli_editors", {"text": "Find editors"}),
@@ -160,7 +160,7 @@ class WorkflowHandlerContractTests(unittest.TestCase):
                 self.workflow._qa_focus_combo.itemData(index)
                 for index in range(self.workflow._qa_focus_combo.count())
             ],
-            ["database", "risky-codes", "dialogue", "release"],
+            ["release", "database", "risky-codes", "dialogue"],
         )
         dialogue_index = self.workflow._qa_focus_combo.findData("dialogue")
         self.assertIn(
@@ -171,35 +171,34 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         self.assertGreaterEqual(database_index, 0)
         self.workflow._qa_focus_combo.setCurrentIndex(database_index)
         QApplication.clipboard().clear()
+        with patch("gui.workflow_tab._RpgMakerQAPrepareWorker", FakeWorker):
+            self.workflow._prepare_translation_qa()
 
-        self.workflow._copy_translation_qa_prompt()
-
-        prompt = QApplication.clipboard().text()
-        self.assertIn("Selected focus: Database files", prompt)
-        self.assertNotIn("Selected focus: Dialogue", prompt)
-        self.assertIn(str(data.resolve()), prompt)
-        self.assertIn(str(game.resolve()), prompt)
-        self.assertIn(
-            str(game.resolve() / ".dazedtl" / "glossary.txt"), prompt
+        qa_worker = FakeWorker.instances[-1]
+        self.assertTrue(qa_worker.started)
+        self.assertEqual(qa_worker.args[:3], (
+            str(game.resolve()), str(data.resolve()), "database"
+        ))
+        self.assertTrue(qa_worker.args[3].endswith("log/rpgmaker_qa"))
+        task_dir = self.harness.root / "qa-task"
+        task_dir.mkdir()
+        (task_dir / "README.md").write_text(
+            "Use the immutable bundle and local checkpoint.\n", encoding="utf-8"
         )
-        self.assertIn(
-            str(game.resolve() / ".dazedtl" / "skills" / "quirks.md"), prompt
-        )
-        self.assertIn(
-            str(game.resolve() / ".dazedtl" / "skills" / "game.md"), prompt
-        )
-        self.assertIn(
-            str(game.resolve() / ".dazedtl" / "skills"), prompt
-        )
-        self.assertNotIn("{{GAME_DATA_FOLDER}}", prompt)
-        self.assertNotIn("{{VOCAB_FILE}}", prompt)
-        self.assertNotIn("{{QUIRKS_FILE}}", prompt)
-        self.assertNotIn("{{GAME_SKILL_FILE}}", prompt)
-        self.assertNotIn("{{GAME_SKILLS_FOLDER}}", prompt)
-        self.assertNotIn("{{QA_TOOL_ROOT}}", prompt)
-        self.assertNotIn("{{QA_FOCUS}}", prompt)
-        self.assertIn("scripts/build_rpgmaker_qa_manifest.py", prompt)
-        self.assertIn('--focus "database"', prompt)
+        task_status = {
+            "stage": "screen",
+            "mechanical": {"checked": 4, "total": 4},
+            "screen": {"accepted": 0, "total": 4},
+            "deep": {"accepted": 0, "total": 0},
+        }
+        with patch.object(QMessageBox, "information"):
+            qa_worker.done.emit(str(task_dir), task_status)
+        handoff = QApplication.clipboard().text()
+        self.assertIn("DazedTL-managed RPG Maker QA task", handoff)
+        self.assertIn("immutable bundle and local checkpoint", handoff)
+        self.assertIn("Screen 0/4", self.workflow._qa_task_status.text())
+        qa_worker.finished.emit()
+        FakeWorker.reset()
         items = [
             {"name": "Actors.json", "path": "/fixture/Actors.json", "size_kb": 1, "category": "core", "default": True},
             {"name": "Map001.json", "path": "/fixture/Map001.json", "size_kb": 1, "category": "map", "default": False},

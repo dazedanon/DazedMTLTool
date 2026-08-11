@@ -117,9 +117,12 @@ class WorkflowShellTests(unittest.TestCase):
             ["Step 8: QA", "Step 9: Images", "Step 10: Playtest"],
         )
         qa_help = self.workflow._qa_ai_help_banner.text_label.text()
-        self.assertIn("all four required QA passes", qa_help)
-        self.assertIn("separate chat for each pass", qa_help)
-        self.assertIn("before starting the next", qa_help)
+        self.assertIn("full-game release gate once", qa_help)
+        self.assertIn("Targeted modes are optional", qa_help)
+        self.assertIn("DazedTL owns coverage", qa_help)
+        self.assertEqual(
+            self.workflow._qa_prepare_btn.text(), "Prepare / resume QA"
+        )
 
         self.workflow._goto_step(3)
         self.app.processEvents()

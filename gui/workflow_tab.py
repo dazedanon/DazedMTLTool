@@ -10,7 +10,7 @@ Provides a guided, step-by-step interface:
   Step 4  – Translation Phase 2 (risky codes)
   Step 5  – Plugins.js prompt helpers and export translated/ to the game
   Step 6  – Deterministically rewrap the exported game data
-  Step 7  – Run the four required translation QA passes
+  Step 7  – Run exhaustive full-game or targeted translation QA
   Step 8  – Prepare and translate editable bitmap UI images
   Step 9  – Install TL Inspector and/or Forge playtest plugins
 """
@@ -42,7 +42,6 @@ from util.skills import (
     game_skill_path_for_game,
     load_clipboard_skill,
     load_project_setup,
-    load_rpgmaker_qa_skill,
     quirks_path_for_game,
 )
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
@@ -106,6 +105,7 @@ from gui.workflow_workers import (
     JsonFormatWorker as _JsonFormatWorker,
     ReleaseZipWorker as _ReleaseZipWorker,
     RpgMakerRewrapWorker as _RpgMakerRewrapWorker,
+    RpgMakerQAPrepareWorker as _RpgMakerQAPrepareWorker,
     ScanWorker as _ScanWorker,
     SubprocessWorker as _SubprocessWorker,
 )
@@ -328,15 +328,14 @@ _STEP_HELP: dict[int, str] = {
     7: (
         "<b>Step 7 - Run translation QA</b><br><br>"
         "Complete Rewrap in Step 6 before using this page.<br><br>"
-        "<b>What to do (all four passes are required)</b><br>"
-        "1. Copy and complete <b>Database files</b> QA.<br>"
-        "2. Copy and complete <b>Risky event codes</b> QA.<br>"
-        "3. Copy and complete <b>Dialogue, choices, lore & wordplay</b> QA.<br>"
-        "4. Copy and complete <b>Coverage & release gate</b> QA.<br><br>"
-        "Use a separate AI chat for each pass. Finish the current pass and save its checkpoint "
-        "or report before starting the next one; do not run the four passes concurrently. Carry "
-        "all three earlier reports into the final gate. Do not continue because only one pass "
-        "was clean; the release check requires evidence from every pass."
+        "<b>What to do</b><br>"
+        "1. For final QA, select <b>Full game - coverage & release gate</b> and prepare the task.<br>"
+        "2. Paste the copied handoff into your AI helper and let it complete the local bundles.<br>"
+        "3. Review its stable finding IDs and approve only the corrections you want applied.<br><br>"
+        "The full-game mode exhaustively covers every supported translated source once. The "
+        "targeted modes are optional reruns after changing one area; stacking all four would "
+        "repeat work and is not required. DazedTL owns the inventory, checkpoints, correction "
+        "map, atomic apply, and regression check."
     ),
     8: (
         "<b>Step 8 - Translate text inside images</b><br><br>"
@@ -600,6 +599,7 @@ class WorkflowTab(QWidget):
         self._file_items: list[dict] = []
         self._worker = None  # active background QThread
         self._rewrap_worker = None
+        self._qa_worker = None
         # Pre-process paths (auto-populated after folder detection)
         self._plugins_js_path: str = ""
         self._gameupdate_path: str = ""
@@ -1008,7 +1008,7 @@ class WorkflowTab(QWidget):
     def _project_task_is_running(self) -> bool:
         return any(
             self._worker_is_running(worker)
-            for worker in (self._worker, self._rewrap_worker)
+            for worker in (self._worker, self._rewrap_worker, self._qa_worker)
             if worker is not None
         )
 
@@ -2550,13 +2550,13 @@ class WorkflowTab(QWidget):
 
         qa_stage = WorkflowStageCard(
             1,
-            "Complete all translation QA passes",
-            "Use a separate AI chat for each pass, complete them in order, and carry every report into the final gate.",
+            "Prepare and complete translation QA",
+            "DazedTL builds immutable review bundles and checkpoints; your AI helper only reviews the prepared text.",
         )
         self._qa_finish_stage = qa_stage
         self._qa_ai_help_banner = StatusBanner(
-            "Complete all four required QA passes in order, using a separate chat for each pass. "
-            "Finish each pass before starting the next; the final gate blocks release on missing evidence.",
+            "For final QA, run the full-game release gate once. Targeted modes are optional reruns. "
+            "DazedTL owns coverage, context, validated results, and approved fixes.",
             "info",
         )
         qa_stage.add_widget(self._qa_ai_help_banner)
@@ -2569,18 +2569,22 @@ class WorkflowTab(QWidget):
         for focus_key, focus_label in RPGMAKER_QA_FOCUSES:
             self._qa_focus_combo.addItem(focus_label, focus_key)
         self._qa_focus_combo.setToolTip(
-            "Complete every pass from 1 through 4; run Coverage & release gate last."
+            "Use Full game for exhaustive final QA; use a targeted mode only after changing that area."
+        )
+        self._qa_focus_combo.currentIndexChanged.connect(
+            lambda _index: self._refresh_qa_task_status()
         )
         self._qa_focus_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         qa_focus_row.addWidget(self._qa_focus_combo, 1)
         qa_stage.add_layout(qa_focus_row)
         qa_actions = QHBoxLayout()
         qa_actions.setSpacing(Spacing.SM)
-        qa_btn = _make_btn("🔎  Copy selected QA pass", "#8a6d3b")
+        qa_btn = _make_btn("🔎  Prepare / resume QA", "#8a6d3b")
         qa_btn.setToolTip(
-            "Copy the selected focused QA pass for the detected game data folder."
+            "Build validated local review bundles, or resume the matching pass, then copy its AI-helper handoff."
         )
-        qa_btn.clicked.connect(self._copy_translation_qa_prompt)
+        qa_btn.clicked.connect(self._prepare_translation_qa)
+        self._qa_prepare_btn = qa_btn
         _size_action_button(qa_btn, Geometry.ACTION_WIDE)
         qa_actions.addWidget(qa_btn)
 
@@ -2605,6 +2609,10 @@ class WorkflowTab(QWidget):
         )
         qa_actions.addStretch()
         qa_stage.add_layout(qa_actions)
+        self._qa_task_status = QLabel("No QA task prepared for this pass.")
+        self._qa_task_status.setWordWrap(True)
+        self._qa_task_status.setStyleSheet(f"color:{COLORS.text_secondary};")
+        qa_stage.add_widget(self._qa_task_status)
         layout.addWidget(qa_stage)
 
     # ── Step 5: Plugins.js + Export ────────────────────────────────────────
@@ -3672,14 +3680,14 @@ class WorkflowTab(QWidget):
         qa_stage = getattr(self, "_qa_finish_stage", None)
         if qa_stage is not None:
             qa_stage.title_label.setText(
-                "Complete translation QA and build the release"
+                "Complete full-game QA and build the release"
                 if is_ace else
-                "Complete all translation QA passes"
+                "Complete full-game translation QA"
             )
             qa_stage.description_label.setText(
-                "Complete all four QA passes, then build the Ace release."
+                "Complete one exhaustive locally managed release QA task, then build the Ace release."
                 if is_ace else
-                "Use a separate AI chat for each pass, complete them in order, and carry every report into the final gate."
+                "Prepare or resume one exhaustive release task; targeted modes are optional reruns."
             )
         if is_ace and self._step_tabs.currentIndex() in tool_indices:
             self._goto_step(7)
@@ -4387,9 +4395,85 @@ class WorkflowTab(QWidget):
             "Risky codes analysis prompt copied to clipboard.",
         )
 
-    def _copy_translation_qa_prompt(self):
-        """Copy one focused post-export RPG Maker QA pass with this game's paths."""
+    @staticmethod
+    def _qa_status_text(task_status: dict) -> str:
+        mechanical = task_status.get("mechanical") or {}
+        screen = task_status.get("screen") or {}
+        deep = task_status.get("deep") or {}
+        eta_seconds = screen.get("eta_seconds")
+        eta_text = (
+            f" · ETA {max(1, round(float(eta_seconds) / 60))}m"
+            if eta_seconds is not None and float(eta_seconds) > 0
+            else ""
+        )
+        deep_denominator = int(deep.get("total", 0)) or int(
+            deep.get("projected", 0)
+        )
+        deep_suffix = (
+            " projected"
+            if not int(deep.get("total", 0)) and deep_denominator
+            else ""
+        )
+        return (
+            f"Mechanical {int(mechanical.get('checked', 0)):,}/"
+            f"{int(mechanical.get('total', 0)):,} · "
+            f"Screen {int(screen.get('accepted', 0)):,}/"
+            f"{int(screen.get('total', 0)):,} "
+            f"({int(screen.get('exceptions', 0)):,} suspects, "
+            f"{int(screen.get('bundles_assigned', 0))} assigned){eta_text} · "
+            f"Deep {int(deep.get('accepted', 0)):,}/"
+            f"{deep_denominator:,}{deep_suffix} · "
+            f"Stage: {task_status.get('stage', 'unknown')}"
+        )
+
+    def _qa_output_root(self) -> Path:
+        return PROJECT_ROOT / "log" / "rpgmaker_qa"
+
+    def _refresh_qa_task_status(self):
+        label = getattr(self, "_qa_task_status", None)
+        if label is None:
+            return
         try:
+            from util.rpgmaker_qa import find_latest_task, status
+
+            game_root = str(getattr(self, "_prepared_game_root", "") or "").strip()
+            focus = str(self._qa_focus_combo.currentData() or "release")
+            if not game_root:
+                label.setText("No prepared game is selected.")
+                return
+            task = find_latest_task(self._qa_output_root(), game_root, focus)
+            if task is None:
+                label.setText("No QA task prepared for this pass.")
+                return
+            task_status = status(task)
+            label.setText(self._qa_status_text(task_status))
+            label.setToolTip(str(task))
+        except Exception as exc:
+            label.setText(f"Could not read QA status: {exc}")
+
+    def _copy_qa_task_handoff(self, task_dir: str, task_status: dict):
+        task = Path(task_dir).expanduser().resolve()
+        readme = task / "README.md"
+        if not readme.is_file():
+            raise FileNotFoundError(f"QA handoff is missing: {readme}")
+        handoff = (
+            "Continue this DazedTL-managed RPG Maker QA task. Follow its README exactly; "
+            "do not invent a separate pipeline or edit game files during discovery.\n\n"
+            + readme.read_text(encoding="utf-8")
+        )
+        QApplication.clipboard().setText(handoff)
+        self._qa_task_status.setText(self._qa_status_text(task_status))
+        self._qa_task_status.setToolTip(str(task))
+        self._log(
+            f"RPG Maker QA handoff copied for {self._qa_focus_combo.currentText()}: {task}"
+        )
+
+    def _prepare_translation_qa(self):
+        """Build/reuse a local QA task, then copy its concise AI-helper handoff."""
+        try:
+            if self._worker_is_running(getattr(self, "_qa_worker", None)):
+                QMessageBox.information(self, "QA preparation", "A QA task is already being prepared.")
+                return
             game_root = self._prepared_project_or_warn()
             if not game_root:
                 return
@@ -4397,33 +4481,49 @@ class WorkflowTab(QWidget):
             if not game_data or not Path(game_data).is_dir():
                 self._log("⚠  No game data folder detected. Complete Step 0 first.")
                 return
-            game_skill_file = game_skill_path_for_game(game_root)
-            replacements = {
-                "{{GAME_DATA_FOLDER}}": str(Path(game_data).expanduser().resolve()),
-                "{{GAME_ROOT}}": str(Path(game_root).expanduser().resolve()),
-                "{{VOCAB_FILE}}": str(ensure_game_glossary(game_root)),
-                "{{QUIRKS_FILE}}": str(quirks_path_for_game(game_root)),
-                "{{GAME_SKILL_FILE}}": str(game_skill_file),
-                "{{GAME_SKILLS_FOLDER}}": str(game_skill_file.parent),
-                "{{QA_TOOL_ROOT}}": str(PROJECT_ROOT),
-                "{{QA_FOCUS}}": str(self._qa_focus_combo.currentData() or "dialogue"),
-            }
-            focus = self._qa_focus_combo.currentData() or "dialogue"
-            prompt = load_rpgmaker_qa_skill(str(focus))
-            missing = [token for token in replacements if token not in prompt]
-            if missing:
-                raise ValueError(
-                    "Translation QA skill is missing required placeholder(s): "
-                    + ", ".join(missing)
-                )
-            for token, value in replacements.items():
-                prompt = prompt.replace(token, value)
-            QApplication.clipboard().setText(prompt)
-            self._log(
-                f"RPG Maker QA pass '{self._qa_focus_combo.currentText()}' copied for {game_data}."
+            ensure_game_glossary(game_root)
+            worker = _RpgMakerQAPrepareWorker(
+                str(Path(game_root).expanduser().resolve()),
+                str(Path(game_data).expanduser().resolve()),
+                str(self._qa_focus_combo.currentData() or "release"),
+                str(self._qa_output_root()),
+            )
+            self._qa_worker = worker
+            self._qa_prepare_btn.setEnabled(False)
+            self._qa_focus_combo.setEnabled(False)
+            self._qa_task_status.setText("Building and independently validating the QA inventory…")
+            worker.done.connect(self._on_qa_task_prepared)
+            worker.failed.connect(self._on_qa_task_failed)
+            worker.finished.connect(lambda: self._qa_prepare_btn.setEnabled(True))
+            worker.finished.connect(lambda: self._qa_focus_combo.setEnabled(True))
+            worker.finished.connect(self._release_qa_worker)
+            worker.start()
+        except Exception as exc:
+            self._qa_prepare_btn.setEnabled(True)
+            self._qa_focus_combo.setEnabled(True)
+            self._log(f"❌ Could not prepare translation QA: {exc}")
+
+    def _on_qa_task_prepared(self, task_dir: str, task_status: dict):
+        try:
+            self._copy_qa_task_handoff(task_dir, task_status)
+            QMessageBox.information(
+                self,
+                "QA task ready",
+                "The validated QA task is ready and its concise handoff was copied. "
+                "Paste it into your AI helper.",
             )
         except Exception as exc:
-            self._log(f"❌ Could not copy translation QA skill: {exc}")
+            self._on_qa_task_failed(str(exc))
+
+    def _on_qa_task_failed(self, message: str):
+        self._qa_task_status.setText(f"QA preparation failed: {message}")
+        self._log(f"❌ Could not prepare translation QA: {message}")
+
+    def _release_qa_worker(self):
+        worker = getattr(self, "_qa_worker", None)
+        if worker is not None:
+            worker.deleteLater()
+        self._qa_worker = None
 
     def _copy_clipboard_skill(self, filename: str, success_message: str):
         try:
