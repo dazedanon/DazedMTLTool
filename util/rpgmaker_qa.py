@@ -820,8 +820,11 @@ redistribute a scene outside the claim/release commands.
    supplied scene context. Confirm publication-ready meaning, natural English, speaker voice,
    terminology and honorific policy, runtime controls, line breaks, and dialogue or UI fit. Keep
    this pass scoped to the proposed findings; do not reopen clean inventory records. Do not edit
-   `findings.json` directly. If a correction needs revision, revise its corresponding deep result
-   receipt, run `python "{cli}" rebuild-final --task "{task_dir}" --output-root
+   `findings.json` directly. Treat stylistic preference as clean: change a line only when you can
+   name a concrete defect, use the smallest natural correction that resolves it, and withdraw the
+   finding when the current and proposed wordings are merely equally valid stylistic alternatives.
+   If a correction needs revision, revise its corresponding deep result receipt, run
+   `python "{cli}" rebuild-final --task "{task_dir}" --output-root
    "<separate-output-root>"`, and repeat this pass on the returned task.
 9. Only after every actionable correction passes, show `findings.json` to the user and wait for
    explicit approval. The helper must never choose

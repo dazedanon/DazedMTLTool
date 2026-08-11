@@ -83,6 +83,10 @@ project's terminology and honorific policy, retain required runtime controls, an
 dialogue or UI constraints. Keep this pass scoped to the proposed findings; do not reopen clean
 inventory records.
 
+Treat stylistic preference as clean. Change a line only when you can name a concrete defect, use
+the smallest natural correction that resolves it, and withdraw the finding when the current and
+proposed wordings are merely equally valid stylistic alternatives.
+
 Do not show or apply a correction that fails this pass. Do not edit `findings.json` directly.
 Revise its corresponding deep result receipt, run `rebuild-final` into a separate output root, and
 repeat the editorial pass on the returned task. Only present stable finding IDs for approval after
