@@ -588,6 +588,92 @@ class RPGMakerQAEngineTests(unittest.TestCase):
         self.assertEqual(updated[3]["description"], "Heals health.")
         self.assertIn('\n    {\n        "id": 1,', updated_text)
 
+        editorial_replacement = "Restores magical power."
+        editorial_review = self.root / "final-editorial.json"
+        _write(editorial_review, {
+            "schema": rpgmaker_qa.EDITORIAL_REVIEW_SCHEMA,
+            "task": str(task),
+            "approved_findings": 1,
+            "accepted_as_written": 0,
+            "revisions_required": 1,
+            "rejected": 0,
+            "reviews": [{
+                "finding_id": approved,
+                "verdict": "revise",
+                "replacement": editorial_replacement,
+                "reason": "Final publication edit.",
+            }],
+        })
+        rpgmaker_qa.create_editorial_correction_map(task, editorial_review)
+        rpgmaker_qa.create_correction_map(task, [approved])
+        with self.assertRaisesRegex(ValueError, "does not match approved corrections"):
+            rpgmaker_qa.dry_run_editorial_correction_map(task)
+        with patch.object(rpgmaker_qa, "QA_POLICY_VERSION", "new-policy"):
+            with self.assertRaisesRegex(ValueError, "QA rules changed"):
+                rpgmaker_qa.dry_run_correction_map(task)
+            editorial_map = rpgmaker_qa.create_editorial_correction_map(
+                task, editorial_review
+            )
+            self.assertEqual(len(editorial_map["operations"]), 1)
+            editorial_preview = rpgmaker_qa.dry_run_editorial_correction_map(task)
+            self.assertEqual(editorial_preview["operation_count"], 1)
+            editorial_regression = rpgmaker_qa.apply_editorial_correction_map(task)
+        self.assertTrue(editorial_regression["valid"])
+        self.assertTrue(rpgmaker_qa.regression_check(task)["valid"])
+        final_items = json.loads(items_path.read_text(encoding="utf-8-sig"))
+        self.assertEqual(final_items[1]["description"], editorial_replacement)
+
+    def test_editorial_regression_reports_only_length_ratio_as_warning(self):
+        identity = "Items.json#/1/_original/description@test"
+        before = {
+            "content_sha256": "before",
+            "records": [{
+                "identity": identity,
+                "source_sha256": "source",
+                "live": "Before",
+                "mechanical": {"flags": []},
+            }],
+        }
+        after = {
+            "content_sha256": "after",
+            "records": [{
+                "identity": identity,
+                "source_sha256": "source",
+                "live": "After",
+                "mechanical": {"flags": ["suspicious-length-ratio"]},
+            }],
+        }
+        corrections = {"operations": [{
+            "identity": identity,
+            "replacement": "After",
+        }]}
+        with (
+            patch.object(rpgmaker_qa, "build_manifest", return_value=after),
+            patch.object(
+                rpgmaker_qa,
+                "verify_manifest",
+                return_value={"valid": True, "errors": []},
+            ),
+        ):
+            normal = rpgmaker_qa._regression_check_loaded(
+                {"data_root": str(self.data), "focus": "database"},
+                before,
+                corrections,
+            )
+            editorial = rpgmaker_qa._regression_check_loaded(
+                {"data_root": str(self.data), "focus": "database"},
+                before,
+                corrections,
+                nonblocking_introduced_flags=frozenset({
+                    "suspicious-length-ratio"
+                }),
+            )
+        self.assertFalse(normal["valid"])
+        self.assertEqual(len(normal["errors"]), 1)
+        self.assertTrue(editorial["valid"])
+        self.assertEqual(editorial["errors"], [])
+        self.assertEqual(len(editorial["warnings"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

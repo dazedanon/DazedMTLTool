@@ -40,6 +40,7 @@ DEEP_RESULT_SCHEMA = "rpgmaker-qa-deep-result-v2"
 FINDINGS_SCHEMA = "rpgmaker-qa-findings-v4"
 CORRECTION_MAP_SCHEMA = "rpgmaker-qa-correction-map-v1"
 REGRESSION_SCHEMA = "rpgmaker-qa-regression-v1"
+EDITORIAL_REVIEW_SCHEMA = "rpgmaker-qa-final-editorial-v1"
 
 DEFAULT_SCREEN_CHAR_BUDGET = 48_000
 DEFAULT_SCREEN_ITEM_LIMIT = 160
@@ -828,6 +829,22 @@ redistribute a scene outside the claim/release commands.
    `python "{cli}" corrections --task "{task_dir}" --approve QA-0001 ...` and
    `python "{cli}" dry-run --task "{task_dir}"`. Only then may the approved map be applied with
    `python "{cli}" apply --task "{task_dir}"`; DazedTL applies atomically and runs regression.
+   If a final editorial adjustment is needed after approval but before applying, write one
+   checksum-recorded review covering every approved finding exactly once, create its delta map
+   with `python "{cli}" editorial-corrections --task "{task_dir}" --review
+   "<editorial-review.json>"`, then run `editorial-dry-run` and `editorial-apply` instead of the
+   ordinary `apply`. A rejected finding requires fresh user approval; use this route only for an
+   accepted correction or a publication-ready wording revision within the approved finding scope.
+
+   The editorial review format is:
+
+```json
+{{"schema":"{EDITORIAL_REVIEW_SCHEMA}","task":"{task_dir}","reviews":[{{"finding_id":"QA-0001","verdict":"accept"}},{{"finding_id":"QA-0002","verdict":"revise","replacement":"Publication-ready wording."}}]}}
+```
+
+   Every approved finding must occur exactly once. Use `accept` without a `replacement` when the
+   approved correction is unchanged, `revise` with a replacement string for a wording adjustment,
+   or `reject` to stop and obtain fresh approval.
 
 For a screen bundle, inspect every target. A `scene` item contains one complete ordered `lines`
 array; lines with an `id` are required review targets and lines with `context_id` were targeted in
@@ -2084,6 +2101,199 @@ def create_correction_map(
     return correction_map
 
 
+def _load_editorial_migration_source(
+    task_dir: str | Path,
+) -> tuple[Path, dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Load a completed frozen task without relaxing the normal fingerprint guard."""
+    root = Path(task_dir).expanduser().resolve()
+    required = [
+        root / "task.json",
+        root / "checkpoint.json",
+        root / "inventory.json",
+        root / "findings.json",
+        root / "correction-map.json",
+    ]
+    for path in required:
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"Invalid frozen QA task file: {path}")
+
+    task = _read_json(root / "task.json")
+    checkpoint = _read_json(root / "checkpoint.json")
+    if (
+        task.get("schema") != TASK_SCHEMA
+        or checkpoint.get("schema") != CHECKPOINT_SCHEMA
+        or checkpoint.get("task_sha256") != _sha256(_canonical_bytes(task))
+    ):
+        raise ValueError(f"Unsupported or corrupt frozen QA task: {root}")
+    if checkpoint.get("stage") != "complete":
+        raise ValueError("Editorial migration requires a completed QA task")
+    for stage in ("screen", "deep"):
+        state = checkpoint.get(stage) or {}
+        rows = state.get("bundles") or []
+        if (
+            any(row.get("status") != "accepted" for row in rows)
+            or int(state.get("accepted_items", -1)) != int(state.get("total_items", -2))
+        ):
+            raise ValueError(f"Editorial migration requires complete {stage} receipts")
+    _validate_completed_receipts(root, checkpoint)
+
+    manifest = _read_json(root / "inventory.json")
+    manifest_checksum_value = dict(manifest)
+    claimed_manifest_checksum = manifest_checksum_value.pop("content_sha256", "")
+    if (
+        claimed_manifest_checksum != _sha256(_canonical_bytes(manifest_checksum_value))
+        or claimed_manifest_checksum != task.get("manifest_sha256")
+    ):
+        raise ValueError("Frozen QA inventory does not match its task")
+    findings = _read_json(root / "findings.json")
+    if (
+        findings.get("schema") != FINDINGS_SCHEMA
+        or findings.get("task_sha256") != checkpoint.get("task_sha256")
+    ):
+        raise ValueError("Frozen QA findings do not match their task")
+
+    correction_map = _read_json(root / "correction-map.json")
+    checksum_value = dict(correction_map)
+    claimed_checksum = checksum_value.pop("content_sha256", "")
+    if (
+        correction_map.get("schema") != CORRECTION_MAP_SCHEMA
+        or claimed_checksum != _sha256(_canonical_bytes(checksum_value))
+        or correction_map.get("manifest_sha256") != task.get("manifest_sha256")
+    ):
+        raise ValueError("Frozen approved correction map is invalid")
+    finding_ids = {item["id"] for item in findings.get("findings") or []}
+    approved_ids = set(correction_map.get("approved_finding_ids") or [])
+    if not approved_ids or not approved_ids <= finding_ids:
+        raise ValueError("Frozen approved correction map has invalid finding coverage")
+    return root, task, checkpoint, correction_map
+
+
+def create_editorial_correction_map(
+    task_dir: str | Path, editorial_review_path: str | Path
+) -> dict[str, Any]:
+    """Create a strict delta map from a completed final-editorial review."""
+    root, task, _checkpoint, base_map = _load_editorial_migration_source(task_dir)
+    review_path = Path(editorial_review_path).expanduser().resolve()
+    if review_path.is_symlink() or not review_path.is_file():
+        raise ValueError(f"Invalid editorial review file: {review_path}")
+    review_document = _read_json(review_path)
+    if review_document.get("schema") != EDITORIAL_REVIEW_SCHEMA:
+        raise ValueError("Editorial review has an unsupported schema")
+    recorded_task = str(review_document.get("task") or "")
+    if recorded_task and Path(recorded_task).expanduser().resolve() != root:
+        raise ValueError("Editorial review names a different QA task")
+
+    decisions: dict[str, dict[str, Any]] = {}
+    for review in review_document.get("reviews") or []:
+        finding_id = str(review.get("finding_id") or "")
+        if not finding_id or finding_id in decisions:
+            raise ValueError("Editorial review finding IDs must be nonempty and unique")
+        verdict = review.get("verdict")
+        replacement = review.get("replacement")
+        if verdict not in {"accept", "revise", "reject"}:
+            raise ValueError(f"Unsupported editorial verdict for {finding_id}")
+        if verdict == "accept" and replacement is not None:
+            raise ValueError(f"Accepted editorial review must not replace {finding_id}")
+        if verdict == "revise" and (
+            not isinstance(replacement, str) or not replacement
+        ):
+            raise ValueError(f"Revised editorial review needs text for {finding_id}")
+        decisions[finding_id] = review
+
+    approved_ids = set(base_map["approved_finding_ids"])
+    if set(decisions) != approved_ids:
+        raise ValueError("Editorial review must cover every approved finding exactly once")
+    counts = {
+        "approved_findings": len(decisions),
+        "accepted_as_written": sum(
+            review["verdict"] == "accept" for review in decisions.values()
+        ),
+        "revisions_required": sum(
+            review["verdict"] == "revise" for review in decisions.values()
+        ),
+        "rejected": sum(review["verdict"] == "reject" for review in decisions.values()),
+    }
+    for key, expected in counts.items():
+        if key in review_document and int(review_document[key]) != expected:
+            raise ValueError(f"Editorial review count is inconsistent: {key}")
+    if counts["rejected"]:
+        raise ValueError("Rejected editorial findings require new user approval")
+
+    data_root = Path(task["data_root"]).resolve()
+    documents: dict[str, Any] = {}
+    operations = []
+    for operation in base_map.get("operations") or []:
+        finding_id = operation["finding_id"]
+        filename = operation["file"]
+        path = (data_root / filename).resolve()
+        if data_root not in path.parents or not path.is_file() or path.is_symlink():
+            raise ValueError(f"Unsafe editorial correction target: {path}")
+        if filename not in documents:
+            documents[filename] = json.loads(path.read_text(encoding="utf-8-sig"))
+        values = _operation_values(documents[filename], operation)
+        current = "\n".join(values)
+        if operation["live_transform"] == "quoted-string":
+            match = _QUOTED_VALUE_RE.search(current)
+            current = match.group(2) if match else current
+        if current not in {operation["expected"], operation["replacement"]}:
+            raise ValueError(
+                f"Live value is outside the frozen approval states: {operation['identity']}"
+            )
+        decision = decisions[finding_id]
+        final_replacement = (
+            decision["replacement"]
+            if decision["verdict"] == "revise"
+            else operation["replacement"]
+        )
+        if current == final_replacement:
+            continue
+        revised = dict(operation)
+        revised["expected"] = current
+        revised["replacement"] = final_replacement
+        operations.append(revised)
+
+    editorial_map = {
+        "schema": CORRECTION_MAP_SCHEMA,
+        "mode": "final-editorial-delta",
+        "created_at": _utc_now(),
+        "manifest_sha256": task["manifest_sha256"],
+        "base_correction_map_sha256": base_map["content_sha256"],
+        "editorial_review_sha256": _sha256(review_path.read_bytes()),
+        "approved_finding_ids": sorted(approved_ids),
+        "operations": operations,
+    }
+    editorial_map["content_sha256"] = _sha256(_canonical_bytes(editorial_map))
+    _atomic_write_json(root / "editorial-correction-map.json", editorial_map)
+    return editorial_map
+
+
+def _load_editorial_correction_map(
+    task_dir: str | Path,
+) -> tuple[Path, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Load an editorial delta only when it remains tied to its approved map."""
+    root, task, checkpoint, base_map = _load_editorial_migration_source(task_dir)
+    path = root / "editorial-correction-map.json"
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"Invalid editorial correction map: {path}")
+    editorial_map = _read_json(path)
+    _validate_correction_map(editorial_map, task)
+    if editorial_map.get("mode") != "final-editorial-delta":
+        raise ValueError("Editorial correction map has an unsupported mode")
+    if editorial_map.get("base_correction_map_sha256") != base_map.get("content_sha256"):
+        raise ValueError("Editorial correction map does not match approved corrections")
+    if set(editorial_map.get("approved_finding_ids") or []) != set(
+        base_map.get("approved_finding_ids") or []
+    ):
+        raise ValueError("Editorial correction map does not match approved finding IDs")
+    approved_ids = set(base_map.get("approved_finding_ids") or [])
+    if any(
+        operation.get("finding_id") not in approved_ids
+        for operation in editorial_map.get("operations") or []
+    ):
+        raise ValueError("Editorial correction map contains an unapproved finding")
+    return root, task, checkpoint, base_map, editorial_map
+
+
 def _operation_values(document: Any, operation: dict) -> list[str]:
     return [resolve_pointer(document, pointer) for pointer in operation["live_pointers"]]
 
@@ -2108,12 +2318,9 @@ def _operation_replacements(values: list[str], operation: dict) -> list[str]:
     return lines
 
 
-def dry_run_correction_map(task_dir: str | Path) -> dict[str, Any]:
-    """Validate every approved target and return a no-write operation preview."""
-    root, task, checkpoint = _load_task(task_dir)
-    if checkpoint["stage"] != "complete":
-        raise ValueError("QA discovery must be complete before validating corrections")
-    correction_map = _read_json(root / "correction-map.json")
+def _validate_correction_map(
+    correction_map: dict[str, Any], task: dict[str, Any]
+) -> None:
     if correction_map.get("schema") != CORRECTION_MAP_SCHEMA:
         raise ValueError("Correction map has an unsupported schema")
     checksum_value = dict(correction_map)
@@ -2122,6 +2329,15 @@ def dry_run_correction_map(task_dir: str | Path) -> dict[str, Any]:
         raise ValueError("Correction map checksum does not match its contents")
     if correction_map.get("manifest_sha256") != task["manifest_sha256"]:
         raise ValueError("Correction map does not match this QA inventory")
+
+
+def _dry_run_loaded_correction_map(
+    root: Path,
+    task: dict[str, Any],
+    correction_map: dict[str, Any],
+    report_name: str,
+) -> dict[str, Any]:
+    _validate_correction_map(correction_map, task)
 
     data_root = Path(task["data_root"]).resolve()
     documents: dict[str, Any] = {}
@@ -2166,8 +2382,34 @@ def dry_run_correction_map(task_dir: str | Path) -> dict[str, Any]:
         "file_count": len(documents),
         "operations": preview,
     }
-    _atomic_write_json(root / "correction-dry-run.json", report)
+    _atomic_write_json(root / report_name, report)
     return report
+
+
+def dry_run_correction_map(task_dir: str | Path) -> dict[str, Any]:
+    """Validate every approved target and return a no-write operation preview."""
+    root, task, checkpoint = _load_task(task_dir)
+    if checkpoint["stage"] != "complete":
+        raise ValueError("QA discovery must be complete before validating corrections")
+    return _dry_run_loaded_correction_map(
+        root,
+        task,
+        _read_json(root / "correction-map.json"),
+        "correction-dry-run.json",
+    )
+
+
+def dry_run_editorial_correction_map(task_dir: str | Path) -> dict[str, Any]:
+    """Validate a frozen task's editorial delta without writing game files."""
+    root, task, _checkpoint, _base_map, editorial_map = _load_editorial_correction_map(
+        task_dir
+    )
+    return _dry_run_loaded_correction_map(
+        root,
+        task,
+        editorial_map,
+        "editorial-correction-dry-run.json",
+    )
 
 
 def _render_json_like(raw: bytes, document: Any) -> bytes:
@@ -2195,14 +2437,19 @@ def _render_json_like(raw: bytes, document: Any) -> bytes:
     return (b"\xef\xbb\xbf" + payload) if has_bom else payload
 
 
-def apply_correction_map(task_dir: str | Path) -> dict[str, Any]:
-    """Apply an approved correction map with validation and rollback on failure."""
-    dry_run_correction_map(task_dir)
-    root, task, _checkpoint = _load_task(task_dir)
-    correction_map = _read_json(root / "correction-map.json")
-    if correction_map.get("schema") != CORRECTION_MAP_SCHEMA:
-        raise ValueError("Correction map has an unsupported schema")
-    data_root = Path(task["data_root"])
+def _apply_loaded_correction_map(
+    root: Path,
+    task: dict[str, Any],
+    correction_map: dict[str, Any],
+    before: dict[str, Any],
+    *,
+    dry_run_name: str,
+    regression_name: str,
+    nonblocking_introduced_flags: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """Apply one validated map atomically and roll back on regression failure."""
+    _dry_run_loaded_correction_map(root, task, correction_map, dry_run_name)
+    data_root = Path(task["data_root"]).resolve()
     by_file: dict[str, list[dict]] = defaultdict(list)
     for operation in correction_map["operations"]:
         by_file[operation["file"]].append(operation)
@@ -2257,36 +2504,82 @@ def apply_correction_map(task_dir: str | Path) -> dict[str, Any]:
     finally:
         for temporary in temporaries.values():
             temporary.unlink(missing_ok=True)
-    regression = regression_check(root)
+    regression = _regression_check_loaded(
+        task,
+        before,
+        correction_map,
+        nonblocking_introduced_flags=nonblocking_introduced_flags,
+    )
     if not regression["valid"]:
         for path, raw in originals.items():
             rollback = path.with_name(path.name + ".qa.rollback")
             rollback.write_bytes(raw)
             rollback.replace(path)
         regression["rolled_back"] = True
-        _atomic_write_json(root / "regression.json", regression)
+        _atomic_write_json(root / regression_name, regression)
         raise ValueError("QA regression failed; all game-file changes were rolled back")
     regression["applied_operations"] = applied
-    _atomic_write_json(root / "regression.json", regression)
+    _atomic_write_json(root / regression_name, regression)
     return regression
 
 
-def regression_check(task_dir: str | Path) -> dict[str, Any]:
-    root, task, _checkpoint = _load_task(task_dir)
-    before = _read_json(root / "inventory.json")
+def apply_correction_map(task_dir: str | Path) -> dict[str, Any]:
+    """Apply an approved correction map with validation and rollback on failure."""
+    root, task, checkpoint = _load_task(task_dir)
+    if checkpoint["stage"] != "complete":
+        raise ValueError("QA discovery must be complete before applying corrections")
+    return _apply_loaded_correction_map(
+        root,
+        task,
+        _read_json(root / "correction-map.json"),
+        _read_json(root / "inventory.json"),
+        dry_run_name="correction-dry-run.json",
+        regression_name="regression.json",
+    )
+
+
+def apply_editorial_correction_map(task_dir: str | Path) -> dict[str, Any]:
+    """Apply a completed frozen task's validated final-editorial delta."""
+    root, task, _checkpoint, _base_map, editorial_map = _load_editorial_correction_map(
+        task_dir
+    )
+    before = build_manifest(task["data_root"], task["focus"])
+    validation = verify_manifest(task["data_root"], before)
+    if not validation["valid"]:
+        raise ValueError(
+            "Current QA inventory validation failed: "
+            + "; ".join(validation.get("errors") or [])
+        )
+    return _apply_loaded_correction_map(
+        root,
+        task,
+        editorial_map,
+        before,
+        dry_run_name="editorial-correction-dry-run.json",
+        regression_name="editorial-regression.json",
+        nonblocking_introduced_flags=frozenset({"suspicious-length-ratio"}),
+    )
+
+
+def _regression_check_loaded(
+    task: dict[str, Any],
+    before: dict[str, Any],
+    corrections: dict[str, Any] | None,
+    *,
+    nonblocking_introduced_flags: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
     after = build_manifest(task["data_root"], task["focus"])
     validation = verify_manifest(task["data_root"], after)
     before_records = {item["identity"]: item for item in before["records"]}
     after_records = {item["identity"]: item for item in after["records"]}
     errors = list(validation.get("errors") or [])
+    warnings = []
     if set(before_records) != set(after_records):
         errors.append("source identity coverage changed after corrections")
     for identity in sorted(set(before_records) & set(after_records)):
         if before_records[identity]["source_sha256"] != after_records[identity]["source_sha256"]:
             errors.append(f"preserved source changed: {identity}")
-    correction_path = root / "correction-map.json"
-    if correction_path.is_file():
-        corrections = _read_json(correction_path)
+    if corrections is not None:
         for operation in corrections.get("operations") or []:
             record = after_records.get(operation["identity"])
             if record is None or record["live"] != operation["replacement"]:
@@ -2297,21 +2590,46 @@ def regression_check(task_dir: str | Path) -> dict[str, Any]:
                 before_record.get("mechanical", {}).get("flags") or []
             )
             after_flags = set(record.get("mechanical", {}).get("flags") or [])
-            introduced_flags = sorted(after_flags - before_flags)
-            if introduced_flags:
+            introduced_flags = after_flags - before_flags
+            warning_flags = sorted(
+                introduced_flags & nonblocking_introduced_flags
+            )
+            blocking_flags = sorted(
+                introduced_flags - nonblocking_introduced_flags
+            )
+            if warning_flags:
+                warnings.append(
+                    "approved correction introduced non-blocking mechanical flags: "
+                    f"{operation['identity']} " + ", ".join(warning_flags)
+                )
+            if blocking_flags:
                 errors.append(
                     "approved correction introduced mechanical flags: "
-                    f"{operation['identity']} " + ", ".join(introduced_flags)
+                    f"{operation['identity']} " + ", ".join(blocking_flags)
                 )
     return {
         "schema": REGRESSION_SCHEMA,
         "created_at": _utc_now(),
         "valid": not errors,
         "errors": errors,
+        "warnings": warnings,
         "before_manifest_sha256": before["content_sha256"],
         "after_manifest_sha256": after["content_sha256"],
         "records_checked": len(after_records),
     }
+
+
+def regression_check(task_dir: str | Path) -> dict[str, Any]:
+    root, task, _checkpoint = _load_task(task_dir)
+    correction_path = root / "editorial-correction-map.json"
+    if not correction_path.is_file():
+        correction_path = root / "correction-map.json"
+    corrections = _read_json(correction_path) if correction_path.is_file() else None
+    return _regression_check_loaded(
+        task,
+        _read_json(root / "inventory.json"),
+        corrections,
+    )
 
 
 def find_latest_task(

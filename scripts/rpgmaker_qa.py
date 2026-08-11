@@ -50,6 +50,13 @@ def main() -> int:
     corrections = sub.add_parser("corrections")
     corrections.add_argument("--task", required=True, type=Path)
     corrections.add_argument("--approve", nargs="+", required=True)
+    editorial = sub.add_parser("editorial-corrections")
+    editorial.add_argument("--task", required=True, type=Path)
+    editorial.add_argument("--review", required=True, type=Path)
+    editorial_dry_run = sub.add_parser("editorial-dry-run")
+    editorial_dry_run.add_argument("--task", required=True, type=Path)
+    editorial_apply = sub.add_parser("editorial-apply")
+    editorial_apply.add_argument("--task", required=True, type=Path)
     apply_cmd = sub.add_parser("apply")
     apply_cmd.add_argument("--task", required=True, type=Path)
     regress = sub.add_parser("regress")
@@ -86,6 +93,12 @@ def main() -> int:
         _print(rpgmaker_qa.finalize(args.task))
     elif args.command == "corrections":
         _print(rpgmaker_qa.create_correction_map(args.task, args.approve))
+    elif args.command == "editorial-corrections":
+        _print(rpgmaker_qa.create_editorial_correction_map(args.task, args.review))
+    elif args.command == "editorial-dry-run":
+        _print(rpgmaker_qa.dry_run_editorial_correction_map(args.task))
+    elif args.command == "editorial-apply":
+        _print(rpgmaker_qa.apply_editorial_correction_map(args.task))
     elif args.command == "dry-run":
         _print(rpgmaker_qa.dry_run_correction_map(args.task))
     elif args.command == "apply":
