@@ -363,6 +363,21 @@ class RPGMakerQAEngineTests(unittest.TestCase):
             for path in (rebuilt / "bundles" / "deep").glob("*.json")
             for item in json.loads(path.read_text(encoding="utf-8"))["items"]
         ]
+        motif_variant_ids = {
+            variant["id"] for variant in motif_item["variants"]
+        }
+        deep_by_id = {item["id"]: item for item in deep_items}
+        self.assertLessEqual(motif_variant_ids, set(deep_by_id))
+        self.assertTrue(all(
+            "motif-scene-contradiction" in deep_by_id[variant_id]["deep_reasons"]
+            for variant_id in motif_variant_ids
+        ))
+        self.assertTrue(all(
+            "nearby_commands" not in variant
+            for variant_id in motif_variant_ids
+            for context in deep_by_id[variant_id]["motif_contexts"]
+            for variant in context["variants"]
+        ))
         escalated = next(
             item for item in deep_items
             if any(

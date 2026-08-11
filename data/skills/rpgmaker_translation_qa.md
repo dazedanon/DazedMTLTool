@@ -51,8 +51,12 @@ same-source alternatives guide that screen; they do not by themselves mandate de
 
 Recurring-joke and wordplay rules with distinctive Japanese anchors in translation quirks become
 deterministic motif families. Every matching variant is reviewed together and receives an explicit
-family receipt even when preserved. The local engine expands scene exceptions, motif suspects, and
-only strong mechanical/runtime defects and choice structures for evidence-backed deep review.
+family receipt even when preserved. A preserved receipt must name one recognizable English joke
+mechanism and verify that every nonliteral variant still reads as its callback; sharing a character
+name alone is not enough. If a scene reviewer later disputes a wordplay variant, the local engine
+reopens every variant in that preserved family for deep review. Otherwise, the engine expands scene
+exceptions, motif suspects, and only strong mechanical/runtime defects and choice structures for
+evidence-backed deep review.
 Escalated screen suspects retain the reviewer's categories and rationale plus every complete scene
 used to reach that judgment. Relevant motif-family receipts travel with the deep item so the deep
 reviewer must reconcile scene and family evidence instead of silently discarding either one. A

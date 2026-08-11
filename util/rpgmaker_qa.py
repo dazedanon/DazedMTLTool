@@ -64,7 +64,7 @@ FINDING_CATEGORIES = frozenset({
     "other",
 })
 
-QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-v5"
+QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-v6"
 FORCED_DEEP_MECHANICAL_FLAGS = frozenset({
     "empty-live",
     "unchanged-source",
@@ -862,7 +862,10 @@ defects and not automatic deep-review instructions. When present, compare
 A `motif-family` item gathers all translations matching one recurring-joke or wordplay rule from
 the project's quirks. Return exactly one `motif_reviews` entry for every motif in the bundle,
 including preserved families. Name concrete affected variant IDs in `suspect_ids`; do not flag
-intentional functional variation merely because wording differs. Write:
+intentional functional variation merely because wording differs. Before marking a family
+`preserved`, name the single recognizable English joke mechanism in the note and verify that every
+nonliteral variant still reads as a callback to it; merely mentioning the same name is not enough.
+Write:
 
 ```json
 {{"schema":"{SCREEN_RESULT_SCHEMA}","bundle_id":"screen-0001","bundle_sha256":"...","reviewed_all":true,"exceptions":[{{"id":"scene-target-...","verdict":"suspect","categories":["meaning"],"note":"short concrete reason"}}],"motif_reviews":[{{"id":"motif-...","disposition":"preserved","note":"The English variants retain the named joke and its function.","suspect_ids":[]}}]}}
@@ -881,7 +884,10 @@ adjudicate that evidence; do not clear a screen suspect merely because its probl
 the small `nearby_commands` window. A `clean` review for an item with `screen_evidence` must rebut
 the screening rationale concretely in its own `evidence`; silent clearing is rejected.
 `motif_contexts` contains the family-level wordplay review. When scene and motif evidence disagree,
-reconcile both in the evidence for your disposition.
+reconcile both in the evidence for your disposition. If `deep_reasons` contains
+`motif-scene-contradiction`, a scene reviewer disputed a wordplay variant after the family screen
+called it preserved, so every family variant has been reopened. Judge each one against a single
+recognizable English joke mechanism rather than accepting unrelated name-bearing phrases.
 
 Use `actionable` only for a concrete source-supported defect with a supported correction; its
 severity must be lowercase `critical`, `high`, or `medium`. Use `uncertain-playtest` for
@@ -1502,6 +1508,63 @@ def _screen_handoff_context(
     )
 
 
+def _reopen_disputed_preserved_motifs(
+    candidate_reasons: dict[str, dict[str, Any]],
+    screen_evidence: dict[str, list[dict[str, Any]]],
+    motif_contexts: dict[str, list[dict[str, Any]]],
+) -> None:
+    """Deep-review a whole preserved motif when scene evidence disputes its wordplay."""
+    disputed = {
+        motif["id"]
+        for cluster_id, evidence_rows in screen_evidence.items()
+        if cluster_id in candidate_reasons
+        and any(
+            _normalize_category(category) == "wordplay"
+            for evidence in evidence_rows
+            for category in evidence.get("categories") or []
+        )
+        for motif in motif_contexts.get(cluster_id) or []
+        if motif.get("disposition") == "preserved"
+    }
+    if not disputed:
+        return
+
+    for cluster_id, contexts in motif_contexts.items():
+        for motif in contexts:
+            if motif.get("id") not in disputed:
+                continue
+            variant = next(
+                (
+                    item for item in motif.get("variants") or []
+                    if item.get("id") == cluster_id
+                ),
+                {},
+            )
+            _merge_candidate(
+                candidate_reasons,
+                cluster_id,
+                ["motif-scene-contradiction"],
+                [str(variant.get("representative_identity") or "")],
+            )
+            break
+
+
+def _motif_translation_roster(context: dict[str, Any]) -> dict[str, Any]:
+    """Keep family-wide comparison evidence without repeating every context window."""
+    return {
+        key: value for key, value in context.items() if key != "variants"
+    } | {
+        "variants": [
+            {
+                key: variant[key]
+                for key in ("source", "translation")
+                if key in variant
+            }
+            for variant in context.get("variants") or []
+        ]
+    }
+
+
 def _deep_items(
     root: Path, candidate_reasons: dict[str, dict[str, Any]]
 ) -> list[dict]:
@@ -1515,6 +1578,9 @@ def _deep_items(
     data_root = Path(_read_json(root / "task.json")["data_root"])
     document_cache: dict[str, Any] = {}
     screen_evidence, screen_scenes, motif_contexts = _screen_handoff_context(root)
+    _reopen_disputed_preserved_motifs(
+        candidate_reasons, screen_evidence, motif_contexts
+    )
     items = []
     for identity in manifest["review_sequence"]:
         if identity not in candidate_reasons:
@@ -1562,7 +1628,10 @@ def _deep_items(
         if screen_scenes.get(identity):
             item["screen_scene_contexts"] = screen_scenes[identity]
         if motif_contexts.get(identity):
-            item["motif_contexts"] = motif_contexts[identity]
+            contexts = motif_contexts[identity]
+            if "motif-scene-contradiction" in item["deep_reasons"]:
+                contexts = [_motif_translation_roster(value) for value in contexts]
+            item["motif_contexts"] = contexts
         items.append(item)
     return items
 
