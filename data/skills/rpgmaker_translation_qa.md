@@ -1,10 +1,10 @@
 # QA Exported RPG Maker Translations — Local Task Handoff
 
-<!-- qa-contract:rpgmaker-qa-local-v5
+<!-- qa-contract:rpgmaker-qa-local-v6
 app-owned-inventory immutable-review-bundles scene-affine-semantic-screen
 evidence-preserving-deep-handoff motif-family-receipts selective-risk-escalation
 validated-checkpoints honest-global-coverage grouped-finding-families
-final-editorial-pass approval-before-edit preserve-original atomic-apply post-fix-regression
+final-editorial-pass subjective-precision-gate approval-before-edit preserve-original atomic-apply post-fix-regression
 no-provider-api
 -->
 
@@ -49,6 +49,13 @@ compact cluster screen. Clean targets are represented by the accepted bundle rec
 exceptions contain only suspects or context needs. Risk cues, glossary hits, length ratios, and
 same-source alternatives guide that screen; they do not by themselves mandate deep review.
 
+For every scene target, explicitly verify who performs each action and to whom;
+pronouns and relationships; negation and conditions; certainty and obligation; quantities and
+chronology; omitted or invented information; and speaker voice plus natural English. Repeated
+translations containing third-person pronouns are shown in every distinct scene context; other
+pronoun-bearing translations spoken by different detected speakers receive one representative scene per speaker.
+Ordinary safe repetition remains deduplicated.
+
 Recurring-joke and wordplay rules with distinctive Japanese anchors in translation quirks become
 deterministic motif families. Every matching variant is reviewed together and receives an explicit
 family receipt even when preserved. A preserved receipt must name one recognizable English joke
@@ -90,6 +97,13 @@ inventory records.
 Treat stylistic preference as clean. Change a line only when you can name a concrete defect, use
 the smallest natural correction that resolves it, and withdraw the finding when the current and
 proposed wordings are merely equally valid stylistic alternatives.
+
+For actionable `fluency`, `voice`, and `wordplay` findings, require a reviewer who did not author
+the correction to independently confirm the recorded `editorial_basis`: the concrete
+reader-facing defect, the source/scene/guidance that makes it defective, and that the proposal is
+not merely preferred wording. If independent review is unavailable or does not agree, revise the
+deep result to `clean` and rebuild the final report. Objective categories do not need this extra
+gate.
 
 Do not show or apply a correction that fails this pass. Do not edit `findings.json` directly.
 Revise its corresponding deep result receipt, run `rebuild-final` into a separate output root, and

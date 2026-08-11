@@ -212,11 +212,15 @@ class RPGMakerQAEngineTests(unittest.TestCase):
                         {"code": 401, "indent": 0, "parameters": ["Luna, indeed!"], "_original": "ルナデス！"},
                         {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2, "Luna"]},
                         {"code": 401, "indent": 0, "parameters": ["Huh?"], "_original": "え？"},
+                        {"code": 401, "indent": 0, "parameters": ["She left."], "_original": "彼女は去った。"},
+                        {"code": 401, "indent": 0, "parameters": ["I understand."], "_original": "分かった。"},
                         {"code": 0, "indent": 0, "parameters": []},
                     ]}]},
                     {"pages": [{"list": [
                         {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2, "Mira"]},
                         {"code": 401, "indent": 0, "parameters": ["Wait, Luna—indeed!"], "_original": "待って、ルナデス！"},
+                        {"code": 401, "indent": 0, "parameters": ["She left."], "_original": "彼女は去った。"},
+                        {"code": 401, "indent": 0, "parameters": ["I understand."], "_original": "分かった。"},
                         {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2, "Luna"]},
                         {"code": 401, "indent": 0, "parameters": ["Huh?"], "_original": "え？"},
                         {"code": 0, "indent": 0, "parameters": []},
@@ -240,6 +244,7 @@ class RPGMakerQAEngineTests(unittest.TestCase):
         scene_locations = {}
         motif = None
         context_ids = []
+        expanded_targets = {"彼女は去った。": [], "分かった。": []}
         for bundle in bundles:
             for item in bundle["items"]:
                 if item["kind"] == "scene":
@@ -261,10 +266,27 @@ class RPGMakerQAEngineTests(unittest.TestCase):
                         line["context_id"] for line in item["lines"]
                         if "context_id" in line
                     )
+                    for line in item["lines"]:
+                        if line.get("source") in expanded_targets and "id" in line:
+                            expanded_targets[line["source"]].append(line)
                 elif item["kind"] == "motif-family":
                     motif = (bundle, item)
         self.assertEqual(len(scene_locations), 2)
         self.assertEqual(len(context_ids), 1)
+        self.assertEqual(len(expanded_targets["彼女は去った。"]), 2)
+        self.assertTrue(all(
+            "repeated-third-person-context" in line["context_expansion"]
+            for line in expanded_targets["彼女は去った。"]
+        ))
+        self.assertEqual(len(expanded_targets["分かった。"]), 2)
+        self.assertEqual(
+            {line["speaker"] for line in expanded_targets["分かった。"]},
+            {"Luna", "Mira"},
+        )
+        self.assertTrue(all(
+            "cross-speaker-pronoun-context" in line["context_expansion"]
+            for line in expanded_targets["分かった。"]
+        ))
         self.assertIsNotNone(motif)
         motif_bundle, motif_item = motif
         self.assertGreaterEqual(len(motif_item["variants"]), 3)
@@ -417,6 +439,48 @@ class RPGMakerQAEngineTests(unittest.TestCase):
                 },
             )
 
+        subjective_review = {
+            "id": escalated["id"],
+            "disposition": "actionable",
+            "severity": "medium",
+            "family_key": "motif:ルナです",
+            "evidence": "The full scene proves this callback loses the name joke.",
+            "correction": "Luna's the name!",
+            "apply_identities": [],
+        }
+        editorial_basis = {
+            "defect": "Readers cannot recognize the established callback.",
+            "source_support": "The source and full scene repeat the same joke mechanism.",
+            "not_preference": True,
+        }
+        for category in rpgmaker_qa.EDITORIAL_JUDGMENT_CATEGORIES:
+            with self.subTest(category=category):
+                with self.assertRaisesRegex(
+                    rpgmaker_qa.QAResultError, "needs editorial_basis"
+                ):
+                    rpgmaker_qa._validate_deep_result(
+                        {"items": [escalated]},
+                        {
+                            "schema": rpgmaker_qa.DEEP_RESULT_SCHEMA,
+                            "reviews": [{**subjective_review, "category": category}],
+                        },
+                    )
+        with self.assertRaisesRegex(rpgmaker_qa.QAResultError, "only a preference"):
+            rpgmaker_qa._validate_deep_result(
+                {"items": [escalated]},
+                {
+                    "schema": rpgmaker_qa.DEEP_RESULT_SCHEMA,
+                    "reviews": [{
+                        **subjective_review,
+                        "category": "wordplay",
+                        "editorial_basis": {
+                            **editorial_basis,
+                            "not_preference": False,
+                        },
+                    }],
+                },
+            )
+
         while True:
             assignment = rpgmaker_qa.next_bundle(rebuilt, "deep-worker")
             if assignment is None:
@@ -437,6 +501,9 @@ class RPGMakerQAEngineTests(unittest.TestCase):
                     ),
                     "correction": "Luna's the name!" if actionable else None,
                     "apply_identities": [],
+                    **({
+                        "editorial_basis": editorial_basis,
+                    } if actionable else {}),
                 })
             result = self.root / f"{assignment['id']}-motif-deep.json"
             _write(result, {
@@ -456,6 +523,11 @@ class RPGMakerQAEngineTests(unittest.TestCase):
             [escalated["id"]],
         )
         self.assertEqual(len(final_motif["deep_reconciliation"]["finding_ids"]), 1)
+        motif_finding = next(
+            item for item in findings["findings"]
+            if item["cluster_id"] == escalated["id"]
+        )
+        self.assertTrue(motif_finding["editorial_basis"]["not_preference"])
 
         real_build_manifest = rpgmaker_qa.build_manifest
 

@@ -36,8 +36,8 @@ TASK_SCHEMA = "rpgmaker-qa-task-v3"
 CHECKPOINT_SCHEMA = "rpgmaker-qa-checkpoint-v3"
 BUNDLE_SCHEMA = "rpgmaker-qa-bundle-v3"
 SCREEN_RESULT_SCHEMA = "rpgmaker-qa-screen-result-v2"
-DEEP_RESULT_SCHEMA = "rpgmaker-qa-deep-result-v2"
-FINDINGS_SCHEMA = "rpgmaker-qa-findings-v4"
+DEEP_RESULT_SCHEMA = "rpgmaker-qa-deep-result-v3"
+FINDINGS_SCHEMA = "rpgmaker-qa-findings-v5"
 CORRECTION_MAP_SCHEMA = "rpgmaker-qa-correction-map-v1"
 REGRESSION_SCHEMA = "rpgmaker-qa-regression-v1"
 EDITORIAL_REVIEW_SCHEMA = "rpgmaker-qa-final-editorial-v1"
@@ -63,8 +63,9 @@ FINDING_CATEGORIES = frozenset({
     "formatting",
     "other",
 })
+EDITORIAL_JUDGMENT_CATEGORIES = frozenset({"fluency", "voice", "wordplay"})
 
-QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-v6"
+QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-v8"
 FORCED_DEEP_MECHANICAL_FLAGS = frozenset({
     "empty-live",
     "unchanged-source",
@@ -91,6 +92,17 @@ _MOTIF_GUIDANCE_RE = re.compile(
     re.IGNORECASE,
 )
 _JAPANESE_ANCHOR_RE = re.compile(r"[一-龠々〆〤ぁ-ゔァ-ヴー]{2,}")
+_EN_PRONOUN_RE = re.compile(
+    r"\b(?:I|me|my|mine|myself|we|us|our|ours|ourselves|you|your|yours|yourself|"
+    r"yourselves|he|him|his|himself|she|her|hers|herself|they|them|their|theirs|"
+    r"themselves)\b",
+    re.IGNORECASE,
+)
+_EN_THIRD_PERSON_PRONOUN_RE = re.compile(
+    r"\b(?:he|him|his|himself|she|her|hers|herself|they|them|their|theirs|"
+    r"themselves)\b",
+    re.IGNORECASE,
+)
 
 
 class QAResultError(ValueError):
@@ -144,6 +156,30 @@ def _normalize_category(value: Any) -> str:
 def _normalize_family_key(value: Any) -> str:
     key = re.sub(r"\s+", " ", str(value or "").strip()).casefold()
     return key[:200]
+
+
+def _validate_editorial_basis(review: dict[str, Any], identity: str) -> None:
+    """Require subjective findings to prove a defect rather than state a preference."""
+    category = _normalize_category(review.get("category"))
+    basis = review.get("editorial_basis")
+    if category not in EDITORIAL_JUDGMENT_CATEGORIES:
+        if basis is not None:
+            raise QAResultError(
+                f"Objective review cannot have editorial_basis for {identity}"
+            )
+        return
+    if not isinstance(basis, dict) or set(basis) != {
+        "defect", "source_support", "not_preference"
+    }:
+        raise QAResultError(
+            f"Subjective actionable review needs editorial_basis for {identity}"
+        )
+    if not str(basis.get("defect") or "").strip():
+        raise QAResultError(f"Editorial basis has no concrete defect for {identity}")
+    if not str(basis.get("source_support") or "").strip():
+        raise QAResultError(f"Editorial basis has no source support for {identity}")
+    if basis.get("not_preference") is not True:
+        raise QAResultError(f"Editorial basis is only a preference for {identity}")
 
 
 def _engine_fingerprint() -> str:
@@ -450,6 +486,47 @@ def _scene_signature(records: list[dict[str, Any]]) -> str:
     return _sha256(_canonical_bytes(content))
 
 
+def _pronoun_context_requirements(
+    groups: list[dict[str, Any]], compact: dict[str, dict[str, Any]]
+) -> dict[tuple[str, str], set[str]]:
+    """Return narrowly scoped repeated-scene targets that need local context."""
+    groups_by_cluster: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    speakers_by_cluster: dict[str, set[str]] = defaultdict(set)
+    for group in groups:
+        for cluster_id in group["clusters"]:
+            groups_by_cluster[cluster_id].append(group)
+            speakers_by_cluster[cluster_id].update(
+                group["cluster_speakers"].get(cluster_id, set())
+            )
+
+    requirements: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for cluster_id, contexts in groups_by_cluster.items():
+        if len(contexts) < 2:
+            continue
+        translation = str(compact[cluster_id]["translation"])
+        if _EN_THIRD_PERSON_PRONOUN_RE.search(translation):
+            for group in contexts:
+                requirements[(group["signature"], cluster_id)].add(
+                    "repeated-third-person-context"
+                )
+
+        speakers = speakers_by_cluster[cluster_id]
+        if len(speakers) < 2 or not _EN_PRONOUN_RE.search(translation):
+            continue
+        for speaker in sorted(speakers):
+            candidates = [
+                group for group in contexts
+                if speaker in group["cluster_speakers"].get(cluster_id, set())
+            ]
+            if not candidates:
+                continue
+            chosen = min(candidates, key=lambda group: group["scene_id"])
+            requirements[(chosen["signature"], cluster_id)].add(
+                "cross-speaker-pronoun-context"
+            )
+    return requirements
+
+
 def _scene_items(
     manifest: dict[str, Any], compact: dict[str, dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], set[str], dict[str, dict[str, str]]]:
@@ -478,16 +555,22 @@ def _scene_items(
     for signature, copies in equivalent.items():
         copies.sort(key=lambda item: item[0])
         scene_id, representative_records = copies[0]
+        cluster_speakers: dict[str, set[str]] = defaultdict(set)
+        for record in representative_records:
+            speaker = str((record.get("speaker") or {}).get("display_name") or "")
+            if speaker:
+                cluster_speakers[cluster_ids[record["identity"]]].add(speaker)
         groups.append({
             "signature": signature,
             "scene_id": scene_id,
             "copies": copies,
             "records": representative_records,
             "clusters": {cluster_ids[record["identity"]] for record in representative_records},
+            "cluster_speakers": cluster_speakers,
         })
 
     uncovered = set().union(*(group["clusters"] for group in groups)) if groups else set()
-    selected = []
+    selected_by_signature: dict[str, dict[str, Any]] = {}
     while uncovered:
         candidates = [
             (len(group["clusters"] & uncovered), group["scene_id"], group)
@@ -499,8 +582,26 @@ def _scene_items(
         )
         chosen = dict(chosen)
         chosen["targets"] = chosen["clusters"] & uncovered
-        selected.append(chosen)
+        chosen["context_expansion"] = defaultdict(set)
+        selected_by_signature[chosen["signature"]] = chosen
         uncovered.difference_update(chosen["targets"])
+
+    groups_by_signature = {group["signature"]: group for group in groups}
+    for (signature, cluster_id), reasons in _pronoun_context_requirements(
+        groups, compact
+    ).items():
+        selected = selected_by_signature.get(signature)
+        if selected is None:
+            selected = dict(groups_by_signature[signature])
+            selected["targets"] = set()
+            selected["context_expansion"] = defaultdict(set)
+            selected_by_signature[signature] = selected
+        selected["targets"].add(cluster_id)
+        selected["context_expansion"][cluster_id].update(reasons)
+
+    selected = sorted(
+        selected_by_signature.values(), key=lambda group: group["scene_id"]
+    )
 
     items = []
     screen_index: dict[str, dict[str, str]] = {}
@@ -537,6 +638,11 @@ def _scene_items(
                     ]
                 if record.get("choice_context"):
                     line["choice_context"] = record["choice_context"]
+                context_expansion = sorted(
+                    group["context_expansion"].get(cluster_id, set())
+                )
+                if context_expansion:
+                    line["context_expansion"] = context_expansion
                 screen_index[review_id] = {
                     "cluster_id": cluster_id,
                     "representative_identity": record["identity"],
@@ -823,6 +929,10 @@ redistribute a scene outside the claim/release commands.
    `findings.json` directly. Treat stylistic preference as clean: change a line only when you can
    name a concrete defect, use the smallest natural correction that resolves it, and withdraw the
    finding when the current and proposed wordings are merely equally valid stylistic alternatives.
+   For `fluency`, `voice`, and `wordplay`, require a reviewer who did not author the correction to
+   independently confirm the recorded `editorial_basis`: the reader-facing defect, its source or
+   scene support, and why the correction is not merely preferred wording. If independent review is
+   unavailable or does not agree, withdraw the finding as clean before presenting results.
    If a correction needs revision, revise its corresponding deep result receipt, run
    `python "{cli}" rebuild-final --task "{task_dir}" --output-root
    "<separate-output-root>"`, and repeat this pass on the returned task.
@@ -858,6 +968,13 @@ clean scene/cluster targets from
 `exceptions`; one accepted bundle receipt covers them. `risk` values are attention hints, not
 defects and not automatic deep-review instructions. When present, compare
 `same_source_alternatives` for genuine consistency problems.
+
+For every scene target, explicitly verify: who performs each action and to whom; pronouns,
+possessives, and relationships; negation, conditions, certainty, and obligation; quantities and
+chronology; omitted or invented information; and speaker voice plus natural English. A
+`context_expansion` value means a repeated pronoun-bearing translation was intentionally assigned
+in more than one scene. Judge it against this scene rather than assuming the wording that worked in
+another context still works here.
 
 A `motif-family` item gathers all translations matching one recurring-joke or wordplay rule from
 the project's quirks. Return exactly one `motif_reviews` entry for every motif in the bundle,
@@ -899,6 +1016,15 @@ For actionable reviews, use one category from: {", ".join(sorted(FINDING_CATEGOR
 `family_key` to a reusable generic key when multiple lines express one underlying problem—for
 example `term:黄泉の巌` or `ui:ＢＧＭ`; otherwise use an empty string. Clean and uncertain reviews
 must use an empty `family_key`.
+
+Actionable `fluency`, `voice`, and `wordplay` reviews must also include exactly this object:
+
+```json
+{{"editorial_basis":{{"defect":"Concrete reader-facing defect in the current wording.","source_support":"Source, scene, or project guidance that makes it defective.","not_preference":true}}}}
+```
+
+Do not use these categories for equally valid alternatives. Other categories and non-actionable
+reviews must omit `editorial_basis`.
 
 If a worker cannot finish an assigned bundle, release it with
 `python "{cli}" release --task "{task_dir}" --bundle "<bundle-id>"`.
@@ -1297,8 +1423,13 @@ def _validate_deep_result(bundle: dict, result: dict) -> None:
             correction = review.get("correction")
             if not isinstance(correction, str) or not correction.strip():
                 raise QAResultError(f"Actionable review has no correction for {identity}")
+            _validate_editorial_basis(review, identity)
         elif review.get("severity") not in {None, ""}:
             raise QAResultError(f"Non-actionable review cannot have severity for {identity}")
+        elif review.get("editorial_basis") is not None:
+            raise QAResultError(
+                f"Non-actionable review cannot have editorial_basis for {identity}"
+            )
         if (
             disposition == "clean"
             and bundle_items[identity].get("screen_evidence")
@@ -1809,6 +1940,12 @@ def _finalize_unlocked(task_dir: str | Path) -> dict[str, Any]:
                     "current": cluster["live"],
                     "correction": review["correction"],
                     "target_identities": target_ids,
+                    **(
+                        {"editorial_basis": review["editorial_basis"]}
+                        if _normalize_category(review.get("category"))
+                        in EDITORIAL_JUDGMENT_CATEGORIES
+                        else {}
+                    ),
                 })
             elif review["disposition"] == "uncertain-playtest":
                 uncertain.append(review)

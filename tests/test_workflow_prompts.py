@@ -273,6 +273,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             "honest-global-coverage",
             "grouped-finding-families",
             "final-editorial-pass",
+            "subjective-precision-gate",
             "approval-before-edit",
             "preserve-original",
             "atomic-apply",
@@ -290,7 +291,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 prompt = load_rpgmaker_qa_skill(focus)
                 lowered = prompt.casefold()
                 contract = re.search(
-                    r"<!-- qa-contract:rpgmaker-qa-local-v5\s+(.*?)-->",
+                    r"<!-- qa-contract:rpgmaker-qa-local-v6\s+(.*?)-->",
                     prompt,
                     re.DOTALL,
                 )
@@ -319,6 +320,14 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 self.assertIn("do not create a replacement manifest", lowered)
                 self.assertIn("the screen stage keeps every dialogue", lowered)
                 self.assertIn("one worker only", lowered)
+                self.assertIn("who performs each action", lowered)
+                self.assertIn("pronouns and relationships", lowered)
+                self.assertIn("third-person pronouns", lowered)
+                self.assertIn("one representative scene per speaker", lowered)
+                self.assertIn("ordinary safe repetition remains deduplicated", lowered)
+                self.assertIn("actionable `fluency`, `voice`, and `wordplay`", lowered)
+                self.assertIn("reviewer who did not author", lowered)
+                self.assertIn("not merely preferred wording", lowered)
                 self.assertIn("family receipt even when preserved", lowered)
                 self.assertIn("complete scene", lowered)
                 self.assertIn("rebuild-deep", lowered)
