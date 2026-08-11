@@ -30,19 +30,28 @@ families into preventive guidance before translation or bounded correction work 
 
 1. Freeze one starting packet containing the game paths, engine, unchanged guidance, user-supplied
    hypotheses, and any raw Phase 1 candidates. Do not add conclusions from the coordinator.
-2. Launch exactly three fresh subagents sequentially with no forked conversation context; set
-   `fork_turns="none"` when that control is available. Wait for each to finish before launching the
-   next, but never show a later worker any earlier report.
+2. Launch exactly three fresh subagents concurrently with no forked conversation context; set
+   `fork_turns="none"` when that control is available. Never show a worker either of the other
+   reports.
 3. Give all three workers the same self-contained packet and the Investigation method below. Tell
    each worker not to delegate, edit files, or write a report into the shared repository; it must
    inspect the corpus read-only and return its compact evidence report only to the coordinator.
-4. Keep the guidance files unchanged until all three reports are returned. If isolated subagents
-   are unavailable, report the blocker rather than presenting one agent's repeated work as three
-   independent investigations.
+4. Keep the guidance files unchanged and do not synthesize or begin coordinator verification until
+   all three reports are returned. If three isolated subagents cannot run concurrently, report the
+   blocker rather than presenting serialized or repeated work as the requested parallel passes.
 5. After all three passes, merge families by shared mechanism and anchors. Treat duplicate
    discoveries as convergence evidence, not waste; retain unique discoveries for equal verification.
    Independently recount and inspect the union of proposed anchors, members, exceptions, and
-   corrections against the corpus. Only the coordinator may confirm families and apply guidance.
+   corrections against the corpus. Treat starting guidance as hypotheses, not evidence; after the
+   blind passes, audit anchored quirks and game-specific glossary keys that have competing current
+   English renderings. For placeholder templates, inspect every distinct resolved value and relevant
+   context; do not force one English frame merely because the Japanese template is identical. Split
+   the policy or retain a backlog item when one frame is not natural for every member. Classify a
+   correction as actionable only when its text is player-visible and release-reachable; keep hidden
+   scaffolding, test content, and uncertain reachability in the backlog. If a canonical choice is a
+   corpus minority, cite the primary in-game label,
+   self-identification, or explicit user instruction that outweighs frequency; generated guidance
+   alone is not proof. Only the coordinator may confirm families and apply guidance.
 
 ## Investigation method
 
@@ -92,8 +101,11 @@ leads. Never count a verified-clean family as an inconsistency, defect, or corre
 For each family report priority, source mechanism, Japanese anchors, occurrence and file/map counts,
 representative locators, current-English assessment when applicable, and the recommended English
 strategy. Include discovery agreement such as `1/3` or `3/3`; agreement raises confidence but does
-not replace corpus verification. Label its outcome `Actionable` or `Verified clean`, and separate
-genuine exceptions from missed family members.
+not replace corpus verification. State total family scope and actionable correction count
+separately, and make the executive total sum actionable targets only. For a placeholder-wide policy,
+state that every distinct resolved value was checked and list any exception classes; IDs alone are
+not evidence. Label its outcome `Actionable` or `Verified clean`, and separate genuine exceptions
+from missed family members.
 
 ### 3. Translation quirks updates applied
 

@@ -400,7 +400,10 @@ blocker; do not substitute a copy/paste block.
 Summarize the Phase 2 result without duplicating the written Glossary or Translation quirks:
 
 - **Confirmed actionable defects** - families with current text requiring correction, including
-  priority, discovery agreement, counts, representative locators, and correction strategy.
+  priority, discovery agreement, total family scope, actionable target count, representative
+  locators, and correction strategy. Justify placeholder-wide rules against every resolved value;
+  IDs alone are not evidence. Justify a minority canonical form with primary in-game evidence or
+  explicit user instruction.
 - **Verified-clean families** - investigated families whose current handling is already sound;
   include discovery agreement and never count these as inconsistencies, defects, or correction
   families.
