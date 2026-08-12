@@ -35,7 +35,7 @@ as Prepare so plugin configuration does not collapse into a whole-file conflict.
 
 ## First-time reconciliation
 
-Both engine workflows expose version tracking in Prepare after optional formatting
+Both engine workflows expose version tracking in Prepare after required formatting
 and GameUpdate prep, and the Version Update page retains a setup path for games
 that still need baseline branches. Prepare bootstraps from the selected
 pre-translation Project game: that single folder becomes both the `original`

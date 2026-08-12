@@ -56,7 +56,7 @@ class GitPreparationCard(WorkflowStageCard):
         super().__init__(
             number,
             "Set up Git version tracking",
-            "Protect the translated game and register its current branch for Version Update.",
+            "Record the clean original baseline and create or register the translated branch so future game updates can be merged safely.",
             parent=parent,
         )
         self._game_root = ""

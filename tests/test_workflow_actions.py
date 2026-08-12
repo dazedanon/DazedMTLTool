@@ -60,9 +60,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (1, "run_dazedformat", {"text": "Format game data"}),
             (1, "browse_plugins_js", {"tooltip": "Choose the plugins.js file"}),
             (1, "run_prettier", {"text": "Format plugins.js"}),
-            (1, "browse_gameupdate", {"tooltip": "Choose the GameUpdate source folder"}),
             (1, "run_gameupdate", {"text": "Install GameUpdate"}),
-            (1, "run_all_preprocess", {"text": "Run optional tasks"}),
             (2, "import_files", {"text": "Import files"}),
             (2, "clear_translated", {"text": "Clear translated"}),
             (2, "add_embedded_reference_game", {"text": "+ Add DazedTL translation"}),
@@ -108,7 +106,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (9, "install_both_playtest", {"text": "Install both plugins"}),
             (9, "refresh_playtest_status", {"text": "Refresh plugin status"}),
         )
-        self.assertEqual(len(cases), 55)
+        self.assertEqual(len(cases), 53)
         for step, endpoint, locator in cases:
             with self.subTest(step=step, endpoint=endpoint, locator=locator):
                 if endpoint == "apply_var_range":

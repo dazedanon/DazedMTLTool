@@ -14,13 +14,14 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PIL import Image
 from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtGui import QPalette
-from PyQt5.QtWidgets import QApplication, QWidget
+from PyQt5.QtWidgets import QApplication, QPushButton, QWidget
 
 from gui.theme import COLORS, contrast_ratio, dark_palette
 from gui.workflow_components import (
     DisclosureSection,
     WorkflowActivityPanel,
     WorkflowPageHeader,
+    WorkflowStageCard,
 )
 from util.game_settings import (
     GameSettingsError,
@@ -116,6 +117,14 @@ class WorkflowShellTests(unittest.TestCase):
         self.assertEqual(
             [button.accessibleName() for button in self.workflow._step_rail.buttons[7:10]],
             ["Step 8: QA", "Step 9: Images", "Step 10: Playtest"],
+        )
+        prepare_page = self.workflow._step_tabs.widget(1)
+        self.assertEqual(len(prepare_page.findChildren(WorkflowStageCard)), 4)
+        self.assertFalse(
+            any(
+                "optional" in button.text().casefold()
+                for button in prepare_page.findChildren(QPushButton)
+            )
         )
         qa_help = self.workflow._qa_ai_help_banner.text_label.text()
         self.assertIn("full-game release gate once", qa_help)
@@ -591,6 +600,14 @@ class WolfWorkflowShellTests(unittest.TestCase):
         first = self.workflow._step_tabs.widget(0).findChild(WorkflowPageHeader)
         self.assertIsNotNone(first.continue_button)
         self.assertIsNone(self.workflow.findChild(QWidget, "workflowFooter"))
+        prepare_page = self.workflow._step_tabs.widget(1)
+        self.assertEqual(len(prepare_page.findChildren(WorkflowStageCard)), 3)
+        self.assertFalse(
+            any(
+                "optional" in button.text().casefold()
+                for button in prepare_page.findChildren(QPushButton)
+            )
+        )
 
         self.workflow._log("❌ Injection failed")
         self.assertEqual(panel.log.toPlainText(), "❌ Injection failed")

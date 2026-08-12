@@ -67,7 +67,6 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QFrame,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -124,7 +123,7 @@ WORKFLOW_TL_NORMAL_LABEL = "Normal Translate"
 
 _STEP_PURPOSES = {
     0: "Detect the game and choose which data files enter this translation run.",
-    1: "Format and prepare the game, then set up Git version tracking.",
+    1: "Normalize project files, install patch support, and protect the clean baseline before translating.",
     2: "Configure speaker detection, collect names, and maintain project guidance.",
     3: "Translate database and dialogue text, then build the variable cache.",
     4: "Translate audited variable, plugin, and script text only when required.",
@@ -253,14 +252,13 @@ _STEP_HELP: dict[int, str] = {
     ),
     1: (
         "<b>Step 1 - Prepare the project</b><br><br>"
-        "Format and prepare the clean game first, then set up version tracking before translation changes it.<br><br>"
-        "<b>What to do</b><br>"
-        "• Use <b>Format game data</b> to make the game's data files easier to inspect.<br>"
-        "• Use <b>Format plugins.js</b> to make the MV/MZ plugin list easier to read.<br>"
-        "• Use <b>Install GameUpdate</b> only when you want that patch helper in the game.<br>"
-        "• Or click <b>Run optional tasks</b> to run every optional prep task that is ready.<br>"
-        "• In <b>Set up Git version tracking</b>, enter the current version. The selected Project game becomes the original and starting translated baseline. Existing repositories and legacy branches are detected automatically.<br><br>"
-        "Unavailable optional tasks are skipped."
+        "Complete all four tasks in order before translating.<br><br>"
+        "<b>What each task does</b><br>"
+        "1. <b>Format game data</b> normalizes JSON layout without changing game values.<br>"
+        "2. <b>Format plugins.js</b> makes the plugin configuration easier to audit without changing behavior.<br>"
+        "3. <b>Install GameUpdate</b> adds the patch helper and writes its saved configuration.<br>"
+        "4. <b>Set up Git version tracking</b> records the clean original baseline and creates or registers the translated branch.<br><br>"
+        "These tasks prepare and protect the project; they do not translate any text."
     ),
     2: (
         "<b>Step 2 - Set up speakers and game guidance</b><br><br>"
@@ -1168,184 +1166,104 @@ class WorkflowTab(QWidget):
     # ── Step 1: format/prep first, then Git version tracking ──────────
 
     def _build_step1_preprocess(self, layout: QVBoxLayout):
-        # Collapse/expand toggle
-        toggle_btn = make_workflow_button("Hide optional tasks", variant="quiet")
-        toggle_btn.setCheckable(True)
-        toggle_btn.setChecked(True)
-        toggle_btn.setFixedSize(208, Geometry.CONTROL)
-        toggle_btn.setToolTip("Show or hide the optional preparation tasks")
-        self._add_step_header(
-            layout,
-            "Step 1 — Prepare Project",
-            1,
-            extra_widgets=[toggle_btn],
+        self._add_step_header(layout, "Step 1 — Prepare Project", 1)
+        layout.addWidget(
+            StatusBanner(
+                "Complete all four tasks in order. The first two make file review and "
+                "Git diffs reliable, GameUpdate prepares patch delivery, and Git records "
+                "the clean baseline before translation begins. No text is translated here.",
+                "info",
+            )
         )
 
-        # Collapsible container — wraps the optional formatter/helper tasks.
-        # These run before Git so the committed baselines are already normalized.
-        collapse_widget = QWidget()
-        collapse_layout = QVBoxLayout(collapse_widget)
-        collapse_layout.setContentsMargins(0, 0, 0, 0)
-        collapse_layout.setSpacing(Spacing.XS)
-
-        tasks_box = QGroupBox()
-        tasks_box.setStyleSheet("QGroupBox{border:none;margin:0;padding:4px 0;}")
-        tb = QVBoxLayout(tasks_box)
-        tb.setContentsMargins(0, 0, 0, 0)
-        tb.setSpacing(Spacing.MD)
-        collapse_layout.addWidget(tasks_box)
-
-        # ---- Task A: dazedformat -----------------------------------------
+        # ---- Task 1: normalize JSON --------------------------------------
         ta = WorkflowStageCard(
             1,
             "Format game data",
-            "Normalize every JSON file with the bundled formatter before review, translation, or Git baseline.",
+            "Normalize JSON layout without changing values or game behavior. This keeps reviews and future Git diffs focused on real changes.",
         )
         ta_inner = ta.body
         self._pp_dazedformat_title = ta.title_label
-        ta_path_row = QHBoxLayout()
-        ta_path_row.addWidget(_make_form_label("Game data:"))
+        ta_action_row = QHBoxLayout()
+        ta_action_row.setSpacing(Spacing.SM)
+        ta_action_row.addWidget(_make_form_label("Target:"))
         self.pp_data_path_label = QLabel("(detect a project folder first)")
         self.pp_data_path_label.setStyleSheet("color:#77777a;font-size:13px;")
-        ta_path_row.addWidget(self.pp_data_path_label, 1)
-        ta_inner.addLayout(ta_path_row)
-        ta_btn_row = QHBoxLayout()
+        self.pp_data_path_label.setSizePolicy(
+            QSizePolicy.Ignored, QSizePolicy.Preferred
+        )
+        ta_action_row.addWidget(self.pp_data_path_label, 1)
         run_dazed = _make_btn("►  Format game data", "#555")
         run_dazed.setToolTip("Normalize the detected game-data JSON with dazedformat")
         run_dazed.clicked.connect(self._run_dazedformat)
-        ta_btn_row.addWidget(run_dazed)
-        ta_btn_row.addStretch()
-        ta_inner.addLayout(ta_btn_row)
-        tb.addWidget(ta)
+        ta_action_row.addWidget(run_dazed)
+        ta_inner.addLayout(ta_action_row)
+        layout.addWidget(ta)
         self._pp_dazedformat_box = ta
 
-        # ---- Task B: prettier on plugins.js
+        # ---- Task 2: normalize plugins.js --------------------------------
         tb_box = WorkflowStageCard(
             2,
             "Format plugin configuration",
-            "Make plugins.js easier to audit and edit without changing its behavior.",
+            "Normalize plugins.js layout so enabled plugins and parameters are easy to audit later. Plugin behavior is unchanged.",
         )
         tb_inner = tb_box.body
         self._pp_plugins_js_title = tb_box.title_label
-        tb_path_row = QHBoxLayout()
-        tb_path_lbl = _make_form_label("Plugin file:" )
-        tb_path_row.addWidget(tb_path_lbl)
+        tb_action_row = QHBoxLayout()
+        tb_action_row.setSpacing(Spacing.SM)
+        tb_action_row.addWidget(_make_form_label("Target:"))
         self.pp_plugins_edit = QLineEdit()
         self.pp_plugins_edit.setPlaceholderText("plugins.js path…")
-        tb_path_row.addWidget(self.pp_plugins_edit, 1)
+        tb_action_row.addWidget(self.pp_plugins_edit, 1)
         browse_plugins = _make_icon_btn("📁", "Choose the plugins.js file")
         browse_plugins.clicked.connect(self._browse_plugins_js)
-        tb_path_row.addWidget(browse_plugins)
-        tb_inner.addLayout(tb_path_row)
-        tb_btn_row = QHBoxLayout()
+        tb_action_row.addWidget(browse_plugins)
         run_prettier = _make_btn("►  Format plugins.js", "#555")
         run_prettier.setToolTip("Format the selected plugins.js file for review")
         run_prettier.clicked.connect(self._run_prettier)
-        tb_btn_row.addWidget(run_prettier)
-        tb_btn_row.addStretch()
-        tb_inner.addLayout(tb_btn_row)
-        tb.addWidget(tb_box)
+        tb_action_row.addWidget(run_prettier)
+        tb_inner.addLayout(tb_action_row)
+        layout.addWidget(tb_box)
         self._pp_plugins_js_box = tb_box
 
-        # ---- Task C: copy gameupdate/ -----------------------------------
+        # ---- Task 3: install GameUpdate ----------------------------------
         tc = WorkflowStageCard(
             3,
             "Install the GameUpdate helper",
-            "Copy GameUpdate into the game and write its patch configuration from your saved defaults.",
+            "Install the bundled patch-delivery helper in the selected game and write its configuration from your saved defaults.",
         )
         tc_inner = tc.body
-
-        tc_src_row = QHBoxLayout()
-        tc_src_row.addWidget(_make_form_label("GameUpdate:"))
-        self.pp_gameupdate_edit = QLineEdit()
-        self.pp_gameupdate_edit.setPlaceholderText("GameUpdate source folder…")
-        tc_src_row.addWidget(self.pp_gameupdate_edit, 1)
-        browse_gu = _make_icon_btn("📁", "Choose the GameUpdate source folder")
-        browse_gu.clicked.connect(self._browse_gameupdate)
-        tc_src_row.addWidget(browse_gu)
-        tc_inner.addLayout(tc_src_row)
-
-        tc_dst_row = QHBoxLayout()
-        tc_dst_row.addWidget(_make_form_label("Game folder:"))
+        self.pp_gameupdate_edit = QLineEdit(tc)
+        self.pp_gameupdate_edit.hide()
+        tc_action_row = QHBoxLayout()
+        tc_action_row.setSpacing(Spacing.SM)
+        tc_action_row.addWidget(_make_form_label("Target:"))
         self.pp_gameupdate_dst_label = QLabel("(game root folder auto-filled from project)")
         self.pp_gameupdate_dst_label.setStyleSheet("color:#77777a;font-size:13px;")
-        tc_dst_row.addWidget(self.pp_gameupdate_dst_label, 1)
-        tc_inner.addLayout(tc_dst_row)
-
-        tc_btn_row = QHBoxLayout()
-        tc_btn_row.setSpacing(Spacing.SM)
+        self.pp_gameupdate_dst_label.setSizePolicy(
+            QSizePolicy.Ignored, QSizePolicy.Preferred
+        )
+        tc_action_row.addWidget(self.pp_gameupdate_dst_label, 1)
         run_gu = _make_btn("►  Install GameUpdate", "#555")
         run_gu.setToolTip("Copy GameUpdate into the selected game folder")
         run_gu.clicked.connect(self._run_gameupdate)
-        tc_btn_row.addWidget(run_gu)
-        tc_btn_row.addStretch()
-        tc_inner.addLayout(tc_btn_row)
-        tb.addWidget(tc)
+        tc_action_row.addWidget(run_gu)
+        tc_inner.addLayout(tc_action_row)
+        layout.addWidget(tc)
 
-        # Keep the page-wide action separate from the final task. It applies to
-        # every card above, so placing it in the GameUpdate card made it look
-        # like part of that one task.
-        self.pp_run_all_bar = QFrame()
-        self.pp_run_all_bar.setObjectName("preprocessRunAllBar")
-        self.pp_run_all_bar.setStyleSheet(
-            f"QFrame#preprocessRunAllBar{{background:{COLORS.surface_1};"
-            f"border:1px solid {COLORS.border};border-radius:6px;}}"
-            f"QFrame#preprocessRunAllBar QLabel{{background:transparent;border:none;}}"
-        )
-        run_all_layout = QHBoxLayout(self.pp_run_all_bar)
-        run_all_layout.setContentsMargins(Spacing.MD, Spacing.SM, Spacing.MD, Spacing.SM)
-        run_all_layout.setSpacing(Spacing.MD)
-
-        run_all_copy = QVBoxLayout()
-        run_all_copy.setSpacing(Spacing.XS)
-        run_all_title = QLabel("Run optional preparation tasks")
-        run_all_title.setStyleSheet(
-            f"color:{COLORS.text_primary};font-size:13px;font-weight:600;"
-        )
-        run_all_copy.addWidget(run_all_title)
-        run_all_hint = QLabel(
-            "Runs the formatting and GameUpdate tasks when their required paths "
-            "are available. Finish these before creating the Git baseline."
-        )
-        run_all_hint.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
-        run_all_hint.setWordWrap(True)
-        run_all_copy.addWidget(run_all_hint)
-        run_all_layout.addLayout(run_all_copy, 1)
-
-        run_all_btn = _make_btn("►►  Run optional tasks", "#0e639c")
-        run_all_btn.setToolTip("Run each preparation task whose required path is available")
-        run_all_btn.clicked.connect(self._run_all_preprocess)
         equalize_button_widths(
             (
                 run_dazed,
                 run_prettier,
                 run_gu,
-                run_all_btn,
             ),
             minimum=Geometry.ACTION_WIDE,
             maximum=Geometry.ACTION_WIDE,
         )
-        self.pp_preprocess_action_buttons = (
-            run_dazed,
-            run_prettier,
-            run_gu,
-            run_all_btn,
-        )
-        run_all_layout.addWidget(run_all_btn)
-        collapse_layout.addWidget(self.pp_run_all_bar)
-
-        layout.addWidget(collapse_widget)
 
         self.git_prepare = GitPreparationCard(4)
         self.git_prepare.activity.connect(self._log)
         layout.addWidget(self.git_prepare)
-
-        def _toggle_preprocess(expanded: bool):
-            toggle_btn.setText(
-                "Hide optional tasks" if expanded else "Show optional tasks"
-            )
-            collapse_widget.setVisible(expanded)
-        toggle_btn.toggled.connect(_toggle_preprocess)
 
     @staticmethod
     def _task_box_style() -> str:

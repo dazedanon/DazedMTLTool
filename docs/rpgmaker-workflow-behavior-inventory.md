@@ -28,14 +28,14 @@ boundaries, or destinations.
 
 ## Step 1: Prepare
 
+All four tasks are required for the guided workflow and are presented in order.
+
 | Action | Effect |
 |---|---|
 | Format game data | Runs the existing `dazedformat` worker against the detected game data. |
 | Format plugins.js | Runs `jsbeautifier` against the explicitly shown plugin file. |
 | Install GameUpdate | Copies the bundled folder using RPG Maker exclusions and writes patch configuration when applicable. |
-| Run optional tasks | Runs the eligible formatting and GameUpdate tasks sequentially and logs skipped prerequisites. |
 | Set up Git version tracking | Creates or reconciles the `original` and translated branches from the selected Project game without replacing the worktree. |
-| Collapse | Changes visibility only; paths and task state remain unchanged. |
 
 ## Step 2: Setup
 

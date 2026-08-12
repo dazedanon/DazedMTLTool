@@ -70,7 +70,6 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QSplitter,
-    QStyle,
     QTabWidget,
     QTextEdit,
     QToolButton,
@@ -773,69 +772,68 @@ class WolfWorkflowTab(QWidget):
 
     def _build_step1_preprocess(self, layout: QVBoxLayout):
         layout.addWidget(self._page_header(
-            1, "Prepare Project", "Format and prepare the game, then set up Git version tracking.",
+            1,
+            "Prepare Project",
+            "Normalize extracted data, install patch support, and protect the clean baseline before translating.",
         ))
+        layout.addWidget(
+            StatusBanner(
+                "Complete all three tasks in order. Formatting keeps extracted WOLF "
+                "data readable and Git diffs reliable, GameUpdate prepares patch "
+                "delivery, and Git records the clean baseline. No text is translated here.",
+                "info",
+            )
+        )
 
         format_card = WorkflowStageCard(
             1,
             "Format extracted game data",
-            "Makes the prepared text files easier to review and track. Do this before creating the Git baseline.",
+            "Normalize the extracted JSON layout without changing values. This keeps reviews and future Git diffs focused on real changes.",
         )
-        ta_path_row = QHBoxLayout()
-        ta_path_row.addWidget(QLabel("Game data:"))
+        ta_action_row = QHBoxLayout()
+        ta_action_row.setSpacing(Spacing.SM)
+        ta_action_row.addWidget(QLabel("Target:"))
         self.pp_wolf_json_label = QLabel("(detect a project folder first)")
         self.pp_wolf_json_label.setStyleSheet("color:#7a7a7a;font-size:13px;")
-        ta_path_row.addWidget(self.pp_wolf_json_label, 1)
-        format_card.add_layout(ta_path_row)
+        self.pp_wolf_json_label.setSizePolicy(
+            QSizePolicy.Ignored, QSizePolicy.Preferred
+        )
+        ta_action_row.addWidget(self.pp_wolf_json_label, 1)
         run_dazed = _make_btn("Format extracted data", "#555")
         run_dazed.clicked.connect(self._run_dazedformat)
-        format_card.add_widget(run_dazed)
+        ta_action_row.addWidget(run_dazed)
+        format_card.add_layout(ta_action_row)
         layout.addWidget(format_card)
 
         update_card = WorkflowStageCard(
             2,
             "Install the GameUpdate helper",
-            "Optional. Adds the bundled update files to the game folder so future translation updates are easier to share.",
+            "Install the bundled patch-delivery helper in the selected game and write its configuration from your saved defaults.",
         )
-        tc_src_row = QHBoxLayout()
-        tc_src_row.addWidget(QLabel("GameUpdate:"))
-        self.pp_gameupdate_edit = QLineEdit()
-        self.pp_gameupdate_edit.setPlaceholderText("Path to gameupdate/ folder…")
-        tc_src_row.addWidget(self.pp_gameupdate_edit, 1)
-        browse_gu = _make_btn("", "#444")
-        browse_gu.setIcon(browse_gu.style().standardIcon(QStyle.SP_DirOpenIcon))
-        browse_gu.setFixedWidth(34)
-        browse_gu.clicked.connect(self._browse_gameupdate)
-        tc_src_row.addWidget(browse_gu)
-        update_card.add_layout(tc_src_row)
-        tc_dst_row = QHBoxLayout()
-        tc_dst_row.addWidget(QLabel("Destination:"))
+        self.pp_gameupdate_edit = QLineEdit(update_card)
+        self.pp_gameupdate_edit.hide()
+        tc_action_row = QHBoxLayout()
+        tc_action_row.setSpacing(Spacing.SM)
+        tc_action_row.addWidget(QLabel("Target:"))
         self.pp_gameupdate_dst_label = QLabel("(game root folder auto-filled from project)")
         self.pp_gameupdate_dst_label.setStyleSheet("color:#7a7a7a;font-size:13px;")
-        tc_dst_row.addWidget(self.pp_gameupdate_dst_label, 1)
-        update_card.add_layout(tc_dst_row)
+        self.pp_gameupdate_dst_label.setSizePolicy(
+            QSizePolicy.Ignored, QSizePolicy.Preferred
+        )
+        tc_action_row.addWidget(self.pp_gameupdate_dst_label, 1)
         run_gu = _make_btn("Install GameUpdate", "#555")
         run_gu.clicked.connect(self._run_gameupdate)
-        update_card.add_widget(run_gu)
+        tc_action_row.addWidget(run_gu)
+        update_card.add_layout(tc_action_row)
         layout.addWidget(update_card)
 
-        run_card = WorkflowStageCard(
-            3,
-            "Run optional preparation tasks",
-            "Runs the two tasks above in order before Git setup. Missing optional items are skipped.",
-        )
-        run_all_btn = _make_btn("Run optional tasks", "#007acc")
-        run_all_btn.setToolTip("Format the extracted data, then install GameUpdate if it is available")
-        run_all_btn.clicked.connect(self._run_all_preprocess)
         equalize_button_widths(
-            (run_dazed, run_gu, run_all_btn),
+            (run_dazed, run_gu),
             minimum=Geometry.ACTION_WIDE,
             maximum=Geometry.ACTION_WIDE,
         )
-        run_card.add_widget(run_all_btn)
-        layout.addWidget(run_card)
 
-        self.git_prepare = GitPreparationCard(4)
+        self.git_prepare = GitPreparationCard(3)
         self.git_prepare.activity.connect(self._log)
         layout.addWidget(self.git_prepare)
 
@@ -1342,12 +1340,6 @@ class WolfWorkflowTab(QWidget):
         if hasattr(self, "pp_gameupdate_dst_label"):
             self.pp_gameupdate_dst_label.setText(game_root or "(no game folder detected)")
 
-    def _browse_gameupdate(self):
-        start = self.pp_gameupdate_edit.text() or self.folder_edit.text()
-        folder = QFileDialog.getExistingDirectory(self, "Select gameupdate folder", start)
-        if folder:
-            self.pp_gameupdate_edit.setText(folder)
-
     def _run_dazedformat(self):
         if not self._game_root:
             self._log("⚠  No game folder set. Complete Step 1 first.")
@@ -1415,66 +1407,6 @@ class WolfWorkflowTab(QWidget):
         dst = destination or self.folder_edit.text().strip()
         if dst and not errors:
             self._write_gameupdate_patch_config(dst)
-
-    def _run_all_preprocess(self):
-        game_root = self._prepared_project_or_warn()
-        if not game_root:
-            return
-
-        def task(log, progress=None):
-            from util.dazedformat import format_json_files
-
-            work_dir = self._work_dir()
-            files_dir = Path("files")
-            total = 0
-            errors: list[str] = []
-            for label, d in ((f"{WORK_DIR_NAME}/", work_dir), ("files/", files_dir)):
-                if not Path(d).is_dir():
-                    log(f"  ⏭  Skipped dazedformat on {label} (folder missing)")
-                    continue
-                log(f"[A] Formatting JSON in {label} …")
-                count, errs = format_json_files(d, log=log)
-                total += count
-                errors.extend(errs)
-            if errors:
-                return False, f"Pre-process: formatted {total} file(s), {len(errors)} error(s)."
-
-            src = self.pp_gameupdate_edit.text().strip()
-            dst = game_root
-            if not src or not Path(src).is_dir():
-                log("  ⏭  Skipped gameupdate copy (source not found)")
-            elif not dst:
-                log("  ⏭  Skipped gameupdate copy (no game root)")
-            else:
-                log("[B] Copying gameupdate/ …")
-                copied = 0
-                for fp in sorted(Path(src).rglob("*")):
-                    if not fp.is_file():
-                        continue
-                    if fp.name in _GAMEUPDATE_COPY_SKIP_NAMES:
-                        log(f"  skipped {fp.relative_to(src)}")
-                        continue
-                    rel = fp.relative_to(src)
-                    target = Path(dst) / rel
-                    try:
-                        target.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(fp, target)
-                        copied += 1
-                    except Exception as exc:
-                        errors.append(f"{rel}: {exc}")
-                log(f"  Copied {copied} gameupdate file(s).")
-                from util.gameupdate_config import write_patch_config
-
-                ok, msg = write_patch_config(dst)
-                if ok:
-                    log(f"  Wrote patch-config.txt from Config defaults → {msg}")
-                else:
-                    log(f"  patch-config.txt: {msg}")
-            if errors:
-                return False, "Pre-process finished with errors (see log)."
-            return True, "Pre-process: dazedformat and gameupdate copy finished."
-
-        self._run_task(task)
 
     def _unpack(self, on_done=None, *, interactive: bool = True, archives=None):
         if not self._require_root():
