@@ -2409,6 +2409,9 @@ class WolfWorkflowTab(QWidget):
         except Exception:
             pass
 
+        if hasattr(tt, "set_workflow_return_target"):
+            tt.set_workflow_return_target(self)
+
         if pw and hasattr(pw, "switch_page"):
             page = getattr(pw, "PAGE_TRANSLATION", 4)
             pw.switch_page(page)

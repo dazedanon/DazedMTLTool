@@ -1537,6 +1537,11 @@ class TranslationTab(QWidget):
         self._applied_file_totals = set()
         # Filenames from the most recently completed translation run (used by post-run export)
         self._last_run_files: list = []
+        # Workflow pages register themselves before opening Translation. The
+        # pending target is consumed only when a run actually starts so a
+        # failed preflight does not lose the return path.
+        self._pending_workflow_return = None
+        self._active_workflow_return = None
         # Totals widget reference
         self.totals_widget = None
         self._batch_active = False
@@ -2007,6 +2012,17 @@ class TranslationTab(QWidget):
         self.reset_view_button.setVisible(False)
         configure_action_button(self.reset_view_button, variant="quiet")
 
+        self.return_to_workflow_button = QPushButton("Return to workflow")
+        qt_icons.apply_button_icon(
+            self.return_to_workflow_button, "← Return to workflow", color="#ffffff"
+        )
+        self.return_to_workflow_button.setToolTip(
+            "Return to the workflow step that started this translation"
+        )
+        self.return_to_workflow_button.clicked.connect(self._return_to_workflow)
+        self.return_to_workflow_button.setVisible(False)
+        configure_action_button(self.return_to_workflow_button, variant="primary")
+
         self.open_translations_button = QPushButton("Open output folder")
         qt_icons.apply_button_icon(
             self.open_translations_button, "📂 Open output folder", color="#dddddd"
@@ -2016,25 +2032,19 @@ class TranslationTab(QWidget):
         self.open_translations_button.setVisible(False)
         configure_action_button(self.open_translations_button, variant="secondary")
 
-        # Sync translated/ → files/ (RPG Maker only)
-        self.sync_translated_button = QPushButton("Sync to workspace")
+        # Keep the workspace and game export in one post-run action. These two
+        # destinations represent the same accepted translation state and should
+        # not be allowed to drift because the user noticed only one button.
+        self.sync_export_button = QPushButton("Sync / Export")
         qt_icons.apply_button_icon(
-            self.sync_translated_button, "🔄 Sync to workspace", color="#dddddd"
+            self.sync_export_button, "📤 Sync / Export", color="#ffffff"
         )
-        self.sync_translated_button.setToolTip("Sync translated/ → files/\nCopy translated files back into files/ so the next phase starts from the latest state")
-        self.sync_translated_button.clicked.connect(self._sync_translated_to_files)
-        self.sync_translated_button.setVisible(False)
-        configure_action_button(self.sync_translated_button, variant="secondary")
-
-        # Export active files → game folder (RPG Maker only)
-        self.export_active_button = QPushButton("Export run to game")
-        qt_icons.apply_button_icon(
-            self.export_active_button, "📤 Export run to game", color="#dddddd"
+        self.sync_export_button.setToolTip(
+            "Copy this run's translated files into both the workspace and the game folder"
         )
-        self.export_active_button.setToolTip("Export translated files → Game Folder\nCopy the files from this translation run into your game's data directory")
-        self.export_active_button.clicked.connect(self._export_last_run_files)
-        self.export_active_button.setVisible(False)
-        configure_action_button(self.export_active_button, variant="primary")
+        self.sync_export_button.clicked.connect(self._sync_and_export_last_run_files)
+        self.sync_export_button.setVisible(False)
+        configure_action_button(self.sync_export_button, variant="primary")
 
         # Stop is the only destructive run action, so it keeps the danger role.
         self.stop_button = QPushButton("Stop run")
@@ -2069,10 +2079,10 @@ class TranslationTab(QWidget):
         buttons_hbox.setSpacing(Spacing.SM)
         # Back/Open/Stop buttons on the left (stop shown while running)
         buttons_hbox.addWidget(self.stop_button)
+        buttons_hbox.addWidget(self.return_to_workflow_button)
         buttons_hbox.addWidget(self.reset_view_button)
         buttons_hbox.addWidget(self.open_translations_button)
-        buttons_hbox.addWidget(self.sync_translated_button)
-        buttons_hbox.addWidget(self.export_active_button)
+        buttons_hbox.addWidget(self.sync_export_button)
         buttons_hbox.addStretch()
         actions_host.setLayout(buttons_hbox)
 
@@ -3327,6 +3337,77 @@ class TranslationTab(QWidget):
             return
         self._export_active_files(filenames=self._last_run_files)
 
+    def _sync_and_export_last_run_files(self):
+        """Sync the latest run to files/ and export it to the RPG Maker game."""
+        if not self._last_run_files:
+            QMessageBox.warning(
+                self,
+                "Sync & Export",
+                "No translation run recorded — translate some files first.",
+            )
+            return
+
+        translated_dir = self.translated_dir
+        exportable = [
+            name
+            for name in self._last_run_files
+            if name != ".gitkeep" and (translated_dir / name).is_file()
+        ]
+        if not exportable:
+            QMessageBox.warning(
+                self,
+                "Sync & Export",
+                "None of this run's translated files were found.",
+            )
+            return
+
+        game_data = None
+        try:
+            workflow = getattr(self.window(), "workflow_tab", None)
+            if workflow and getattr(workflow, "_data_path", None):
+                game_data = workflow._data_path
+        except Exception:
+            pass
+        if not game_data:
+            game_data = QFileDialog.getExistingDirectory(
+                self, "Select Game Data Folder to Export Into"
+            )
+            if not game_data:
+                return
+
+        reply = QMessageBox.question(
+            self,
+            "Sync & Export Translation Run",
+            f"Copy {len(exportable)} translated file(s) into the workspace and:\n"
+            f"{game_data}\n\n"
+            "The game files will be replaced. Make a backup first if needed. Continue?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        import shutil
+
+        self.files_dir.mkdir(exist_ok=True)
+        game_data_path = Path(game_data)
+        synced = 0
+        exported = 0
+        for name in exportable:
+            src = translated_dir / name
+            shutil.copy2(src, self.files_dir / name)
+            synced += 1
+            shutil.copy2(src, game_data_path / name)
+            exported += 1
+
+        self.refresh_file_lists()
+        QMessageBox.information(
+            self,
+            "Sync & Export Complete",
+            f"Synced {synced} file(s) to the workspace and exported "
+            f"{exported} file(s) to:\n{game_data}",
+        )
+
     def _export_active_files(self, filenames: list | None = None):
         """Export translated files into the game data folder.
 
@@ -3669,22 +3750,20 @@ class TranslationTab(QWidget):
     
     def reset_to_file_view(self):
         """Reset back to file selection view."""
+        self._active_workflow_return = None
         self._reset_batch_pipeline_ui()
         self.file_stack.setCurrentIndex(0)
         if self.file_card.title_label is not None:
             self.file_card.title_label.setText("Files to translate")
         self.reset_view_button.setVisible(False)
+        self.return_to_workflow_button.setVisible(False)
         # Also hide the open translations button when returning to file view
         try:
             self.open_translations_button.setVisible(False)
         except Exception:
             pass
         try:
-            self.sync_translated_button.setVisible(False)
-        except Exception:
-            pass
-        try:
-            self.export_active_button.setVisible(False)
+            self.sync_export_button.setVisible(False)
         except Exception:
             pass
         # Hide totals when returning to file view
@@ -3698,6 +3777,43 @@ class TranslationTab(QWidget):
         self.refresh_file_lists()
         self._on_mode_changed(self.mode_combo.currentText())
         self._set_run_controls_enabled(True)
+
+    def set_workflow_return_target(self, workflow_tab):
+        """Remember the workflow step that owns the next translation run."""
+        step_index = None
+        try:
+            step_index = workflow_tab._step_tabs.currentIndex()
+        except Exception:
+            pass
+        self._pending_workflow_return = (workflow_tab, step_index)
+
+    def _return_to_workflow(self):
+        """Return to the exact workflow and step that launched this run."""
+        target = self._active_workflow_return or self._pending_workflow_return
+        if target is None:
+            return
+        workflow_tab, step_index = target
+        parent = self.parent_window or self.window()
+
+        self._active_workflow_return = None
+        self._pending_workflow_return = None
+        self.reset_to_file_view()
+
+        try:
+            workflow_stack = getattr(parent, "workflow_stack", None)
+            if workflow_stack is not None:
+                workflow_stack.setCurrentWidget(workflow_tab)
+            engine_combo = getattr(parent, "workflow_engine_combo", None)
+            if engine_combo is not None and workflow_stack is not None:
+                engine_combo.setCurrentIndex(workflow_stack.currentIndex())
+            if step_index is not None and hasattr(workflow_tab, "_goto_step"):
+                workflow_tab._goto_step(step_index)
+            if hasattr(parent, "switch_page"):
+                parent.switch_page(getattr(parent, "PAGE_WORKFLOW", 1))
+            elif hasattr(parent, "content_stack"):
+                parent.content_stack.setCurrentIndex(1)
+        except Exception:
+            pass
             
     def start_translation(self, skip_confirm: bool = False, forced_resume_state: str | None = None):
         """Start the translation process.
@@ -3926,6 +4042,9 @@ class TranslationTab(QWidget):
                 f"Could not load the selected game's translation settings:\n\n{exc}",
             )
             return
+
+        self._active_workflow_return = self._pending_workflow_return
+        self._pending_workflow_return = None
         
         if True:
             # Switch to progress view
@@ -3984,8 +4103,8 @@ class TranslationTab(QWidget):
             for _btn_attr in (
                 "open_translations_button",
                 "reset_view_button",
-                "sync_translated_button",
-                "export_active_button",
+                "return_to_workflow_button",
+                "sync_export_button",
             ):
                 try:
                     getattr(self, _btn_attr).setVisible(False)
@@ -4477,28 +4596,31 @@ class TranslationTab(QWidget):
                     self.mode_combo.setCurrentIndex(translate_index)
         except Exception:
             pass
-        # Hide the stop button and show the reset/back button
+        workflow_run = self._active_workflow_return is not None
+
+        # Workflow runs have a single, dominant next action: return to the step
+        # that launched them. Standalone runs keep the normal result actions.
         try:
             self.stop_button.setVisible(False)
         except Exception:
             pass
         try:
-            self.reset_view_button.setVisible(True)
+            self.return_to_workflow_button.setVisible(workflow_run)
+            self.reset_view_button.setVisible(not workflow_run)
         except Exception:
             pass
 
-        # Show the button to open the translated files folder
         try:
-            self.open_translations_button.setVisible(True)
+            self.open_translations_button.setVisible(not workflow_run)
         except Exception:
             pass
 
-        # Show sync/export buttons only for RPG Maker engines
+        # Every RPG Maker run offers one action that keeps the workspace and
+        # exported game data in sync, including runs launched from a workflow.
         try:
             module_text = self.module_combo.currentText().lower()
             is_rpgmaker = "rpg maker" in module_text or "rpgmaker" in module_text
-            self.sync_translated_button.setVisible(is_rpgmaker)
-            self.export_active_button.setVisible(is_rpgmaker)
+            self.sync_export_button.setVisible(is_rpgmaker)
         except Exception:
             pass
 
@@ -4515,6 +4637,7 @@ class TranslationTab(QWidget):
                 self.translating_label.setText(f"Failed: {message}")
                 self.translate_button.setText("Run failed")
             self.translate_button.setEnabled(False)
+            self.translate_button.setVisible(not workflow_run)
         except Exception:
             pass
 

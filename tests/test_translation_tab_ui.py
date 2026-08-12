@@ -213,7 +213,7 @@ class TranslationTabUITests(unittest.TestCase):
 
 
 
-    def test_completed_speaker_collection_resets_next_run_to_translate(self) -> None:
+    def test_finished_run_offers_the_contextual_next_action(self) -> None:
         self.assertGreaterEqual(self.tab.mode_combo.findText("Parse Speakers"), 0)
         self.tab.mode_combo.setCurrentText("Parse Speakers")
         self.tab.translation_worker = SimpleNamespace(parse_speakers=True)
@@ -221,6 +221,64 @@ class TranslationTabUITests(unittest.TestCase):
         self.tab._apply_finish_ui(True, "Success")
 
         self.assertEqual(self.tab.mode_combo.currentText(), "Translate")
+        self.assertFalse(self.tab.sync_export_button.isHidden())
+        self.assertTrue(self.tab.return_to_workflow_button.isHidden())
+        self.tab.translation_worker = None
+
+        game_data = Path(self.temporary.name) / "game" / "data"
+        game_data.mkdir(parents=True)
+        self.tab.translated_dir.joinpath("Actors.json").write_text(
+            '{"name": "translated"}', encoding="utf-8"
+        )
+        self.tab.translated_dir.joinpath("Map001.json").write_text(
+            '{"name": "not in run"}', encoding="utf-8"
+        )
+        self.tab._last_run_files = ["Actors.json"]
+
+        with (
+            mock.patch(
+                "gui.translation_tab.QFileDialog.getExistingDirectory",
+                return_value=str(game_data),
+            ),
+            mock.patch.object(
+                QMessageBox, "question", return_value=QMessageBox.Yes
+            ) as question,
+            mock.patch.object(QMessageBox, "information"),
+        ):
+            self.tab._sync_and_export_last_run_files()
+
+        expected = '{"name": "translated"}'
+        self.assertEqual(
+            self.tab.files_dir.joinpath("Actors.json").read_text(), expected
+        )
+        self.assertEqual(game_data.joinpath("Actors.json").read_text(), expected)
+        self.assertFalse(game_data.joinpath("Map001.json").exists())
+        question.assert_called_once()
+
+        workflow = SimpleNamespace(_goto_step=mock.Mock())
+        parent = SimpleNamespace(
+            PAGE_WORKFLOW=1,
+            switch_page=mock.Mock(),
+            workflow_stack=None,
+            workflow_engine_combo=None,
+        )
+        self.tab.parent_window = parent
+        self.tab._active_workflow_return = (workflow, 4)
+
+        self.tab._apply_finish_ui(True, "Success")
+
+        self.assertFalse(self.tab.return_to_workflow_button.isHidden())
+        self.assertTrue(self.tab.reset_view_button.isHidden())
+        self.assertTrue(self.tab.open_translations_button.isHidden())
+        self.assertFalse(self.tab.sync_export_button.isHidden())
+        self.assertTrue(self.tab.translate_button.isHidden())
+
+        self.tab.return_to_workflow_button.click()
+
+        workflow._goto_step.assert_called_once_with(4)
+        parent.switch_page.assert_called_once_with(parent.PAGE_WORKFLOW)
+        self.assertEqual(self.tab.file_stack.currentIndex(), 0)
+        self.assertIsNone(self.tab._active_workflow_return)
 
     def test_cancel_and_legacy_resume_preserve_safe_workflow(self) -> None:
         self.tab._batch_active = True

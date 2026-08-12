@@ -506,6 +506,7 @@ class WorkflowHandlerContractTests(unittest.TestCase):
                     tt.file_list.addItem(item)
                 tt.refresh_file_lists = MagicMock()
                 tt.start_translation = MagicMock()
+                tt.set_workflow_return_target = MagicMock()
                 self.switched_to = None
 
             def switch_page(self, index):
@@ -527,6 +528,7 @@ class WorkflowHandlerContractTests(unittest.TestCase):
             self.assertEqual(checks["CommonEvents.json"], Qt.Checked)
             self.assertEqual(checks["Map001.json"], Qt.Checked)
             self.assertEqual(host.switched_to, host.PAGE_TRANSLATION)
+            tt.set_workflow_return_target.assert_called_once_with(nested.workflow)
             tt.start_translation.assert_called_once_with(skip_confirm=True)
         finally:
             nested.close()

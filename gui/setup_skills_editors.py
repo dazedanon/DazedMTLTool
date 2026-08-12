@@ -144,7 +144,7 @@ class SetupSkillsEditors(QWidget):
                 "quirks_editor",
                 "quirks",
             ),
-            "Translation quirks",
+            "Quirks",
         )
 
         game_skills_page = QWidget()
@@ -210,7 +210,7 @@ class SetupSkillsEditors(QWidget):
                 "game skill",
             ),
         )
-        editors.addTab(game_skills_page, "Game skill")
+        editors.addTab(game_skills_page, "Game")
         root.addWidget(editors, 1)
 
     def show_editor(self, section: str) -> None:

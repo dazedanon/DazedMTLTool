@@ -5334,6 +5334,8 @@ class WorkflowTab(QWidget):
                 pass
 
             # 5. Navigate to Translation tab
+            if hasattr(tt, "set_workflow_return_target"):
+                tt.set_workflow_return_target(self)
             if hasattr(pw, "switch_page"):
                 page = getattr(pw, "PAGE_TRANSLATION", 4)
                 pw.switch_page(page)
