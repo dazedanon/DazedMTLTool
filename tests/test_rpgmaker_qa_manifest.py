@@ -260,6 +260,31 @@ class TestRPGMakerQAManifest(unittest.TestCase):
         self.assertNotIn("visible-number-mismatch", record["mechanical"]["flags"])
         self.assertTrue(verify_manifest(self.data, manifest)["valid"])
 
+    def test_tool_managed_game_title_is_excluded_without_hiding_system_text(self):
+        _write_json(
+            self.data / "System.json",
+            {
+                "gameTitle": "Localized Game | TL: Translator | Cheats: F8",
+                "currencyUnit": "Gold",
+                "_original": {
+                    "gameTitle": "原題",
+                    "currencyUnit": "金貨",
+                },
+            },
+        )
+
+        manifest = build_manifest(self.data, "database")
+        system_records = [
+            item for item in manifest["records"] if item["file"] == "System.json"
+        ]
+
+        self.assertEqual(
+            [item["source_pointer"] for item in system_records],
+            ["/_original/currencyUnit"],
+        )
+        self.assertEqual(system_records[0]["live"], "Gold")
+        self.assertTrue(verify_manifest(self.data, manifest)["valid"])
+
     def test_focus_partition_and_risky_inner_string(self):
         database = build_manifest(self.data, "database")
         risky = build_manifest(self.data, "risky-codes")

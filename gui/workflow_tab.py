@@ -2447,6 +2447,17 @@ class WorkflowTab(QWidget):
         load_widths_btn.clicked.connect(self._load_rewrap_widths)
         rules_stage.add_widget(load_widths_btn, 0)
 
+        self.rewrap_only_over_limit_cb = QCheckBox(
+            "Only rewrap text over its line-width limit"
+        )
+        self.rewrap_only_over_limit_cb.setChecked(True)
+        self.rewrap_only_over_limit_cb.setToolTip(
+            "Scan each current rendered line using the configured width for its text type. "
+            "Text whose lines already fit is left exactly as-is. Uncheck to reflow all "
+            "selected text with the existing rewrap behavior."
+        )
+        rules_stage.add_widget(self.rewrap_only_over_limit_cb, 0)
+
         advanced_content = QWidget()
         advanced_layout = QVBoxLayout(advanced_content)
         advanced_layout.setContentsMargins(0, 0, 0, 0)
@@ -4931,6 +4942,7 @@ class WorkflowTab(QWidget):
                 else 0
             ),
             skip_protected_overflow=self.rewrap_skip_overflow_cb.isChecked(),
+            only_over_limit=self.rewrap_only_over_limit_cb.isChecked(),
         )
 
     def _run_rewrap(self, apply: bool):
@@ -4974,12 +4986,18 @@ class WorkflowTab(QWidget):
                 if options.skip_protected_overflow
                 else "off"
             )
+            rewrap_mode = (
+                "only text with a current line over its configured width"
+                if options.only_over_limit
+                else "all selected text"
+            )
             answer = QMessageBox.question(
                 self,
                 "Rewrap Exported Game Data",
                 f"Deterministically rewrap {len(file_names)} file(s) directly in:\n"
                 f"{data_directory}\n\n"
                 f"Categories: {categories}\n"
+                f"Mode: {rewrap_mode}\n"
                 f"Event codes: {codes}\n"
                 f"Widths: dialogue {options.dialogue_width}, face {options.face_dialogue_width}, "
                 f"list {options.list_width}, notes {options.note_width}\n"
@@ -4997,7 +5015,15 @@ class WorkflowTab(QWidget):
         self.rewrap_results.clear()
         self._rewrap_results_disclosure.toggle.setChecked(True)
         self.rewrap_status_label.setText(
-            "Rewrapping selected files…" if apply else "Scanning selected files…"
+            (
+                "Fixing over-limit text…"
+                if apply and options.only_over_limit
+                else "Rewrapping selected files…"
+                if apply
+                else "Scanning for over-limit text…"
+                if options.only_over_limit
+                else "Scanning selected files…"
+            )
         )
         worker = _RpgMakerRewrapWorker(
             str(data_directory), options, file_names, apply=apply

@@ -85,6 +85,7 @@ boundaries, or destinations.
 |---|---|
 | Load saved line widths | Loads the selected game's saved widths without editing game data. |
 | Scope/filter/presets | Change only the in-memory file selection. |
+| Only rewrap text over its line-width limit | Limits preview/apply to fields with a current rendered line wider than the selected game's matching saved width. Control codes do not count toward the limit. |
 | Preview rewrap | Runs deterministic rewrap analysis with `apply=False`. |
 | Apply rewrap | Runs the same options with `apply=True` against the resolved game data folder. `_original` remains protected. |
 | Copy final QA skill | Copies the existing RPG Maker QA skill. |

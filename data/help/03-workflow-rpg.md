@@ -60,9 +60,12 @@ English often takes more space than Japanese. **Rewrap** changes where a line br
 the message box.
 
 1. Export the translation in Step 5 first.
-2. In Step 6, choose the kind of text and the files you want to check.
-3. Scan and preview the changes.
-4. Apply only the changes that look correct.
+2. In Step 6, choose the kind of text and the files you want to check. **Select all** checks the
+   entire game.
+3. Leave **Only rewrap text over its line-width limit** on to preserve text that already fits, then
+   scan and preview every over-limit line.
+4. Apply the reviewed fixes. Turn that option off only when you deliberately want to reflow all
+   selected text.
 5. Start the game and test again.
 
 The extra settings are for unusual games. Leave their default values alone on your first pass.

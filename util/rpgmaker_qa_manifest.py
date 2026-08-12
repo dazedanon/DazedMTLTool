@@ -38,6 +38,9 @@ DATABASE_FILES = frozenset(
         "Weapons.json",
     }
 )
+TOOL_MANAGED_QA_EXCLUSIONS = frozenset({
+    ("System.json", "/_original/gameTitle"),
+})
 SCALAR_PARAMETER = {
     108: 0,
     122: 4,
@@ -421,6 +424,11 @@ def build_manifest(data_root: str | Path, focus: str) -> dict[str, Any]:
                             )
                         for original_path, source in leaves:
                             source_path = path_parts + ("_original",) + original_path
+                            if (
+                                filename,
+                                pointer(source_path),
+                            ) in TOOL_MANAGED_QA_EXCLUSIONS:
+                                continue
                             mapping = _live_mapping(
                                 value,
                                 path_parts,

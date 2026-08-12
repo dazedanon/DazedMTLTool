@@ -30,6 +30,9 @@ DATABASE = {
     "System.json",
     "Weapons.json",
 }
+TOOL_MANAGED_QA_EXCLUSIONS = {
+    ("System.json", "/_original/gameTitle"),
+}
 SCALAR_PARAMETER = {108: 0, 122: 4, 320: 1, 324: 1, 325: 1, 355: 0, 356: 0, 408: 0, 655: 0, 657: 0}
 CODE357_TEXT_ARGUMENTS = {
     "LL_InfoPopupWIndow": ("messageText",),
@@ -131,13 +134,11 @@ def _inventory(document: Any, filename: str, focus: str) -> list[tuple[str, str,
                 classification = _classify(filename, value)
                 if focus == "release" or focus == classification:
                     for child_path, source in _leaves(value["_original"]):
-                        found.append(
-                            (
-                                filename,
-                                _pointer(parts + ("_original",) + child_path),
-                                source,
-                            )
+                        source_pointer = _pointer(
+                            parts + ("_original",) + child_path
                         )
+                        if (filename, source_pointer) not in TOOL_MANAGED_QA_EXCLUSIONS:
+                            found.append((filename, source_pointer, source))
             for key in sorted(value):
                 if key != "_original":
                     visit(value[key], parts + (key,))

@@ -74,6 +74,7 @@ class RewrapOptions:
     event_codes: frozenset[int] | None = STANDARD_MESSAGE_CODES
     max_protected_rows: int = 4
     skip_protected_overflow: bool = True
+    only_over_limit: bool = False
 
     def __post_init__(self) -> None:
         for label, value in (
@@ -322,6 +323,8 @@ def _rewrap_database_lists(
             before = entry.get(field_name)
             if not isinstance(before, str) or not before.strip():
                 continue
+            if not _should_rewrap(before, options.list_width, options):
+                continue
             after = _rewrap_text(before, options.list_width)
             if collector.offer(
                 category=LIST_HELP,
@@ -397,13 +400,24 @@ def _rewrap_command_list(
                         # A 401 is an RPG Maker command boundary, not a rendered row.
                         # Preserve every command and wrap only inside its text value.
                         after_parts = [
-                            _rewrap_text(text, options.width_for(category))
+                            (
+                                _rewrap_text(text, options.width_for(category))
+                                if _should_rewrap(
+                                    text, options.width_for(category), options
+                                )
+                                else text
+                            )
                             for text in before_parts
                         ]
                     else:
+                        combined = "\n".join(before_parts)
                         after_parts = [
-                            _rewrap_text(
-                                "\n".join(before_parts), options.width_for(category)
+                            (
+                                _rewrap_text(combined, options.width_for(category))
+                                if _should_rewrap(
+                                    combined, options.width_for(category), options
+                                )
+                                else combined
                             )
                         ]
                     before = "\n".join(before_parts)
@@ -497,6 +511,8 @@ def _rewrap_string_parameter(
     before = params[parameter_index]
     if not isinstance(before, str) or not before.strip():
         return
+    if not _should_rewrap(before, width, collector.options):
+        return
     after = _rewrap_text(before, width)
     if collector.offer(
         category=category,
@@ -524,6 +540,8 @@ def _rewrap_code122(
     if first_tick < 0 or last_tick <= first_tick:
         return
     body = before[first_tick + 1 : last_tick]
+    if not _should_rewrap(body, options.list_width, options):
+        return
     # Reflow only line breaks previously inserted by list wrapping.  Keep RPG
     # Maker name codes such as \n[1] intact.
     normalized = re.sub(r"\\n(?!\[)", " ", body)
@@ -556,6 +574,8 @@ def _rewrap_code357(
     for key in ("comment", "text", "messageText"):
         before = payload.get(key)
         if not isinstance(before, str) or not before.strip():
+            continue
+        if not _should_rewrap(before, options.dialogue_width, options):
             continue
         after = (
             _rewrap_dtext_picture(before, options.dialogue_width)
@@ -601,6 +621,8 @@ def _rewrap_note_bodies(document, options: RewrapOptions, collector: _Collector)
                     continue
                 before = match.group(1)
                 if not before.strip():
+                    continue
+                if not _should_rewrap(before, options.note_width, options):
                     continue
                 after = (
                     dazedwrap.wrapSGDesc(before, options.note_width)
@@ -652,6 +674,20 @@ def _rewrap_text(text: str, width: int) -> str:
     if uses_br:
         wrapped = wrapped.replace("\n", "<br>")
     return prefix + wrapped
+
+
+def _should_rewrap(text: str, width: int, options: RewrapOptions) -> bool:
+    """Return whether *text* belongs in the selected rewrap mode.
+
+    Escaped newlines used by stored RPG Maker strings and ``<br>`` plugin
+    breaks are rendered line boundaries.  Measure each current rendered line
+    with the same control-code-aware character count used by ``wrapText``.
+    """
+    if not options.only_over_limit:
+        return True
+    rendered = str(text).replace("<br>", "\n")
+    rendered = re.sub(r"\\n(?!\[)", "\n", rendered)
+    return dazedwrap.max_line_visible_length(rendered) > int(width)
 
 
 def _rendered_rows(text: str) -> int:

@@ -334,6 +334,42 @@ class RpgMakerRewrapTests(unittest.TestCase):
         self.assertEqual([command.get("code") for command in wide_commands], [101, 401, 0])
         self.assertEqual(wide_commands[1]["_original"], "繰り返し折り返せる原文")
 
+    def test_over_limit_mode_leaves_text_that_already_fits_unchanged(self):
+        path = self.root / "MapOverLimitOnly.json"
+        fitting = r"\c[1]Already fits\c[0]\non two manual rows."
+        overflowing = "Face dialogue currently runs beyond its narrower configured limit."
+        _write(
+            path,
+            _map_with(
+                [
+                    {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2]},
+                    {"code": 401, "indent": 0, "parameters": [fitting]},
+                    {"code": 0, "indent": 0, "parameters": []},
+                    {"code": 101, "indent": 0, "parameters": ["Actor1", 0, 0, 2]},
+                    {"code": 401, "indent": 0, "parameters": [overflowing]},
+                ]
+            ),
+        )
+
+        result = rewrap_directory(
+            self.root,
+            self._options(
+                categories=frozenset({DIALOGUE, FACE_DIALOGUE}),
+                event_codes=frozenset({401}),
+                dialogue_width=30,
+                face_dialogue_width=14,
+                only_over_limit=True,
+            ),
+            apply=True,
+        )
+
+        self.assertEqual(result.changes_found, 1)
+        self.assertEqual(result.changes_applied, 1)
+        self.assertEqual(result.by_category, {FACE_DIALOGUE: 1})
+        commands = json.loads(path.read_text(encoding="utf-8"))["events"]["1"]["pages"][0]["list"]
+        self.assertEqual(commands[1]["parameters"][0], fitting)
+        self.assertIn("\n", commands[4]["parameters"][0])
+
     def test_database_list_and_note_bodies_rewrap_without_touching_original(self):
         path = self.root / "Items.json"
         source = {

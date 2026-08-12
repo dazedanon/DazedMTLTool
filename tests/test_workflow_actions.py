@@ -549,6 +549,7 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         self.assertEqual(scan.args[0], str(data))
         self.assertEqual(scan.args[2], ["Actors.json"])
         self.assertFalse(scan.kwargs["apply"])
+        self.assertTrue(scan.args[1].only_over_limit)
 
         self.workflow._rewrap_worker = None
         FakeWorker.reset()
