@@ -59,6 +59,23 @@ Map / event files can be huge. Do **not** read them sequentially end-to-end.
    late maps plus common events; stop ordinary setup sampling when patterns stabilize.
 3. One scan feeds every output block - do not rescan from scratch per block.
 
+### Optional reference translations
+
+The copied setup instructions may include a `<reference_translations>` attachment pointing to
+`.dazedtl/reference-overlaps.json`. When present, read that generated file before finalizing the
+Glossary, Translation quirks, or Game skill. It contains only exact Japanese-source matches from
+finished games the user deliberately registered in DazedTL. Treat every match as advisory evidence.
+
+- Use these matches as evidence of Sub-Par's established English choices, especially returning
+  proper names, titles, coined terms, catchphrases, and recurring UI labels.
+- Do not copy a reference merely because the Japanese string matches. Confirm that the referent,
+  function, tone, and current-game context are genuinely the same.
+- The current Japanese source and current project's explicit glossary remain authoritative. When
+  reference games disagree with each other or with stronger current evidence, investigate the
+  conflict and record the current game's deliberate decision in the appropriate guidance file.
+- Do not edit a registered reference game or treat the generated overlap/index files as portable
+  project guidance. Promote only verified, current-game decisions into the normal owned files.
+
 Do not review every line. Use cheap corpus-wide frequency/alternative summaries, recurring
 speakers, and distributed scene samples to harvest concrete candidates involving systemic humor,
 callbacks, coined words, titles, common nouns mistaken for names, or other patterns isolated

@@ -294,7 +294,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 prompt = load_rpgmaker_qa_skill(focus)
                 lowered = prompt.casefold()
                 contract = re.search(
-                    r"<!-- qa-contract:rpgmaker-qa-local-v8\s+(.*?)-->",
+                    r"<!-- qa-contract:rpgmaker-qa-local-v9\s+(.*?)-->",
                     prompt,
                     re.DOTALL,
                 )
@@ -363,6 +363,9 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("include displayed comment text (code 408)", lowered)
         self.assertIn("recurring humor mode", lowered)
         self.assertIn("one-off jokes", lowered)
+        self.assertIn("optional reference translations", lowered)
+        self.assertIn(".dazedtl/reference-overlaps.json", lowered)
+        self.assertIn("advisory", lowered)
         self.assertIn("phase 1 — baseline setup", lowered)
         self.assertIn("phase 2 — global localization investigation", lowered)
         self.assertIn("localization investigation", lowered)

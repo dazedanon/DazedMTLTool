@@ -46,6 +46,13 @@ from util.skills import (
 )
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
 from util.id_ranges import legacy_exclusive_range, normalize_id_ranges
+from util.reference_games import (
+    add_embedded_reference,
+    load_registry as load_reference_registry,
+    prepare_overlaps as prepare_reference_overlaps,
+    remove_reference,
+    setup_reference_note,
+)
 
 from dotenv import dotenv_values
 
@@ -61,6 +68,7 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -106,6 +114,7 @@ from gui.workflow_workers import (
     ReleaseZipWorker as _ReleaseZipWorker,
     RpgMakerRewrapWorker as _RpgMakerRewrapWorker,
     RpgMakerQAPrepareWorker as _RpgMakerQAPrepareWorker,
+    ReferencePairPrepareWorker as _ReferencePairPrepareWorker,
     ScanWorker as _ScanWorker,
     SubprocessWorker as _SubprocessWorker,
 )
@@ -611,6 +620,7 @@ class WorkflowTab(QWidget):
         self._worker = None  # active background QThread
         self._rewrap_worker = None
         self._qa_worker = None
+        self._reference_worker = None
         # Pre-process paths (auto-populated after folder detection)
         self._plugins_js_path: str = ""
         self._gameupdate_path: str = ""
@@ -1010,6 +1020,12 @@ class WorkflowTab(QWidget):
                 button.setEnabled(False)
         if hasattr(self, "setup_editors"):
             self.setup_editors.invalidate()
+        if hasattr(self, "reference_games_list"):
+            self.reference_games_list.clear()
+        if hasattr(self, "reference_games_status"):
+            self.reference_games_status.setText(
+                "Scan a project to manage its references."
+            )
 
     @staticmethod
     def _worker_is_running(worker) -> bool:
@@ -1019,7 +1035,12 @@ class WorkflowTab(QWidget):
     def _project_task_is_running(self) -> bool:
         return any(
             self._worker_is_running(worker)
-            for worker in (self._worker, self._rewrap_worker, self._qa_worker)
+            for worker in (
+                self._worker,
+                self._rewrap_worker,
+                self._qa_worker,
+                self._reference_worker,
+            )
             if worker is not None
         )
 
@@ -1476,8 +1497,62 @@ class WorkflowTab(QWidget):
         prepare_stage.add_layout(prepare_actions)
         setup_workspace_layout.addWidget(prepare_stage, 2, Qt.AlignTop)
 
-        speaker_stage = WorkflowStageCard(
+        reference_stage = WorkflowStageCard(
             2,
+            "Add earlier translations as references (optional)",
+            "Register finished games locally before copying Setup so it can compare established English wording.",
+        )
+        reference_stage.add_widget(
+            StatusBanner(
+                "Reference evidence is advisory. The current game's source, glossary, and context stay authoritative. "
+                "For a Japanese/English pair, choose the two game folders; supported engines are unpacked and normalized automatically. "
+                "Generated data stays under .dazedtl and is ignored by Git.",
+                "info",
+            )
+        )
+        self.reference_games_list = QListWidget()
+        self.reference_games_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.reference_games_list.setMaximumHeight(126)
+        reference_stage.add_widget(self.reference_games_list)
+        self.reference_games_status = QLabel("Scan a project to manage its references.")
+        self.reference_games_status.setWordWrap(True)
+        self.reference_games_status.setStyleSheet(
+            f"color:{COLORS.text_muted};font-size:12px;"
+        )
+        reference_stage.add_widget(self.reference_games_status)
+
+        reference_actions = QHBoxLayout()
+        reference_actions.setSpacing(Spacing.SM)
+        self.reference_add_embedded_btn = _make_btn(
+            "+  Add DazedTL translation", "#555"
+        )
+        self.reference_add_embedded_btn.setToolTip(
+            "Choose a translated JSON data folder that retains DazedTL _original values."
+        )
+        self.reference_add_embedded_btn.clicked.connect(
+            self._add_embedded_reference_game
+        )
+        reference_actions.addWidget(self.reference_add_embedded_btn)
+        self.reference_add_paired_btn = _make_btn(
+            "+  Add Japanese / English pair", "#555"
+        )
+        self.reference_add_paired_btn.setToolTip(
+            "Choose the Japanese and translated English game folders. DazedTL detects supported engines and creates normalized JSON automatically."
+        )
+        self.reference_add_paired_btn.clicked.connect(self._add_paired_reference_game)
+        reference_actions.addWidget(self.reference_add_paired_btn)
+        self.reference_remove_btn = _make_btn("−  Remove", "#8f3f3f")
+        self.reference_remove_btn.clicked.connect(self._remove_reference_game)
+        reference_actions.addWidget(self.reference_remove_btn)
+        self.reference_refresh_btn = _make_btn("↺  Build exact matches", "#0e639c")
+        self.reference_refresh_btn.clicked.connect(self._build_reference_matches)
+        reference_actions.addWidget(self.reference_refresh_btn)
+        reference_actions.addStretch()
+        reference_stage.add_layout(reference_actions)
+        setup_workspace_layout.addWidget(reference_stage, 3, Qt.AlignTop)
+
+        speaker_stage = WorkflowStageCard(
+            3,
             "Configure speakers and generate project context",
             "Collect recognized names first, then ask your AI helper whether this game needs any extra speaker formats.",
         )
@@ -1571,12 +1646,12 @@ class WorkflowTab(QWidget):
         context_actions.addWidget(self.speaker_copy_setup_btn, 1)
         context_actions.addStretch()
         speaker_stage.add_layout(context_actions)
-        setup_workspace_layout.addWidget(speaker_stage, 3, Qt.AlignTop)
         layout.addWidget(setup_workspace)
+        layout.addWidget(speaker_stage)
         self._populate_speaker_flags()
 
         guidance_stage = WorkflowStageCard(
-            3,
+            4,
             "Review glossary, translation quirks, and game skill",
             "Setup and investigation write these files directly; reload them here to review or edit.",
         )
@@ -4004,6 +4079,7 @@ class WorkflowTab(QWidget):
 
         self._set_import_buttons_enabled(len(items) > 0)
         self._log(f"Found {len(items)} importable file(s).")
+        self._refresh_reference_games()
         self._populate_preprocess_paths()
         if items:
             self._log("Choose files to import, then click 📥 to copy them into files/.")
@@ -4211,6 +4287,21 @@ class WorkflowTab(QWidget):
                     + speaker_lines
                     + "\n</known_speakers>\n"
                 )
+            game_root = self.folder_edit.text().strip()
+            if self._project_is_prepared(game_root) and self._data_path:
+                try:
+                    reference_note = setup_reference_note(game_root, self._data_path)
+                except Exception as exc:
+                    reference_note = ""
+                    self._log(
+                        "⚠  Reference evidence could not be refreshed; copied Setup "
+                        f"without it: {exc}"
+                    )
+                if reference_note:
+                    prepend = (
+                        prepend.rstrip() + "\n\n" + reference_note + "\n"
+                    ).lstrip()
+                    self._refresh_reference_games()
             prompt = load_project_setup("rpgmaker", prepend=prepend)
             self._copy_to_clipboard(
                 prompt,
@@ -4218,6 +4309,171 @@ class WorkflowTab(QWidget):
             )
         except Exception as exc:
             self._log(f"❌ Could not load Project Setup skill: {exc}")
+
+    def _refresh_reference_games(self):
+        if not hasattr(self, "reference_games_list"):
+            return
+        self.reference_games_list.clear()
+        game_root = self.folder_edit.text().strip()
+        if not self._project_is_prepared(game_root):
+            self.reference_games_status.setText(
+                "Scan a project to manage its references."
+            )
+            return
+        try:
+            registry = load_reference_registry(game_root)
+            for entry in registry["references"]:
+                mode = "DazedTL" if entry["mode"] == "embedded" else "paired folders"
+                item = QListWidgetItem(f"{entry['title']}  ·  {mode}")
+                item.setData(Qt.UserRole, entry["id"])
+                item.setToolTip(entry["translated_data"])
+                self.reference_games_list.addItem(item)
+            count = len(registry["references"])
+            if count:
+                self.reference_games_status.setText(
+                    f"{count} reference game{'s' if count != 1 else ''} configured. "
+                    "Setup and QA rebuild exact matches when needed."
+                )
+            else:
+                self.reference_games_status.setText(
+                    "No reference games configured. This step is optional."
+                )
+        except Exception as exc:
+            self.reference_games_status.setText(f"Reference configuration error: {exc}")
+
+    def _reference_project_or_warn(self) -> str | None:
+        game_root = self._prepared_project_or_warn()
+        if game_root is None:
+            return None
+        if not self._data_path:
+            self._log("⚠  No normalized current-game data folder is available yet.")
+            return None
+        return game_root
+
+    def _reference_title(self, translated_data: str) -> str | None:
+        default = Path(translated_data).parent.name or Path(translated_data).name
+        title, accepted = QInputDialog.getText(
+            self, "Reference game title", "Display title:", text=default
+        )
+        clean = title.strip()
+        return clean if accepted and clean else None
+
+    def _add_embedded_reference_game(self):
+        game_root = self._reference_project_or_warn()
+        if game_root is None:
+            return
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Choose translated JSON data with _original values",
+            self.folder_edit.text().strip(),
+        )
+        if not folder:
+            return
+        title = self._reference_title(folder)
+        if title is None:
+            return
+        try:
+            add_embedded_reference(game_root, title, folder)
+            self._refresh_reference_games()
+            self._log(f"✅ Added reference translation: {title}")
+        except Exception as exc:
+            self._log(f"❌ Could not add reference translation: {exc}")
+
+    def _add_paired_reference_game(self):
+        game_root = self._reference_project_or_warn()
+        if game_root is None:
+            return
+        source = QFileDialog.getExistingDirectory(
+            self,
+            "Choose the original Japanese game folder",
+            self.folder_edit.text().strip(),
+        )
+        if not source:
+            return
+        translated = QFileDialog.getExistingDirectory(
+            self, "Choose the translated English game folder", source
+        )
+        if not translated:
+            return
+        title = self._reference_title(translated)
+        if title is None:
+            return
+        self.reference_games_status.setText(
+            "Detecting engines and preparing normalized reference data…"
+        )
+        for button in (
+            self.reference_add_embedded_btn,
+            self.reference_add_paired_btn,
+            self.reference_remove_btn,
+            self.reference_refresh_btn,
+        ):
+            button.setEnabled(False)
+        worker = _ReferencePairPrepareWorker(
+            game_root, title, source, translated
+        )
+        self._reference_worker = worker
+        worker.log.connect(self._log)
+        worker.done.connect(
+            lambda _registry, name=title: self._on_reference_pair_ready(name)
+        )
+        worker.failed.connect(self._on_reference_pair_failed)
+        worker.finished.connect(self._finish_reference_pair_worker)
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _on_reference_pair_ready(self, title: str):
+        self._refresh_reference_games()
+        self._log(f"✅ Added and normalized reference translation: {title}")
+
+    def _on_reference_pair_failed(self, message: str):
+        self.reference_games_status.setText(f"Reference preparation failed: {message}")
+        self._log(f"❌ Could not prepare reference game pair: {message}")
+
+    def _finish_reference_pair_worker(self):
+        self._reference_worker = None
+        for button in (
+            self.reference_add_embedded_btn,
+            self.reference_add_paired_btn,
+            self.reference_remove_btn,
+            self.reference_refresh_btn,
+        ):
+            button.setEnabled(True)
+
+    def _remove_reference_game(self):
+        game_root = self._reference_project_or_warn()
+        item = self.reference_games_list.currentItem()
+        if game_root is None or item is None:
+            self._log("⚠  Select a reference game to remove.")
+            return
+        try:
+            remove_reference(game_root, str(item.data(Qt.UserRole)))
+            self._refresh_reference_games()
+            self._log("✅ Removed the selected reference game from this project.")
+        except Exception as exc:
+            self._log(f"❌ Could not remove reference game: {exc}")
+
+    def _build_reference_matches(self):
+        game_root = self._reference_project_or_warn()
+        if game_root is None:
+            return
+        try:
+            self.reference_games_status.setText("Building exact Japanese-source matches…")
+            QApplication.processEvents()
+            pack = prepare_reference_overlaps(game_root, self._data_path, force=True)
+            if pack["status"] == "ready":
+                self.reference_games_status.setText(
+                    f"Ready: {pack['source_count']} exact source strings overlap the current game."
+                )
+            else:
+                self.reference_games_status.setText(
+                    "No reference games configured. This step is optional."
+                )
+            self._log(
+                f"✅ Built reference evidence for {pack['source_count']} exact source overlap(s)."
+            )
+        except Exception as exc:
+            self.reference_games_status.setText(f"Reference build failed: {exc}")
+            self._log(f"❌ Could not build reference matches: {exc}")
 
     def _read_vocab_speakers(self) -> list[tuple[str, str]]:
         """Parse character names, retaining legacy Speakers compatibility."""

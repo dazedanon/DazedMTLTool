@@ -65,6 +65,10 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (1, "run_all_preprocess", {"text": "Run optional tasks"}),
             (2, "import_files", {"text": "Import files"}),
             (2, "clear_translated", {"text": "Clear translated"}),
+            (2, "add_embedded_reference_game", {"text": "+ Add DazedTL translation"}),
+            (2, "add_paired_reference_game", {"text": "+ Add Japanese / English pair"}),
+            (2, "remove_reference_game", {"text": "− Remove"}),
+            (2, "build_reference_matches", {"text": "Build exact matches"}),
             (2, "run_parse_speakers", {"text": "1  Collect names"}),
             (2, "copy_project_setup_prompt", {"text": "2  Copy setup instructions"}),
             (2, "reload_setup_guidance", {"text": "Reload and review guidance"}),
@@ -104,7 +108,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (9, "install_both_playtest", {"text": "Install both plugins"}),
             (9, "refresh_playtest_status", {"text": "Refresh plugin status"}),
         )
-        self.assertEqual(len(cases), 51)
+        self.assertEqual(len(cases), 55)
         for step, endpoint, locator in cases:
             with self.subTest(step=step, endpoint=endpoint, locator=locator):
                 if endpoint == "apply_var_range":
@@ -159,6 +163,35 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         game, data = self.harness.make_mvmz_project("MZ")
         self.harness.prepare_project(game)
         self.workflow._data_path = str(data)
+        japanese = self.harness.root / "Japanese Reference"
+        english = self.harness.root / "English Reference"
+        japanese.mkdir()
+        english.mkdir()
+        with (
+            patch(
+                "gui.workflow_tab.QFileDialog.getExistingDirectory",
+                side_effect=[str(japanese), str(english)],
+            ),
+            patch(
+                "gui.workflow_tab.QInputDialog.getText",
+                return_value=("Earlier Game", True),
+            ),
+            patch("gui.workflow_tab._ReferencePairPrepareWorker", FakeWorker),
+        ):
+            self.workflow._add_paired_reference_game()
+        reference_worker = FakeWorker.instances[-1]
+        self.assertEqual(
+            reference_worker.args,
+            (str(game), "Earlier Game", str(japanese), str(english)),
+        )
+        self.assertTrue(reference_worker.started)
+        self.assertFalse(self.workflow.reference_add_paired_btn.isEnabled())
+        reference_worker.done.emit({"references": []})
+        reference_worker.finished.emit()
+        self.assertTrue(self.workflow.reference_add_paired_btn.isEnabled())
+        self.assertIsNone(self.workflow._reference_worker)
+        FakeWorker.reset()
+
         self.assertEqual(
             [
                 self.workflow._qa_focus_combo.itemData(index)

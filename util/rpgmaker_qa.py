@@ -30,6 +30,7 @@ from util.paths import (
 )
 from util.rpgmaker_qa_manifest import build_manifest, resolve_pointer, write_manifest
 from util.rpgmaker_qa_verify import verify_manifest
+from util.reference_games import reference_context
 
 
 TASK_SCHEMA = "rpgmaker-qa-task-v3"
@@ -66,7 +67,7 @@ FINDING_CATEGORIES = frozenset({
 EDITORIAL_JUDGMENT_CATEGORIES = frozenset({"fluency", "voice", "wordplay"})
 APPROVED_NONBLOCKING_MECHANICAL_FLAGS = frozenset({"suspicious-length-ratio"})
 
-QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-v10"
+QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-reference-v11"
 FORCED_DEEP_MECHANICAL_FLAGS = frozenset({
     "empty-live",
     "unchanged-source",
@@ -384,7 +385,9 @@ def _read_optional(path: Path | None) -> dict[str, Any]:
     }
 
 
-def _context_pack(game_root: Path) -> dict[str, Any]:
+def _context_pack(
+    game_root: Path, current_sources: Iterable[str] = ()
+) -> dict[str, Any]:
     skills_dir = game_root / GAME_SKILLS_RELATIVE
     reserved = {name.casefold() for name in GAME_SKILL_RESERVED_NAMES}
     overlay_paths = []
@@ -400,11 +403,12 @@ def _context_pack(game_root: Path) -> dict[str, Any]:
     game = _read_optional(game_root / GAME_SKILL_RELATIVE)
     overlays = [_read_optional(path) for path in overlay_paths]
     pack = {
-        "schema": "rpgmaker-qa-context-v1",
+        "schema": "rpgmaker-qa-context-v2",
         "glossary": glossary,
         "quirks": quirks,
         "game": game,
         "overlays": overlays,
+        "reference_translations": reference_context(game_root, current_sources),
     }
     pack["content_sha256"] = _sha256(_canonical_bytes(pack))
     return pack
@@ -492,6 +496,16 @@ def _compact_items(manifest: dict[str, Any], context: dict[str, Any]) -> list[di
         )
         if alternatives:
             reasons = sorted({*reasons, "inconsistent-source"})
+        reference_rows = list(
+            ((context.get("reference_translations") or {}).get("matches") or {}).get(
+                str(cluster["source"]), []
+            )
+        )
+        if reference_rows and any(
+            str(row.get("translation") or "") != str(cluster["live"])
+            for row in reference_rows
+        ):
+            reasons = sorted({*reasons, "reference-difference"})
         member_records = [records[identity] for identity in cluster["identities"]]
         speakers = sorted({
             str((record.get("speaker") or {}).get("display_name") or "")
@@ -523,6 +537,8 @@ def _compact_items(manifest: dict[str, Any], context: dict[str, Any]) -> list[di
             "source": cluster["source"],
             "translation": cluster["live"],
         }
+        if reference_rows:
+            item["reference_translations"] = reference_rows
         if alternatives:
             item["same_source_alternatives"] = alternatives[:20]
         items.append(item)
@@ -717,6 +733,10 @@ def _scene_items(
                     line["same_source_alternatives"] = cluster_item[
                         "same_source_alternatives"
                     ]
+                if cluster_item.get("reference_translations"):
+                    line["reference_translations"] = cluster_item[
+                        "reference_translations"
+                    ]
                 if record.get("choice_context"):
                     line["choice_context"] = record["choice_context"]
                 context_expansion = sorted(
@@ -802,7 +822,10 @@ def _motif_items(
                 "nearby_commands": _nearby_commands(
                     data_root, representative, document_cache
                 ),
-            })
+            } | (
+                {"reference_translations": item["reference_translations"]}
+                if item.get("reference_translations") else {}
+            ))
         variants.sort(key=lambda item: (item["source"], item["translation"], item["id"]))
         items.append({
             "kind": "motif-family",
@@ -1015,6 +1038,10 @@ only one bundle. A bundle may contain multiple complete scenes, but workers must
 redistribute a scene outside the claim/release commands.
 
 1. Read `context.json` once for the game glossary and translation guidance.
+   If `reference_translations.status` is `ready`, use its exact Japanese-source matches as
+   advisory evidence of established wording. A reference difference is a reason to compare
+   referent, function, tone, and scene context—not an automatic defect. The current source and
+   explicit current-game glossary remain authoritative.
 2. Run `python "{cli}" status --task "{task_dir}"`.
 3. Claim work with `python "{cli}" next --task "{task_dir}" --worker "<unique-worker-name>"`.
 4. Read the returned immutable bundle and write the result schema described below. Create the
@@ -1073,7 +1100,9 @@ line, it may also be reported as an exception. A `cluster` item is isolated non-
 clean scene/cluster targets from
 `exceptions`; one accepted bundle receipt covers them. `risk` values are attention hints, not
 defects and not automatic deep-review instructions. When present, compare
-`same_source_alternatives` for genuine consistency problems.
+`same_source_alternatives` for genuine consistency problems. When present, compare
+`reference_translations` with the current wording, but accept a deliberate current-game
+translation when the referent or context differs or older references conflict.
 
 For every scene target, explicitly verify: who performs each action and to whom; pronouns,
 possessives, and relationships; negation, conditions, certainty, and obligation; quantities and
@@ -1160,7 +1189,9 @@ def prepare_task(
     validation = verify_manifest(data, manifest)
     if not validation["valid"]:
         raise ValueError("QA inventory validation failed: " + "; ".join(validation["errors"]))
-    context = _context_pack(game)
+    context = _context_pack(
+        game, (str(record.get("source") or "") for record in manifest["records"])
+    )
     engine_fingerprint = _engine_fingerprint()
     screen_configuration = {
         "char_budget": int(screen_char_budget),
@@ -2234,7 +2265,13 @@ def rebuild_findings_from_results(
             + "; ".join(validation.get("errors") or [])
         )
     source_manifest = _read_json(source / "inventory.json")
-    current_context = _context_pack(Path(source_task["game_root"]))
+    current_context = _context_pack(
+        Path(source_task["game_root"]),
+        (
+            str(record.get("source") or "")
+            for record in current_manifest["records"]
+        ),
+    )
     mechanical_only_change = (
         current_manifest["content_sha256"] != source_task.get("manifest_sha256")
         and _semantic_manifest_sha256(current_manifest)

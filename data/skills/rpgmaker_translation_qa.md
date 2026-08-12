@@ -1,6 +1,6 @@
 # QA Exported RPG Maker Translations — Local Task Handoff
 
-<!-- qa-contract:rpgmaker-qa-local-v8
+<!-- qa-contract:rpgmaker-qa-local-v9
 app-owned-inventory immutable-review-bundles scene-affine-semantic-screen
 evidence-preserving-deep-handoff motif-family-receipts selective-risk-escalation
 validated-checkpoints honest-global-coverage grouped-finding-families
@@ -57,6 +57,11 @@ boundaries. Exact duplicate scenes may share one contextual receipt. Non-dialogu
 compact cluster screen. Clean targets are represented by the accepted bundle receipt, while
 exceptions contain only suspects or context needs. Risk cues, glossary hits, length ratios, and
 same-source alternatives guide that screen; they do not by themselves mandate deep review.
+When the user configured reference games, exact Japanese-source matches appear as
+`reference_translations` evidence on the affected targets. Compare established wording for
+returning terms and callbacks, but treat it as advisory: a difference is a cue to investigate, not
+an automatic defect. The current source, scene, and explicit current-game glossary win when the
+contexts differ or the older references conflict.
 
 For every scene target, explicitly verify who performs each action and to whom;
 pronouns and relationships; negation and conditions; certainty and obligation; quantities and

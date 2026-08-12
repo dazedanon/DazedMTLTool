@@ -123,6 +123,9 @@ class WorkflowShellTests(unittest.TestCase):
         investigation_help = self.workflow._investigation_help_banner.text_label.text()
         self.assertIn("compare English against", investigation_help)
         self.assertIn("directly maintaining confirmed", investigation_help)
+        self.workflow._refresh_reference_games()
+        self.assertIsNotNone(self.workflow.reference_games_list)
+        self.assertIn("optional", self.workflow.reference_games_status.text().casefold())
         self.assertIn("Reload the existing Setup editors", investigation_help)
         self.assertEqual(
             self.workflow._investigation_copy_btn.text(), "Copy investigation skill"

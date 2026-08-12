@@ -81,15 +81,10 @@ class ExportWorker(QThread):
             from util.project_scanner import export_to_game
 
             if self.filter_names:
-                self.log.emit(
-                    f"Exporting {len(self.filter_names)} active file(s) → "
-                    f"{self.game_data_path} …"
-                )
+                self.log.emit(f"Exporting {len(self.filter_names)} active file(s) → {self.game_data_path} …")
             else:
                 self.log.emit(f"Exporting translated/ → {self.game_data_path} …")
-            count, errors = export_to_game(
-                "translated", self.game_data_path, filenames=self.filter_names
-            )
+            count, errors = export_to_game("translated", self.game_data_path, filenames=self.filter_names)
             self.done.emit(count, errors)
         except Exception as exc:
             self.done.emit(0, [str(exc)])
@@ -155,6 +150,42 @@ class RpgMakerQAPrepareWorker(QThread):
             self.failed.emit(str(exc))
 
 
+class ReferencePairPrepareWorker(QThread):
+    """Detect and normalize a reference game pair off the UI thread."""
+
+    done = pyqtSignal(object)
+    failed = pyqtSignal(str)
+    log = pyqtSignal(str)
+
+    def __init__(
+        self,
+        game_root: str,
+        title: str,
+        japanese_game: str,
+        english_game: str,
+    ):
+        super().__init__()
+        self.game_root = game_root
+        self.title = title
+        self.japanese_game = japanese_game
+        self.english_game = english_game
+
+    def run(self):
+        try:
+            from util.reference_games import add_game_pair_reference
+
+            registry = add_game_pair_reference(
+                self.game_root,
+                self.title,
+                self.japanese_game,
+                self.english_game,
+                log_fn=self.log.emit,
+            )
+            self.done.emit(registry)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
 class SubprocessWorker(QThread):
     done = pyqtSignal(bool, str)
     log = pyqtSignal(str)
@@ -171,8 +202,7 @@ class SubprocessWorker(QThread):
             if executable is None:
                 self.done.emit(
                     False,
-                    f"'{self.cmd[0]}' not found on PATH. "
-                    "Make sure it is installed and accessible from the terminal.",
+                    f"'{self.cmd[0]}' not found on PATH. Make sure it is installed and accessible from the terminal.",
                 )
                 return
             self.log.emit(f"$ {' '.join(str(item) for item in self.cmd)}  —  cwd: {self.cwd}")
@@ -278,9 +308,7 @@ class ReleaseZipWorker(QThread):
             result = create_release_zip(
                 self.game_root,
                 self.output_path,
-                progress=lambda current, total, label: self.progress.emit(
-                    current, total, label
-                ),
+                progress=lambda current, total, label: self.progress.emit(current, total, label),
             )
             self.done.emit(result)
         except Exception as exc:
