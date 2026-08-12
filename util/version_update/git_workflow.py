@@ -950,7 +950,12 @@ def _install_gameupdate_gitignore(game_root: Path) -> bool:
     # incomplete managed section along with project-owned rules.
     canonical_portable_rules(existing)
 
-    if normalized(template) in normalized(existing):
+    # The managed block may validly appear on either side of the selected-image
+    # exceptions. Compare the bundled policy without that block so bootstrap does
+    # not relocate an equivalent section every time different tool versions run.
+    if normalized(without_portable_blocks(template)) in normalized(
+        without_portable_blocks(existing)
+    ):
         return normalize_portable_rules()
 
     # The previous bundled policy is exactly the current policy without the

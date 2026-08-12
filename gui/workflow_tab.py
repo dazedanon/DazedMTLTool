@@ -639,8 +639,6 @@ class WorkflowTab(QWidget):
         self._release_zip_btn: QPushButton | None = None
         self._tl_mode_user_selected = False
         self._last_default_translation_mode = None
-        self._activity_unread = 0
-        self._activity_errors = 0
         self._project_generation = 0
         self._prepared_game_root = ""
 
@@ -654,9 +652,9 @@ class WorkflowTab(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Main content and the optional Activity panel share a splitter so the
-        # user can adjust the detail area without changing page geometry.
-        splitter = QSplitter(Qt.Horizontal)
+        # Keep workflow feedback visible below every step while allowing the
+        # user to give the console more vertical room when needed.
+        splitter = QSplitter(Qt.Vertical)
         splitter.setObjectName("workflowSplitter")
         splitter.setHandleWidth(1)
         self._workflow_splitter = splitter
@@ -717,41 +715,6 @@ class WorkflowTab(QWidget):
 
             scroll.setWidget(inner)
             page_layout.addWidget(scroll, 1)
-
-            # ── Navigation footer ──────────────────────────────────────────
-            nav = QWidget()
-            nav.setObjectName("workflowFooter")
-            nav.setStyleSheet(
-                f"QWidget#workflowFooter{{background:{COLORS.chrome};"
-                f"border-top:1px solid {COLORS.border};}}"
-            )
-            nav_layout = QHBoxLayout(nav)
-            nav_layout.setContentsMargins(Spacing.LG, Spacing.SM, Spacing.LG, Spacing.SM)
-            nav_layout.setSpacing(Spacing.SM)
-
-            tab_idx = len(self._step_tabs)  # current tab index (before addTab)
-
-            if tab_idx > 0:
-                back_btn = make_workflow_button("←  Back", variant="secondary")
-                back_btn.setMinimumWidth(120)
-                _idx = tab_idx  # capture for lambda
-                back_btn.clicked.connect(
-                    lambda _checked, i=_idx: self._goto_step(i - 1)
-                )
-                nav_layout.addWidget(back_btn)
-
-            nav_layout.addStretch()
-
-            if tab_idx < len(_tab_defs) - 1:
-                next_btn = make_workflow_button("Continue  →", variant="primary")
-                next_btn.setMinimumWidth(120)
-                _idx = tab_idx  # capture for lambda
-                next_btn.clicked.connect(
-                    lambda _checked, i=_idx: self._advance_step(i)
-                )
-                nav_layout.addWidget(next_btn)
-
-            page_layout.addWidget(nav)
             self._step_tabs.addTab(page, tab_label)
 
         self._step_tabs.currentChanged.connect(self._on_step_tab_changed)
@@ -766,23 +729,18 @@ class WorkflowTab(QWidget):
         steps_host_layout.addWidget(self._step_tabs, 1)
         splitter.addWidget(steps_host)
 
-        # ---- Right: collapsible Activity panel ----
+        # ---- Bottom: pinned Activity Console ----
         self._activity_panel = WorkflowActivityPanel()
         self.log_area = self._activity_panel.log
         self._activity_panel.clear_requested.connect(self._clear_activity)
-        self._activity_panel.collapse_requested.connect(
-            lambda: self._set_activity_visible(False)
-        )
-        self._step_rail.activity_requested.connect(self._toggle_activity)
         splitter.addWidget(self._activity_panel)
-        splitter.setSizes([980, Geometry.ACTIVITY_WIDTH])
+        splitter.setSizes([570, Geometry.ACTIVITY_HEIGHT])
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
+        splitter.setCollapsible(1, False)
 
         root.addWidget(splitter)
         self._apply_theme()
-        saved_activity = str(self._setting("activity_panel_visible", "false")).lower()
-        self._set_activity_visible(saved_activity in {"1", "true", "yes", "on"}, persist=False)
         self._detected_on_show: bool = False  # guard: only auto-detect once per new folder
 
     # ── Tab visibility ──────────────────────────────────────────────────────
@@ -806,7 +764,6 @@ class WorkflowTab(QWidget):
             rail.set_compact(
                 self.width() < 1320 or rail.labels_require_compact_mode()
             )
-            self._refresh_activity_badge()
         rewrap_layout = getattr(self, "_rewrap_workspace_layout", None)
         if rewrap_layout is not None:
             rewrap_layout.setDirection(
@@ -822,62 +779,8 @@ class WorkflowTab(QWidget):
                 else QBoxLayout.LeftToRight
             )
 
-    def _set_activity_visible(self, visible: bool, *, persist: bool = True):
-        panel = getattr(self, "_activity_panel", None)
-        if panel is None:
-            return
-        panel.setVisible(bool(visible))
-        if visible:
-            self._activity_unread = 0
-            self._activity_errors = 0
-        rail = getattr(self, "_step_rail", None)
-        if rail is not None:
-            rail.activity_button.setCheckable(True)
-            rail.activity_button.setChecked(bool(visible))
-            self._refresh_activity_badge()
-        if visible and hasattr(self, "_workflow_splitter"):
-            available = max(1, self._workflow_splitter.width())
-            activity_width = min(Geometry.ACTIVITY_WIDTH, max(240, available // 3))
-            self._workflow_splitter.setSizes([available - activity_width, activity_width])
-        if persist:
-            self._save_setting("activity_panel_visible", "true" if visible else "false")
-
-    def _toggle_activity(self):
-        panel = getattr(self, "_activity_panel", None)
-        if panel is not None:
-            self._set_activity_visible(not panel.isVisible())
-
     def _clear_activity(self):
         self._activity_panel.clear_activity()
-        self._activity_unread = 0
-        self._activity_errors = 0
-        self._refresh_activity_badge()
-
-    def _refresh_activity_badge(self):
-        rail = getattr(self, "_step_rail", None)
-        panel = getattr(self, "_activity_panel", None)
-        if rail is None or panel is None:
-            return
-        if panel.isVisible():
-            text = "×" if rail._compact else "Hide"
-        else:
-            text = (
-                (str(min(self._activity_unread, 99)) if self._activity_unread else "⋯")
-                if rail._compact else "Activity"
-            )
-            if self._activity_unread and not rail._compact:
-                text += f" {self._activity_unread}"
-        rail.activity_button.setText(text)
-        if self._activity_errors:
-            rail.activity_button.setToolTip(
-                f"{self._activity_errors} error message(s) in workflow activity"
-            )
-            rail.activity_button.setStyleSheet(f"color:{COLORS.danger};")
-        else:
-            rail.activity_button.setToolTip(
-                "Show or hide workflow activity and detailed log"
-            )
-            rail.activity_button.setStyleSheet("")
 
     def _step_strip_label(self, idx: int, *, done: bool) -> str:
         """Compact strip text: number + short name, optional checkmark for done."""
@@ -1128,6 +1031,18 @@ class WorkflowTab(QWidget):
             _STEP_PURPOSES.get(step_idx, "Complete this workflow step."),
             optional=False,
             total_steps=10,
+        )
+        header.add_navigation(
+            back_callback=(
+                (lambda i=step_idx: self._goto_step(i - 1))
+                if step_idx > 0
+                else None
+            ),
+            continue_callback=(
+                (lambda i=step_idx: self._advance_step(i))
+                if step_idx < 9
+                else None
+            ),
         )
         for widget in extra_widgets or []:
             # The standard header already owns the Optional badge. Preserve
@@ -6252,12 +6167,7 @@ class WorkflowTab(QWidget):
         panel = getattr(self, "_activity_panel", None)
         if panel is None:
             return
-        _clean, kind = panel.append_message(message)
-        if not panel.isVisible():
-            self._activity_unread += 1
-            if kind == "error":
-                self._activity_errors += 1
-            self._refresh_activity_badge()
+        panel.append_message(message)
 
     def _setting(self, key: str, default=None):
         if self.settings:

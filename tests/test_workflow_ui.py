@@ -12,14 +12,15 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
-from PyQt5.QtCore import QSettings
+from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtGui import QPalette
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QWidget
 
 from gui.theme import COLORS, contrast_ratio, dark_palette
 from gui.workflow_components import (
     DisclosureSection,
     WorkflowActivityPanel,
+    WorkflowPageHeader,
 )
 from util.game_settings import (
     GameSettingsError,
@@ -343,20 +344,31 @@ class WorkflowShellTests(unittest.TestCase):
             all(not button.isEnabled() for button in self.workflow._import_buttons)
         )
 
-    def test_activity_panel_is_collapsible_and_persisted(self):
-        self.assertFalse(self.workflow._activity_panel.isVisible())
-        self.workflow._set_activity_visible(True)
-        self.app.processEvents()
+    def test_activity_console_is_pinned_below_the_workflow(self):
         self.assertTrue(self.workflow._activity_panel.isVisible())
-        self.assertEqual(self.settings.value("workflow/activity_panel_visible"), "true")
-        self.workflow._set_activity_visible(False)
-        self.assertEqual(self.settings.value("workflow/activity_panel_visible"), "false")
+        self.assertEqual(self.workflow._workflow_splitter.orientation(), Qt.Vertical)
+        self.assertFalse(self.workflow._workflow_splitter.isCollapsible(1))
+        first = self.workflow._step_tabs.widget(0).findChild(WorkflowPageHeader)
+        middle = self.workflow._step_tabs.widget(1).findChild(WorkflowPageHeader)
+        last = self.workflow._step_tabs.widget(9).findChild(WorkflowPageHeader)
+
+        self.assertIsNone(first.back_button)
+        self.assertIsNotNone(first.continue_button)
+        self.assertIsNotNone(middle.back_button)
+        self.assertIsNotNone(middle.continue_button)
+        self.assertIsNotNone(last.back_button)
+        self.assertIsNone(last.continue_button)
+        self.assertIsNone(self.workflow.findChild(QWidget, "workflowFooter"))
 
     def test_activity_log_uses_shared_semantic_colors_and_plain_text(self):
         panel = self.workflow._activity_panel
         panel.append_message("\x1b[31m❌ Injection failed\x1b[0m")
         panel.append_message("⚠ Translation mismatch")
         panel.append_message("✅ Injection completed")
+        panel.append_message("Neutral status")
+        panel.append_message("")
+        panel.append_message("────────────────")
+        panel.append_message("Neutral status")
 
         self.assertEqual(
             panel.log.toPlainText().splitlines(),
@@ -364,18 +376,21 @@ class WorkflowShellTests(unittest.TestCase):
                 "❌ Injection failed",
                 "⚠ Translation mismatch",
                 "✅ Injection completed",
+                "Neutral status",
             ],
         )
         html = panel.log.toHtml().casefold()
         self.assertIn(COLORS.danger.casefold(), html)
         self.assertIn(COLORS.warning.casefold(), html)
         self.assertIn(COLORS.success.casefold(), html)
+        self.assertIn(COLORS.text_primary.casefold(), html)
         self.assertEqual(panel.message_kind("0 failed"), "info")
         self.assertEqual(panel.message_kind("No errors found"), "info")
+        self.assertEqual(panel.message_kind("Could not save file"), "error")
 
         panel.clear_activity()
         self.assertFalse(panel.log.toPlainText())
-        self.assertEqual(panel.summary_label.text(), "Activity · Idle")
+        self.assertEqual(panel.summary_label.text(), "Activity Console · Idle")
 
     def test_phase_two_child_controls_require_their_parent_code(self):
         checks = self.workflow._p2_code_checks
@@ -570,25 +585,19 @@ class WolfWorkflowShellTests(unittest.TestCase):
         self.assertIsInstance(panel, WorkflowActivityPanel)
         self.assertIs(self.workflow.log_area, panel.log)
         self.assertEqual(self.workflow._workflow_splitter.indexOf(panel), 1)
-        self.assertFalse(panel.isVisible())
+        self.assertTrue(panel.isVisible())
+        self.assertEqual(self.workflow._workflow_splitter.orientation(), Qt.Vertical)
+        self.assertFalse(self.workflow._workflow_splitter.isCollapsible(1))
+        first = self.workflow._step_tabs.widget(0).findChild(WorkflowPageHeader)
+        self.assertIsNotNone(first.continue_button)
+        self.assertIsNone(self.workflow.findChild(QWidget, "workflowFooter"))
 
         self.workflow._log("❌ Injection failed")
-        self.assertEqual(self.workflow._activity_unread, 1)
-        self.assertEqual(self.workflow._activity_errors, 1)
-        self.assertIn("1 error", self.workflow._step_rail.activity_button.toolTip())
-
-        self.workflow._set_activity_visible(True)
-        self.app.processEvents()
-        self.assertTrue(panel.isVisible())
-        self.assertEqual(self.workflow._activity_unread, 0)
-        self.assertEqual(self.workflow._activity_errors, 0)
-        self.assertEqual(
-            self.settings.value("wolf_workflow/activity_panel_visible"), "true"
-        )
+        self.assertEqual(panel.log.toPlainText(), "❌ Injection failed")
 
         panel.clear_requested.emit()
         self.assertFalse(panel.log.toPlainText())
-        self.assertEqual(panel.summary_label.text(), "Activity · Idle")
+        self.assertEqual(panel.summary_label.text(), "Activity Console · Idle")
 
         unrelated = Path(self.temp.name) / "Not A Wolf Game"
         unrelated.joinpath("skills").mkdir(parents=True)

@@ -121,6 +121,14 @@ def _build_host(settings: QSettings):
     return host, workflow
 
 
+def _set_activity_messages(workflow, *messages: str) -> None:
+    """Seed the console through its real semantic-color rendering path."""
+
+    workflow._activity_panel.clear_activity()
+    for message in messages:
+        workflow._activity_panel.append_message(message)
+
+
 def _seed_ready_fixture(workflow) -> None:
     """Populate controls with invented, non-sensitive fixture content."""
 
@@ -200,11 +208,12 @@ def _seed_ready_fixture(workflow) -> None:
     workflow._forge_status_label.setText("Status: installed · current")
     workflow._tli_detect_label.setText("Detected editor: Visual Studio Code")
 
-    workflow.log_area.setPlainText(
-        "Workflow ready.\n"
-        "Detected RPG Maker MZ sample fixture.\n"
-        "Found 6 importable files.\n"
-        "No actions run in capture mode."
+    _set_activity_messages(
+        workflow,
+        "Workflow ready.",
+        "Detected RPG Maker MZ sample fixture.",
+        "Found 6 importable files.",
+        "No actions run in capture mode.",
     )
 
 
@@ -220,16 +229,18 @@ def _apply_fixture_state(workflow, state: str) -> None:
         workflow.file_list.clear()
         workflow.detected_label.setText("No project detected yet")
         workflow._set_import_buttons_enabled(False)
-        workflow.log_area.setPlainText("Choose a game folder to begin.")
+        _set_activity_messages(workflow, "Choose a game folder to begin.")
         return
     if state == "busy":
         workflow._run_p1_btn.setEnabled(False)
         workflow._p1_status_lbl.setText("Translating 18 of 42 files…")
-        workflow.log_area.setPlainText(
-            "Translation started.\nProcessing Map014.json…\n18 of 42 files complete."
+        _set_activity_messages(
+            workflow,
+            "Translation started.",
+            "Processing Map014.json…",
+            "18 of 42 files complete.",
         )
         workflow._activity_panel.set_summary("Translating 18 of 42 files…", "info")
-        workflow._set_activity_visible(True, persist=False)
         return
     if state == "warning":
         workflow._p2_status_lbl.setText("Review required · risky code families selected")
@@ -237,22 +248,23 @@ def _apply_fixture_state(workflow, state: str) -> None:
         workflow._image_workflow_status.setText(
             "<b>Review required</b><br>Encryption key is missing from System.json."
         )
-        workflow.log_area.setPlainText(
-            "Warning: verify plugin handlers before Phase 2.\n"
-            "No game files were changed."
+        _set_activity_messages(
+            workflow,
+            "Warning: verify plugin handlers before Phase 2.",
+            "No game files were changed.",
         )
         return
     if state == "error":
         workflow.detected_label.setText(
             "Could not read the selected project · check folder permissions"
         )
-        workflow._p1_status_lbl.setText("Failed · open Activity for details")
-        workflow.log_area.setPlainText(
-            "Error: SampleGame/data could not be read.\n"
-            "No files were imported."
+        workflow._p1_status_lbl.setText("Failed · see Activity Console below")
+        _set_activity_messages(
+            workflow,
+            "Error: SampleGame/data could not be read.",
+            "No files were imported.",
         )
         workflow._activity_panel.set_summary("Project scan failed", "error")
-        workflow._set_activity_visible(True, persist=False)
         return
     if state == "complete":
         workflow._step_done.update(range(9))
@@ -261,8 +273,11 @@ def _apply_fixture_state(workflow, state: str) -> None:
         workflow._p1_status_lbl.setText("Complete")
         workflow._p1b_status_lbl.setText("Complete")
         workflow._p2_status_lbl.setText("Complete · 12 files translated")
-        workflow.log_area.setPlainText(
-            "Translation complete.\nExported 12 files.\nFinal QA passed."
+        _set_activity_messages(
+            workflow,
+            "Translation complete.",
+            "Exported 12 files.",
+            "Final QA passed.",
         )
         workflow._activity_panel.set_summary("Final QA passed", "success")
         return
@@ -271,7 +286,9 @@ def _apply_fixture_state(workflow, state: str) -> None:
             if button.objectName() not in {"workflowHelpButton"}:
                 button.setEnabled(False)
         workflow.detected_label.setText("Complete Project detection to enable actions")
-        workflow.log_area.setPlainText("Actions are waiting for project prerequisites.")
+        _set_activity_messages(
+            workflow, "Actions are waiting for project prerequisites."
+        )
         return
     raise ValueError(f"Unknown fixture state: {state}")
 

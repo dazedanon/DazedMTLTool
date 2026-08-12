@@ -75,7 +75,7 @@ class Geometry:
     RADIUS_CARD = 6
     STEP_RAIL_WIDTH = 176
     STEP_RAIL_COMPACT_WIDTH = 72
-    ACTIVITY_WIDTH = 300
+    ACTIVITY_HEIGHT = 190
     CONTENT_MAX_WIDTH = 1040
     APP_RAIL_WIDTH = 64
 
@@ -315,8 +315,7 @@ def application_stylesheet() -> str:
             font-weight: 600;
         }}
         QComboBox#workflowEngineSelector {{ min-width: 220px; }}
-        QWidget#workflowStepRail, QWidget#workflowFooter,
-        QWidget#workflowActivityHeader {{
+        QWidget#workflowStepRail, QWidget#workflowActivityHeader {{
             background-color: {c.chrome};
         }}
         QWidget#workflowTaskCard, QWidget#tbox, QWidget#cbbox {{

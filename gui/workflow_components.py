@@ -101,7 +101,6 @@ class WorkflowStepRail(QWidget):
     """Vertical direct-navigation rail with explicit step state."""
 
     step_requested = pyqtSignal(int)
-    activity_requested = pyqtSignal()
 
     def __init__(self, labels: list[str], parent: QWidget | None = None):
         super().__init__(parent)
@@ -165,21 +164,6 @@ class WorkflowStepRail(QWidget):
             self._button_layouts.append(button_row)
 
         root.addStretch(1)
-        self.activity_host = QWidget()
-        self.activity_host.setObjectName("workflowActivityHost")
-        self.activity_host.setFixedHeight(Geometry.CONTROL + (Spacing.SM * 2))
-        activity_layout = QVBoxLayout(self.activity_host)
-        activity_layout.setContentsMargins(0, 0, 0, 0)
-        activity_layout.setSpacing(0)
-        self.activity_button = QToolButton(self.activity_host)
-        self.activity_button.setObjectName("workflowActivityToggle")
-        self.activity_button.setText("Activity")
-        self.activity_button.setToolTip("Show or hide workflow activity and detailed log")
-        self.activity_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.activity_button.setCursor(Qt.PointingHandCursor)
-        self.activity_button.clicked.connect(self.activity_requested)
-        activity_layout.addWidget(self.activity_button)
-        root.addWidget(self.activity_host)
 
         self.setStyleSheet(self._stylesheet())
         self.set_current(0)
@@ -206,21 +190,6 @@ class WorkflowStepRail(QWidget):
             QPushButton#workflowStepButton:checked {{
                 background-color: {c.surface_1};
                 border-left-color: {c.accent_text};
-            }}
-            QToolButton#workflowActivityToggle {{
-                background-color: transparent;
-                color: {c.text_muted};
-                border: none;
-                border-top: 1px solid {c.border};
-                border-radius: 0;
-                padding: 6px 10px;
-                text-align: left;
-            }}
-            QToolButton#workflowActivityToggle:hover,
-            QToolButton#workflowActivityToggle:checked {{
-                background-color: {c.surface_hover};
-                color: {c.text_primary};
-                border-top-color: {c.accent_text};
             }}
         """
 
@@ -269,7 +238,6 @@ class WorkflowStepRail(QWidget):
             0,
         )
         self.title_label.setVisible(not compact)
-        self.activity_button.setText("Log" if compact else "Activity")
         for number_label, text_label, button_layout in zip(
             self._number_labels, self._text_labels, self._button_layouts
         ):
@@ -384,12 +352,36 @@ class WorkflowPageHeader(QWidget):
         self.purpose_label = purpose_label
         self.help_button = help_button
         self.title_row = title_row
+        self.back_button: QPushButton | None = None
+        self.continue_button: QPushButton | None = None
 
     def add_trailing_widget(self, widget: QWidget) -> None:
         """Insert a page-specific control immediately before Help."""
 
         index = max(0, self.title_row.count() - (1 if self.help_button else 0))
         self.title_row.insertWidget(index, widget, 0, Qt.AlignVCenter)
+
+    def add_navigation(
+        self,
+        *,
+        back_callback=None,
+        continue_callback=None,
+        continue_text: str = "Continue  →",
+    ) -> None:
+        """Place compact workflow navigation beside the page title."""
+
+        if back_callback is not None:
+            back = make_workflow_button("←  Back", variant="quiet")
+            back.setAccessibleName("Back to previous workflow step")
+            back.clicked.connect(lambda _checked=False: back_callback())
+            self.add_trailing_widget(back)
+            self.back_button = back
+        if continue_callback is not None:
+            forward = make_workflow_button(continue_text, variant="primary")
+            forward.setAccessibleName("Continue to next workflow step")
+            forward.clicked.connect(lambda _checked=False: continue_callback())
+            self.add_trailing_widget(forward)
+            self.continue_button = forward
 
 
 class TaskCard(QFrame):
@@ -541,12 +533,12 @@ class StatusBanner(QFrame):
 
 
 class WorkflowActivityPanel(QWidget):
-    """Collapsible detailed activity log used by the workflow shell."""
+    """Pinned bottom console used by the workflow shell."""
 
-    collapse_requested = pyqtSignal()
     clear_requested = pyqtSignal()
 
     _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+    _DECORATION_RE = re.compile(r"^[\s\-─━═—–_]{3,}$")
 
     def __init__(
         self,
@@ -555,8 +547,8 @@ class WorkflowActivityPanel(QWidget):
     ):
         super().__init__(parent)
         self.setObjectName("workflowActivityPanel")
-        self.setMinimumWidth(240)
-        self.setMaximumWidth(420)
+        self.setMinimumHeight(140)
+        self._last_message = ""
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -566,21 +558,18 @@ class WorkflowActivityPanel(QWidget):
         header_row = QHBoxLayout(header)
         header_row.setContentsMargins(Spacing.MD, Spacing.SM, Spacing.SM, Spacing.SM)
         header_row.setSpacing(Spacing.SM)
-        self.summary_label = QLabel("Activity · Idle")
+        self.summary_label = QLabel("Activity Console · Idle")
         self.summary_label.setObjectName("workflowActivitySummary")
-        self.summary_label.setWordWrap(True)
         self.summary_label.setStyleSheet(
             f"color:{COLORS.text_primary};font-size:11px;font-weight:600;"
         )
         header_row.addWidget(self.summary_label)
         header_row.addStretch()
-        collapse = QToolButton()
-        collapse.setText("×")
-        collapse.setToolTip("Hide activity panel")
-        collapse.setObjectName("workflowActivityClose")
-        collapse.setFixedSize(32, 32)
-        collapse.clicked.connect(self.collapse_requested)
-        header_row.addWidget(collapse)
+        clear = make_workflow_button("Clear", variant="quiet")
+        clear.setObjectName("workflowActivityClear")
+        clear.setToolTip("Clear console messages without changing workflow state")
+        clear.clicked.connect(self.clear_requested)
+        header_row.addWidget(clear)
         root.addWidget(header)
 
         self.log = log or QTextEdit()
@@ -591,27 +580,17 @@ class WorkflowActivityPanel(QWidget):
         self.log.setFont(QFont("Consolas", 9))
         root.addWidget(self.log, 1)
 
-        clear = make_workflow_button("Clear activity", variant="quiet")
-        clear.setObjectName("workflowActivityClear")
-        clear.clicked.connect(self.clear_requested)
-        root.addWidget(clear)
-
         self.setStyleSheet(
             f"QWidget#workflowActivityPanel{{background:{COLORS.canvas};"
-            f"border-left:1px solid {COLORS.border};}}"
+            f"border-top:1px solid {COLORS.border};}}"
             f"QTextEdit#workflowActivityLog{{background:{COLORS.canvas};"
-            f"color:{COLORS.text_secondary};border:none;padding:12px;}}"
-            f"QToolButton#workflowActivityClose{{background:transparent;"
-            f"color:{COLORS.text_muted};border:none;border-radius:4px;padding:0;"
-            "min-width:32px;max-width:32px;min-height:32px;max-height:32px;}"
-            f"QToolButton#workflowActivityClose:hover{{background:{COLORS.surface_hover};"
-            f"color:{COLORS.text_primary};}}"
+            f"color:{COLORS.text_primary};border:none;padding:6px 12px 10px 12px;}}"
         )
 
     @classmethod
     def clean_message(cls, message: str) -> str:
         """Strip terminal formatting that is unreadable in a Qt text widget."""
-        return cls._ANSI_RE.sub("", str(message or "")).replace("\r", "").rstrip("\n")
+        return cls._ANSI_RE.sub("", str(message or "")).replace("\r", "").rstrip()
 
     @staticmethod
     def message_kind(message: str) -> str:
@@ -625,6 +604,7 @@ class WorkflowActivityPanel(QWidget):
             any(mark in text for mark in ("❌", "✗"))
             or "traceback" in error_text
             or "exception" in error_text
+            or re.search(r"\b(could not|unable to)\b", error_text)
             or re.search(r"\b(error|fatal|failure)\b", error_text)
             or re.search(r"\bfailed\b", error_text)
         ):
@@ -649,15 +629,21 @@ class WorkflowActivityPanel(QWidget):
         self.layout().insertWidget(self.layout().indexOf(self.log), widget)
 
     def append_message(self, message: str, kind: str | None = None) -> tuple[str, str]:
-        """Append one plain-text message with shared severity-aware styling."""
+        """Append one concise plain-text message with severity-aware styling."""
         clean = self.clean_message(message)
         resolved_kind = kind or self.message_kind(clean)
+        if (
+            not clean.strip()
+            or self._DECORATION_RE.fullmatch(clean)
+            or clean == self._last_message
+        ):
+            return clean, resolved_kind
         color = {
-            "info": COLORS.text_secondary,
+            "info": COLORS.text_primary,
             "success": COLORS.success,
             "warning": COLORS.warning,
             "error": COLORS.danger,
-        }.get(resolved_kind, COLORS.text_secondary)
+        }.get(resolved_kind, COLORS.text_primary)
 
         cursor = self.log.textCursor()
         cursor.movePosition(QTextCursor.End)
@@ -670,6 +656,7 @@ class WorkflowActivityPanel(QWidget):
         cursor.insertText(clean, fmt)
         self.log.setTextCursor(cursor)
         self.log.ensureCursorVisible()
+        self._last_message = clean
 
         summary = clean.strip().replace("\n", " ")
         if summary:
@@ -681,6 +668,7 @@ class WorkflowActivityPanel(QWidget):
 
     def clear_activity(self) -> None:
         self.log.clear()
+        self._last_message = ""
         self.set_summary("Idle", "info")
 
     def set_summary(self, text: str, kind: str = "info") -> None:
@@ -690,7 +678,7 @@ class WorkflowActivityPanel(QWidget):
             "warning": COLORS.warning,
             "error": COLORS.danger,
         }.get(kind, COLORS.text_muted)
-        self.summary_label.setText(f"Activity · {text}")
+        self.summary_label.setText(f"Activity Console · {text}")
         self.summary_label.setStyleSheet(
             f"color:{color};font-size:11px;font-weight:600;"
         )

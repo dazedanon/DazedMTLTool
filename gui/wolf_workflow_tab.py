@@ -202,8 +202,6 @@ class WolfWorkflowTab(QWidget):
         self._tl_mode_user_selected = False
         self._last_default_translation_mode = None
         self._tl_mode_combos = []
-        self._activity_unread = 0
-        self._activity_errors = 0
         self._project_generation = 0
         self._prepared_game_root = ""
 
@@ -229,7 +227,6 @@ class WolfWorkflowTab(QWidget):
                 self.width() < 1320
                 or self._step_rail.labels_require_compact_mode()
             )
-            self._refresh_activity_badge()
 
     # ───────────────────────────────── paths ─────────────────────────────────
 
@@ -415,7 +412,7 @@ class WolfWorkflowTab(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Vertical)
         splitter.setObjectName("workflowSplitter")
         splitter.setHandleWidth(1)
         self._workflow_splitter = splitter
@@ -487,34 +484,6 @@ class WolfWorkflowTab(QWidget):
 
             scroll.setWidget(inner)
             page_layout.addWidget(scroll, 1)
-
-            # Navigation footer
-            nav = QWidget()
-            nav.setObjectName("workflowFooter")
-            nav_layout = QHBoxLayout(nav)
-            nav_layout.setContentsMargins(
-                Spacing.LG, Spacing.SM, Spacing.LG, Spacing.SM
-            )
-            nav_layout.setSpacing(Spacing.SM)
-
-            tab_idx = len(self._step_tabs)
-            if tab_idx > 0:
-                back_btn = _make_btn("← Back", "#3a3a3a")
-                back_btn.setMinimumWidth(112)
-                back_btn.clicked.connect(
-                    lambda _c, i=tab_idx: self._goto_step(i - 1)
-                )
-                nav_layout.addWidget(back_btn)
-            nav_layout.addStretch()
-            if tab_idx < len(_tab_defs) - 1:
-                next_btn = _make_btn("Next →", "#007acc")
-                next_btn.setMinimumWidth(112)
-                next_btn.clicked.connect(
-                    lambda _c, i=tab_idx: self._advance_step(i)
-                )
-                nav_layout.addWidget(next_btn)
-
-            page_layout.addWidget(nav)
             self._step_tabs.addTab(page, tab_label)
 
         self._step_tabs.currentChanged.connect(self._on_step_changed)
@@ -560,83 +529,17 @@ class WolfWorkflowTab(QWidget):
         self.log_area = self._activity_panel.log
         self._activity_panel.add_status_widget(self.task_progress_row)
         self._activity_panel.clear_requested.connect(self._clear_activity)
-        self._activity_panel.collapse_requested.connect(
-            lambda: self._set_activity_visible(False)
-        )
-        self._step_rail.activity_requested.connect(self._toggle_activity)
         splitter.addWidget(self._activity_panel)
-        splitter.setSizes([980, Geometry.ACTIVITY_WIDTH])
+        splitter.setSizes([570, Geometry.ACTIVITY_HEIGHT])
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
+        splitter.setCollapsible(1, False)
 
         root.addWidget(splitter)
         self._apply_theme()
-        saved_activity = str(self._setting("activity_panel_visible", "false")).lower()
-        self._set_activity_visible(
-            saved_activity in {"1", "true", "yes", "on"}, persist=False
-        )
-
-    def _set_activity_visible(self, visible: bool, *, persist: bool = True) -> None:
-        panel = getattr(self, "_activity_panel", None)
-        if panel is None:
-            return
-        panel.setVisible(bool(visible))
-        if visible:
-            self._activity_unread = 0
-            self._activity_errors = 0
-        rail = getattr(self, "_step_rail", None)
-        if rail is not None:
-            rail.activity_button.setCheckable(True)
-            rail.activity_button.setChecked(bool(visible))
-            self._refresh_activity_badge()
-        if visible and hasattr(self, "_workflow_splitter"):
-            available = max(1, self._workflow_splitter.width())
-            activity_width = min(Geometry.ACTIVITY_WIDTH, max(240, available // 3))
-            self._workflow_splitter.setSizes(
-                [available - activity_width, activity_width]
-            )
-        if persist:
-            self._save_setting(
-                "activity_panel_visible", "true" if visible else "false"
-            )
-
-    def _toggle_activity(self) -> None:
-        panel = getattr(self, "_activity_panel", None)
-        if panel is not None:
-            self._set_activity_visible(not panel.isVisible())
 
     def _clear_activity(self) -> None:
         self._activity_panel.clear_activity()
-        self._activity_unread = 0
-        self._activity_errors = 0
-        self._refresh_activity_badge()
-
-    def _refresh_activity_badge(self) -> None:
-        rail = getattr(self, "_step_rail", None)
-        panel = getattr(self, "_activity_panel", None)
-        if rail is None or panel is None:
-            return
-        if panel.isVisible():
-            text = "×" if rail._compact else "Hide"
-        else:
-            text = (
-                (str(min(self._activity_unread, 99)) if self._activity_unread else "⋯")
-                if rail._compact
-                else "Activity"
-            )
-            if self._activity_unread and not rail._compact:
-                text += f" {self._activity_unread}"
-        rail.activity_button.setText(text)
-        if self._activity_errors:
-            rail.activity_button.setToolTip(
-                f"{self._activity_errors} error message(s) in workflow activity"
-            )
-            rail.activity_button.setStyleSheet(f"color:{COLORS.danger};")
-        else:
-            rail.activity_button.setToolTip(
-                "Show or hide workflow activity and detailed log"
-            )
-            rail.activity_button.setStyleSheet("")
 
     def _apply_theme(self):
         self.setStyleSheet("""
@@ -667,7 +570,7 @@ class WolfWorkflowTab(QWidget):
     def _page_header(
         self, step: int, title: str, purpose: str, *, optional: bool = False
     ) -> WorkflowPageHeader:
-        return WorkflowPageHeader(
+        header = WorkflowPageHeader(
             step,
             title,
             purpose,
@@ -675,6 +578,15 @@ class WolfWorkflowTab(QWidget):
             total_steps=10,
             show_help=False,
         )
+        header.add_navigation(
+            back_callback=(
+                (lambda i=step: self._goto_step(i - 1)) if step > 0 else None
+            ),
+            continue_callback=(
+                (lambda i=step: self._advance_step(i)) if step < 9 else None
+            ),
+        )
+        return header
 
     def _register(self, btn: QPushButton) -> QPushButton:
         self._buttons.append(btn)
@@ -685,12 +597,7 @@ class WolfWorkflowTab(QWidget):
         panel = getattr(self, "_activity_panel", None)
         if panel is None:
             return
-        _clean, resolved_kind = panel.append_message(message, kind)
-        if not panel.isVisible():
-            self._activity_unread += 1
-            if resolved_kind == "error":
-                self._activity_errors += 1
-            self._refresh_activity_badge()
+        panel.append_message(message, kind)
 
     def _setting(self, key: str, default=None):
         if self.settings:

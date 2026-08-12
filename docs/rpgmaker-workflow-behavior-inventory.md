@@ -14,7 +14,7 @@ boundaries, or destinations.
 | Leaving Project | Auto-imports the checked selection only when it differs from the last completed or pending import. |
 | Ace detection | Hides unsupported Images and Playtest steps and redirects away from them if necessary. |
 | Help | Opens the existing rich-text help for the current step. |
-| Activity | Displays the existing workflow log; clearing it does not alter task state. |
+| Activity Console | Remains visible below every workflow step; clearing it does not alter task state. |
 
 ## Step 0: Project
 

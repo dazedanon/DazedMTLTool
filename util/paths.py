@@ -127,8 +127,9 @@ def normalize_game_tool_gitignore_text(
     *,
     path_label: str = ".gitignore",
 ) -> str:
-    """Return project rules, the portable block, then image exceptions."""
+    """Return content with one canonical managed block in its existing position."""
     pieces: list[str] = []
+    first_block_piece: int | None = None
     cursor = 0
     while True:
         start = existing.find(GAME_TOOL_GITIGNORE_BEGIN, cursor)
@@ -158,45 +159,60 @@ def normalize_game_tool_gitignore_text(
                 f"DazedTL's managed .gitignore block is incomplete in {path_label}"
             )
         pieces.append(existing[cursor:start])
+        if first_block_piece is None:
+            first_block_piece = len(pieces)
         cursor = end + len(GAME_TOOL_GITIGNORE_END)
         if cursor < len(existing) and existing[cursor] == "\r":
             cursor += 1
         if cursor < len(existing) and existing[cursor] == "\n":
             cursor += 1
 
-    prefix_lines = "".join(pieces).splitlines(keepends=True)
-    cleaned_lines: list[str] = []
-    index = 0
-    while index < len(prefix_lines):
-        line = prefix_lines[index]
-        rule = line.rstrip("\r\n")
-        next_rule = (
-            prefix_lines[index + 1].rstrip("\r\n")
-            if index + 1 < len(prefix_lines)
-            else None
-        )
-        if (
-            rule == LEGACY_GAME_TOOL_GITIGNORE_COMMENT
-            and next_rule == LEGACY_GAME_TOOL_GITIGNORE_RULE
-        ):
-            index += 2
-            continue
-        if rule == LEGACY_GAME_TOOL_GITIGNORE_RULE:
+    def without_legacy_rules(value: str) -> str:
+        lines = value.splitlines(keepends=True)
+        cleaned_lines: list[str] = []
+        index = 0
+        while index < len(lines):
+            line = lines[index]
+            rule = line.rstrip("\r\n")
+            next_rule = (
+                lines[index + 1].rstrip("\r\n")
+                if index + 1 < len(lines)
+                else None
+            )
+            if (
+                rule == LEGACY_GAME_TOOL_GITIGNORE_COMMENT
+                and next_rule == LEGACY_GAME_TOOL_GITIGNORE_RULE
+            ):
+                index += 2
+                continue
+            if rule == LEGACY_GAME_TOOL_GITIGNORE_RULE:
+                index += 1
+                continue
+            cleaned_lines.append(line)
             index += 1
-            continue
-        cleaned_lines.append(line)
-        index += 1
+        return "".join(cleaned_lines)
 
-    prefix = "".join(cleaned_lines).rstrip("\r\n")
+    if first_block_piece is not None:
+        before = without_legacy_rules("".join(pieces[:first_block_piece])).rstrip(
+            "\r\n"
+        )
+        after = without_legacy_rules("".join(pieces[first_block_piece:])).strip(
+            "\r\n"
+        )
+        normalized = f"{before}\n\n" if before else ""
+        normalized += GAME_TOOL_GITIGNORE_BLOCK
+        if after:
+            normalized += f"\n{after}\n"
+        return normalized
+
+    prefix = without_legacy_rules("".join(pieces)).rstrip("\r\n")
     image_section = ""
     image_start = prefix.find(GAME_IMAGE_PATCH_GITIGNORE_COMMENT)
     if image_start >= 0:
         image_section = prefix[image_start:].strip("\r\n")
         prefix = prefix[:image_start].rstrip("\r\n")
-    if prefix and not prefix.endswith("\n"):
-        prefix += "\n"
-    if prefix and not prefix.endswith("\n\n"):
-        prefix += "\n"
+    if prefix:
+        prefix += "\n\n"
     normalized = prefix + GAME_TOOL_GITIGNORE_BLOCK
     if image_section:
         normalized += "\n" + image_section + "\n"
@@ -206,8 +222,9 @@ def normalize_game_tool_gitignore_text(
 def ensure_game_tool_gitignore(game_root: str | Path) -> bool:
     """Allowlist portable translation settings while ignoring other tool state.
 
-    The managed block replaces older ``/.dazedtl/`` rules. Selected image-patch
-    exceptions remain last; only portable glossary/settings/skills are exposed.
+    The managed block replaces older ``/.dazedtl/`` rules. Its existing position
+    is retained to avoid meaningless Git churn; only portable glossary/settings/
+    skills are exposed.
     """
     root = Path(game_root).expanduser().resolve()
     if not root.is_dir():

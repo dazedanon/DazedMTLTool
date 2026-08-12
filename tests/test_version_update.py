@@ -299,6 +299,30 @@ class GitVersionUpdateTests(unittest.TestCase):
             image_only_ignore.splitlines()[-1], "!/www/img/pictures/title.png"
         )
 
+        portable_block = current_policy[block_start:block_end]
+        policy_without_block = (
+            current_policy[:block_start].rstrip()
+            + "\n\n"
+            + current_policy[block_end:].lstrip()
+        )
+        portable_last = self.root / "Installed Template With Portable Block Last"
+        portable_last.mkdir()
+        portable_last_ignore = portable_last / ".gitignore"
+        portable_last_text = (
+            policy_without_block.rstrip()
+            + "\n\n"
+            + GAME_IMAGE_PATCH_GITIGNORE_COMMENT
+            + "\n!/www/img/pictures/title.png\n\n"
+            + portable_block
+            + "\n"
+        )
+        portable_last_ignore.write_text(portable_last_text, encoding="utf-8")
+
+        self.assertFalse(_install_gameupdate_gitignore(portable_last))
+        self.assertEqual(
+            portable_last_ignore.read_text(encoding="utf-8"), portable_last_text
+        )
+
         malformed_cases = {
             "missing end": (
                 "custom-rule/\n\n"

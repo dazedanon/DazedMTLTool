@@ -48,8 +48,9 @@ Application navigation
 - A page may add one secondary navigation level when it represents real peer
   sections, such as Configuration categories. Do not add navigation for a
   single form or for actions.
-- Guided multi-step work uses the workflow rail, numbered stage cards, footer
-  navigation, and collapsible Activity panel from `gui/workflow_components.py`.
+- Guided multi-step work uses the workflow rail, numbered stage cards, compact
+  header navigation, and persistent bottom Activity Console from
+  `gui/workflow_components.py`.
 - Ordinary pages use `PageHeader`, `SectionCard`, semantic action buttons, and
   the shared form rules from `gui/ui_components.py`. They are organized around
   the page's dominant job rather than presented as miniature workflows.
@@ -360,8 +361,8 @@ An active screen is migrated only when it has:
 |---|---|
 | Application shell | `appSidebar`, semantic navigation roles, canonical palette |
 | Guide | `PageHeader`, shared actions, tokenized document/list surfaces |
-| RPG Maker workflow | Guided-workflow rail, stage cards, footer, Activity panel |
-| WOLF workflow | Guided-workflow rail, page headers, footer, Activity panel |
+| RPG Maker workflow | Guided-workflow rail, stage cards, header navigation, and a persistent bottom Activity Console |
+| WOLF workflow | Guided-workflow rail, page headers with navigation, and a persistent bottom Activity Console |
 | Image Manager | `PageHeader`, dominant browser workspace, compact source/filter controls, bounded preview, contextual actions |
 | Version Update | `PageHeader`, repository detection, first-time branch bootstrap, official-release update, recovery, and activity cards |
 | Translation | `PageHeader`, run setup plus file/progress cards, and a persistent side-by-side Translation Log; the log is primary run feedback and is never collapsed |
