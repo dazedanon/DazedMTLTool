@@ -268,12 +268,51 @@ def _game_glossary_paths(
         raise GameProjectPathError(
             f"Legacy glossary path is not a regular file: {legacy}"
         )
-    if preferred_present and legacy_present:
+    if (
+        preferred_present
+        and legacy_present
+        and not _files_have_identical_content(preferred, legacy)
+    ):
         raise GameProjectPathError(
             "Both the legacy and portable glossaries exist. DazedTL did not "
             f"overwrite either file:\n- {legacy}\n- {preferred}"
         )
     return root, preferred, legacy
+
+
+def _files_have_identical_content(first: Path, second: Path) -> bool:
+    """Compare regular files without trusting timestamps or cached metadata."""
+    try:
+        if first.stat().st_size != second.stat().st_size:
+            return False
+        with first.open("rb") as first_handle, second.open("rb") as second_handle:
+            while True:
+                first_chunk = first_handle.read(64 * 1024)
+                second_chunk = second_handle.read(64 * 1024)
+                if first_chunk != second_chunk:
+                    return False
+                if not first_chunk:
+                    return True
+    except OSError as exc:
+        raise GameProjectPathError(
+            f"Could not compare duplicate glossaries {first} and {second}: {exc}"
+        ) from exc
+
+
+def _remove_identical_legacy_glossary(preferred: Path, legacy: Path) -> None:
+    """Remove a redundant root glossary, rechecking it immediately beforehand."""
+    if not _files_have_identical_content(preferred, legacy):
+        raise GameProjectPathError(
+            "The legacy and portable glossaries changed while DazedTL was "
+            f"preparing them. DazedTL did not overwrite either file:\n"
+            f"- {legacy}\n- {preferred}"
+        )
+    try:
+        legacy.unlink()
+    except OSError as exc:
+        raise GameProjectPathError(
+            f"Could not remove redundant legacy glossary {legacy}: {exc}"
+        ) from exc
 
 
 def validate_game_glossary_migration(game_root: str | Path | None) -> None:
@@ -296,9 +335,12 @@ def game_glossary_path(
     if not root.is_dir():
         return preferred
     metadata = root / GAME_METADATA_RELATIVE
+    preferred_present = preferred.exists() or preferred.is_symlink()
     legacy_present = legacy.exists() or legacy.is_symlink()
     ensure_game_tool_gitignore(root)
-    if legacy_present:
+    if preferred_present and legacy_present:
+        _remove_identical_legacy_glossary(preferred, legacy)
+    elif legacy_present:
         metadata.mkdir(exist_ok=True)
         try:
             legacy.rename(preferred)
@@ -340,6 +382,9 @@ def prepare_game_translation_context(
     legacy_game_skill = root / LEGACY_GAME_SKILL_RELATIVE
     portable_game_skill = root / GAME_SKILL_RELATIVE
     completed_moves: list[tuple[Path, Path]] = []
+    duplicate_glossary = (
+        portable_glossary.is_file() and legacy_glossary.is_file()
+    )
 
     def move(source: Path, destination: Path) -> None:
         if not (source.exists() or source.is_symlink()):
@@ -349,13 +394,20 @@ def prepare_game_translation_context(
         completed_moves.append((source, destination))
 
     try:
-        move(legacy_glossary, portable_glossary)
+        if not duplicate_glossary:
+            move(legacy_glossary, portable_glossary)
         move(legacy_skills, portable_skills)
         # ``translation.md`` now lives inside the portable directory whether
         # that directory was just moved or already existed.
         move(legacy_game_skill, portable_game_skill)
         move(root_quirks, portable_quirks)
-        if create_glossary:
+        # Delete an identical duplicate only after every fallible guidance move
+        # succeeds, so rollback never needs to recreate a user file.
+        if duplicate_glossary:
+            _remove_identical_legacy_glossary(
+                portable_glossary, legacy_glossary
+            )
+        if create_glossary and not portable_glossary.is_file():
             return ensure_game_glossary(root)
         return portable_glossary
     except Exception as exc:

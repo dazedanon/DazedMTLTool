@@ -76,6 +76,23 @@ class TestGameGlossaryPaths(unittest.TestCase):
             with self.assertRaisesRegex(paths.GameProjectPathError, "Both the legacy"):
                 paths.game_glossary_path(conflict)
 
+            duplicate = root / "Identical Duplicate"
+            duplicate.joinpath(".dazedtl").mkdir(parents=True)
+            duplicate.joinpath("glossary.txt").write_text(
+                "Alice (Alice)\n", encoding="utf-8"
+            )
+            duplicate.joinpath(".dazedtl/glossary.txt").write_text(
+                "Alice (Alice)\n", encoding="utf-8"
+            )
+
+            resolved = paths.prepare_game_translation_context(duplicate)
+
+            self.assertEqual(resolved, duplicate / ".dazedtl/glossary.txt")
+            self.assertEqual(
+                resolved.read_text(encoding="utf-8"), "Alice (Alice)\n"
+            )
+            self.assertFalse(duplicate.joinpath("glossary.txt").exists())
+
             preview_game = root / "Preview"
             preview_game.mkdir()
             preview_legacy = preview_game / "glossary.txt"
