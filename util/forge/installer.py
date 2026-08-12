@@ -8,7 +8,17 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from util.forge.config import PLUGIN_BY_ENGINE, is_legacy_forge_plugin, plugin_entry, prepare_forge_js
+from util.forge.config import (
+    PLUGIN_BY_ENGINE,
+    is_legacy_forge_plugin,
+    plugin_entry,
+    prepare_forge_js,
+)
+from util.paths import (
+    GameProjectPathError,
+    ensure_game_tool_gitignore,
+    game_metadata_dir,
+)
 
 _PKG_ROOT = Path(__file__).resolve().parent
 
@@ -41,6 +51,17 @@ def detect_mz(game_root: Path) -> tuple[Path, Path] | None:
 
 def _plugin_name(engine: str) -> str:
     return PLUGIN_BY_ENGINE[engine]
+
+
+def _prepare_ignored_forge_settings(game_root: Path) -> tuple[bool, str]:
+    """Create Forge's runtime metadata home and ensure Git ignores it."""
+    try:
+        game_metadata_dir(game_root)
+        ensure_game_tool_gitignore(game_root)
+        game_metadata_dir(game_root, create=True)
+    except (OSError, GameProjectPathError) as exc:
+        return False, f"Could not prepare ignored Forge settings: {exc}"
+    return True, ""
 
 
 def _read_plugins_js(plugins_js: Path) -> tuple[str, str]:
@@ -179,6 +200,10 @@ def install(game_root: Path, source_js: Path | None = None, cfg: dict | None = N
     if not source_js and not default_src.is_file():
         return False, f"{plugin_name}.js not found: {default_src}"
 
+    prepared, message = _prepare_ignored_forge_settings(game_root)
+    if not prepared:
+        return False, message
+
     target = plugins_dir / f"{plugin_name}.js"
     content, nl = _read_plugins_js(plugins_js)
 
@@ -231,6 +256,10 @@ def apply_config(game_root: Path, cfg: dict | None = None) -> tuple[bool, str]:
     target = plugins_dir / f"{plugin_name}.js"
     if not target.is_file():
         return False, "Forge is not installed in this game folder."
+
+    prepared, message = _prepare_ignored_forge_settings(game_root)
+    if not prepared:
+        return False, message
 
     target.write_text(prepare_forge_js(engine, cfg=cfg), encoding="utf-8")
     return True, f"Forge settings applied to the installed {plugin_name} plugin."

@@ -25,6 +25,7 @@ _TOGGLE_UI_KEYSTR_RE = re.compile(
 _SHOW_LAUNCHER_DEFAULT_RE = re.compile(
     r"(favorites:\{\},showLauncher:)![01](,quickSaveSlot:1)"
 )
+_CONFIG_FILENAME_RE = re.compile(r"`forge-config\.json`")
 
 
 def forge_key_str(hotkey: str) -> str:
@@ -54,6 +55,21 @@ def _bootstrap_js(hotkey: str, ui_scale: str) -> str:
 (function () {{
   var toggleKey = {key_str};
   var uiScale = {scale};
+  // Forge persists settings through NW.js. Keep that runtime-only file with
+  // DazedTL's other ignored per-game metadata, and preserve settings written
+  // by older installs at the game root.
+  try {{
+    var forgeFs = window.require && window.require("fs");
+    if (forgeFs) {{
+      var forgeDir = ".dazedtl";
+      var forgeConfig = forgeDir + "/forge-config.json";
+      var legacyForgeConfig = "forge-config.json";
+      if (!forgeFs.existsSync(forgeDir)) forgeFs.mkdirSync(forgeDir);
+      if (forgeFs.existsSync(legacyForgeConfig) && !forgeFs.existsSync(forgeConfig)) {{
+        forgeFs.renameSync(legacyForgeConfig, forgeConfig);
+      }}
+    }}
+  }} catch (e) {{}}
   // Forge's shortcut matcher uses legacy keyCode. Some NW.js/Wine builds deliver
   // keydown with keyCode=0 while still setting key/code - map those back.
   window.__dazedKeyCode = function (e) {{
@@ -151,6 +167,16 @@ def _disable_launcher_default(text: str) -> str:
     return text
 
 
+def _relocate_config_file(text: str) -> str:
+    """Store Forge's runtime settings under the ignored game metadata folder."""
+    text, count = _CONFIG_FILENAME_RE.subn(
+        "`.dazedtl/forge-config.json`", text, count=1
+    )
+    if count != 1:
+        raise ValueError("Could not relocate modern Forge config file")
+    return text
+
+
 def _patch_keycode_reads(text: str) -> str:
     """Route Forge shortcut key reads through the keyCode polyfill."""
     replacements = [
@@ -200,6 +226,7 @@ def apply_modern_forge_patches(text: str, hotkey: str, ui_scale: str) -> str:
     text = _strip_existing_bootstrap(text)
     text = _patch_toggle_ui_default(text, hotkey)
     text = _disable_launcher_default(text)
+    text = _relocate_config_file(text)
     text = _patch_keycode_reads(text)
     bootstrap = _bootstrap_js(hotkey, ui_scale)
     match = re.search(r"\*/\s*\n", text)
