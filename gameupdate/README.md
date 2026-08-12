@@ -23,6 +23,24 @@ Create `gameupdate/patch-config.txt` next to `patch.ps1` (see `patch-config.exam
 
 In DazedTL, set **Config → Game Update Defaults** (forge, host, org/username, branch) once. Step 1 **Copy gameupdate/** writes those into each game's `patch-config.txt`. You still set `repo=` per game.
 
+For RPG Maker MV/MZ, **Install GameUpdate** also enables
+`TranslationUpdateCheck.js`. When a saved patch commit exists, the plugin checks
+the configured public repository in the background at game startup. It warns the
+player if the branch has a newer commit and otherwise stays silent. Missing
+configuration/state, offline play, API errors, and every other check failure are
+ignored so the game always continues normally.
+The warning includes a clickable link to the configured repository for players
+who prefer to download and apply the patch manually. After copying the patch,
+reopen the game and choose **I installed this update manually**. After an
+explicit confirmation, the plugin records the already-verified remote commit in
+the existing `previous_patch_sha.txt`; no second version marker is used.
+
+DazedTL's public release builder stamps the clean translation repository's
+current commit into `gameupdate/previous_patch_sha.txt` inside the ZIP. The
+source game folder is not modified, and stale local updater state is never
+copied. Commit the game and check out the branch named in `patch-config.txt`
+before building a public release.
+
 ```txt
 forge=gitlab
 host=gitgud.io

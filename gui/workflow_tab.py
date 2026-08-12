@@ -6115,6 +6115,13 @@ class WorkflowTab(QWidget):
         else:
             self._log(f"ℹ  patch-config.txt: {msg}")
 
+    def _install_translation_update_check(self, game_root: str):
+        """Enable the fail-open MV/MZ startup check bundled with GameUpdate."""
+        from util.translation_update_check import install
+
+        ok, msg = install(game_root)
+        self._log(("🧩 " if ok else "ℹ  ") + msg)
+
     def _run_gameupdate(self):
         src = self.pp_gameupdate_edit.text().strip()
         dst = self._prepared_project_or_warn()
@@ -6145,6 +6152,7 @@ class WorkflowTab(QWidget):
         dst = destination or self.folder_edit.text().strip()
         if dst and not errors:
             self._write_gameupdate_patch_config(dst)
+            self._install_translation_update_check(dst)
 
     def _run_all_preprocess(self):
         """Launch all three pre-process tasks in sequence, chaining via signals."""
@@ -6231,6 +6239,7 @@ class WorkflowTab(QWidget):
                         self._log(f"   ⚠  {e}")
                     if not errors and game_root_dst:
                         self._write_gameupdate_patch_config(game_root_dst)
+                        self._install_translation_update_check(game_root_dst)
                     run_next(rest)
                 worker.done.connect(on_copy_done)
             else:

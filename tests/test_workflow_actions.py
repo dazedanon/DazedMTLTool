@@ -384,9 +384,15 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         other_game = self.harness.root / "OtherGame"
         other_game.mkdir()
         self.workflow.folder_edit.setText(str(other_game))
-        with patch.object(self.workflow, "_write_gameupdate_patch_config") as write_config:
+        with (
+            patch.object(self.workflow, "_write_gameupdate_patch_config") as write_config,
+            patch.object(
+                self.workflow, "_install_translation_update_check"
+            ) as install_check,
+        ):
             copy_worker.done.emit(1, [])
         write_config.assert_called_once_with(str(game))
+        install_check.assert_called_once_with(str(game))
 
     def test_phase_actions_apply_exact_profiles_and_translation_presets(self):
         config = MagicMock()

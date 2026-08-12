@@ -6,6 +6,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 import zipfile
+import subprocess
 from pathlib import Path
 
 from util.release_package import ReleasePackageError, create_release_zip
@@ -157,6 +158,81 @@ class ReleasePackageTests(unittest.TestCase):
 
             self.assertEqual(result.output_path.name, "release.zip")
             self.assertTrue(result.output_path.is_file())
+
+    def test_release_stamps_clean_git_head_instead_of_local_updater_state(self):
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            game = base / "Game"
+            game.mkdir()
+            self._write(game, "Game.exe")
+            self._write(
+                game,
+                "gameupdate/patch-config.txt",
+                b"forge=gitlab\nhost=gitgud.io\nusername=team\nrepo=game\nbranch=main\n",
+            )
+            self._write(
+                game,
+                ".gitignore",
+                b"gameupdate/previous_patch_sha.txt\n",
+            )
+            subprocess.run(
+                ["git", "init", "-b", "main"], cwd=game, check=True, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Release Test"], cwd=game, check=True
+            )
+            subprocess.run(
+                ["git", "config", "user.email", "release@example.invalid"],
+                cwd=game,
+                check=True,
+            )
+            subprocess.run(["git", "add", "."], cwd=game, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "release"], cwd=game, check=True, capture_output=True
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://example.invalid/team/game.git",
+                ],
+                cwd=game,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "update-ref", "refs/remotes/origin/main", "HEAD"],
+                cwd=game,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "branch.main.remote", "origin"], cwd=game, check=True
+            )
+            subprocess.run(
+                ["git", "config", "branch.main.merge", "refs/heads/main"],
+                cwd=game,
+                check=True,
+            )
+            head = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=game,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            stale_state = game / "gameupdate" / "previous_patch_sha.txt"
+            stale_state.write_text("0" * 40 + "\n", encoding="ascii")
+
+            output = base / "release.zip"
+            create_release_zip(game, output)
+
+            with zipfile.ZipFile(output) as archive:
+                archived_state = archive.read(
+                    "Game/gameupdate/previous_patch_sha.txt"
+                ).decode("ascii").strip()
+            self.assertEqual(archived_state, head)
+            self.assertEqual(stale_state.read_text(encoding="ascii"), "0" * 40 + "\n")
 
 
 if __name__ == "__main__":
