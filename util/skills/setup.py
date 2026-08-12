@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 from util.paths import SKILLS_DIR
@@ -26,6 +27,45 @@ _INVESTIGATION_PHASE_MARKERS = (
     "<!-- /investigation-phase -->",
 )
 _INVESTIGATION_PHASE_PLACEHOLDER = "{{LOCALIZATION_INVESTIGATION_PHASE}}"
+
+_SPEAKER_CROSSCHECK = {
+    "rpgmaker": "Actors.json and dialogue across the full event corpus",
+    "wolf": "DataBase*.project.json and dialogue across the full event corpus",
+}
+
+
+def build_known_speakers_context(
+    engine: str, speakers: Iterable[tuple[str, str]]
+) -> str:
+    """Render collected nameplates as provisional Setup evidence.
+
+    Speaker collection translates isolated nameplates before Setup has inspected
+    the story.  Preserve the useful source-name inventory without presenting its
+    context-limited target spellings as approved glossary decisions.
+    """
+    pairs = [(str(source).strip(), str(target).strip()) for source, target in speakers]
+    pairs = [(source, target) for source, target in pairs if source and target]
+    if not pairs:
+        return ""
+    try:
+        crosscheck = _SPEAKER_CROSSCHECK[engine]
+    except KeyError as exc:
+        raise ValueError(f"Unknown setup engine: {engine!r}") from exc
+
+    speaker_lines = "\n".join(f"  {source} ({target})" for source, target in pairs)
+    return (
+        "<known_speakers>\n"
+        "The source names below were extracted from game files before Project Setup. "
+        "Targets in parentheses are context-limited machine guesses: they are provisional, "
+        "not approved glossary spellings.\n"
+        "Use the source names as discovery anchors. Independently verify every target against "
+        f"{crosscheck}; replace any unsupported guess. Do not prefer or preserve a target merely "
+        "because it appears in this block. For short or ambiguous katakana proper names, search "
+        "the full corpus for longer related forms, aliases, self-identification, and name-origin "
+        "wordplay before choosing a romanization.\n\n"
+        f"{speaker_lines}\n"
+        "</known_speakers>\n"
+    )
 
 
 def _read_skill_file(name: str) -> str:

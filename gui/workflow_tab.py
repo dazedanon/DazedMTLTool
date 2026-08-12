@@ -38,6 +38,7 @@ from util.game_settings import (
     save_game_wrap_widths,
 )
 from util.skills import (
+    build_known_speakers_context,
     RPGMAKER_QA_FOCUSES,
     game_skill_path_for_game,
     load_clipboard_skill,
@@ -1559,7 +1560,8 @@ class WorkflowTab(QWidget):
 
         self.speaker_setup_hint = StatusBanner(
             "Always start with “1  Collect names” so recognized speakers are added to the "
-            "Glossary. The setup instructions include a global localization investigation before "
+            "Glossary as provisional nameplate translations. Project Setup verifies their spellings "
+            "during its global localization investigation before "
             "they write final guidance. If setup marks an option ENABLE, turn it on and collect "
             "names again. Many games need none.",
             "info",
@@ -1624,8 +1626,9 @@ class WorkflowTab(QWidget):
 
         self.speaker_collect_names_btn = _make_btn("🔍  1  Collect names", "#0e639c")
         self.speaker_collect_names_btn.setToolTip(
-            "Start here. Collect recognized speaker names from event files into the "
-            "Glossary's # Game Characters section. Run this again if you later enable an extra format. "
+            "Start here. Collect recognized speaker names from event files and add provisional "
+            "nameplate translations to the Glossary's # Game Characters section. Project Setup must "
+            "verify proper-name spellings. Run this again if you later enable an extra format. "
             "Normal translation does not create or rebuild this section."
         )
         self.speaker_collect_names_btn.clicked.connect(self._run_parse_speakers)
@@ -4275,18 +4278,7 @@ class WorkflowTab(QWidget):
         """Copy the Project Setup skill, optionally prepending known speakers."""
         try:
             speakers = self._read_vocab_speakers()
-            prepend = ""
-            if speakers:
-                speaker_lines = "\n".join(f"  {orig} ({tl})" for orig, tl in speakers)
-                prepend = (
-                    "<known_speakers>\n"
-                    "These character names were extracted from the game files by the Parse Speakers tool.\n"
-                    "For the glossary block '# Game Characters', prefer entries for these names, "
-                    "then cross-check Actors.json for other major named actors.\n"
-                    "\n"
-                    + speaker_lines
-                    + "\n</known_speakers>\n"
-                )
+            prepend = build_known_speakers_context("rpgmaker", speakers)
             game_root = self.folder_edit.text().strip()
             if self._project_is_prepared(game_root) and self._data_path:
                 try:

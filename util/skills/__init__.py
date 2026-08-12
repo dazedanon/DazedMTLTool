@@ -5,6 +5,7 @@ from __future__ import annotations
 from util.skills.contexts import ctx, reload_contexts
 from util.skills.setup import (
     RPGMAKER_QA_FOCUSES,
+    build_known_speakers_context,
     load_clipboard_skill,
     load_project_setup,
     load_rpgmaker_qa_skill,
@@ -27,6 +28,7 @@ __all__ = [
     "game_skill_path_for_game",
     "list_custom_skill_paths",
     "RPGMAKER_QA_FOCUSES",
+    "build_known_speakers_context",
     "load_clipboard_skill",
     "load_project_setup",
     "load_rpgmaker_qa_skill",

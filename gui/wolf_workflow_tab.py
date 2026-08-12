@@ -125,7 +125,11 @@ from util.project_scanner import (
     wolf_repair_nested_data_dir,
     wolf_unpack_out_dir,
 )
-from util.skills import load_clipboard_skill, load_project_setup
+from util.skills import (
+    build_known_speakers_context,
+    load_clipboard_skill,
+    load_project_setup,
+)
 
 # Workflow-level label for the non-batch (live) translation path. The Translation
 # tab's own mode is called "Translate"; _workflow_mode_text() maps to that.
@@ -1909,18 +1913,7 @@ class WolfWorkflowTab(QWidget):
         """Copy the Wolf Project Setup skill, optionally prepending known vocab speakers."""
         try:
             speakers = self._read_vocab_speakers()
-            prepend = ""
-            if speakers:
-                speaker_lines = "\n".join(f"  {orig} ({tl})" for orig, tl in speakers)
-                prepend = (
-                    "<known_speakers>\n"
-                    "These character names were already listed in the Glossary (glossary.txt).\n"
-                    "For the glossary block '# Game Characters', prefer entries for these names, "
-                    "then cross-check DataBase*.project.json and dialogue for other major names.\n"
-                    "\n"
-                    + speaker_lines
-                    + "\n</known_speakers>\n"
-                )
+            prepend = build_known_speakers_context("wolf", speakers)
             prompt = load_project_setup("wolf", prepend=prepend)
             QApplication.clipboard().setText(prompt)
             self._log("📋 Project Setup skill copied. Paste it into Cursor/Copilot with files/ open.")

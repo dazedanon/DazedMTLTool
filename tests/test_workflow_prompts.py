@@ -18,6 +18,8 @@ from scripts.score_rpgmaker_qa_benchmark import (
 
 from util.skills import (
     RPGMAKER_QA_FOCUSES,
+    build_known_speakers_context,
+    ctx,
     load_clipboard_skill,
     load_project_setup,
     load_rpgmaker_qa_skill,
@@ -451,6 +453,24 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         system_prompt = load_clipboard_skill("system.md").casefold()
         self.assertIn("preserve established lore facts", system_prompt)
         self.assertIn("natural english adaptation", system_prompt)
+
+    def test_collected_speaker_targets_remain_provisional_until_setup(self):
+        context = build_known_speakers_context(
+            "rpgmaker", [("サン", "Sun"), ("サングイス", "Sanguis")]
+        )
+        prompt = load_project_setup("rpgmaker", prepend=context).casefold()
+
+        self.assertIn("サン (sun)", prompt)
+        self.assertIn("context-limited machine guesses", prompt)
+        self.assertIn("provisional, not approved glossary spellings", prompt)
+        self.assertIn("replace any unsupported guess", prompt)
+        self.assertIn("longer related forms", prompt)
+        self.assertIn("explicitly curated project glossary decisions", prompt)
+        self.assertNotIn("prefer entries for these names", prompt)
+
+        speaker_instruction = ctx("names.speaker", language="English").casefold()
+        self.assertIn("for a proper name, transliterate it", speaker_instruction)
+        self.assertIn("do not turn it into a common english word", speaker_instruction)
 
     def test_wrap_prompt_accounts_for_code101_faces_and_font_changes(self):
         prompt = load_clipboard_skill("wrap_config.md").casefold()

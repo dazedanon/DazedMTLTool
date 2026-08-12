@@ -70,8 +70,9 @@ finished games the user deliberately registered in DazedTL. Treat every match as
   proper names, titles, coined terms, catchphrases, and recurring UI labels.
 - Do not copy a reference merely because the Japanese string matches. Confirm that the referent,
   function, tone, and current-game context are genuinely the same.
-- The current Japanese source and current project's explicit glossary remain authoritative. When
-  reference games disagree with each other or with stronger current evidence, investigate the
+- The current Japanese source and explicitly curated project glossary decisions remain
+  authoritative. Bare nameplate translations supplied through `<known_speakers>` are provisional
+  under the glossary rules below. When reference games disagree with either source, investigate the
   conflict and record the current game's deliberate decision in the appropriate guidance file.
 - Do not edit a registered reference game or treat the generated overlap/index files as portable
   project guidance. Promote only verified, current-game decisions into the normal owned files.
@@ -156,6 +157,11 @@ make no edits and report the evidence normally.
 
 ### Glossary rules (for the written Glossary)
 
+- Treat bare target spellings from a prepended `<known_speakers>` block as provisional machine
+  guesses made from isolated nameplates, not as approved translations. Use their Japanese source
+  names as discovery anchors, verify each proper name against the full corpus, and replace
+  unsupported targets. For short or ambiguous katakana names, explicitly search for longer related
+  forms, aliases, self-identification, and name-origin wordplay before choosing a romanization.
 - Separator: plain hyphen-minus `-` only (never em/en dash).
 - Descriptions entirely in English; refer to other characters by English name.
 - Commit to one spelling - never `Sylfia / Sylphia`.
@@ -461,5 +467,6 @@ Do not use a code fence in this section. Keep it brief and include only applicab
 - Runtime/window/font/plugin evidence supporting RPG Maker settings.
 - Exceptions, uncertainty, unsupported features, and exact playtests the user should perform.
 
-If known speakers were prepended in a `<known_speakers>` block above this skill, prefer those names
-in the glossary, then cross-check Actors.json for other major named actors.
+If known speakers were prepended in a `<known_speakers>` block above this skill, use their source
+names to seed character discovery. Their target spellings are provisional: verify them against the
+engine databases and full dialogue corpus, replace unsupported guesses, and add other major actors.
