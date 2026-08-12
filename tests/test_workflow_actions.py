@@ -61,8 +61,6 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (1, "browse_plugins_js", {"tooltip": "Choose the plugins.js file"}),
             (1, "run_prettier", {"text": "Format plugins.js"}),
             (1, "run_gameupdate", {"text": "Install GameUpdate"}),
-            (2, "import_files", {"text": "Import files"}),
-            (2, "clear_translated", {"text": "Clear translated"}),
             (2, "add_embedded_reference_game", {"text": "+ Add DazedTL translation"}),
             (2, "add_paired_reference_game", {"text": "+ Add Japanese / English pair"}),
             (2, "remove_reference_game", {"text": "− Remove"}),
@@ -106,7 +104,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (9, "install_both_playtest", {"text": "Install both plugins"}),
             (9, "refresh_playtest_status", {"text": "Refresh plugin status"}),
         )
-        self.assertEqual(len(cases), 53)
+        self.assertEqual(len(cases), 51)
         for step, endpoint, locator in cases:
             with self.subTest(step=step, endpoint=endpoint, locator=locator):
                 if endpoint == "apply_var_range":
@@ -282,7 +280,7 @@ class WorkflowHandlerContractTests(unittest.TestCase):
             ("Actors.json", "Map001.json"),
         )
 
-    def test_import_and_clear_require_explicit_confirmation(self):
+    def test_import_requires_explicit_confirmation(self):
         game, _data = self.harness.make_mvmz_project("MZ")
         self.harness.prepare_project(game)
         selected = [{"name": "Actors.json", "path": "/fixture/Actors.json"}]
@@ -296,15 +294,6 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         self.assertFalse(FakeWorker.instances)
         self.assertTrue(existing.exists())
         self.assertEqual(warning.call_args.args[-1], QMessageBox.Cancel)
-
-        translated = self.harness.root / "translated" / "old.json"
-        translated.write_text("{}", encoding="utf-8")
-        with patch.object(QMessageBox, "warning", return_value=QMessageBox.Cancel):
-            self.workflow._clear_translated()
-        self.assertTrue(translated.exists())
-        with patch.object(QMessageBox, "warning", return_value=QMessageBox.Yes):
-            self.workflow._clear_translated()
-        self.assertFalse(translated.exists())
 
     def test_mz_mv_and_ace_detection_use_disposable_project_roots(self):
         for engine in ("MZ", "MV"):

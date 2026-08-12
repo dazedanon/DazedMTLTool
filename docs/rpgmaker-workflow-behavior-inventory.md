@@ -41,8 +41,6 @@ All four tasks are required for the guided workflow and are presented in order.
 
 | Action | Effect |
 |---|---|
-| Import selected files | Invokes the same Step 0 import path. |
-| Clear translated | Confirms and deletes contents of `translated/` while preserving `.gitkeep`. |
 | Collect names | Applies speaker flags, selects event files, and starts the existing Parse Speakers translation mode. |
 | Copy setup skill | Copies the existing project-setup skill with game context. |
 | Speaker flags | Persist and apply through the existing config integration. |

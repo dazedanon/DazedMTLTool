@@ -147,7 +147,6 @@ for _method_name in (
     "_browse_plugins_js",
     "_run_prettier",
     "_run_gameupdate",
-    "_clear_translated",
     "_apply_speaker_flags",
     "_run_parse_speakers",
     "_add_embedded_reference_game",

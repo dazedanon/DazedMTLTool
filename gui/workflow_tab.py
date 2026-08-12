@@ -769,14 +769,6 @@ class WorkflowTab(QWidget):
                 if self.width() < 1500
                 else QBoxLayout.LeftToRight
             )
-        setup_layout = getattr(self, "_setup_workspace_layout", None)
-        if setup_layout is not None:
-            setup_layout.setDirection(
-                QBoxLayout.TopToBottom
-                if self.width() < 1500
-                else QBoxLayout.LeftToRight
-            )
-
     def _clear_activity(self):
         self._activity_panel.clear_activity()
 
@@ -1293,46 +1285,8 @@ class WorkflowTab(QWidget):
         """Combined speaker flags + Project Setup + vocab/quirks/game-skill editors."""
         self._add_step_header(layout, "Step 2 — Speakers & Guidance", 2)
 
-        setup_workspace = QWidget()
-        setup_workspace.setObjectName("setupWorkspace")
-        setup_workspace_layout = QBoxLayout(QBoxLayout.LeftToRight)
-        setup_workspace_layout.setContentsMargins(0, 0, 0, 0)
-        setup_workspace_layout.setSpacing(Spacing.LG)
-        setup_workspace.setLayout(setup_workspace_layout)
-        self._setup_workspace_layout = setup_workspace_layout
-
-        prepare_stage = WorkflowStageCard(
-            1,
-            "Prepare the translation workspace",
-            "Import the Step 0 selection or remove translated output before restarting.",
-        )
-        prepare_actions = QHBoxLayout()
-        prepare_actions.setSpacing(Spacing.SM)
-
-        import_btn = _make_btn("↓  Import files", "#5a5a60")
-        import_btn.setToolTip("Import the files currently selected in Step 0")
-        import_btn.setEnabled(False)
-        import_btn.clicked.connect(lambda _checked=False: self._import_files())
-        self._register_import_button(import_btn)
-        prepare_actions.addWidget(import_btn)
-
-        clear_translated_btn = _make_btn("✕  Clear translated", "#cc4444")
-        clear_translated_btn.setToolTip("Delete translated/ contents after confirmation")
-        clear_translated_btn.clicked.connect(self._clear_translated)
-        _equalize_action_buttons(
-            import_btn,
-            clear_translated_btn,
-            width=Geometry.ACTION_WIDE,
-        )
-        prepare_actions.addWidget(clear_translated_btn)
-        prepare_actions.setStretch(0, 1)
-        prepare_actions.setStretch(1, 1)
-        prepare_actions.addStretch()
-        prepare_stage.add_layout(prepare_actions)
-        setup_workspace_layout.addWidget(prepare_stage, 2, Qt.AlignTop)
-
         reference_stage = WorkflowStageCard(
-            2,
+            1,
             "Add earlier translations as references (optional)",
             "Register finished games locally before copying Setup so it can compare established English wording.",
         )
@@ -1383,10 +1337,10 @@ class WorkflowTab(QWidget):
         reference_actions.addWidget(self.reference_refresh_btn)
         reference_actions.addStretch()
         reference_stage.add_layout(reference_actions)
-        setup_workspace_layout.addWidget(reference_stage, 3, Qt.AlignTop)
+        layout.addWidget(reference_stage)
 
         speaker_stage = WorkflowStageCard(
-            3,
+            2,
             "Configure speakers and generate project context",
             "Collect recognized names first, then ask your AI helper whether this game needs any extra speaker formats.",
         )
@@ -1482,12 +1436,11 @@ class WorkflowTab(QWidget):
         context_actions.addWidget(self.speaker_copy_setup_btn, 1)
         context_actions.addStretch()
         speaker_stage.add_layout(context_actions)
-        layout.addWidget(setup_workspace)
         layout.addWidget(speaker_stage)
         self._populate_speaker_flags()
 
         guidance_stage = WorkflowStageCard(
-            4,
+            3,
             "Review glossary, translation quirks, and game skill",
             "Setup and investigation write these files directly; reload them here to review or edit.",
         )
@@ -4041,43 +3994,6 @@ class WorkflowTab(QWidget):
             QMessageBox.Cancel,
         )
         return reply == QMessageBox.Yes
-
-    def _clear_translated(self):
-        translated_dir = Path("translated")
-        items_to_delete = [
-            item for item in translated_dir.iterdir()
-            if item.name != ".gitkeep"
-        ] if translated_dir.exists() else []
-        if not items_to_delete:
-            self._log("ℹ  translated/ is already empty — nothing to clear.")
-            return
-        reply = QMessageBox.warning(
-            self,
-            "Clear translated/ folder",
-            "This will permanently delete all files inside the translated/ folder.\n\nAre you sure?",
-            QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel,
-        )
-        if reply != QMessageBox.Yes:
-            return
-        deleted = 0
-        errors = []
-        for item in items_to_delete:
-            try:
-                if item.is_file():
-                    item.unlink()
-                    deleted += 1
-                elif item.is_dir():
-                    import shutil
-                    shutil.rmtree(item)
-                    deleted += 1
-            except Exception as exc:
-                errors.append(f"{item.name}: {exc}")
-        if errors:
-            self._log(f"⚠  {len(errors)} error(s) while clearing translated/:")
-            for e in errors[:10]:
-                self._log(f"   {e}")
-        self._log(f"✅ Cleared {deleted} item(s) from translated/")
 
     def _on_import_done(
         self,
