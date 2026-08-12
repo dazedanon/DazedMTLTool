@@ -44,6 +44,9 @@ GAME_SKILL_RESERVED_NAMES = frozenset({"quirks.md", "game.md", "translation.md"}
 
 GAME_TOOL_GITIGNORE_BEGIN = "# BEGIN DazedTL portable translation settings"
 GAME_TOOL_GITIGNORE_END = "# END DazedTL portable translation settings"
+GAME_IMAGE_PATCH_GITIGNORE_COMMENT = "# DazedTL selected image patches"
+LEGACY_GAME_TOOL_GITIGNORE_COMMENT = "# DazedTL image manager working files"
+LEGACY_GAME_TOOL_GITIGNORE_RULE = "/.dazedtl/"
 GAME_TOOL_GITIGNORE_BLOCK = "\n".join(
     (
         GAME_TOOL_GITIGNORE_BEGIN,
@@ -124,7 +127,7 @@ def normalize_game_tool_gitignore_text(
     *,
     path_label: str = ".gitignore",
 ) -> str:
-    """Return content with one canonical managed block, without writing it."""
+    """Return project rules, the portable block, then image exceptions."""
     pieces: list[str] = []
     cursor = 0
     while True:
@@ -161,19 +164,50 @@ def normalize_game_tool_gitignore_text(
         if cursor < len(existing) and existing[cursor] == "\n":
             cursor += 1
 
-    prefix = "".join(pieces)
+    prefix_lines = "".join(pieces).splitlines(keepends=True)
+    cleaned_lines: list[str] = []
+    index = 0
+    while index < len(prefix_lines):
+        line = prefix_lines[index]
+        rule = line.rstrip("\r\n")
+        next_rule = (
+            prefix_lines[index + 1].rstrip("\r\n")
+            if index + 1 < len(prefix_lines)
+            else None
+        )
+        if (
+            rule == LEGACY_GAME_TOOL_GITIGNORE_COMMENT
+            and next_rule == LEGACY_GAME_TOOL_GITIGNORE_RULE
+        ):
+            index += 2
+            continue
+        if rule == LEGACY_GAME_TOOL_GITIGNORE_RULE:
+            index += 1
+            continue
+        cleaned_lines.append(line)
+        index += 1
+
+    prefix = "".join(cleaned_lines).rstrip("\r\n")
+    image_section = ""
+    image_start = prefix.find(GAME_IMAGE_PATCH_GITIGNORE_COMMENT)
+    if image_start >= 0:
+        image_section = prefix[image_start:].strip("\r\n")
+        prefix = prefix[:image_start].rstrip("\r\n")
     if prefix and not prefix.endswith("\n"):
         prefix += "\n"
     if prefix and not prefix.endswith("\n\n"):
         prefix += "\n"
-    return prefix + GAME_TOOL_GITIGNORE_BLOCK
+    normalized = prefix + GAME_TOOL_GITIGNORE_BLOCK
+    if image_section:
+        normalized += "\n" + image_section + "\n"
+    return normalized
 
 
 def ensure_game_tool_gitignore(game_root: str | Path) -> bool:
     """Allowlist portable translation settings while ignoring other tool state.
 
-    The managed block intentionally overrides older ``/.dazedtl/`` rules. Only
-    the glossary, settings file, and Markdown game skills become visible to Git.
+    The managed block replaces older ``/.dazedtl/`` rules. Selected image-patch
+    exceptions remain last; only portable glossary/settings/skills are exposed.
     """
     root = Path(game_root).expanduser().resolve()
     if not root.is_dir():

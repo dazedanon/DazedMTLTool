@@ -41,16 +41,6 @@
 # WolfDawn pristine originals kept locally for re-injection (never shipped)
 wolf_json/originals/
 
-# BEGIN DazedTL portable translation settings
-!/.dazedtl/
-/.dazedtl/*
-!/.dazedtl/glossary.txt
-!/.dazedtl/settings.json
-!/.dazedtl/skills/
-/.dazedtl/skills/*
-!/.dazedtl/skills/*.md
-# END DazedTL portable translation settings
-
 # Ignore
 previous_patch_sha.txt
 kabe3_save.dat
@@ -60,5 +50,15 @@ Save*
 cg.dat
 scene.dat
 BSXScript_*
+
+# BEGIN DazedTL portable translation settings
+!/.dazedtl/
+/.dazedtl/*
+!/.dazedtl/glossary.txt
+!/.dazedtl/settings.json
+!/.dazedtl/skills/
+/.dazedtl/skills/*
+!/.dazedtl/skills/*.md
+# END DazedTL portable translation settings
 
 # Images

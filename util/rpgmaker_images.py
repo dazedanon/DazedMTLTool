@@ -18,7 +18,11 @@ import shutil
 import tempfile
 
 from util.image_manager import ImageActionResult, ImageAsset
-from util.paths import ensure_game_tool_gitignore
+from util.paths import (
+    GAME_IMAGE_PATCH_GITIGNORE_COMMENT,
+    ensure_game_tool_gitignore,
+    normalize_game_tool_gitignore_text,
+)
 
 
 RPGMV_HEADER = bytes(
@@ -455,9 +459,13 @@ def add_patch_exceptions(
         text = existing
         if text and not text.endswith("\n"):
             text += "\n"
-        if "# DazedTL selected image patches" not in text:
-            text += "\n# DazedTL selected image patches\n"
+        if GAME_IMAGE_PATCH_GITIGNORE_COMMENT not in text:
+            text += f"\n{GAME_IMAGE_PATCH_GITIGNORE_COMMENT}\n"
         text += "\n".join(additions) + "\n"
+        if ignore_path == root / ".gitignore":
+            text = normalize_game_tool_gitignore_text(
+                text, path_label=str(ignore_path)
+            )
         ignore_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(ignore_path, text.encode("utf-8", errors="surrogateescape"))
         if ignore_path not in changed:

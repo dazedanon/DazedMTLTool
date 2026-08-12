@@ -12,6 +12,7 @@ from unittest.mock import patch
 from PyQt5.QtWidgets import QApplication, QLineEdit, QMessageBox, QWidget
 
 from util.paths import (
+    GAME_IMAGE_PATCH_GITIGNORE_COMMENT,
     GAME_TOOL_GITIGNORE_BEGIN,
     GAME_TOOL_GITIGNORE_END,
     ensure_game_tool_gitignore,
@@ -227,7 +228,9 @@ class GitVersionUpdateTests(unittest.TestCase):
         )
         self.translated.joinpath(".gitignore").write_text(
             previous_policy.rstrip()
-            + "\n\n# Existing project rules\nsave/\n*.log\n",
+            + "\n\n# Existing project rules\nsave/\n*.log\n\n"
+            + GAME_IMAGE_PATCH_GITIGNORE_COMMENT
+            + "\n!/www/img/pictures/menu.png\n",
             encoding="utf-8",
         )
 
@@ -259,14 +262,42 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertEqual(combined_ignore.count("# Ignore all files"), 1)
         self.assertEqual(combined_ignore.count(GAME_TOOL_GITIGNORE_BEGIN), 1)
         self.assertIn("# Existing project rules\nsave/\n*.log\n", combined_ignore)
+        self.assertEqual(combined_ignore.count(GAME_IMAGE_PATCH_GITIGNORE_COMMENT), 1)
         self.assertGreater(
             combined_ignore.index(GAME_TOOL_GITIGNORE_BEGIN),
             combined_ignore.index("# Existing project rules"),
+        )
+        self.assertGreater(
+            combined_ignore.index(GAME_IMAGE_PATCH_GITIGNORE_COMMENT),
+            combined_ignore.index(GAME_TOOL_GITIGNORE_END),
+        )
+        self.assertEqual(
+            combined_ignore.splitlines()[-1], "!/www/img/pictures/menu.png"
         )
         diff = self.git(self.translated, "diff", "original", "main", "--", "data.json")
         self.assertIn('"name": "Japanese"', diff)
         self.assertIn('"name": "English"', diff)
         self.assertNotIn('{"name":', diff)
+
+        image_only = self.root / "Installed Template With Image Patch"
+        image_only.mkdir()
+        image_only.joinpath(".gitignore").write_text(
+            current_policy.rstrip()
+            + "\n\n"
+            + GAME_IMAGE_PATCH_GITIGNORE_COMMENT
+            + "\n!/www/img/pictures/title.png\n",
+            encoding="utf-8",
+        )
+        ensure_game_tool_gitignore(image_only)
+
+        _install_gameupdate_gitignore(image_only)
+
+        image_only_ignore = image_only.joinpath(".gitignore").read_text()
+        self.assertEqual(image_only_ignore.count("# Ignore all files"), 1)
+        self.assertEqual(image_only_ignore.count(GAME_TOOL_GITIGNORE_BEGIN), 1)
+        self.assertEqual(
+            image_only_ignore.splitlines()[-1], "!/www/img/pictures/title.png"
+        )
 
         malformed_cases = {
             "missing end": (

@@ -47,6 +47,8 @@ placement, and final compositing must remain deterministic.
 Produce localized images that:
 
 - Preserve the original dimensions, format, color mode, and alpha channel.
+- Preserve the source alpha topology and translucent underpainting outside explicitly approved
+  changes, with no seams that appear only when the asset is composited in game.
 - Change only approved text or panel regions.
 - Leave portraits and protected artwork pixel-identical when feasible.
 - Preserve empty spaces used for runtime-drawn values.
@@ -94,6 +96,8 @@ Record:
 - Format and bit depth.
 - RGB/RGBA channel layout.
 - Alpha behavior.
+- The alpha plane at original resolution and in a contrast-enhanced view, including soft fades,
+  holes, ornaments, low-alpha color, and any existing hard edges.
 - Visible source-language text.
 - Repeated panel geometry.
 - Character art and other protected regions.
@@ -112,6 +116,9 @@ Do not decide that a low-contrast region is blank merely because its artwork is 
 contrast-enhanced views when necessary, and inspect representative pages from the beginning,
 middle, and end of each image sequence. Memo, codex, gallery, and recollection pages commonly
 change from a neutral enemy icon on early pages to unlocked scene artwork on later pages.
+Likewise, do not judge a translucent asset only against an editor checkerboard. Determine the
+runtime backdrop, scaling/filtering, and picture opacity when available; these can expose alpha
+or matte defects that are inconspicuous in the standalone PNG.
 
 ### 4. Locate clean artwork and source layers
 
@@ -253,6 +260,31 @@ pill, card, or heavy shadow when the source text was freestanding. Reconstruct t
 behind the old glyphs, then render the translation with an equivalent outline, glow, bloom, and
 layering. Only rebuild a panel when that panel was already part of the source design.
 
+### 9a. Treat transparency as artwork
+
+For every non-opaque asset, treat both color and alpha as visual source material. Preserve source
+alpha exactly wherever no approved element changes. Expected alpha changes normally belong only
+to removed source glyphs, replacement text and effects, or a deliberately reconstructed native
+panel; a broad rectangular cleanup area is not implicitly approved by its RGB bounds.
+
+- Inspect the source alpha plane before editing and diff it against the candidate afterward.
+- Build background, underpainting, ornaments, text, glow, and alpha as explicit layers. Do not
+  flatten a temporary matte color into transparent or partially transparent pixels.
+- Use alpha-aware compositing. When custom math is necessary, blend partially transparent color
+  in premultiplied-alpha space and convert back exactly once; do not independently interpolate
+  straight RGB and alpha across soft edges or accidentally premultiply twice.
+- Preserve meaningful RGB beneath zero and low alpha, or edge-pad it consistently from adjacent
+  visible color when reconstruction requires new transparent edge pixels. Hidden matte colors
+  can become halos after scaling, filtering, or later compositing.
+- When removing glyphs from translucent underpainting, reconstruct continuous color and alpha
+  from a verified clean layer or a semantically matching donor. Feathering may soften a valid
+  transition, but it must not merely disguise the corners of a rectangular replacement plate.
+- Reuse a donor variant only when its alpha silhouette, ornaments, background state, and intended
+  artwork match the target. Similar RGB appearance alone is insufficient.
+
+Document every intentional non-text alpha change in the work log, including the source or model
+used to reconstruct it. If continuous alpha cannot be recovered confidently, skip and report.
+
 ### 10. Fit typography
 
 Use real font metrics. Fit text in this order:
@@ -320,6 +352,8 @@ background class, geometry, and progression state. For a multi-page memo set, th
 includes an early icon page and a later illustration page, plus examples whose art is pale,
 dark, highly saturated, or close to the text color. Do not proceed to the full batch until these
 samples show all intended artwork and no source glyphs at original resolution.
+For translucent assets, the representative gate also requires clean alpha-only views and clean
+diagnostic composites; structural metadata such as `RGBA` or “alpha present” is not sufficient.
 
 After the representative gate passes, render the entire candidate set from the backup.
 Use one shared renderer and one accepted layout for exact duplicates and template families while applying explicit per-variant label and art-state inventories so that reuse does not erase progression differences.
@@ -332,6 +366,17 @@ Perform all applicable checks:
 - Confirm exact expected dimensions.
 - Confirm format, bit depth, and channel layout.
 - Confirm alpha remains present when required.
+- For every non-opaque candidate, inspect a contrast-enhanced alpha-only view and an alpha diff
+  against the verified source. Confirm alpha changes stay within the approved reconstruction mask
+  and contain no unexplained rectangles, long axis-aligned edges, isolated corners, bands, or
+  step changes.
+- Composite every non-opaque candidate over black, white, midtone, and strongly colored diagnostic
+  backdrops, plus a checkerboard and the actual runtime background when available. Inspect these
+  composites at original resolution and intended runtime scale and opacity.
+- Compare source and candidate over the same backdrops. Inspect every mask boundary and corner for
+  seams, matte halos, color fringe, ornament discontinuities, and altered translucent paint.
+- Exercise the game's expected scaling/filtering path, or a close deterministic equivalent, so
+  low-alpha hidden-color defects cannot pass merely because the unscaled PNG looks clean.
 - Compare protected crops against the original with a zero-pixel-difference target.
 - Confirm changed pixels remain inside approved regions.
 - Inspect every variant in a contact sheet.
@@ -450,6 +495,12 @@ Do not paste full image files, large encoded data, or unrelated source code.
 - Never install before reviewing the actual rendered candidate.
 - Never overwrite the only original.
 - Never claim pixel preservation without running a pixel comparison.
+- Never treat “has an alpha channel,” transparent-corner samples, or a checkerboard-only preview
+  as sufficient transparency validation.
+- Never introduce a broad rectangular alpha/underpainting plate behind localized text unless that
+  rectangle is verified native component geometry and its complete boundary is validated.
+- Never accept a transparent candidate with seams, matte halos, square corners, or color fringes
+  on any diagnostic or available runtime background, even if its standalone preview looks clean.
 - Never modify files outside the editable image folder except for isolated backup and temporary
   validation artifacts. Inside the editable image folder, create no new non-image artifact except
   the single required `image_translation_log.md` work log.
@@ -493,6 +544,8 @@ Consider the task complete only when:
 - Every intended background illustration remains present, recognizable, and matched to the
   correct progression state.
 - Every translated text role retains the source asset's visual identity and relative emphasis.
+- Every non-opaque installed asset has a reviewed alpha diff and composites cleanly over diagnostic
+  and available runtime backgrounds at the intended scale and opacity.
 - Originals remain recoverable.
 - `image_translation_log.md` accounts for every reviewed image and text region without duplicate
   current-run entries.

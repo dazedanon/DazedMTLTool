@@ -20,6 +20,14 @@ from util.rpgmaker_images import (
     remove_editable_assets,
     scan_image_assets,
 )
+from util.paths import (
+    GAME_IMAGE_PATCH_GITIGNORE_COMMENT,
+    GAME_TOOL_GITIGNORE_BEGIN,
+    GAME_TOOL_GITIGNORE_END,
+    LEGACY_GAME_TOOL_GITIGNORE_COMMENT,
+    LEGACY_GAME_TOOL_GITIGNORE_RULE,
+    ensure_game_tool_gitignore,
+)
 
 
 KEY_HEX = "00112233445566778899aabbccddeeff"
@@ -55,7 +63,9 @@ class RPGMakerImageTests(unittest.TestCase):
         encrypted = self._encrypted_asset()
         original = encrypted.read_bytes()
         self.root.joinpath(".gitignore").write_text(
-            "/.dazedtl/\n", encoding="utf-8"
+            f"{LEGACY_GAME_TOOL_GITIGNORE_COMMENT}\n"
+            f"{LEGACY_GAME_TOOL_GITIGNORE_RULE}\n",
+            encoding="utf-8",
         )
 
         assets = scan_image_assets(self.root)
@@ -83,6 +93,10 @@ class RPGMakerImageTests(unittest.TestCase):
         skill.parent.mkdir()
         skill.write_text("# Translation Frame\n", encoding="utf-8")
         skill.with_name("private-cache.json").write_text("{}\n", encoding="utf-8")
+        ignore = self.root.joinpath(".gitignore").read_text(encoding="utf-8")
+        self.assertNotIn(LEGACY_GAME_TOOL_GITIGNORE_COMMENT, ignore)
+        self.assertNotIn(LEGACY_GAME_TOOL_GITIGNORE_RULE, ignore.splitlines())
+        self.assertEqual(ignore.splitlines()[-1], GAME_TOOL_GITIGNORE_END)
         subprocess.run(
             ["git", "-C", str(self.root), "init", "-q"],
             check=True,
@@ -188,9 +202,25 @@ class RPGMakerImageTests(unittest.TestCase):
         backup = self.root / ".dazedtl" / "image_backups" / "www/img/pictures/001.rpgmvp"
         self.assertEqual(backup.read_bytes(), original)
         ignore = self.root.joinpath(".gitignore").read_text(encoding="utf-8")
-        self.assertIn("/.dazedtl/", ignore)
+        self.assertIn("!/.dazedtl/", ignore.splitlines())
+        self.assertNotIn(LEGACY_GAME_TOOL_GITIGNORE_RULE, ignore.splitlines())
         self.assertIn("!/www/img/pictures/001.rpgmvp", ignore)
         self.assertNotIn("!/www/img/pictures/001.png", ignore)
+        self.assertLess(
+            ignore.index(GAME_TOOL_GITIGNORE_END),
+            ignore.index(GAME_IMAGE_PATCH_GITIGNORE_COMMENT),
+        )
+        self.assertEqual(ignore.splitlines()[-1], "!/www/img/pictures/001.rpgmvp")
+
+        ensure_game_tool_gitignore(self.root)
+        normalized = self.root.joinpath(".gitignore").read_text(encoding="utf-8")
+        self.assertLess(
+            normalized.index(GAME_TOOL_GITIGNORE_END),
+            normalized.index(GAME_IMAGE_PATCH_GITIGNORE_COMMENT),
+        )
+        self.assertEqual(
+            normalized.splitlines()[-1], "!/www/img/pictures/001.rpgmvp"
+        )
 
         second = prepare_assets_for_patch(self.root, [asset], KEY)
         again = self.root.joinpath(".gitignore").read_text(encoding="utf-8")

@@ -24,6 +24,7 @@ from typing import Iterable, Mapping
 import jsbeautifier
 
 from util.paths import (
+    GAME_IMAGE_PATCH_GITIGNORE_COMMENT,
     GAME_TOOL_GITIGNORE_BEGIN,
     GAME_TOOL_GITIGNORE_END,
     ensure_game_tool_gitignore,
@@ -958,12 +959,24 @@ def _install_gameupdate_gitignore(game_root: Path) -> bool:
     previous_template = without_portable_blocks(template)
     project_rules = without_portable_blocks(existing)
     previous_separator = b"\n\n# Existing project rules\n"
+    image_marker = GAME_IMAGE_PATCH_GITIGNORE_COMMENT.encode("utf-8")
+    image_start = project_rules.find(image_marker)
     if project_rules == previous_template:
         project_rules = b""
     elif project_rules.startswith(previous_template + previous_separator):
         project_rules = project_rules[
             len(previous_template + previous_separator) :
         ].strip()
+    elif image_start >= 0 and [
+        line
+        for line in normalized(project_rules[:image_start]).splitlines()
+        if line.strip()
+    ] == [
+        line
+        for line in normalized(previous_template).splitlines()
+        if line.strip()
+    ]:
+        project_rules = project_rules[image_start:].strip()
 
     combined = template.rstrip(b"\r\n") + b"\n"
     if project_rules:
