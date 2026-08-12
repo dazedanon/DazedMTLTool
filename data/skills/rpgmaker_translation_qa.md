@@ -1,10 +1,12 @@
 # QA Exported RPG Maker Translations — Local Task Handoff
 
-<!-- qa-contract:rpgmaker-qa-local-v6
+<!-- qa-contract:rpgmaker-qa-local-v8
 app-owned-inventory immutable-review-bundles scene-affine-semantic-screen
 evidence-preserving-deep-handoff motif-family-receipts selective-risk-escalation
 validated-checkpoints honest-global-coverage grouped-finding-families
-final-editorial-pass subjective-precision-gate approval-before-edit preserve-original atomic-apply post-fix-regression
+motif-finding-attribution final-consistency-audit final-editorial-pass
+subjective-precision-gate ignored-receipt-workspace clean-release-auto-approval
+preserve-original atomic-apply post-fix-regression
 no-provider-api
 -->
 
@@ -24,6 +26,8 @@ Translation quirks: `{{QUIRKS_FILE}}`
 Game skill: `{{GAME_SKILL_FILE}}`
 
 Optional game skills: `{{GAME_SKILLS_FOLDER}}`
+
+Ignored reviewer receipts: `{{GAME_ROOT}}/.dazedtl/qa-receipts/`
 </task_context>
 
 ## Required workflow
@@ -41,6 +45,11 @@ python "{{QA_TOOL_ROOT}}/scripts/rpgmaker_qa.py" prepare --game-root "{{GAME_ROO
 Open the generated task directory's `README.md` and follow it exactly. It gives the checksum-bound
 screen and deep-review result schemas and the commands for claiming, accepting, resuming, and
 finalizing bundles.
+
+Write temporary screen and deep result JSON only beneath the task-specific directory named by the
+generated README under `{{GAME_ROOT}}/.dazedtl/qa-receipts/`. Never place `.qa-*.json` or
+`qa-*.json` in the game root. DazedTL retains accepted canonical receipts in its managed task;
+the ignored game-local directory is convenient review history and must not pollute Git changes.
 
 The screen stage keeps every dialogue command-list scene intact and assigns that complete scene to
 one worker only. A bundle may contain several whole scenes, but no scene may cross bundle or worker
@@ -75,7 +84,9 @@ worker assignments, throughput, and ETA—never merely one completed bundle.
 
 Final motif-family summaries reconcile the earlier family receipt with every accepted deep result.
 Actionable or uncertain variants supersede an earlier clean family disposition, while the original
-screen receipt remains nested in the report for auditability.
+screen receipt remains nested in the report for auditability. Deep reviews explicitly attribute
+motif IDs only when their correction or playtest uncertainty concerns that joke mechanism;
+unrelated defects and ordinary anchor collisions never make a motif family look broken.
 
 If QA rules change after an exhaustive screen finishes, reuse its checksum-validated receipts and
 regenerate only deep review with `rebuild-deep --task "<completed-task>"`. The command creates a
@@ -84,6 +95,10 @@ context, or screen-bundle checksums differ.
 If only final-report rules change after deep review completes, use
 `rebuild-final --task "<completed-task>"`; compatible screen and deep receipts are
 checksum-validated and replayed into a new task without invoking semantic review again.
+
+Finalization first runs a deterministic consistency audit against exact mappings recorded in the
+translation quirks and repeated structured UI headers. If it reports a conflict, do not present a
+partial report: reconcile the named deep receipts and use `rebuild-final` until the audit passes.
 
 After finalization and before showing findings to the user, perform a final editorial pass over
 every actionable correction. Prefer a reviewer who did not author the correction when another
@@ -107,12 +122,19 @@ gate.
 
 Do not show or apply a correction that fails this pass. Do not edit `findings.json` directly.
 Revise its corresponding deep result receipt, run `rebuild-final` into a separate output root, and
-repeat the editorial pass on the returned task. Only present stable finding IDs for approval after
-every actionable correction has passed.
+repeat the editorial pass on the returned task.
 
-Do not edit until the user approves specific stable finding IDs. Never modify or remove
-`_original`. After approval, use the generated README's correction-map, dry-run, atomic-apply, and
-regression commands. Never write game files directly.
+For a full-game release task, once every actionable correction passes and there are no unresolved
+playtest/context records, automatically create the all-findings correction map, dry-run it, and
+apply it through DazedTL's atomic regression gate. Do not make the user approve already-verified
+stable IDs. If `uncertain_playtests` is nonempty, or any deterministic audit, dry-run, apply, or
+regression safeguard fails, pause and ask only for the decision needed to resolve that issue. The
+generated README provides the restricted `--approve-all` commands and the explicit
+`--allow-uncertain` path for applying verified findings while leaving uncertain records unchanged.
+
+Targeted reruns still require approval of specific stable IDs because they do not represent the
+complete release gate. Never modify or remove `_original`, and never write game files directly;
+always use the generated README's correction-map, dry-run, atomic-apply, and regression commands.
 
 <!-- qa-focus:database -->
 Database focus. The local manifest owns the exact canonical database-file scope; review only the

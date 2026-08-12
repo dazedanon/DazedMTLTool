@@ -272,9 +272,12 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             "validated-checkpoints",
             "honest-global-coverage",
             "grouped-finding-families",
+            "motif-finding-attribution",
+            "final-consistency-audit",
             "final-editorial-pass",
             "subjective-precision-gate",
-            "approval-before-edit",
+            "ignored-receipt-workspace",
+            "clean-release-auto-approval",
             "preserve-original",
             "atomic-apply",
             "post-fix-regression",
@@ -291,15 +294,19 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 prompt = load_rpgmaker_qa_skill(focus)
                 lowered = prompt.casefold()
                 contract = re.search(
-                    r"<!-- qa-contract:rpgmaker-qa-local-v6\s+(.*?)-->",
+                    r"<!-- qa-contract:rpgmaker-qa-local-v8\s+(.*?)-->",
                     prompt,
                     re.DOTALL,
                 )
                 self.assertIsNotNone(contract)
                 self.assertEqual(set(contract.group(1).split()), expected_contract)
-                self.assertIn("do not edit until the user approves", lowered)
+                self.assertIn("automatically create the all-findings correction map", lowered)
+                self.assertIn("do not make the user approve", lowered)
+                self.assertIn("targeted reruns still require approval", lowered)
                 self.assertIn("never modify or remove", lowered)
                 self.assertIn("`_original`", lowered)
+                self.assertIn(".dazedtl/qa-receipts/", lowered)
+                self.assertIn("never place `.qa-*.json`", lowered)
                 self.assertIn(focus_signatures[focus], prompt)
                 for other_focus, signature in focus_signatures.items():
                     if other_focus != focus:
@@ -329,6 +336,8 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 self.assertIn("reviewer who did not author", lowered)
                 self.assertIn("not merely preferred wording", lowered)
                 self.assertIn("family receipt even when preserved", lowered)
+                self.assertIn("unrelated defects", lowered)
+                self.assertIn("deterministic consistency audit", lowered)
                 self.assertIn("complete scene", lowered)
                 self.assertIn("rebuild-deep", lowered)
                 self.assertIn("themselves mandate deep review", lowered)

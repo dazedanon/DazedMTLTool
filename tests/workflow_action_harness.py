@@ -166,6 +166,7 @@ for _method_name in (
     "_copy_localization_investigation_prompt",
     "_reload_investigation_guidance",
     "_prepare_translation_qa",
+    "_copy_qa_final_rebuild_handoff",
     "_create_public_release",
     "_copy_plugins_js_translate_prompt",
     "_export_active_files",

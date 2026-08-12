@@ -337,7 +337,10 @@ _STEP_HELP: dict[int, str] = {
         "2. Click <b>Reload and review guidance</b> when investigation finishes.<br>"
         "3. For final QA, select <b>Full game - coverage & release gate</b> and prepare the task.<br>"
         "4. Paste the copied QA handoff into your AI helper and let it complete the local bundles.<br>"
-        "5. Review its stable finding IDs and approve only the translation corrections you want applied.<br><br>"
+        "5. If QA rules change after completion, use <b>Copy final rebuild handoff</b> to reuse the "
+        "finished screen and deep review instead of starting another pass.<br>"
+        "6. Let the full-game release gate validate and apply clean findings automatically. It pauses "
+        "only for unresolved playtest/context decisions or a failed safeguard.<br><br>"
         "Investigation is hypothesis-led and optional; it maintains guidance but does not edit "
         "translated game text or replace QA. "
         "The full-game mode exhaustively covers every supported translated source once. The "
@@ -2632,7 +2635,8 @@ class WorkflowTab(QWidget):
         self._qa_finish_stage = qa_stage
         self._qa_ai_help_banner = StatusBanner(
             "For final QA, run the full-game release gate once. Targeted modes are optional reruns. "
-            "DazedTL owns coverage, context, validated results, and approved fixes.",
+            "DazedTL owns coverage, context, and validated results. It automatically applies a "
+            "clean release result and pauses only when it needs a decision or a safeguard fails.",
             "info",
         )
         qa_stage.add_widget(self._qa_ai_help_banner)
@@ -2664,6 +2668,17 @@ class WorkflowTab(QWidget):
         _size_action_button(qa_btn, Geometry.ACTION_WIDE)
         qa_actions.addWidget(qa_btn)
 
+        qa_rebuild_btn = _make_btn("Copy final rebuild handoff", "#555")
+        qa_rebuild_btn.setToolTip(
+            "Reuse a completed QA pass to rebuild only its final report after QA rules change. "
+            "This does not repeat screen or deep review."
+        )
+        qa_rebuild_btn.clicked.connect(self._copy_qa_final_rebuild_handoff)
+        qa_rebuild_btn.setEnabled(False)
+        self._qa_rebuild_btn = qa_rebuild_btn
+        _size_action_button(qa_rebuild_btn, Geometry.ACTION_WIDE)
+        qa_actions.addWidget(qa_rebuild_btn)
+
         # Images and playtesting are MV/MZ-only. Ace exposes its release action
         # here after the same required game-data QA sequence.
         self._ace_release_zip_btn = _make_btn(
@@ -2680,6 +2695,7 @@ class WorkflowTab(QWidget):
         qa_actions.addWidget(self._ace_release_zip_btn)
         _equalize_action_buttons(
             qa_btn,
+            qa_rebuild_btn,
             self._ace_release_zip_btn,
             width=Geometry.ACTION_WIDE,
         )
@@ -4513,22 +4529,110 @@ class WorkflowTab(QWidget):
         if label is None:
             return
         try:
-            from util.rpgmaker_qa import find_latest_task, status
+            from util.rpgmaker_qa import (
+                find_latest_completed_task,
+                find_latest_task,
+                status,
+            )
 
             game_root = str(getattr(self, "_prepared_game_root", "") or "").strip()
             focus = str(self._qa_focus_combo.currentData() or "release")
             if not game_root:
                 label.setText("No prepared game is selected.")
+                self._set_qa_rebuild_source(None)
                 return
+            completed = find_latest_completed_task(
+                self._qa_output_root(), game_root, focus
+            )
+            self._set_qa_rebuild_source(completed)
             task = find_latest_task(self._qa_output_root(), game_root, focus)
             if task is None:
-                label.setText("No QA task prepared for this pass.")
+                label.setText(
+                    "A completed QA pass is available for a final-only rebuild."
+                    if completed else "No QA task prepared for this pass."
+                )
                 return
             task_status = status(task)
-            label.setText(self._qa_status_text(task_status))
+            status_text = self._qa_status_text(task_status)
+            if completed is not None and task.resolve() != completed.resolve():
+                status_text += (
+                    "\nCompleted pass available: use Copy final rebuild handoff "
+                    "to reuse screen and deep review."
+                )
+            label.setText(status_text)
             label.setToolTip(str(task))
         except Exception as exc:
-            label.setText(f"Could not read QA status: {exc}")
+            rebuild_available = bool(
+                str(getattr(self, "_qa_rebuild_source_task", "") or "")
+            )
+            label.setText(
+                f"Could not read QA status: {exc}"
+                + (
+                    "\nCompleted pass available: use Copy final rebuild handoff."
+                    if rebuild_available else ""
+                )
+            )
+
+    def _set_qa_rebuild_source(self, task: Path | None):
+        self._qa_rebuild_source_task = str(task.resolve()) if task else ""
+        button = getattr(self, "_qa_rebuild_btn", None)
+        if button is not None:
+            button.setEnabled(bool(task))
+
+    def _copy_qa_final_rebuild_handoff(self):
+        """Copy a final-only rebuild handoff for the latest completed pass."""
+        try:
+            from util.rpgmaker_qa import find_latest_completed_task
+
+            game_root = self._prepared_project_or_warn()
+            if not game_root:
+                return
+            focus = str(self._qa_focus_combo.currentData() or "release")
+            source = find_latest_completed_task(
+                self._qa_output_root(), game_root, focus
+            )
+            if source is None:
+                self._set_qa_rebuild_source(None)
+                QMessageBox.information(
+                    self,
+                    "Final report rebuild",
+                    "No completed QA pass is available for this game and focus.",
+                )
+                return
+            output_parent = self._qa_output_root() / "final_rebuilds"
+            cli = PROJECT_ROOT / "scripts" / "rpgmaker_qa.py"
+            handoff = (
+                "Rebuild only the final report for this completed DazedTL-managed RPG Maker "
+                "QA task. Do not run prepare and do not repeat screen or deep review.\n\n"
+                f"Completed source task: `{source.resolve()}`\n"
+                f"DazedTL checkout: `{PROJECT_ROOT}`\n\n"
+                "Run:\n"
+                f"`python \"{cli}\" rebuild-final --task \"{source.resolve()}\" "
+                f"--output-root \"<new directory under {output_parent}>\"`\n\n"
+                "Use a new separate output root for every attempt. "
+                "Reuse its checksum-validated screen and deep receipts. If the deterministic "
+                "final consistency audit reports conflicts, reconcile only the named deep "
+                "receipts, retry with another new output root, and do not reopen clean records. "
+                "After finalization succeeds, perform the required final editorial pass, then "
+                "follow the rebuilt task's automatic release-approval and safeguard workflow."
+            )
+            QApplication.clipboard().setText(handoff)
+            self._qa_task_status.setText(
+                "Final-only rebuild handoff copied. The completed screen and deep review "
+                "will be reused."
+            )
+            self._qa_task_status.setToolTip(str(source.resolve()))
+            self._log(f"Final-only QA rebuild handoff copied from: {source.resolve()}")
+            QMessageBox.information(
+                self,
+                "Final rebuild handoff copied",
+                "Paste the copied handoff into your AI helper. It will reuse the completed "
+                "screen and deep review instead of starting another QA pass.",
+            )
+        except Exception as exc:
+            self._qa_task_status.setText(f"Could not copy final rebuild handoff: {exc}")
+            self._log(f"❌ Could not copy final QA rebuild handoff: {exc}")
+            QMessageBox.warning(self, "Final rebuild handoff", str(exc))
 
     def _copy_qa_task_handoff(self, task_dir: str, task_status: dict):
         task = Path(task_dir).expanduser().resolve()
@@ -4569,17 +4673,20 @@ class WorkflowTab(QWidget):
             )
             self._qa_worker = worker
             self._qa_prepare_btn.setEnabled(False)
+            self._qa_rebuild_btn.setEnabled(False)
             self._qa_focus_combo.setEnabled(False)
             self._qa_task_status.setText("Building and independently validating the QA inventory…")
             worker.done.connect(self._on_qa_task_prepared)
             worker.failed.connect(self._on_qa_task_failed)
             worker.finished.connect(lambda: self._qa_prepare_btn.setEnabled(True))
             worker.finished.connect(lambda: self._qa_focus_combo.setEnabled(True))
+            worker.finished.connect(self._refresh_qa_task_status)
             worker.finished.connect(self._release_qa_worker)
             worker.start()
         except Exception as exc:
             self._qa_prepare_btn.setEnabled(True)
             self._qa_focus_combo.setEnabled(True)
+            self._refresh_qa_task_status()
             self._log(f"❌ Could not prepare translation QA: {exc}")
 
     def _on_qa_task_prepared(self, task_dir: str, task_status: dict):

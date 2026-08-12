@@ -89,6 +89,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (7, "copy_localization_investigation_prompt", {"text": "Copy investigation skill"}),
             (7, "reload_investigation_guidance", {"text": "Reload and review guidance"}),
             (7, "prepare_translation_qa", {"text": "Prepare / resume QA"}),
+            (7, "copy_qa_final_rebuild_handoff", {"text": "Copy final rebuild handoff"}),
             (8, "refresh_image_workflow_status", {"text": "Refresh readiness"}),
             (8, "open_image_manager", {"text": "Open Image Manager"}),
             (9, "detect_tli_editors", {"text": "Find editors"}),
@@ -103,7 +104,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (9, "install_both_playtest", {"text": "Install both plugins"}),
             (9, "refresh_playtest_status", {"text": "Refresh plugin status"}),
         )
-        self.assertEqual(len(cases), 50)
+        self.assertEqual(len(cases), 51)
         for step, endpoint, locator in cases:
             with self.subTest(step=step, endpoint=endpoint, locator=locator):
                 if endpoint == "apply_var_range":
@@ -202,6 +203,27 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         self.assertIn("Screen 0/4", self.workflow._qa_task_status.text())
         qa_worker.finished.emit()
         FakeWorker.reset()
+
+        completed_task = self.harness.root / "completed-qa-task"
+        completed_task.mkdir()
+        with (
+            patch(
+                "util.rpgmaker_qa.find_latest_completed_task",
+                return_value=completed_task,
+            ),
+            patch.object(QMessageBox, "information"),
+        ):
+            self.workflow._refresh_qa_task_status()
+            self.assertTrue(self.workflow._qa_rebuild_btn.isEnabled())
+            QApplication.clipboard().clear()
+            self.workflow._copy_qa_final_rebuild_handoff()
+        rebuild_handoff = QApplication.clipboard().text()
+        self.assertIn(str(completed_task.resolve()), rebuild_handoff)
+        self.assertIn("Do not run prepare", rebuild_handoff)
+        self.assertIn("do not repeat screen or deep review", rebuild_handoff)
+        self.assertIn("rebuild-final", rebuild_handoff)
+        self.assertIn("will be reused", self.workflow._qa_task_status.text())
+
         items = [
             {"name": "Actors.json", "path": "/fixture/Actors.json", "size_kb": 1, "category": "core", "default": True},
             {"name": "Map001.json", "path": "/fixture/Map001.json", "size_kb": 1, "category": "map", "default": False},

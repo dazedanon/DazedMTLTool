@@ -64,8 +64,9 @@ FINDING_CATEGORIES = frozenset({
     "other",
 })
 EDITORIAL_JUDGMENT_CATEGORIES = frozenset({"fluency", "voice", "wordplay"})
+APPROVED_NONBLOCKING_MECHANICAL_FLAGS = frozenset({"suspicious-length-ratio"})
 
-QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-v8"
+QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-v10"
 FORCED_DEEP_MECHANICAL_FLAGS = frozenset({
     "empty-live",
     "unchanged-source",
@@ -92,6 +93,13 @@ _MOTIF_GUIDANCE_RE = re.compile(
     re.IGNORECASE,
 )
 _JAPANESE_ANCHOR_RE = re.compile(r"[一-龠々〆〤ぁ-ゔァ-ヴー]{2,}")
+_CANONICAL_QUIRK_MAPPING_RE = re.compile(
+    r"`([^`\n]+)`\s*→\s*\"([^\"\n]+)\""
+)
+_JAPANESE_FIELD_LABEL_RE = re.compile(r"【([^】\n]+)】")
+_ENGLISH_FIELD_LABEL_RE = re.compile(
+    r"\[([A-Za-z][A-Za-z0-9 /&'’-]{0,79})\]"
+)
 _EN_PRONOUN_RE = re.compile(
     r"\b(?:I|me|my|mine|myself|we|us|our|ours|ourselves|you|your|yours|yourself|"
     r"yourselves|he|him|his|himself|she|her|hers|herself|they|them|their|theirs|"
@@ -156,6 +164,79 @@ def _normalize_category(value: Any) -> str:
 def _normalize_family_key(value: Any) -> str:
     key = re.sub(r"\s+", " ", str(value or "").strip()).casefold()
     return key[:200]
+
+
+def _fixed_source_key(value: Any) -> str:
+    return re.sub(r"\s+", "", str(value or ""))
+
+
+def _fixed_translation_key(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _audit_final_findings(
+    findings: list[dict[str, Any]], context: dict[str, Any]
+) -> None:
+    """Stop publication when accepted corrections contradict fixed project wording."""
+    quirks = str((context.get("quirks") or {}).get("text") or "")
+    canonical: dict[str, set[str]] = defaultdict(set)
+    for source, translation in _CANONICAL_QUIRK_MAPPING_RE.findall(quirks):
+        source_parts = re.split(r"\s+/\s+", source)
+        translation_parts = re.split(r"\s+/\s+", translation)
+        mappings = (
+            zip(source_parts, translation_parts, strict=True)
+            if len(source_parts) > 1 and len(source_parts) == len(translation_parts)
+            else ((source, translation),)
+        )
+        for mapped_source, mapped_translation in mappings:
+            canonical[_fixed_source_key(mapped_source)].add(
+                _fixed_translation_key(mapped_translation)
+            )
+
+    violations = []
+    for finding in findings:
+        expected = canonical.get(_fixed_source_key(finding.get("source"))) or set()
+        if len(expected) != 1:
+            continue
+        correction = _fixed_translation_key(finding.get("correction"))
+        if correction not in expected:
+            violations.append(
+                f"{finding['id']} conflicts with fixed wording "
+                f"{next(iter(expected))!r}"
+            )
+
+    field_labels: dict[str, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
+    for finding in findings:
+        source_labels = _JAPANESE_FIELD_LABEL_RE.findall(
+            str(finding.get("source") or "")
+        )
+        correction_labels = _ENGLISH_FIELD_LABEL_RE.findall(
+            str(finding.get("correction") or "")
+        )
+        if not source_labels or len(source_labels) != len(correction_labels):
+            continue
+        for source_label, correction_label in zip(
+            source_labels, correction_labels, strict=True
+        ):
+            field_labels[source_label][correction_label].add(finding["id"])
+    for source_label, translations in sorted(field_labels.items()):
+        if len(translations) < 2:
+            continue
+        rendered = ", ".join(
+            f"{translation!r} ({', '.join(sorted(finding_ids))})"
+            for translation, finding_ids in sorted(translations.items())
+        )
+        violations.append(
+            f"structured field 【{source_label}】 has conflicting labels: {rendered}"
+        )
+
+    if violations:
+        raise QAResultError(
+            "Final editorial consistency audit failed; revise the named deep "
+            "receipts and rebuild-final: " + "; ".join(violations)
+        )
 
 
 def _validate_editorial_basis(review: dict[str, Any], identity: str) -> None:
@@ -896,8 +977,28 @@ def _write_bundles(
     return summaries
 
 
-def _task_instructions(task_dir: Path) -> str:
+def _task_instructions(task_dir: Path, task: dict[str, Any]) -> str:
     cli = Path(__file__).resolve().parents[1] / "scripts" / "rpgmaker_qa.py"
+    receipt_dir = (
+        Path(task["game_root"]) / ".dazedtl" / "qa-receipts" / task_dir.name
+    )
+    if task["focus"] == "release":
+        correction_workflow = f"""9. After every actionable correction passes, continue automatically; do not ask the user to
+   approve stable finding IDs. Run
+   `python "{cli}" corrections --task "{task_dir}" --approve-all`, followed by
+   `python "{cli}" dry-run --task "{task_dir}"`, then
+   `python "{cli}" apply --task "{task_dir}"`. The first command is restricted to the full-game
+   release focus and refuses to proceed when unresolved `uncertain_playtests` remain. If it
+   refuses, ask the user only about those named playtest/context decisions. After the user
+   explicitly chooses to apply the independently verified findings while leaving those records
+   unchanged, rerun corrections with `--approve-all --allow-uncertain`. Pause and report any
+   deterministic audit, dry-run, apply, or regression error; never bypass a failed safeguard."""
+    else:
+        correction_workflow = f"""9. After every actionable correction passes, show the targeted findings to the user and wait
+   for approval of specific stable IDs. Create and validate the selected correction map with
+   `python "{cli}" corrections --task "{task_dir}" --approve QA-0001 ...` and
+   `python "{cli}" dry-run --task "{task_dir}"`. Only then apply it with
+   `python "{cli}" apply --task "{task_dir}"`. Targeted reruns never use `--approve-all`."""
     return f"""# AI-helper QA task
 
 This task is managed by DazedTL. Do not create another manifest, index, checkpoint, registry,
@@ -905,6 +1006,7 @@ or pipeline. Do not call a model-provider API; use the current AI helper for sem
 Do not edit the game during discovery.
 
 Task directory: `{task_dir}`
+Reviewer receipt workspace: `{receipt_dir}`
 
 If the AI helper supports parallel reviewers, use two to four persistent workers. Each worker must
 use a unique name with `next`; DazedTL assigns non-overlapping bundles and keeps global coverage.
@@ -915,11 +1017,18 @@ redistribute a scene outside the claim/release commands.
 1. Read `context.json` once for the game glossary and translation guidance.
 2. Run `python "{cli}" status --task "{task_dir}"`.
 3. Claim work with `python "{cli}" next --task "{task_dir}" --worker "<unique-worker-name>"`.
-4. Read the returned immutable bundle and write the result schema described below.
+4. Read the returned immutable bundle and write the result schema described below. Create the
+   reviewer receipt workspace above and write every temporary screen/deep result there using a
+   unique filename containing its bundle ID. Never write `.qa-*.json` or `qa-*.json` in the game
+   root. DazedTL copies accepted receipts into the managed task directory; the ignored workspace
+   only preserves convenient reviewer history.
 5. Submit it with `python "{cli}" accept --task "{task_dir}" --result "<result.json>"`.
 6. Continue until `next` says the current stage is complete, then run
    `python "{cli}" advance --task "{task_dir}"` and continue the next stage.
 7. When every deep bundle is accepted, run `python "{cli}" finalize --task "{task_dir}"`.
+   Finalization audits exact mappings from the translation quirks and repeated structured UI
+   headers across all proposed corrections. If it reports a conflict, do not present a partial
+   report; reconcile the named deep receipts and run `rebuild-final` until the audit passes.
 8. Before showing findings to the user, perform a final editorial pass over every actionable
    correction in `findings.json`. Prefer a reviewer who did not author the correction when another
    reviewer is available. Compare the source, current translation, correction, evidence, and
@@ -936,12 +1045,9 @@ redistribute a scene outside the claim/release commands.
    If a correction needs revision, revise its corresponding deep result receipt, run
    `python "{cli}" rebuild-final --task "{task_dir}" --output-root
    "<separate-output-root>"`, and repeat this pass on the returned task.
-9. Only after every actionable correction passes, show `findings.json` to the user and wait for
-   explicit approval. The helper must never choose
-   approvals itself. After approval, create and validate a correction map with
-   `python "{cli}" corrections --task "{task_dir}" --approve QA-0001 ...` and
-   `python "{cli}" dry-run --task "{task_dir}"`. Only then may the approved map be applied with
-   `python "{cli}" apply --task "{task_dir}"`; DazedTL applies atomically and runs regression.
+{correction_workflow}
+
+   DazedTL applies correction maps atomically and runs regression.
    If a final editorial adjustment is needed after approval but before applying, write one
    checksum-recorded review covering every approved finding exactly once, create its delta map
    with `python "{cli}" editorial-corrections --task "{task_dir}" --review
@@ -991,7 +1097,7 @@ Write:
 For a deep bundle, return exactly one review per item:
 
 ```json
-{{"schema":"{DEEP_RESULT_SCHEMA}","bundle_id":"deep-0001","bundle_sha256":"...","reviews":[{{"id":"...","disposition":"clean","severity":null,"category":"","family_key":"","evidence":"","correction":null,"apply_identities":[]}}]}}
+{{"schema":"{DEEP_RESULT_SCHEMA}","bundle_id":"deep-0001","bundle_sha256":"...","reviews":[{{"id":"...","disposition":"clean","severity":null,"category":"","family_key":"","motif_ids":[],"evidence":"","correction":null,"apply_identities":[]}}]}}
 ```
 
 Each deep item states the high-confidence `deep_reasons` that caused escalation. Do not expand the
@@ -1005,6 +1111,10 @@ reconcile both in the evidence for your disposition. If `deep_reasons` contains
 `motif-scene-contradiction`, a scene reviewer disputed a wordplay variant after the family screen
 called it preserved, so every family variant has been reopened. Judge each one against a single
 recognizable English joke mechanism rather than accepting unrelated name-bearing phrases.
+Set `motif_ids` to the exact bundle-provided motif IDs only when this review's correction or
+playtest uncertainty actually concerns those joke mechanisms. Use an empty list for ordinary name
+mentions, anchor collisions, and unrelated defects on a motif-matched line; motif summaries use
+this attribution and must not claim that an unrelated correction is a family failure.
 
 Use `actionable` only for a concrete source-supported defect with a supported correction; its
 severity must be lowercase `critical`, `high`, or `medium`. Use `uncertain-playtest` for
@@ -1142,7 +1252,9 @@ def prepare_task(
             }
             _atomic_write_json(staging / "task.json", task)
             _atomic_write_json(staging / "checkpoint.json", checkpoint)
-            _atomic_write_text(staging / "README.md", _task_instructions(task_dir))
+            _atomic_write_text(
+                staging / "README.md", _task_instructions(task_dir, task)
+            )
             staging.replace(task_dir)
         except Exception:
             if staging.is_dir() and not staging.is_symlink():
@@ -1451,6 +1563,27 @@ def _validate_deep_result(bundle: dict, result: dict) -> None:
         allowed_ids = set(bundle_items[identity].get("identities") or [])
         if not isinstance(apply_ids, list) or not set(apply_ids).issubset(allowed_ids):
             raise QAResultError(f"Invalid apply_identities for {identity}")
+        motif_ids = review.get("motif_ids") or []
+        allowed_motif_ids = {
+            str(context.get("id") or "")
+            for context in bundle_items[identity].get("motif_contexts") or []
+        }
+        if (
+            not isinstance(motif_ids, list)
+            or len(motif_ids) != len(set(motif_ids))
+            or not set(motif_ids).issubset(allowed_motif_ids)
+        ):
+            raise QAResultError(f"Invalid motif_ids for {identity}")
+        if motif_ids and disposition == "clean":
+            raise QAResultError(f"Clean review cannot attribute a motif for {identity}")
+        if (
+            motif_ids
+            and disposition == "actionable"
+            and _normalize_category(review.get("category")) != "wordplay"
+        ):
+            raise QAResultError(
+                f"Motif-attributed actionable review must use wordplay for {identity}"
+            )
 
 
 def accept_result(task_dir: str | Path, result_path: str | Path) -> dict[str, Any]:
@@ -1899,6 +2032,7 @@ def _finalize_unlocked(task_dir: str | Path) -> dict[str, Any]:
     uncertain = []
     motif_families = []
     deep_dispositions: dict[str, str] = {}
+    deep_motif_attributions: dict[str, set[str] | None] = {}
     for row in checkpoint["screen"]["bundles"]:
         bundle = _read_json(Path(row["path"]))
         motifs = _screen_motif_map(bundle)
@@ -1926,6 +2060,11 @@ def _finalize_unlocked(task_dir: str | Path) -> dict[str, Any]:
         result = _read_json(Path(row["result_path"]))
         for review in result["reviews"]:
             deep_dispositions[review["id"]] = review["disposition"]
+            deep_motif_attributions[review["id"]] = (
+                set(review.get("motif_ids") or [])
+                if "motif_ids" in review
+                else None
+            )
             if review["disposition"] == "actionable":
                 cluster = clusters[review["id"]]
                 target_ids = review.get("apply_identities") or cluster["identities"]
@@ -1955,15 +2094,35 @@ def _finalize_unlocked(task_dir: str | Path) -> dict[str, Any]:
     ))
     for index, finding in enumerate(findings, start=1):
         finding["id"] = f"QA-{index:04d}"
+    _audit_final_findings(findings, _read_json(root / "context.json"))
     finding_by_cluster = {item["cluster_id"]: item for item in findings}
     uncertain_ids = {item["id"] for item in uncertain}
     for motif in motif_families:
         variant_ids = set(motif.pop("_variant_ids"))
-        actionable_variants = sorted(variant_ids & set(finding_by_cluster))
-        uncertain_variants = sorted(variant_ids & uncertain_ids)
-        finding_ids = [finding_by_cluster[item]["id"] for item in actionable_variants]
         screen_review = motif["screen_review"]
         screen_suspects = set(screen_review["suspect_ids"])
+        actionable_variants = sorted(
+            cluster_id
+            for cluster_id in variant_ids & set(finding_by_cluster)
+            if (
+                motif["id"] in deep_motif_attributions[cluster_id]
+                if deep_motif_attributions.get(cluster_id) is not None
+                else (
+                    cluster_id in screen_suspects
+                    and finding_by_cluster[cluster_id]["category"] == "wordplay"
+                )
+            )
+        )
+        uncertain_variants = sorted(
+            cluster_id
+            for cluster_id in variant_ids & uncertain_ids
+            if (
+                motif["id"] in deep_motif_attributions[cluster_id]
+                if deep_motif_attributions.get(cluster_id) is not None
+                else cluster_id in screen_suspects
+            )
+        )
+        finding_ids = [finding_by_cluster[item]["id"] for item in actionable_variants]
         cleared_screen_suspects = sorted(
             item for item in screen_suspects
             if deep_dispositions.get(item) == "clean"
@@ -2241,7 +2400,9 @@ def _rebuild_final_from_frozen_semantics(
             checkpoint["task_sha256"] = _sha256(_canonical_bytes(task))
             _atomic_write_json(staging / "task.json", task)
             _atomic_write_json(staging / "checkpoint.json", checkpoint)
-            _atomic_write_text(staging / "README.md", _task_instructions(rebuilt))
+            _atomic_write_text(
+                staging / "README.md", _task_instructions(rebuilt, task)
+            )
             staging.replace(rebuilt)
         except Exception:
             if staging.is_dir() and not staging.is_symlink():
@@ -2308,6 +2469,27 @@ def create_correction_map(
     correction_map["content_sha256"] = _sha256(_canonical_bytes(correction_map))
     _atomic_write_json(root / "correction-map.json", correction_map)
     return correction_map
+
+
+def create_release_correction_map(
+    task_dir: str | Path, *, allow_uncertain: bool = False
+) -> dict[str, Any]:
+    """Approve every finalized release finding when no user decision is pending."""
+    root, task, checkpoint = _load_task(task_dir)
+    if checkpoint["stage"] != "complete":
+        raise ValueError("QA discovery must be complete before creating corrections")
+    if task["focus"] != "release":
+        raise ValueError("Automatic approval is restricted to full-game release QA")
+    findings_doc = _read_json(root / "findings.json")
+    uncertain = list(findings_doc.get("uncertain_playtests") or [])
+    if uncertain and not allow_uncertain:
+        raise ValueError(
+            "Automatic approval paused because unresolved uncertain playtests remain; "
+            "ask the user about those records or explicitly use --allow-uncertain to "
+            "leave them unchanged"
+        )
+    finding_ids = [item["id"] for item in findings_doc.get("findings") or []]
+    return create_correction_map(root, finding_ids)
 
 
 def _load_editorial_migration_source(
@@ -2527,6 +2709,15 @@ def _operation_replacements(values: list[str], operation: dict) -> list[str]:
     return lines
 
 
+def _has_suspicious_length_ratio(source: Any, live: Any) -> bool:
+    source_text = str(source or "")
+    live_text = str(live or "")
+    if len(source_text) < 8 or not live_text:
+        return False
+    ratio = len(live_text) / len(source_text)
+    return ratio < 0.35 or ratio > 3.0
+
+
 def _validate_correction_map(
     correction_map: dict[str, Any], task: dict[str, Any]
 ) -> None:
@@ -2549,8 +2740,13 @@ def _dry_run_loaded_correction_map(
     _validate_correction_map(correction_map, task)
 
     data_root = Path(task["data_root"]).resolve()
+    inventory_records = {
+        item["identity"]: item
+        for item in _read_json(root / "inventory.json").get("records") or []
+    }
     documents: dict[str, Any] = {}
     preview = []
+    warnings = []
     pointer_targets: dict[tuple[str, str], str] = {}
     for operation in correction_map.get("operations") or []:
         filename = str(operation.get("file") or "")
@@ -2583,12 +2779,27 @@ def _dry_run_loaded_correction_map(
             "expected": operation["expected"],
             "replacement": operation["replacement"],
         })
+        baseline = inventory_records.get(operation["identity"]) or {}
+        baseline_flags = set(
+            (baseline.get("mechanical") or {}).get("flags") or []
+        )
+        if (
+            "suspicious-length-ratio" not in baseline_flags
+            and _has_suspicious_length_ratio(
+                baseline.get("source"), operation["replacement"]
+            )
+        ):
+            warnings.append(
+                "approved correction projects a non-blocking mechanical flag: "
+                f"{operation['identity']} suspicious-length-ratio"
+            )
     report = {
         "schema": "rpgmaker-qa-correction-dry-run-v1",
         "created_at": _utc_now(),
         "valid": True,
         "operation_count": len(preview),
         "file_count": len(documents),
+        "warnings": warnings,
         "operations": preview,
     }
     _atomic_write_json(root / report_name, report)
@@ -2744,6 +2955,7 @@ def apply_correction_map(task_dir: str | Path) -> dict[str, Any]:
         _read_json(root / "inventory.json"),
         dry_run_name="correction-dry-run.json",
         regression_name="regression.json",
+        nonblocking_introduced_flags=APPROVED_NONBLOCKING_MECHANICAL_FLAGS,
     )
 
 
@@ -2766,7 +2978,7 @@ def apply_editorial_correction_map(task_dir: str | Path) -> dict[str, Any]:
         before,
         dry_run_name="editorial-correction-dry-run.json",
         regression_name="editorial-regression.json",
-        nonblocking_introduced_flags=frozenset({"suspicious-length-ratio"}),
+        nonblocking_introduced_flags=APPROVED_NONBLOCKING_MECHANICAL_FLAGS,
     )
 
 
@@ -2838,6 +3050,7 @@ def regression_check(task_dir: str | Path) -> dict[str, Any]:
         task,
         _read_json(root / "inventory.json"),
         corrections,
+        nonblocking_introduced_flags=APPROVED_NONBLOCKING_MECHANICAL_FLAGS,
     )
 
 
@@ -2849,3 +3062,45 @@ def find_latest_task(
         return None
     tasks = [path for path in base.iterdir() if (path / "task.json").is_file()]
     return max(tasks, key=lambda path: path.stat().st_mtime) if tasks else None
+
+
+def find_latest_completed_task(
+    output_root: str | Path, game_root: str | Path, focus: str
+) -> Path | None:
+    """Find a completed pass even when newer QA rules make its status stale."""
+    game = Path(game_root).expanduser().resolve()
+    base = Path(output_root).expanduser().resolve() / _slug(game.name) / focus
+    if not base.is_dir():
+        return None
+    completed = []
+    for path in base.iterdir():
+        if path.is_symlink():
+            continue
+        try:
+            task = _read_json(path / "task.json")
+            checkpoint = _read_json(path / "checkpoint.json")
+        except (OSError, ValueError):
+            continue
+        if (
+            task.get("schema") != TASK_SCHEMA
+            or checkpoint.get("schema") != CHECKPOINT_SCHEMA
+            or checkpoint.get("task_sha256") != _sha256(_canonical_bytes(task))
+            or Path(str(task.get("game_root") or "")).expanduser().resolve() != game
+            or task.get("focus") != focus
+            or checkpoint.get("stage") != "complete"
+        ):
+            continue
+        screen = checkpoint.get("screen") or {}
+        deep = checkpoint.get("deep") or {}
+        if any(
+            int(stage.get("accepted_items", -1))
+            != int(stage.get("total_items", -2))
+            or any(
+                row.get("status") != "accepted"
+                for row in stage.get("bundles") or []
+            )
+            for stage in (screen, deep)
+        ) or not deep.get("bundles"):
+            continue
+        completed.append(path)
+    return max(completed, key=lambda path: path.stat().st_mtime) if completed else None

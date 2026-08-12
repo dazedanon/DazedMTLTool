@@ -49,7 +49,18 @@ def main() -> int:
     release.add_argument("--bundle", required=True)
     corrections = sub.add_parser("corrections")
     corrections.add_argument("--task", required=True, type=Path)
-    corrections.add_argument("--approve", nargs="+", required=True)
+    approval = corrections.add_mutually_exclusive_group(required=True)
+    approval.add_argument("--approve", nargs="+")
+    approval.add_argument(
+        "--approve-all",
+        action="store_true",
+        help="Approve all finalized findings in a full-game release task.",
+    )
+    corrections.add_argument(
+        "--allow-uncertain",
+        action="store_true",
+        help="Leave unresolved playtest records unchanged after explicit user direction.",
+    )
     editorial = sub.add_parser("editorial-corrections")
     editorial.add_argument("--task", required=True, type=Path)
     editorial.add_argument("--review", required=True, type=Path)
@@ -92,7 +103,14 @@ def main() -> int:
     elif args.command == "finalize":
         _print(rpgmaker_qa.finalize(args.task))
     elif args.command == "corrections":
-        _print(rpgmaker_qa.create_correction_map(args.task, args.approve))
+        if args.allow_uncertain and not args.approve_all:
+            parser.error("--allow-uncertain requires --approve-all")
+        if args.approve_all:
+            _print(rpgmaker_qa.create_release_correction_map(
+                args.task, allow_uncertain=args.allow_uncertain
+            ))
+        else:
+            _print(rpgmaker_qa.create_correction_map(args.task, args.approve))
     elif args.command == "editorial-corrections":
         _print(rpgmaker_qa.create_editorial_correction_map(args.task, args.review))
     elif args.command == "editorial-dry-run":

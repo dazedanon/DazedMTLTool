@@ -134,6 +134,9 @@ class WorkflowShellTests(unittest.TestCase):
         self.assertEqual(
             self.workflow._qa_prepare_btn.text(), "Prepare / resume QA"
         )
+        self.assertEqual(
+            self.workflow._qa_rebuild_btn.text(), "Copy final rebuild handoff"
+        )
 
         self.workflow._goto_step(7)
         existing_glossary = glossary.read_text(encoding="utf-8")

@@ -55,11 +55,11 @@ class RPGMakerQAEngineTests(unittest.TestCase):
             ],
         )
 
-    def _prepare(self, **kwargs):
+    def _prepare(self, *, focus="database", **kwargs):
         return rpgmaker_qa.prepare_task(
             self.game,
             self.data,
-            "database",
+            focus,
             self.root / "tasks",
             **kwargs,
         )[0]
@@ -111,6 +111,51 @@ class RPGMakerQAEngineTests(unittest.TestCase):
             state = rpgmaker_qa.accept_result(task, result)
         self.assertEqual(state["screen"]["accepted"], 2)
         self.assertEqual(state["screen"]["total"], 4)
+
+    def test_release_readme_uses_ignored_receipts_and_auto_approves_clean_findings(self):
+        task = self._prepare(focus="release")
+        readme = (task / "README.md").read_text(encoding="utf-8")
+        expected_receipts = self.game / ".dazedtl" / "qa-receipts" / task.name
+        self.assertIn(str(expected_receipts), readme)
+        self.assertIn("Never write `.qa-*.json`", readme)
+        self.assertIn("corrections --task", readme)
+        self.assertIn("--approve-all", readme)
+        self.assertIn("do not ask the user to", readme)
+
+        self._accept_clean_screen(task)
+        self.assertEqual(rpgmaker_qa.advance(task)["stage"], "ready-finalize")
+        rpgmaker_qa.finalize(task)
+        findings_path = task / "findings.json"
+        findings = json.loads(findings_path.read_text(encoding="utf-8"))
+        inventory = json.loads((task / "inventory.json").read_text(encoding="utf-8"))
+        record = next(item for item in inventory["records"] if item["live"] == "Potion")
+        findings["findings"] = [{
+            "id": "QA-0001",
+            "target_identities": [record["identity"]],
+            "correction": "Tonic",
+        }]
+        _write(findings_path, findings)
+
+        correction_map = rpgmaker_qa.create_release_correction_map(task)
+        self.assertEqual(correction_map["approved_finding_ids"], ["QA-0001"])
+        self.assertEqual(len(correction_map["operations"]), 1)
+
+        findings["uncertain_playtests"] = [{"id": "QAU-0001"}]
+        _write(findings_path, findings)
+        with self.assertRaisesRegex(ValueError, "uncertain playtests remain"):
+            rpgmaker_qa.create_release_correction_map(task)
+        correction_map = rpgmaker_qa.create_release_correction_map(
+            task, allow_uncertain=True
+        )
+        self.assertEqual(correction_map["approved_finding_ids"], ["QA-0001"])
+
+    def test_targeted_task_cannot_auto_approve_all_findings(self):
+        task = self._prepare()
+        self._accept_clean_screen(task)
+        self.assertEqual(rpgmaker_qa.advance(task)["stage"], "ready-finalize")
+        rpgmaker_qa.finalize(task)
+        with self.assertRaisesRegex(ValueError, "restricted to full-game release"):
+            rpgmaker_qa.create_release_correction_map(task)
 
     def test_screen_result_rejects_unknown_identity_without_advancing_coverage(self):
         task = self._prepare()
@@ -407,6 +452,10 @@ class RPGMakerQAEngineTests(unittest.TestCase):
                 for evidence in item.get("screen_evidence") or []
             )
         )
+        unrelated = next(
+            item for item in deep_items
+            if item["id"] in motif_variant_ids and item["id"] != escalated["id"]
+        )
         self.assertEqual(
             escalated["screen_evidence"][0]["note"],
             "This callback conflicts with the established Luna-name joke.",
@@ -488,22 +537,34 @@ class RPGMakerQAEngineTests(unittest.TestCase):
             bundle = json.loads(Path(assignment["path"]).read_text(encoding="utf-8"))
             reviews = []
             for item in bundle["items"]:
-                actionable = item["id"] == escalated["id"]
+                motif_actionable = item["id"] == escalated["id"]
+                unrelated_actionable = item["id"] == unrelated["id"]
+                actionable = motif_actionable or unrelated_actionable
                 reviews.append({
                     "id": item["id"],
                     "disposition": "actionable" if actionable else "clean",
                     "severity": "medium" if actionable else None,
-                    "category": "wordplay" if actionable else "",
-                    "family_key": "motif:ルナです" if actionable else "",
+                    "category": (
+                        "wordplay" if motif_actionable
+                        else "meaning" if unrelated_actionable else ""
+                    ),
+                    "family_key": "motif:ルナです" if motif_actionable else "",
+                    "motif_ids": [motif_item["id"]] if motif_actionable else [],
                     "evidence": (
                         "The full scene proves this callback loses the Luna-name joke."
-                        if actionable else ""
+                        if motif_actionable
+                        else "An unrelated meaning defect occurs on this motif-matched line."
+                        if unrelated_actionable else ""
                     ),
-                    "correction": "Luna's the name!" if actionable else None,
+                    "correction": (
+                        "Luna's the name!" if motif_actionable
+                        else "Correct unrelated meaning." if unrelated_actionable
+                        else None
+                    ),
                     "apply_identities": [],
                     **({
                         "editorial_basis": editorial_basis,
-                    } if actionable else {}),
+                    } if motif_actionable else {}),
                 })
             result = self.root / f"{assignment['id']}-motif-deep.json"
             _write(result, {
@@ -523,6 +584,14 @@ class RPGMakerQAEngineTests(unittest.TestCase):
             [escalated["id"]],
         )
         self.assertEqual(len(final_motif["deep_reconciliation"]["finding_ids"]), 1)
+        self.assertNotIn(
+            unrelated["id"],
+            final_motif["deep_reconciliation"]["actionable_variant_ids"],
+        )
+        self.assertTrue(any(
+            item["cluster_id"] == unrelated["id"]
+            for item in findings["findings"]
+        ))
         motif_finding = next(
             item for item in findings["findings"]
             if item["cluster_id"] == escalated["id"]
@@ -585,12 +654,109 @@ class RPGMakerQAEngineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "QA rules changed"):
             rpgmaker_qa.status(task)
 
+    def test_completed_task_discovery_ignores_a_newer_fresh_pass(self):
+        completed = self._prepare()
+        self._accept_clean_screen(completed, suspect_source="体力を回復する。")
+        rpgmaker_qa.advance(completed)
+        while True:
+            assignment = rpgmaker_qa.next_bundle(completed, "deep-worker")
+            if assignment is None:
+                break
+            bundle = json.loads(Path(assignment["path"]).read_text(encoding="utf-8"))
+            result = self.root / f"{assignment['id']}-completed-deep.json"
+            _write(result, {
+                "schema": rpgmaker_qa.DEEP_RESULT_SCHEMA,
+                "bundle_id": assignment["id"],
+                "bundle_sha256": assignment["sha256"],
+                "reviews": [{
+                    "id": item["id"],
+                    "disposition": "clean",
+                    "severity": None,
+                    "category": "",
+                    "family_key": "",
+                    "motif_ids": [],
+                    "evidence": (
+                        "The source and translation both describe restoring health; "
+                        "the screen suspicion is not supported."
+                    ),
+                    "correction": None,
+                    "apply_identities": [],
+                } for item in bundle["items"]],
+            })
+            rpgmaker_qa.accept_result(completed, result)
+        rpgmaker_qa.finalize(completed)
+
+        with patch.object(
+            rpgmaker_qa, "_engine_fingerprint", return_value="new-qa-rules"
+        ):
+            fresh = self._prepare()
+            with self.assertRaisesRegex(ValueError, "QA rules changed"):
+                rpgmaker_qa.status(completed)
+
+        self.assertNotEqual(fresh, completed)
+        self.assertEqual(
+            rpgmaker_qa.find_latest_task(
+                self.root / "tasks", self.game, "database"
+            ),
+            fresh,
+        )
+        self.assertEqual(
+            rpgmaker_qa.find_latest_completed_task(
+                self.root / "tasks", self.game, "database"
+            ),
+            completed,
+        )
+
+    def test_final_consistency_audit_rejects_fixed_and_structured_label_conflicts(self):
+        fixed_context = {
+            "quirks": {"text": '- Keep `%1の%2！` → "%1\'s %2!" exactly.'}
+        }
+        fixed_findings = [{
+            "id": "QA-0001",
+            "source": "%1の%2！",
+            "correction": "%1 uses %2!",
+        }]
+        with self.assertRaisesRegex(
+            rpgmaker_qa.QAResultError, "conflicts with fixed wording"
+        ):
+            rpgmaker_qa._audit_final_findings(fixed_findings, fixed_context)
+
+        menu_context = {"quirks": {"text": (
+            '- Keep `回想する / アニメーションを再生する / やめる` → '
+            '"Replay Scene / Play Animation / Cancel" exactly.'
+        )}}
+        with self.assertRaisesRegex(
+            rpgmaker_qa.QAResultError, "Play Animation"
+        ):
+            rpgmaker_qa._audit_final_findings([{
+                "id": "QA-0002",
+                "source": "アニメーションを再生する",
+                "correction": "View CG",
+            }], menu_context)
+        rpgmaker_qa._audit_final_findings([{
+            "id": "QA-0002",
+            "source": "アニメーションを再生する",
+            "correction": "Play Animation",
+        }], menu_context)
+
+        structured_findings = [{
+            "id": "QA-0001",
+            "source": "\\C[16]【交流対象】\\C[0]",
+            "correction": "\\C[16][Interaction Target]\\C[0]",
+        }, {
+            "id": "QA-0002",
+            "source": "\\C[16]【交流対象】\\C[0]",
+            "correction": "\\C[16][Interaction Partner]\\C[0]",
+        }]
+        with self.assertRaisesRegex(
+            rpgmaker_qa.QAResultError, "structured field 【交流対象】"
+        ):
+            rpgmaker_qa._audit_final_findings(structured_findings, {"quirks": {}})
+
     def test_deep_finding_applies_only_after_map_and_preserves_original(self):
         items_path = self.data / "Items.json"
         items = json.loads(items_path.read_text(encoding="utf-8"))
-        verbose_current = (
-            "This overly verbose description says that the item restores health completely."
-        )
+        verbose_current = "Restores health."
         verbose_correction = (
             "This clearer description says that the item restores magical power."
         )
@@ -656,15 +822,17 @@ class RPGMakerQAEngineTests(unittest.TestCase):
         baseline_record = next(
             item for item in baseline["records"] if item["live"] == verbose_current
         )
-        self.assertIn(
+        self.assertNotIn(
             "suspicious-length-ratio", baseline_record["mechanical"]["flags"]
         )
         rpgmaker_qa.create_correction_map(task, [approved])
         preview = rpgmaker_qa.dry_run_correction_map(task)
         self.assertTrue(preview["valid"])
         self.assertEqual(preview["operation_count"], 1)
+        self.assertEqual(len(preview["warnings"]), 1)
         regression = rpgmaker_qa.apply_correction_map(task)
         self.assertTrue(regression["valid"])
+        self.assertEqual(len(regression["warnings"]), 1)
 
         updated_raw = (self.data / "Items.json").read_bytes()
         self.assertTrue(updated_raw.startswith(b"\xef\xbb\xbf"))
@@ -710,7 +878,7 @@ class RPGMakerQAEngineTests(unittest.TestCase):
         final_items = json.loads(items_path.read_text(encoding="utf-8-sig"))
         self.assertEqual(final_items[1]["description"], editorial_replacement)
 
-    def test_editorial_regression_reports_only_length_ratio_as_warning(self):
+    def test_approved_regression_reports_only_length_ratio_as_warning(self):
         identity = "Items.json#/1/_original/description@test"
         before = {
             "content_sha256": "before",
@@ -747,19 +915,19 @@ class RPGMakerQAEngineTests(unittest.TestCase):
                 before,
                 corrections,
             )
-            editorial = rpgmaker_qa._regression_check_loaded(
+            approved = rpgmaker_qa._regression_check_loaded(
                 {"data_root": str(self.data), "focus": "database"},
                 before,
                 corrections,
-                nonblocking_introduced_flags=frozenset({
-                    "suspicious-length-ratio"
-                }),
+                nonblocking_introduced_flags=(
+                    rpgmaker_qa.APPROVED_NONBLOCKING_MECHANICAL_FLAGS
+                ),
             )
         self.assertFalse(normal["valid"])
         self.assertEqual(len(normal["errors"]), 1)
-        self.assertTrue(editorial["valid"])
-        self.assertEqual(editorial["errors"], [])
-        self.assertEqual(len(editorial["warnings"]), 1)
+        self.assertTrue(approved["valid"])
+        self.assertEqual(approved["errors"], [])
+        self.assertEqual(len(approved["warnings"]), 1)
 
 
 if __name__ == "__main__":
