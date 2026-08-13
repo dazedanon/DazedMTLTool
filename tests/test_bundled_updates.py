@@ -36,6 +36,8 @@ _SHIPPED_DATA_FILES = (
     "data/skills/post_update_translation.md",
     "data/skills/build-game-walkthrough/SKILL.md",
     "data/skills/build-game-walkthrough/agents/openai.yaml",
+    "data/skills/build-game-walkthrough/references/validation-evidence.md",
+    "data/skills/build-game-walkthrough/scripts/validate_walkthrough.py",
     "data/help/index.json",
     "data/help/00-welcome.md",
     "data/help/01-git-setup.md",

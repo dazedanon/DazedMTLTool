@@ -25,8 +25,9 @@ Work autonomously through research, authoring, cross-checking, and rendering. Do
 
 1. Detect the actual engine and game version; treat the engine hint only as a starting point.
 2. Inventory all relevant maps, transfers, event pages, common events, variables, switches, journal entries, achievements, enemies, troops, drops, items, skills, states, puzzles, optional areas, postgame gates, and replay flags that actually exist in the project.
-3. Audit independent bounded areas in parallel when subagents are available: main progression; maps and fixed pickups; side content and relationships; combat, achievements, postgame, and New Game+.
-4. Resolve disagreements against the executable data. Record remaining uncertainty explicitly.
+3. Audit independent bounded areas separately: main progression; maps and fixed pickups; side content and relationships; combat, achievements, postgame, and New Game+.
+4. Resolve disagreements against the executable data. Trace material choices forward through transfers, common events, page conditions, `If`, `Else`, switches, and variables; then reverse-index each claimed unique reward to every acquisition command.
+5. For RPG Maker MV/MZ, read [`references/validation-evidence.md`](references/validation-evidence.md) and record high-risk claims in `<game>/.dazedtl/walkthrough/evidence.json`. Never mark guide-derived mappings as reviewed without checking executable data.
 
 Use hard evidence throughout:
 
@@ -59,7 +60,7 @@ Use consistent callouts:
 - **Optional Detour**
 - **Return Later**
 - **Boss Ahead**
-- **Choice Ahead**
+- **Choice Ahead — Player-Facing Choice Name**
 - **Before Leaving**
 - **Navigation Note**
 
@@ -70,6 +71,7 @@ Protect readers from spoilers. Keep major future events vague until the route re
 Keep these ignored authoring files under `<game>/.dazedtl/walkthrough/`:
 
 - `WALKTHROUGH.md` as the editable source.
+- `evidence.json`, `validation-report.json`, and `live-play-checklist.md` as machine-readable evidence, coverage results, and unresolved runtime checks.
 - Focused research reports and any local build script needed to regenerate the publication.
 
 Create `<game>/WALKTHROUGH.html` as a single offline file containing all markup, styles, scripts, and walkthrough content. It must not require the Markdown source, a server, internet access, remote fonts, CDNs, frameworks, or other assets.
@@ -103,6 +105,8 @@ Place this visible disclaimer near the beginning:
 
 ## Validate before finishing
 
+- For RPG Maker MV/MZ, run `python3 scripts/validate_walkthrough.py --game-root <game>` from this skill directory after rebuilding HTML. Treat errors and contradicted coverage as blockers. Report `passed_with_unresolved` honestly and preserve every unresolved or unsupported item in the generated live-play checklist.
+- Give every material-choice callout a stable player-facing name. Confirm every branch states its exact in-game option label plus complete fights, rewards, achievements, scenes, and later access in the **Choice Ahead** callout before the player chooses. Keep badge/name mappings and exact database names consistent everywhere.
 - Reconcile every claimed total with the source events and rewards.
 - Verify first availability and route order for each collectible and optional event.
 - Check that every internal HTML anchor resolves and every element ID is unique.
