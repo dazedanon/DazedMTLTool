@@ -87,6 +87,39 @@ class ControlCodeProtectionTests(unittest.TestCase):
 
         self.assertTrue(valid, reasons)
 
+    def test_orphan_backslash_cannot_become_translated_control_code(self):
+        source = r"\C[1]\ヘレンの体力－100"
+        protected, replacements = tr.protect_script_codes(source)
+        raw_translation = protected.replace(
+            "ヘレンの体力－100", "Helen's Stamina -100"
+        )
+
+        self.assertEqual(tr.restore_script_codes(protected, replacements), source)
+        self.assertIn("\\", replacements.values())
+
+        restored_for_validation = tr.restore_script_codes(
+            raw_translation, replacements
+        )
+        valid, reasons = tr.validate_control_codes(
+            source, restored_for_validation, {0: replacements}
+        )
+        self.assertTrue(valid, reasons)
+
+        safe_translation = tr.restore_script_codes(
+            raw_translation,
+            replacements,
+            escape_orphan_backslashes=True,
+        )
+        self.assertEqual(safe_translation, r"\C[1]\\Helen's Stamina -100")
+        valid, reasons = tr.validate_control_codes(
+            source, safe_translation, {0: replacements}
+        )
+        self.assertTrue(valid, reasons)
+        self.assertEqual(
+            tr._reprotect_cached_codes(safe_translation, replacements),
+            raw_translation,
+        )
+
     def test_mapped_control_validation_still_rejects_missing_code(self):
         source = r"\vcそう"
         _, replacements = tr.protect_script_codes(source)

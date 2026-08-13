@@ -230,6 +230,12 @@ def clear_estimate_written_sizes():
 
 # ===== Placeholder Protection System =====
 # Patterns to protect from translation (sound effects, control codes, etc.)
+_GENERAL_CONTROL_PATTERN = (
+    r'[\\]+(?:[A-Za-z_][A-Za-z0-9_]*(?:\[(?:[^\[\]]|\[[^\]]*\])*\])?'
+    r'|[{}.!|^><#$@,\-])'
+)
+_ORPHAN_BACKSLASH_PATTERN = r'[\\]+(?=[^\W\d_])'
+
 PROTECTED_PATTERNS = [
     r'\\SE\[[^\]]+\]',      # \SE[sound_effect_name]
     r'\\ME\[[^\]]+\]',      # \ME[music_effect_name]
@@ -239,10 +245,24 @@ PROTECTED_PATTERNS = [
     r'\\VS\[[^\]]+\]',      # \VS[name]
     # General RPG Maker/plugin controls. Preserve the full spelling, parameter,
     # slash count, and order rather than asking the model to reproduce them.
-    r'[\\]+(?:[A-Za-z_][A-Za-z0-9_]*(?:\[(?:[^\[\]]|\[[^\]]*\])*\])?|[{}.!|^><#$@,\-])',
+    _GENERAL_CONTROL_PATTERN,
+    # A backslash before a non-ASCII word is not recognized as a control code,
+    # but translating that word can turn it into one (``\ヘレン`` ->
+    # ``\Helen``). Protect the slash run separately; target restoration escapes
+    # odd runs so they remain literal instead of becoming runtime commands.
+    _ORPHAN_BACKSLASH_PATTERN,
 ]
 
-_CONTROL_CODE_RE = re.compile(PROTECTED_PATTERNS[-1])
+_CONTROL_CODE_RE = re.compile(_GENERAL_CONTROL_PATTERN)
+_ORPHAN_BACKSLASH_RE = re.compile(r'^[\\]+$')
+
+
+def _escaped_orphan_backslash(code):
+    """Return an even slash run so RPG Maker treats it as literal text."""
+    value = str(code)
+    if _ORPHAN_BACKSLASH_RE.fullmatch(value) and len(value) % 2:
+        return value + "\\"
+    return value
 
 
 def extract_control_codes(text):
@@ -260,18 +280,27 @@ def _mask_mapped_control_codes(text, replacements):
     # Match exact restored codes before using the generic parser. This matters
     # for unparameterized codes such as ``\vc``: once restored before English
     # text, ``\vcThat's`` would otherwise be greedily parsed as ``\vcThat``.
+    # Orphan slash placeholders are also masked. Cached/final translations may
+    # contain their even, literal-safe form, so prefer that form when present.
     # Search from the beginning for each occurrence so normal translation word
     # order may move standalone values/icons without making them look missing.
     for original in replacements.values():
         code = str(original)
-        if _CONTROL_CODE_RE.fullmatch(code) is None:
+        is_orphan_backslash = _ORPHAN_BACKSLASH_RE.fullmatch(code) is not None
+        if _CONTROL_CODE_RE.fullmatch(code) is None and not is_orphan_backslash:
             continue
-        index = masked.find(code)
+        matched_code = (
+            _escaped_orphan_backslash(code) if is_orphan_backslash else code
+        )
+        index = masked.find(matched_code)
+        if index < 0 and matched_code != code:
+            matched_code = code
+            index = masked.find(matched_code)
         if index < 0:
             missing.append(code)
             continue
-        end = index + len(code)
-        masked = masked[:index] + (" " * len(code)) + masked[end:]
+        end = index + len(matched_code)
+        masked = masked[:index] + (" " * len(matched_code)) + masked[end:]
 
     return masked, missing
 
@@ -422,9 +451,13 @@ def protect_script_codes(text):
     return protected_text, replacements
 
 
-def restore_script_codes(text, replacements):
+def restore_script_codes(text, replacements, escape_orphan_backslashes=False):
     """
     Restore protected script codes from placeholders after translation.
+
+    When ``escape_orphan_backslashes`` is true, odd slash-only replacements are
+    made even. This preserves a literal backslash without allowing translated
+    ASCII text immediately after it to become a new RPG Maker control code.
     """
     if not text or not replacements:
         return text
@@ -432,10 +465,22 @@ def restore_script_codes(text, replacements):
     if isinstance(text, str):
         result = text
         for placeholder, original in replacements.items():
-            result = result.replace(placeholder, original)
+            restored = (
+                _escaped_orphan_backslash(original)
+                if escape_orphan_backslashes
+                else original
+            )
+            result = result.replace(placeholder, restored)
         return result
     elif isinstance(text, list):
-        return [restore_script_codes(item, replacements) for item in text]
+        return [
+            restore_script_codes(
+                item,
+                replacements,
+                escape_orphan_backslashes=escape_orphan_backslashes,
+            )
+            for item in text
+        ]
     else:
         return text
 
@@ -444,10 +489,15 @@ def _reprotect_cached_codes(text, replacements):
     """Reapply known placeholders before validating a restored cache value."""
     protected = str(text)
     for placeholder, original in replacements.items():
-        index = protected.find(str(original))
+        code = str(original)
+        cached_code = _escaped_orphan_backslash(code)
+        index = protected.find(cached_code)
+        if index < 0 and cached_code != code:
+            cached_code = code
+            index = protected.find(cached_code)
         if index < 0:
             continue
-        end = index + len(str(original))
+        end = index + len(cached_code)
         protected = protected[:index] + placeholder + protected[end:]
     return protected
 
@@ -5210,7 +5260,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             if isinstance(tItem, list):
                 for j in range(len(final_translations)):
                     if j in all_replacements:
-                        final_translations[j] = restore_script_codes(final_translations[j], all_replacements[j])
+                        final_translations[j] = restore_script_codes(
+                            final_translations[j],
+                            all_replacements[j],
+                            escape_orphan_backslashes=True,
+                        )
 
                 # Cache before expansion; key is Japanese-only, so value must match.
                 if not config.estimateMode:
@@ -5228,7 +5282,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                         final_translations, tItem, corrupted_map, no_japanese_map
                     )
             else:
-                final_translations = restore_script_codes(final_translations, all_replacements[0])
+                final_translations = restore_script_codes(
+                    final_translations,
+                    all_replacements[0],
+                    escape_orphan_backslashes=True,
+                )
             
             formatted_output = last_raw_translation
             try:

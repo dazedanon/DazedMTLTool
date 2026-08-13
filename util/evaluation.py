@@ -3060,9 +3060,11 @@ def _process_results(manifest: dict, raw_results: dict,
                 line_issues.append(
                     "Placeholder mismatch: " + ", ".join((*missing, *extra))
                 )
-            restored = restore_script_codes(raw_translation, replacements)
+            restored_for_validation = restore_script_codes(
+                raw_translation, replacements
+            )
             controls_ok, control_issues = validate_control_codes(
-                [source], [restored], {0: replacements}
+                [source], [restored_for_validation], {0: replacements}
             )
             if not controls_ok:
                 line_issues.extend(control_issues)
@@ -3080,6 +3082,11 @@ def _process_results(manifest: dict, raw_results: dict,
                 valid_segments += 1
             else:
                 validation_failures += 1
+            restored = restore_script_codes(
+                raw_translation,
+                replacements,
+                escape_orphan_backslashes=True,
+            )
             lines.append({
                 "segment_id": segment_id,
                 "source": source,
