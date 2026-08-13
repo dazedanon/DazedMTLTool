@@ -33,6 +33,7 @@ _SHIPPED_DATA_FILES = (
     "data/skills/risky_codes.md",
     "data/skills/wolf_speakers.md",
     "data/skills/wolf_precheck_repair.md",
+    "data/skills/post_update_translation.md",
     "data/skills/build-game-walkthrough/SKILL.md",
     "data/skills/build-game-walkthrough/agents/openai.yaml",
     "data/help/index.json",

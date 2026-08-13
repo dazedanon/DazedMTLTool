@@ -8,6 +8,7 @@ from typing import Callable
 
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
+    QApplication,
     QCheckBox,
     QFileDialog,
     QFormLayout,
@@ -28,6 +29,7 @@ from PyQt5.QtWidgets import (
 )
 
 from gui.theme import COLORS, Spacing
+from util.skills import load_clipboard_skill
 from util.version_update import (
     GitWorkflowError,
     RepositoryStatus,
@@ -360,6 +362,37 @@ class VersionUpdateTab(QWidget):
         layout.addWidget(activity_card)
         self.activity_card = activity_card
 
+        post_update_card = SectionCard(
+            "4. Translate and review the update",
+            "After the Git update is complete, copy a game-specific skill that finds and translates new official text while preserving the existing localization.",
+        )
+        post_update_note = QLabel(
+            "The AI helper will use the selected game's glossary, game skill, quirks, "
+            "custom skill overlays, existing translations, and the registered update diff."
+        )
+        post_update_note.setWordWrap(True)
+        post_update_note.setStyleSheet(f"color:{COLORS.text_muted};")
+        post_update_card.add_widget(post_update_note)
+        post_update_actions = QHBoxLayout()
+        post_update_actions.addStretch()
+        self.copy_post_update_skill_btn = QPushButton("Copy post-update translation skill")
+        configure_action_button(self.copy_post_update_skill_btn, variant="secondary")
+        self.copy_post_update_skill_btn.setToolTip(
+            "Copy instructions for an AI helper to translate and consistency-check the latest applied official update."
+        )
+        self.copy_post_update_skill_btn.clicked.connect(
+            self._copy_post_update_translation_skill
+        )
+        post_update_actions.addWidget(self.copy_post_update_skill_btn)
+        post_update_card.add_layout(post_update_actions)
+        self.post_update_copy_status = QLabel("")
+        self.post_update_copy_status.setWordWrap(True)
+        self.post_update_copy_status.setStyleSheet(f"color:{COLORS.success};")
+        post_update_card.add_widget(self.post_update_copy_status)
+        post_update_card.setVisible(False)
+        layout.addWidget(post_update_card)
+        self.post_update_card = post_update_card
+
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.setVisible(False)
@@ -416,6 +449,9 @@ class VersionUpdateTab(QWidget):
         if hasattr(self, "activity"):
             self.activity.clear()
             self.activity_card.setVisible(False)
+        if hasattr(self, "post_update_card"):
+            self.post_update_card.setVisible(False)
+            self.post_update_copy_status.clear()
         if hasattr(self, "baseline_edit"):
             self.baseline_edit.clear()
         candidate = self._workflow_game_path()
@@ -493,6 +529,7 @@ class VersionUpdateTab(QWidget):
             self.bootstrap_card.setVisible(False)
             self.update_card.setVisible(False)
             self.recovery_card.setVisible(False)
+            self.post_update_card.setVisible(False)
             self.switch_translation_btn.setVisible(False)
             self.finish_assets_btn.setVisible(False)
 
@@ -505,6 +542,7 @@ class VersionUpdateTab(QWidget):
             self.bootstrap_card.setVisible(False)
             self.update_card.setVisible(False)
             self.recovery_card.setVisible(False)
+            self.post_update_card.setVisible(False)
             self.switch_translation_btn.setVisible(False)
             self.finish_assets_btn.setVisible(False)
             return
@@ -519,6 +557,7 @@ class VersionUpdateTab(QWidget):
             self.bootstrap_card.setVisible(False)
             self.update_card.setVisible(False)
             self.recovery_card.setVisible(False)
+            self.post_update_card.setVisible(False)
             self.switch_translation_btn.setVisible(False)
             self.finish_assets_btn.setVisible(False)
             return
@@ -644,6 +683,17 @@ class VersionUpdateTab(QWidget):
         )
         self.apply_registered_btn.setVisible(branch_ready and behind)
         self.recovery_card.setVisible(status.pending_cherry_pick)
+        self.post_update_card.setVisible(
+            bool(
+                status.repo_root
+                and status.original_exists
+                and status.translation_exists
+                and status.current_branch == status.translation_branch
+                and not status.pending_cherry_pick
+                and not status.asset_sync_pending
+                and status.applied_update_version
+            )
+        )
         if status.pending_cherry_pick:
             paths = conflict_paths(status.selected_root)
             self.conflict_summary.setPlainText(
@@ -664,6 +714,7 @@ class VersionUpdateTab(QWidget):
             self.apply_registered_btn,
             self.continue_btn,
             self.abort_btn,
+            self.copy_post_update_skill_btn,
         ):
             button.setEnabled(not busy)
         self.patch_overlay_check.setEnabled(not busy)
@@ -677,6 +728,55 @@ class VersionUpdateTab(QWidget):
     def _set_activity(self, text: str) -> None:
         self.activity.setPlainText(text)
         self.activity_card.setVisible(True)
+
+    def _copy_post_update_translation_skill(self) -> None:
+        """Copy a game-scoped handoff for translating the latest applied update."""
+        try:
+            selected = self.current_edit.text().strip()
+            if not selected:
+                raise ValueError("Select a translated game folder first.")
+            game_root = Path(selected).expanduser().resolve()
+            status = inspect_repository(game_root)
+            if not (
+                status.repo_root
+                and status.original_exists
+                and status.translation_exists
+                and status.current_branch == status.translation_branch
+                and not status.pending_cherry_pick
+                and not status.asset_sync_pending
+                and status.applied_update_version
+            ):
+                raise ValueError(
+                    "Finish the official update on the registered translated branch before copying this skill."
+                )
+
+            version = status.applied_update_version
+            metadata = game_root / ".dazedtl"
+            skills = metadata / "skills"
+            replacements = {
+                "{{GAME_ROOT}}": str(game_root),
+                "{{VERSION}}": version,
+                "{{GLOSSARY_FILE}}": str(metadata / "glossary.txt"),
+                "{{GAME_SKILL_FILE}}": str(skills / "game.md"),
+                "{{QUIRKS_FILE}}": str(skills / "quirks.md"),
+                "{{GAME_SKILLS_DIR}}": str(skills),
+            }
+            prompt = load_clipboard_skill("post_update_translation.md")
+            invalid = [token for token in replacements if token not in prompt]
+            if invalid:
+                raise ValueError(
+                    "Post-update translation skill has invalid placeholder(s): "
+                    + ", ".join(invalid)
+                )
+            for token, value in replacements.items():
+                prompt = prompt.replace(token, value)
+
+            QApplication.clipboard().setText(prompt)
+            self.post_update_copy_status.setText(
+                f"Copied the version {version} translation skill. Paste it into your AI helper."
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Copy Post-update Translation Skill", str(exc))
 
     def _run(self, operation: Callable[[], object], success: Callable[[object], None]):
         if self._worker is not None and self._worker.isRunning():

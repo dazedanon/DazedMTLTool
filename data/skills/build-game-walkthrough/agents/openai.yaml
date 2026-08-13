@@ -1,4 +1,4 @@
 interface:
   display_name: "Game Walkthrough Builder"
-  short_description: "Build an evidence-based portable game walkthrough"
-  default_prompt: "Use $build-game-walkthrough to create a spoiler-conscious 100% walkthrough from this game data."
+  short_description: "Build a consistent evidence-based game walkthrough"
+  default_prompt: "Use $build-game-walkthrough to create a spoiler-conscious 100% walkthrough from this game data using the shared walkthrough design."

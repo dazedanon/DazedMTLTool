@@ -158,6 +158,7 @@ class RepositoryStatus:
     asset_manifest_available: bool = False
     asset_baseline_repair_needed: bool = False
     translation_branch: str | None = None
+    applied_update_version: str | None = None
 
     @property
     def ready(self) -> bool:
@@ -425,6 +426,23 @@ def _version_from_history(repo: Path, ref: str, commit: str | None) -> str | Non
     return match.group(1) if match else None
 
 
+def _applied_update_version(
+    repo: Path, ref: str, commit: str | None
+) -> str | None:
+    """Return the newest DazedTL patch version on a translated branch."""
+    if not commit:
+        return None
+    messages = _run_git(repo, "log", "-n", "100", "--format=%B%x00", ref).stdout
+    for message in messages.split("\x00"):
+        lines = message.strip().splitlines()
+        if not lines or not lines[0].casefold().startswith("patch:"):
+            continue
+        match = _VERSION_LINE.search(message)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
 def _repository_for(selected: Path) -> tuple[Path, str] | None:
     result = _run_git(selected, "rev-parse", "--show-toplevel", check=False)
     if result.returncode != 0:
@@ -487,6 +505,9 @@ def inspect_repository(game_root: str | Path) -> RepositoryStatus:
         ).exists(),
         asset_baseline_repair_needed=_asset_manifest_needs_repair(repo, prefix),
         translation_branch=translation_branch,
+        applied_update_version=_applied_update_version(
+            repo, translation_branch or TRANSLATION_BRANCH, translation_commit
+        ),
     )
 
 

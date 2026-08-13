@@ -501,6 +501,21 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_clipboard_skill("../system.md")
 
+        post_update = load_clipboard_skill("post_update_translation.md")
+        for placeholder in (
+            "{{GAME_ROOT}}",
+            "{{VERSION}}",
+            "{{GLOSSARY_FILE}}",
+            "{{GAME_SKILL_FILE}}",
+            "{{QUIRKS_FILE}}",
+            "{{GAME_SKILLS_DIR}}",
+        ):
+            self.assertIn(placeholder, post_update)
+        self.assertIn("DazedTL-Version", post_update)
+        self.assertIn("Preserve unrelated user changes", post_update)
+        self.assertIn("Do not switch branches", post_update)
+        self.assertIn("Search the update-touched player-visible scope", post_update)
+
         with tempfile.TemporaryDirectory() as raw:
             game_root = Path(raw) / "Game With Spaces"
             game_root.mkdir()

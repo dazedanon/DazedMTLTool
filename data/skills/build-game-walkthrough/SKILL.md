@@ -1,6 +1,6 @@
 ---
 name: build-game-walkthrough
-description: Build a spoiler-conscious, evidence-based 100% game walkthrough as a self-contained responsive HTML file by auditing local game code and data. Use when a translated RPG Maker or WOLF RPG project needs player-facing story routing, side content, collectibles, puzzles, combat guidance, achievements, postgame, and New Game+ coverage.
+description: Build a spoiler-conscious, evidence-based 100% game walkthrough as a self-contained responsive HTML file by auditing local game code and data and applying the bundled shared walkthrough design system. Use when a translated RPG Maker or WOLF RPG project needs player-facing story routing, side content, collectibles, puzzles, combat guidance, achievements, postgame, and New Game+ coverage.
 ---
 
 # Build a Game Walkthrough
@@ -33,6 +33,7 @@ Use hard evidence throughout:
 - Do not invent visual landmarks, colors, minimaps, directions, level requirements, expiration rules, rewards, or route behavior.
 - A coordinate proves relative placement, not what a player sees. Use compass/area language only when supported, and mark exact walking approaches as unverified when static data cannot establish them.
 - Keep internal map IDs, coordinates, event IDs, switches, and variables out of player-facing directions.
+- Use exact translated names for locations, items, quests, achievements, and fast-travel destinations; format counting badges consistently after the full name, never alone.
 - Use the game's own translated terminology. Do not assume that a familiar system, collectible, fast-travel object, or quest category exists or impose a generic name on it.
 - Label combat preparation as a code-derived recommendation unless verified through live play.
 - Distinguish a battle configured to allow defeat from a defeat branch that actually advances the story.
@@ -47,7 +48,7 @@ Make the main route sufficient for 100% completion without consulting a technica
 - **Before Leaving** audits with running collectible totals.
 - A spoiler-light side-content timeline showing earliest confirmed availability.
 - Every side quest, optional area, optional boss, relationship route, choice, achievement, puzzle, postgame chain, ending, and New Game+ behavior found in the data.
-- Neutral choice explanations. Recommend a branch only when it is demonstrably required for a stated completion definition; otherwise let the player choose.
+- Explain every material branch outcome before the choice, including exclusive rewards, fights, scenes, achievements, and later access. Recommend a branch only when it is demonstrably required for a stated completion definition; otherwise let the player choose.
 - Puzzle hints before direct solutions.
 - Concise party-role guidance for each story period and code-derived tactics for every mandatory, optional, and enhanced boss.
 - Readiness benchmarks based on mechanics and available equipment, not invented level thresholds.
@@ -73,6 +74,12 @@ Keep these ignored authoring files under `<game>/.dazedtl/walkthrough/`:
 
 Create `<game>/WALKTHROUGH.html` as a single offline file containing all markup, styles, scripts, and walkthrough content. It must not require the Markdown source, a server, internet access, remote fonts, CDNs, frameworks, or other assets.
 
+### Use the shared walkthrough design
+
+Read [`references/walkthrough-design.md`](references/walkthrough-design.md) completely before authoring the presentation layer and follow it as the canonical design contract. It is bundled with this skill and contains the required shell, geometry, breakpoints, component appearance, interaction behavior, theme limits, prohibited structural drift, and visual validation checklist. Do not require any machine-specific design reference.
+
+Preserve the shared structure and behavior across games. Vary only the CSS theme tokens, small brand mark, restrained hero decoration, title/summary, and evidence-based coverage statistics unless an accessibility or content requirement demands a documented exception.
+
 Include:
 
 - Responsive phone, tablet, desktop, and handheld layouts.
@@ -88,6 +95,8 @@ Include:
 - Print/PDF styles.
 - Complete readability without JavaScript; only enhanced interactions may depend on it.
 
+Implement themes by cycling one compact control through system, dark, and light modes. Persist the selection locally. Use CSS custom properties for all game-specific color variation so restyling never forks the shared layout.
+
 Place this visible disclaimer near the beginning:
 
 > **AI-generated guide:** This walkthrough was created with AI by analyzing the translated game's code and data. It has not been fully verified through a live playthrough, so code-derived navigation and strategy recommendations may contain errors or differ from the experience in game.
@@ -100,6 +109,8 @@ Place this visible disclaimer near the beginning:
 - Confirm that the HTML makes no external requests and remains useful with JavaScript disabled.
 - Parse or syntax-check inline JavaScript.
 - Render at desktop and phone widths when a local browser is available; correct clipping, overflow, unreadable controls, and table behavior.
+- Compare the rendered desktop and phone shells against the bundled design contract: sidebar/top-bar geometry, hero hierarchy, content width, nested navigation, progress placement, control density, and mobile drawer must remain recognizably consistent.
+- Verify the baseline component hooks exist, the desktop sidebar becomes an off-canvas drawer at the responsive breakpoint, and game-specific styling changes tokens rather than structural layout.
 - Scan the player-facing guide for developer locators and unsupported visual assumptions.
 - Preserve a concise list of static-analysis limitations rather than converting uncertainty into fact.
 

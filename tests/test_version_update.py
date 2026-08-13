@@ -77,6 +77,7 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertEqual(status.translation_branch, "main")
         self.assertEqual(status.original_version, "1.00")
         self.assertEqual(status.translation_version, "1.00")
+        self.assertIsNone(status.applied_update_version)
         self.assertTrue(status.worktree_clean)
         self.assertTrue(status.asset_manifest_available)
         self.assertEqual(result.repo_root, self.translated)
@@ -678,6 +679,9 @@ class GitVersionUpdateTests(unittest.TestCase):
         result = apply_official_update(self.translated, self.new, "1.03")
 
         self.assertEqual(result.official_won_paths, ("game.txt",))
+        self.assertEqual(
+            inspect_repository(self.translated).applied_update_version, "1.03"
+        )
         merged = self.translated.joinpath("game.txt").read_text()
         self.assertIn("Changed Japanese source", merged)
         self.assertNotIn("English replaced source", merged)
@@ -1705,6 +1709,41 @@ class VersionUpdateUITests(unittest.TestCase):
             finally:
                 parent.close()
 
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            old = root / "old"
+            translated = root / "translated"
+            new = root / "new"
+            for folder, text in (
+                (old, "Japanese\n"),
+                (translated, "English\n"),
+                (new, "New Japanese\n"),
+            ):
+                folder.mkdir()
+                folder.joinpath("game.txt").write_text(text)
+            bootstrap_repository(translated, old, "1.00")
+
+            post_update = VersionUpdateTab()
+            try:
+                post_update.current_edit.setText(str(translated))
+                post_update.refresh_status()
+                self.assertTrue(post_update.post_update_card.isHidden())
+
+                apply_official_update(translated, new, "1.03")
+                post_update.refresh_status()
+                self.assertFalse(post_update.post_update_card.isHidden())
+                with patch(
+                    "gui.version_update_tab.QApplication.clipboard"
+                ) as clipboard:
+                    post_update._copy_post_update_translation_skill()
+                copied_prompt = clipboard.return_value.setText.call_args.args[0]
+                self.assertIn(str(translated.resolve()), copied_prompt)
+                self.assertIn("version `1.03`", copied_prompt)
+                self.assertNotIn("{{GAME_ROOT}}", copied_prompt)
+                self.assertNotIn("{{VERSION}}", copied_prompt)
+            finally:
+                post_update.close()
+
     def test_already_applied_versions_are_detected_from_git_history(self):
         from gui.version_update_tab import VersionUpdateTab
 
@@ -1758,6 +1797,7 @@ class VersionUpdateUITests(unittest.TestCase):
                 tab._render_status(tab._status)
                 preview = preview_official_update(translated, new, "1.03")
                 tab._show_preview(preview)
+                self.assertTrue(tab.post_update_card.isHidden())
                 self.assertFalse(tab.preview_panel.isHidden())
                 self.assertIn("2 warning", tab.preview_summary.text())
                 self.assertIn("Git-tracked patch", tab.preview_expected.text())
