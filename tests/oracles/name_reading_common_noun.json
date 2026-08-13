@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "name-reading-common-noun-v1",
+  "fixture_file": "source_evidence.md",
+  "fixture_sha256": "23e82c2ad4076b6adae807174fcea09376f722d8ecf850ad6eb20b0fff68f22f",
+  "subject_id": "D",
+  "recommendation": "Bell",
+  "forbidden_recommendations": [
+    "Belle",
+    "Beru"
+  ],
+  "lexical_language_pattern": "english",
+  "lexical_source_word": "bell",
+  "lexical_meaning_patterns": [
+    "bell|hollow.*metal|ringing|sound"
+  ],
+  "lexical_source_host_patterns": [
+    "(^|\\.)merriam-webster\\.com$",
+    "(^|\\.)dictionary\\.cambridge\\.org$",
+    "(^|\\.)collinsdictionary\\.com$"
+  ],
+  "kana_discrepancy_patterns": [
+    "ベル|\\bberu\\b",
+    "bell|loanword|adapt|epenthetic|final"
+  ],
+  "rationale_patterns": [
+    "sibling|チャイム|chime|ゴング|gong|family",
+    "parent|explanation|named|名前|鐘の音",
+    "pun|callback|冗談|鳴ら|emblem|紋章",
+    "independent|converge|multiple|naming signal|wordplay"
+  ]
+}

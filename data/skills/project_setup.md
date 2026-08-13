@@ -59,6 +59,16 @@ Map / event files can be huge. Do **not** read them sequentially end-to-end.
    late maps plus common events; stop ordinary setup sampling when patterns stabilize.
 3. One scan feeds every output block - do not rescan from scratch per block.
 
+### Shared character-name handling
+
+Treat ambiguous readings as lore-aware editorial decisions, not mechanical kana conversion.
+Gather longer forms, aliases, naming-family morphology, character/world context, and credible
+lexical candidates. Compare only discriminating evidence and exact phonetic mismatches; repeated
+labels prove identity, not Latin spelling. Decide multi-part names component by component. Apply
+the full evidence hierarchy in Phase 2 before finalizing the Glossary. Keep common-noun readings
+eligible when multiple independent naming signals support them; otherwise use a conservative,
+naturalized player-facing spelling and record uncertainty.
+
 ### Optional reference translations
 
 The copied setup instructions may include a `<reference_translations>` attachment pointing to
@@ -160,8 +170,7 @@ make no edits and report the evidence normally.
 - Treat bare target spellings from a prepended `<known_speakers>` block as provisional machine
   guesses made from isolated nameplates, not as approved translations. Use their Japanese source
   names as discovery anchors, verify each proper name against the full corpus, and replace
-  unsupported targets. For short or ambiguous katakana names, explicitly search for longer related
-  forms, aliases, self-identification, and name-origin wordplay before choosing a romanization.
+  unsupported targets.
 - Separator: plain hyphen-minus `-` only (never em/en dash).
 - Descriptions entirely in English; refer to other characters by English name.
 - Commit to one spelling - never `Sylfia / Sylphia`.

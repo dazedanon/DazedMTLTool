@@ -36,6 +36,9 @@ families into preventive guidance before translation or bounded correction work 
 3. Give all three workers the same self-contained packet and the Investigation method below. Tell
    each worker not to delegate, edit files, or write a report into the shared repository; it must
    inspect the corpus read-only and return its compact evidence report only to the coordinator.
+   When a prompt explicitly designates you as one of these already-launched workers, do not run or
+   repeat Three-pass discovery: perform the Investigation method exactly once and return your own
+   report.
 4. Keep the guidance files unchanged and do not synthesize or begin coordinator verification until
    all three reports are returned. If three isolated subagents cannot run concurrently, report the
    blocker rather than presenting serialized or repeated work as the requested parallel passes.
@@ -61,7 +64,8 @@ families into preventive guidance before translation or bounded correction work 
    - recurring jokes, callbacks, catchphrases, coined words, and speech suffixes;
    - repeated scene structures whose Japanese wording varies, such as observation → coinage →
      deadpan repetition;
-   - proper names, titles, locations, or common nouns with competing translations;
+   - proper names whose reading may depend on character lore, naming-family morphology, mythology,
+     titles, affiliations, motifs, or wordplay—not only kana-to-Latin phonetics;
    - suspicious romanization or untranslated common nouns;
    - the same Japanese translated several ways, or repeated English that erases distinct Japanese;
    - English lines that are locally intelligible but disconnected from adjacent setup or callbacks.
@@ -71,16 +75,51 @@ families into preventive guidance before translation or bounded correction work 
    Search all maps, common events, and relevant databases rather than only early files. Inspect the
    complete local scene around every candidate. Deduplicate exact copies for analysis, but report
    the total number of occurrences and files/maps affected.
-5. Expand a family by its shared semantic, comic, or structural mechanism—not merely one repeated
+<!-- character-name-evidence -->
+5. For each suspicious character name, enumerate competing spellings and build a compact evidence
+   matrix. Evaluate evidence in this order, while recording contradictions and source quality:
+   1. trustworthy creator or in-game Latin spelling;
+   2. corpus structure and demonstrated naming-family morphology;
+   3. attested lexical or proper-name candidates in plausible source languages;
+   4. independent lore convergence, including explicit wordplay or callbacks;
+   5. kana phonetics and the exact mismatch for each candidate; then
+   6. a conservative naturalized fallback, clearly labeled editorial when ambiguity remains.
+
+   Compare which candidates each item actually distinguishes. Repeated nameplates, database fields,
+   and self-introductions establish identity or segmentation, not Latin orthography. Treat related
+   lines from one role, motif, institution, or scene premise as one evidence class. Do not validate
+   a spelling merely because every occurrence inherited the same provisional glossary guess.
+
+   Research credible dictionaries and naming references rather than stopping at transliteration.
+   Record meaning, pronunciation, morphology, and exact kana mismatch; compare cognates across
+   plausible languages. An attested word whose meaning fits independent source anchors can outweigh
+   a minor transcription irregularity. The irregularity remains contrary evidence, not a veto, and
+   an otherwise unexplained mechanical spelling does not win solely by following kana more closely.
+
+   Decide every component of a multi-part name independently. A common-noun reading supported only
+   by one matching trait, dictionary existence, phonetic fit, or a language inferred from another
+   component is weak; default to the conservative naturalized reading. Keep the common-noun reading
+   eligible, however, and promote it when multiple independent naming signals converge—for example
+   an unusually exact semantic callback plus demonstrated language or morphology, explicit
+   wordplay, creator evidence, or parallel names. An attested proper name is a useful conservative
+   candidate, not an automatic winner. Matching two dictionary words to two character traits does
+   not by itself establish a compound naming pattern.
+
+   Prefer the reading that explains the most independent, discriminating evidence with the fewest
+   unsupported assumptions. Naturalize foreign or invented names for the player-facing language
+   rather than preserving every kana mora mechanically. When the evidence remains close, retain a
+   conservative reading and put the alternatives and exact missing evidence in the research backlog.
+<!-- /character-name-evidence -->
+6. Expand a family by its shared semantic, comic, or structural mechanism—not merely one repeated
    token. After finding a new variant, search again for its anchors and structural siblings until
    no new supported members appear.
-6. Confirm a recurring family only when at least two independent examples or an explicit callback
+7. Confirm a recurring family only when at least two independent examples or an explicit callback
    establish it. For each confirmed family, determine:
    - the Japanese mechanism and distinctive source anchors;
    - every supported member and meaningful exception;
    - one recognizable English mechanism or canonical term;
    - whether the rule belongs in Translation quirks, the Glossary, or a bounded correction list.
-7. When the project is untranslated, emphasize preventive guidance. When English already exists,
+8. When the project is untranslated, emphasize preventive guidance. When English already exists,
    additionally identify inconsistent members and propose translation corrections, but do not
    apply those corrections. Return proposed guidance to the coordinator; it applies confirmed
    guidance-file updates only after synthesizing all three reports.

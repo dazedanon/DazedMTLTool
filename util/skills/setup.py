@@ -62,8 +62,9 @@ def build_known_speakers_context(
         "Use the source names as discovery anchors. Independently verify every target against "
         f"{crosscheck}; replace any unsupported guess. Do not prefer or preserve a target merely "
         "because it appears in this block. For short or ambiguous katakana proper names, search "
-        "the full corpus for longer related forms, aliases, self-identification, and name-origin "
-        "wordplay before choosing a romanization.\n\n"
+        "the full corpus for longer forms, aliases, and self-identification. Treat phonetic, lexical, "
+        "and lore-based readings as competing hypotheses. Apply the character-name evidence hierarchy "
+        "in Project Setup's investigation phase before finalizing the Glossary.\n\n"
         f"{speaker_lines}\n"
         "</known_speakers>\n"
     )

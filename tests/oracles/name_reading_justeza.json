@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "name-reading-justeza-v1",
+  "fixture_file": "source_evidence.md",
+  "fixture_sha256": "2cf6fc7700c9be2e8656c8a3694df3f8a1575c938177f43e1ac2889ffc641799",
+  "subject_id": "C",
+  "recommendation": "Justeza Roa",
+  "forbidden_recommendations": [
+    "Yusteza Roa",
+    "Yusteza Loa",
+    "Justeza Loa",
+    "Justeza Lore",
+    "Yusteza Lore"
+  ],
+  "lexical_language_pattern": "portuguese|português|spanish|español",
+  "lexical_source_word": "justeza",
+  "lexical_meaning_patterns": [
+    "justice|justiça|being just|just or exact|rightness|fairness|exactness|precision|truth"
+  ],
+  "lexical_source_host_patterns": [
+    "(^|\\.)infopedia\\.pt$",
+    "(^|\\.)dicionario\\.priberam\\.org$",
+    "(^|\\.)rae\\.es$"
+  ],
+  "kana_discrepancy_patterns": [
+    "ユ|\\byu\\b",
+    "ジュ|\\bju\\b|zh|ʒ|/x/|spanish j"
+  ],
+  "rationale_patterns": [
+    "attested|dictionary|word|lexical|portuguese|português",
+    "justice|justiça|rightness|fairness|exactness|precision|truth|moral|right|good|evil",
+    "ユ|yu|ジュ|ju|phonetic|transcription|kana|irregular|mismatch",
+    "unexplained|meaningless|explains|semantic|lore|character|evidence|converge"
+  ]
+}
