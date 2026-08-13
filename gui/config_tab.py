@@ -44,7 +44,7 @@ class ModelFetchThread(QThread):
 
     # Fallback list shown when no API key is set or a fetch fails
     DEFAULTS = [
-        "gpt-5.6-terra", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini",
+        "gpt-5.6-sol", "gpt-5.6-terra", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini",
         "o3", "o4-mini",
         "claude-sonnet-5", "claude-opus-4-5", "claude-sonnet-4-6",
         "claude-sonnet-4-5", "claude-haiku-4-5",

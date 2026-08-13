@@ -38,16 +38,28 @@ install or configure Python yourself.
 An **API key** is a private password that lets DazedTL use an online AI company. Never share it or
 include it in screenshots.
 
-Open **Configuration → General**. Choose the company, paste its API key, choose a model, and click
-**Save**. The beginner choices in this version are:
+Open **Configuration → General Settings**. Choose the company under **Presets**, click **New** to
+save its API key, choose a model, and click **Save changes**. The beginner choices in this version
+are:
 
 | Choice | Good for |
 |---|---|
-| **Claude Sonnet 4.6** | Strong paid option; supports cheaper Batch jobs for large translations |
+| **GPT-5.6 Sol** | Best translation quality; budget about $30 for an average full-game translation |
+| **GPT-5.6 Terra** | Recommended paid option; best overall translation quality-to-cost balance and supports Batch jobs |
+| **Claude Sonnet 4.6** | Lower-cost paid alternative; about 1.5× cheaper, with slightly lower average translation quality |
 | **Mistral Medium 3.5** | Free option; use Normal translation mode |
 
-Choose **Claude (Anthropic)** for a Claude key or **Mistral** for a Mistral key. Online translation
-may cost money, so the example starts with one small map.
+Choose the **OpenAI** preset. Use **GPT-5.6 Sol** (`gpt-5.6-sol`) for the best quality, or
+**GPT-5.6 Terra** (`gpt-5.6-terra`) for the recommended quality-to-cost balance. A full-game Sol
+translation costs about **$30 on average**, but the actual total varies with the game's size and
+retries. Choose **Claude (Anthropic)** when lower cost matters more than the small average quality
+difference, or **Mistral** when you need the free option. Online translation may cost money, so the
+example starts with one small map.
+
+![Configuration General Settings with the provider preset, saved API key, model, and Save changes highlighted](images/configuration-api.png)
+
+*In Configuration → General Settings, work through the four highlighted controls from left to
+right. The key name is visible, but its secret stays hidden.*
 
 ## What you will do
 

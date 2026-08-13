@@ -23,6 +23,7 @@ from util.skills import (
     load_clipboard_skill,
     load_project_setup,
     load_rpgmaker_qa_skill,
+    load_walkthrough_skill,
 )
 from util.rpgmaker_markers import SUPPORTED_CODE408_MARKERS
 
@@ -496,9 +497,22 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("Edit only the affected `text` value", prompt)
         self.assertIn("Never edit `source`", prompt)
 
-    def test_clipboard_skill_loader_rejects_paths(self):
+    def test_clipboard_skill_loaders_scope_paths_and_project_context(self):
         with self.assertRaises(ValueError):
             load_clipboard_skill("../system.md")
+
+        with tempfile.TemporaryDirectory() as raw:
+            game_root = Path(raw) / "Game With Spaces"
+            game_root.mkdir()
+            prompt = load_walkthrough_skill(game_root, "RPG Maker MZ")
+
+        self.assertIn(str(game_root.resolve()), prompt)
+        self.assertIn("RPG Maker MZ", prompt)
+        self.assertNotIn("{{GAME_ROOT}}", prompt)
+        self.assertNotIn("{{ENGINE}}", prompt)
+        self.assertIn("<game>/WALKTHROUGH.html", prompt)
+        self.assertIn("self-contained responsive HTML", prompt)
+        self.assertIn("AI-generated guide", prompt)
 
 
 if __name__ == "__main__":

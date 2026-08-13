@@ -43,6 +43,7 @@ from util.skills import (
     game_skill_path_for_game,
     load_clipboard_skill,
     load_project_setup,
+    load_walkthrough_skill,
     quirks_path_for_game,
 )
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
@@ -379,8 +380,10 @@ _STEP_HELP: dict[int, str] = {
         "3. Launch the game and verify that the tools open with the chosen hotkeys.<br>"
         "4. Play through the translated game. Check dialogue, menus, choices, images, and "
         "important scenes.<br>"
-        "5. Fix anything you find and repeat the relevant checks.<br>"
-        "6. When the game is ready to share, click <b>Build public release ZIP</b>.<br><br>"
+        "5. Optional: click <b>Copy walkthrough skill</b> and paste it into your AI helper "
+        "to build a portable guide from the selected game's code and data.<br>"
+        "6. Fix anything you find and repeat the relevant checks.<br>"
+        "7. When the game is ready to share, click <b>Build public release ZIP</b>.<br><br>"
         "Building the ZIP is the final workflow action. It leaves the game folder unchanged "
         "and leaves translator workspaces, Git files, backups, and saves out of the ZIP."
     ),
@@ -3035,8 +3038,28 @@ class WorkflowTab(QWidget):
         verify_stage.add_layout(verify_row)
         layout.addWidget(verify_stage)
 
-        release_stage = WorkflowStageCard(
+        walkthrough_stage = WorkflowStageCard(
             4,
+            "Create a player walkthrough",
+            "Copy an evidence-first task that audits the selected game and builds one portable, spoiler-conscious HTML walkthrough.",
+        )
+        walkthrough_row = QHBoxLayout()
+        walkthrough_row.setSpacing(Spacing.SM)
+        self._walkthrough_skill_btn = _make_btn(
+            "Copy walkthrough skill", "#555"
+        )
+        self._walkthrough_skill_btn.setToolTip(
+            "Copy a game-specific AI task that builds WALKTHROUGH.html from the selected game's data"
+        )
+        self._walkthrough_skill_btn.clicked.connect(self._copy_walkthrough_prompt)
+        _size_action_button(self._walkthrough_skill_btn, Geometry.ACTION_WIDE)
+        walkthrough_row.addWidget(self._walkthrough_skill_btn)
+        walkthrough_row.addStretch()
+        walkthrough_stage.add_layout(walkthrough_row)
+        layout.addWidget(walkthrough_stage)
+
+        release_stage = WorkflowStageCard(
+            5,
             "Build the public release",
             "After translated images are patched and the game has been fully playtested, create the ZIP you can share.",
         )
@@ -3065,6 +3088,19 @@ class WorkflowTab(QWidget):
 
         self._populate_tli_editor_combo()
         self._load_playtest_settings()
+
+    def _copy_walkthrough_prompt(self):
+        game_root = self._prepared_project_or_warn()
+        if not game_root:
+            return
+        try:
+            prompt = load_walkthrough_skill(game_root, "RPG Maker MV/MZ")
+            self._copy_to_clipboard(
+                prompt,
+                "Walkthrough skill copied. Paste it into your AI helper with the selected game folder open.",
+            )
+        except Exception as exc:
+            self._log(f"❌ Could not copy walkthrough skill: {exc}")
 
     def _refresh_image_workflow_status(self):
         """Check that Step 0 points at an MV/MZ root ready for image work."""

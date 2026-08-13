@@ -21,6 +21,7 @@ RPGMAKER_QA_FOCUSES = (
 )
 
 _RPGMAKER_QA_FILENAME = "rpgmaker_translation_qa.md"
+_WALKTHROUGH_SKILL_RELATIVE = Path("build-game-walkthrough") / "SKILL.md"
 _LOCALIZATION_INVESTIGATION_FILENAME = "localization_investigation.md"
 _INVESTIGATION_PHASE_MARKERS = (
     "<!-- investigation-phase -->",
@@ -153,6 +154,32 @@ def load_clipboard_skill(name: str) -> str:
     if path_name.name != name or path_name.suffix.casefold() != ".md":
         raise ValueError(f"Invalid clipboard skill filename: {name!r}")
     return _read_skill_file(name).strip() + "\n"
+
+
+def load_walkthrough_skill(game_root: str | Path, engine: str) -> str:
+    """Load the packaged walkthrough skill with one selected project context."""
+    root = str(game_root).strip()
+    engine_name = str(engine).strip()
+    if not root:
+        raise ValueError("A game root is required for the walkthrough skill")
+    if not engine_name:
+        raise ValueError("An engine hint is required for the walkthrough skill")
+
+    path = SKILLS_DIR / _WALKTHROUGH_SKILL_RELATIVE
+    if not path.is_file():
+        raise FileNotFoundError(f"Skill file missing: {path}")
+    prompt = path.read_text(encoding="utf-8")
+    replacements = {
+        "{{GAME_ROOT}}": str(Path(root).expanduser().resolve()),
+        "{{ENGINE}}": engine_name,
+    }
+    for placeholder, value in replacements.items():
+        if prompt.count(placeholder) != 1:
+            raise ValueError(
+                f"Walkthrough skill must contain exactly one {placeholder} placeholder"
+            )
+        prompt = prompt.replace(placeholder, value)
+    return prompt.strip() + "\n"
 
 
 def load_rpgmaker_qa_skill(focus: str) -> str:

@@ -32,6 +32,8 @@ errors.
 
 Only select the rest of the maps after this test looks good.
 
+![RPG Maker Project and Files step with the game folder and small file selection highlighted](images/workflow-project.png)
+
 ## Name options in Step 2
 
 DazedTL shows options named **INLINE401**, **FIRSTLINE**, and **FACENAME**. These are extra places
@@ -67,6 +69,8 @@ the message box.
 4. Apply the reviewed fixes. Turn that option off only when you deliberately want to reflow all
    selected text.
 5. Start the game and test again.
+
+![Rewrap step with the over-limit safeguard, Preview rewrap, and Apply rewrap highlighted](images/workflow-rewrap.png)
 
 The extra settings are for unusual games. Leave their default values alone on your first pass.
 

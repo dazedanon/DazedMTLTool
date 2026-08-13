@@ -128,6 +128,7 @@ from util.skills import (
     build_known_speakers_context,
     load_clipboard_skill,
     load_project_setup,
+    load_walkthrough_skill,
 )
 
 # Workflow-level label for the non-batch (live) translation path. The Translation
@@ -4452,6 +4453,35 @@ class WolfWorkflowTab(QWidget):
             DisclosureSection("Existing save compatibility", saves_content, expanded=False)
         )
         layout.addWidget(saves_card)
+
+        walkthrough_card = WorkflowStageCard(
+            3,
+            "Create a player walkthrough",
+            "Copy an evidence-first task that audits the selected game and builds one portable, spoiler-conscious HTML walkthrough.",
+        )
+        self._walkthrough_skill_btn = self._register(
+            _make_btn("Copy walkthrough skill", "#555")
+        )
+        self._walkthrough_skill_btn.setFixedWidth(Geometry.ACTION_WIDE)
+        self._walkthrough_skill_btn.setToolTip(
+            "Copy a game-specific AI task that builds WALKTHROUGH.html from the selected game's data"
+        )
+        self._walkthrough_skill_btn.clicked.connect(self._copy_walkthrough_prompt)
+        walkthrough_card.add_widget(self._walkthrough_skill_btn)
+        layout.addWidget(walkthrough_card)
+
+    def _copy_walkthrough_prompt(self):
+        game_root = self._prepared_project_or_warn()
+        if not game_root:
+            return
+        try:
+            prompt = load_walkthrough_skill(game_root, "WOLF RPG")
+            QApplication.clipboard().setText(prompt)
+            self._log(
+                "Walkthrough skill copied. Paste it into your AI helper with the selected game folder open."
+            )
+        except Exception as exc:
+            self._log(f"❌ Could not copy walkthrough skill: {exc}")
 
     def _package_loose(self):
         if not self._require_root():

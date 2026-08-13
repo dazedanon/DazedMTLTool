@@ -9,6 +9,7 @@ from util.skills.setup import (
     load_clipboard_skill,
     load_project_setup,
     load_rpgmaker_qa_skill,
+    load_walkthrough_skill,
     skills_dir,
 )
 from util.skills.system import (
@@ -32,6 +33,7 @@ __all__ = [
     "load_clipboard_skill",
     "load_project_setup",
     "load_rpgmaker_qa_skill",
+    "load_walkthrough_skill",
     "load_system_prompt",
     "migrate_game_skill_text",
     "quirks_path_for_game",

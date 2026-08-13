@@ -103,8 +103,9 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (9, "create_public_release", {"text": "Build public release ZIP"}),
             (9, "install_both_playtest", {"text": "Install both plugins"}),
             (9, "refresh_playtest_status", {"text": "Refresh plugin status"}),
+            (9, "copy_walkthrough_prompt", {"text": "Copy walkthrough skill"}),
         )
-        self.assertEqual(len(cases), 51)
+        self.assertEqual(len(cases), 52)
         for step, endpoint, locator in cases:
             with self.subTest(step=step, endpoint=endpoint, locator=locator):
                 if endpoint == "apply_var_range":

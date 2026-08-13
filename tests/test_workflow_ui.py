@@ -609,6 +609,25 @@ class WolfWorkflowShellTests(unittest.TestCase):
             )
         )
 
+        walkthrough_game = Path(self.temp.name) / "Walkthrough Game"
+        walkthrough_game.mkdir()
+        walkthrough_button = next(
+            button
+            for button in self.workflow._step_tabs.widget(8).findChildren(QPushButton)
+            if button.text() == "Copy walkthrough skill"
+        )
+        QApplication.clipboard().clear()
+        with patch.object(
+            self.workflow,
+            "_prepared_project_or_warn",
+            return_value=str(walkthrough_game),
+        ):
+            walkthrough_button.click()
+        walkthrough_prompt = QApplication.clipboard().text()
+        self.assertIn(str(walkthrough_game.resolve()), walkthrough_prompt)
+        self.assertIn("WOLF RPG", walkthrough_prompt)
+        panel.clear_requested.emit()
+
         self.workflow._log("❌ Injection failed")
         self.assertEqual(panel.log.toPlainText(), "❌ Injection failed")
 

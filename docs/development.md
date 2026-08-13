@@ -46,6 +46,17 @@ state, evaluation archives, `files/`, or `translated/`.
 - `docs/`: maintainer contracts, architecture, audits, and implementation plans.
 - `gameupdate/README.md`: the standalone GameUpdate component.
 
+The Guide screenshots under `data/help/images/` are sanitized captures of real
+widgets. Regenerate the complete annotated set after relevant Configuration or
+RPG Maker workflow changes:
+
+```bash
+./.venv/bin/python scripts/build_tutorial_screenshots.py
+```
+
+Review every generated image before committing it. The builder uses temporary
+settings and fixture paths, never a real API key or game project.
+
 Keep upstream asset revisions, hashes, and license status current in
 `docs/third-party-assets.md` whenever a bundled executable, plugin, or font is
 refreshed.

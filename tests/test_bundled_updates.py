@@ -33,6 +33,8 @@ _SHIPPED_DATA_FILES = (
     "data/skills/risky_codes.md",
     "data/skills/wolf_speakers.md",
     "data/skills/wolf_precheck_repair.md",
+    "data/skills/build-game-walkthrough/SKILL.md",
+    "data/skills/build-game-walkthrough/agents/openai.yaml",
     "data/help/index.json",
     "data/help/00-welcome.md",
     "data/help/01-git-setup.md",
@@ -41,6 +43,12 @@ _SHIPPED_DATA_FILES = (
     "data/help/08-problems-resuming.md",
     "data/help/09-backups-recovery.md",
     "data/help/10-playtest-checklist.md",
+    "data/help/images/configuration-api.png",
+    "data/help/images/workflow-project.png",
+    "data/help/images/workflow-setup.png",
+    "data/help/images/workflow-translate.png",
+    "data/help/images/workflow-export.png",
+    "data/help/images/workflow-rewrap.png",
     "data/glossary_base.txt",
     "data/sfx_reference/j_ono.json",
     "data/sfx_reference/LICENSE.md",
@@ -212,6 +220,7 @@ class ShippedDataTrackingTests(unittest.TestCase):
 
     def test_help_dir_markdown_matches_index(self):
         import json
+        import re
 
         help_dir = _REPO_ROOT / "data" / "help"
         index = json.loads((help_dir / "index.json").read_text(encoding="utf-8"))
@@ -227,11 +236,21 @@ class ShippedDataTrackingTests(unittest.TestCase):
                     (help_dir / rel).is_file(),
                     f"data/help/index.json references missing {rel}",
                 )
+        for page in help_dir.glob("*.md"):
+            source = page.read_text(encoding="utf-8")
+            for image_ref in re.findall(r"!\[[^]]*\]\((images/[^)\s]+)\)", source):
+                with self.subTest(page=page.name, image=image_ref):
+                    self.assertTrue(
+                        (help_dir / image_ref).is_file(),
+                        f"{page.name} references missing Guide image {image_ref}",
+                    )
 
     def test_shipped_data_files_are_not_gitignored(self):
         help_dir = _REPO_ROOT / "data" / "help"
         rels = list(_SHIPPED_DATA_FILES)
-        for path in sorted(help_dir.glob("*.md")):
+        for path in sorted(help_dir.rglob("*")):
+            if not path.is_file():
+                continue
             rel = path.relative_to(_REPO_ROOT).as_posix()
             if rel not in rels:
                 rels.append(rel)

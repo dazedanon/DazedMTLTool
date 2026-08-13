@@ -33,6 +33,11 @@ easier to correct before fifty maps have been translated.
 
 Beginners can normally skip the optional **Prepare** step.
 
+![RPG Maker Project and Files step with the game folder and small file selection highlighted](images/workflow-project.png)
+
+*Choose the working copy, then start with the database and one early map. The paths and filenames
+shown here are harmless examples.*
+
 ## 4. Set up names and writing style
 
 Go to Step 2 and click **Collect names** first so DazedTL can add recognized speakers to the
@@ -43,6 +48,11 @@ names** again.
 The answer is divided into labeled parts. Copy each part into its matching place in DazedTL, then
 save. The **Set Up Your AI Helper** page has a table showing where every label goes.
 
+![Speakers and Guidance step with Collect names and Copy setup instructions highlighted](images/workflow-setup.png)
+
+*Use these two buttons in order. If the helper later enables an extra speaker format, collect names
+again.*
+
 ## 5. Translate the test
 
 Go to Step 3 and use **Normal** mode. Translate the main game information first, then the dialogue
@@ -52,10 +62,18 @@ Wait for each job to finish. If there is an error, open **Activity** and read th
 Common problems are an incorrect AI key, no internet connection, or a temporary limit from the AI
 company.
 
+![Translation Phase 1 step with Normal Translate, Translate database, and Translate dialogue highlighted](images/workflow-translate.png)
+
+*For the first test, use Normal Translate and run database text before dialogue.*
+
 ## 6. Put the English into the game
 
 Go to Step 5 and click **Export selected files**. This puts only the files from your small test back
 into the game.
+
+![Export to Game step with Export selected files highlighted](images/workflow-export.png)
+
+*Use Export selected files for the small first test. Export all is for a deliberate full export.*
 
 Start the game and play that map. Look for:
 
@@ -67,6 +85,10 @@ Start the game and play that map. Look for:
 
 Fix your setup now if names or writing style are wrong. Use Step 6 Rewrap if good English text is
 simply too wide for its box.
+
+![Rewrap step with the over-limit safeguard, Preview rewrap, and Apply rewrap highlighted](images/workflow-rewrap.png)
+
+*Leave the safeguard on, preview the proposed line breaks, review them, and only then apply.*
 
 ## 7. Save a good checkpoint
 

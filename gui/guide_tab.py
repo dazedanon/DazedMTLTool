@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
+from html import unescape
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor
+from PyQt5.QtCore import QEvent, QTimer, QUrl, Qt
+from PyQt5.QtGui import QColor, QImageReader
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -14,6 +17,7 @@ from PyQt5.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QSizePolicy,
+    QStyle,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -101,6 +105,11 @@ blockquote {
     color: $text_muted;
     background-color: $chrome;
 }
+img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
 """)
 
 _LIST_STYLE = _theme_css("""
@@ -136,7 +145,54 @@ QTextBrowser {
 }
 """)
 
-def _md_to_html(source: str) -> str:
+_IMG_TAG_RE = re.compile(r"<img\b(?P<attrs>[^>]*)>", re.IGNORECASE)
+_IMG_SRC_RE = re.compile(
+    r"\bsrc\s*=\s*(?P<quote>['\"])(?P<src>.*?)(?P=quote)",
+    re.IGNORECASE,
+)
+_IMG_PARAGRAPH_RE = re.compile(
+    r"<p>\s*(?P<image><img\b[^>]*>)\s*</p>",
+    re.IGNORECASE,
+)
+
+
+def _fit_local_images(body: str, help_dir: Path, max_width: int) -> str:
+    """Give Qt explicit image widths because its rich text ignores max-width."""
+
+    root = help_dir.resolve()
+
+    def fit(match: re.Match[str]) -> str:
+        attrs = match.group("attrs")
+        src_match = _IMG_SRC_RE.search(attrs)
+        if src_match is None or re.search(r"\bwidth\s*=", attrs, re.IGNORECASE):
+            return match.group(0)
+        src = unescape(src_match.group("src"))
+        split = urlsplit(src)
+        if split.scheme or split.netloc:
+            return match.group(0)
+        path = (root / unquote(split.path)).resolve()
+        if not path.is_relative_to(root) or not path.is_file():
+            return match.group(0)
+        size = QImageReader(str(path)).size()
+        if not size.isValid() or size.width() <= 0:
+            return match.group(0)
+        width = min(size.width(), max(1, max_width))
+        height = max(1, round(size.height() * width / size.width()))
+        return f'<img width="{width}" height="{height}"{attrs}>'
+
+    fitted = _IMG_TAG_RE.sub(fit, body)
+    return _IMG_PARAGRAPH_RE.sub(
+        r'<p style="line-height:100%;margin:12px 0 6px 0;">\g<image></p>',
+        fitted,
+    )
+
+
+def _md_to_html(
+    source: str,
+    *,
+    help_dir: Path | None = None,
+    image_width: int | None = None,
+) -> str:
     if _markdown is not None:
         body = _markdown.markdown(
             source,
@@ -149,6 +205,8 @@ def _md_to_html(source: str) -> str:
             .replace(">", "&gt;")
         )
         body = f"<pre style='white-space:pre-wrap;font-family:Segoe UI,sans-serif;'>{escaped}</pre>"
+    if help_dir is not None and image_width is not None:
+        body = _fit_local_images(body, help_dir, image_width)
     return (
         "<html><head><meta charset='utf-8'>"
         f"<style>{_BROWSER_CSS}</style></head>"
@@ -164,6 +222,10 @@ class GuideTab(QWidget):
         self.parent_window = parent
         self.help_dir = Path(help_dir) if help_dir else HELP_DIR
         self._sections: list[dict] = []
+        self._current_source: str | None = None
+        self._image_resize_pending = False
+        self._rendered_image_width = -1
+        self._render_generation = 0
         self._build_ui()
         self.reload()
 
@@ -188,6 +250,10 @@ class GuideTab(QWidget):
         self.browser.setOpenExternalLinks(True)
         self.browser.setStyleSheet(_BROWSER_STYLE)
         self.browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.browser.document().setBaseUrl(
+            QUrl.fromLocalFile(f"{self.help_dir.resolve().as_posix()}/")
+        )
+        self.browser.installEventFilter(self)
         body.addWidget(self.browser, 1)
 
         root.addLayout(body, 1)
@@ -253,6 +319,8 @@ class GuideTab(QWidget):
         if select_row >= 0:
             self.section_list.setCurrentRow(select_row)
         else:
+            self._current_source = None
+            self._render_generation += 1
             self.browser.setHtml(
                 _md_to_html(
                     "# Guide unavailable\n\n"
@@ -287,6 +355,8 @@ class GuideTab(QWidget):
         rel = section.get("file", "")
         path = self.help_dir / rel
         if not path.is_file():
+            self._current_source = None
+            self._render_generation += 1
             self.browser.setHtml(
                 _md_to_html(f"# Missing file\n\nCould not find `{rel}` under `data/help/`.")
             )
@@ -294,10 +364,81 @@ class GuideTab(QWidget):
         try:
             source = path.read_text(encoding="utf-8")
         except OSError as exc:
+            self._current_source = None
+            self._render_generation += 1
             self.browser.setHtml(_md_to_html(f"# Read error\n\n{exc}"))
             return
-        self.browser.setHtml(_md_to_html(source))
-        self.browser.verticalScrollBar().setValue(0)
+        self._current_source = source
+        self._render_source(reset_scroll=True)
+
+    def _render_source(self, *, reset_scroll: bool) -> None:
+        if self._current_source is None:
+            return
+        scrollbar = self.browser.verticalScrollBar()
+        old_maximum = scrollbar.maximum()
+        old_ratio = scrollbar.value() / old_maximum if old_maximum else 0.0
+        was_at_bottom = bool(old_maximum and scrollbar.value() >= old_maximum - 2)
+        image_width = self._available_image_width()
+        self._rendered_image_width = image_width
+        self._render_generation += 1
+        generation = self._render_generation
+        self.browser.setHtml(
+            _md_to_html(
+                self._current_source,
+                help_dir=self.help_dir,
+                image_width=image_width,
+            )
+        )
+        if reset_scroll:
+            scrollbar.setValue(0)
+        else:
+            QTimer.singleShot(
+                0,
+                lambda: self._restore_scroll_position(
+                    old_ratio,
+                    was_at_bottom,
+                    generation,
+                ),
+            )
+
+    def _available_image_width(self) -> int:
+        """Return a stable width that already reserves the vertical scrollbar."""
+
+        scrollbar_width = self.browser.style().pixelMetric(QStyle.PM_ScrollBarExtent)
+        # Account for the document body margins, browser frame, and a scrollbar
+        # even before the document is tall enough to display one. Using the
+        # viewport width here causes a render loop as that scrollbar appears.
+        return max(160, self.browser.contentsRect().width() - scrollbar_width - 48)
+
+    def _restore_scroll_position(
+        self,
+        ratio: float,
+        was_at_bottom: bool,
+        generation: int,
+    ) -> None:
+        if generation != self._render_generation:
+            return
+        scrollbar = self.browser.verticalScrollBar()
+        if was_at_bottom:
+            scrollbar.setValue(scrollbar.maximum())
+        else:
+            scrollbar.setValue(round(scrollbar.maximum() * ratio))
+
+    def eventFilter(self, watched, event):
+        if (
+            watched is self.browser
+            and event.type() == QEvent.Resize
+            and self._current_source is not None
+        ):
+            image_width = self._available_image_width()
+            if image_width != self._rendered_image_width and not self._image_resize_pending:
+                self._image_resize_pending = True
+                QTimer.singleShot(0, self._rerender_for_viewport)
+        return super().eventFilter(watched, event)
+
+    def _rerender_for_viewport(self) -> None:
+        self._image_resize_pending = False
+        self._render_source(reset_scroll=False)
 
     def show_section(self, section_id: str) -> bool:
         """Select a section by id. Returns True if found."""
