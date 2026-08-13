@@ -2035,9 +2035,9 @@ class TranslationTab(QWidget):
         # Keep the workspace and game export in one post-run action. These two
         # destinations represent the same accepted translation state and should
         # not be allowed to drift because the user noticed only one button.
-        self.sync_export_button = QPushButton("Sync / Export")
+        self.sync_export_button = QPushButton("Sync/Export")
         qt_icons.apply_button_icon(
-            self.sync_export_button, "📤 Sync / Export", color="#ffffff"
+            self.sync_export_button, "📤 Sync/Export", color="#ffffff"
         )
         self.sync_export_button.setToolTip(
             "Copy this run's translated files into both the workspace and the game folder"
