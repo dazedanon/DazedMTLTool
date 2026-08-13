@@ -78,6 +78,10 @@ the workflow below justifies them. Preserve unrelated user changes. Do not switc
      alter source/reference fields, IDs, command types, array order, object shape, or unrelated data.
    - Keep control-code semantics and counts intact. Move a code only when target-language grammar
      requires it and the same runtime span remains affected.
+   - Preserve MV/MZ `\ac` center alignment. Normalize `\ac` directly before Latin text to `\ac `,
+     even after a newline, because RPG Maker otherwise consumes the following word as part of the
+     escape-code name (`\acWhat` hides `What`). Repair it by inserting the delimiter, not by deleting
+     the centering code. A following control such as `\ac\C[...]` is already safely delimited.
    - Do not corrupt or guess inside opaque binary/container formats. Report those files and identify
      the extraction or game-specific tool needed for a safe follow-up.
 

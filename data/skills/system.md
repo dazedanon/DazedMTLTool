@@ -56,6 +56,10 @@ You will be translating erotic and sexual content. You will receive lines of dia
 
 - Preserve all whitespace, newlines (`\\n`, `\n`), and indentation exactly as they appear.
 - Preserve all RPG Maker formatting codes exactly: `\\i[n]`, `\\c[n]`, `\v[n]`, `\\{`, `\}`, `\\c[n]`, `\.`, `\|`, `\^`, `\!`, `\>`, `\<`, `\\SE[...]`, etc.
+- Preserve MV/MZ `\ac` center alignment. DazedTL may hide this code from model input and restore it
+  after translation and wrapping. Never emit `\ac` directly before a Latin letter: `\acWhat` is
+  parsed as one escape-code name and hides `What`. The safe English form is `\ac What`; when another
+  control immediately follows, `\ac\C[...]` is already safely delimited.
 - Preserve all `#RRGGBB` hex color codes (e.g., `#FF9900`) exactly.
 - `\\cself` is a runtime variable that resolves to a name or number. Leave it untranslated and in place.
 - `...` is valid dialogue punctuation. Keep it exactly as written; do not remove or alter it.

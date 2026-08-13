@@ -67,12 +67,14 @@ FINDING_CATEGORIES = frozenset({
 EDITORIAL_JUDGMENT_CATEGORIES = frozenset({"fluency", "voice", "wordplay"})
 APPROVED_NONBLOCKING_MECHANICAL_FLAGS = frozenset({"suspicious-length-ratio"})
 
-QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-reference-v11"
+QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-reference-v12"
 FORCED_DEEP_MECHANICAL_FLAGS = frozenset({
     "empty-live",
     "unchanged-source",
     "source-language-residue",
+    "missing-center-alignment",
     "runtime-token-mismatch",
+    "unsafe-bare-center-code",
     "visible-number-mismatch",
 })
 FORCED_DEEP_EVENT_CODES = frozenset({102})

@@ -604,6 +604,25 @@ class TestMVMZSourceOriginal(unittest.TestCase):
             )
         )
 
+    def test_code401_restores_center_alignment_with_safe_english_delimiter(self):
+        source = "\n\\ac相手がしたがっていることは……"
+        page = {
+            "list": [
+                {"code": 401, "indent": 0, "parameters": [source]},
+            ]
+        }
+
+        translated, captured = _run_search_codes(page)
+        command = _find_commands(translated, 401)[0]
+
+        self.assertEqual(command["_original"], source)
+        self.assertEqual(command["parameters"][0], r"\ac EN_TRANSLATED")
+        for payload in captured:
+            items = payload if isinstance(payload, list) else [payload]
+            for item in items:
+                if isinstance(item, str):
+                    self.assertNotIn(r"\ac", item)
+
     def test_rerun_uses_original_not_display_text(self):
         page1, captured1 = _run_search_codes(_load_map_excerpt())
         originals_snapshot = json.dumps(

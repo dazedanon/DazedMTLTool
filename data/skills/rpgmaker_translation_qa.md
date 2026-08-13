@@ -1,12 +1,13 @@
 # QA Exported RPG Maker Translations — Local Task Handoff
 
-<!-- qa-contract:rpgmaker-qa-local-v9
+<!-- qa-contract:rpgmaker-qa-local-v10
 app-owned-inventory immutable-review-bundles scene-affine-semantic-screen
 evidence-preserving-deep-handoff motif-family-receipts selective-risk-escalation
 validated-checkpoints honest-global-coverage grouped-finding-families
 motif-finding-attribution final-consistency-audit final-editorial-pass
 subjective-precision-gate ignored-receipt-workspace clean-release-auto-approval
 preserve-original atomic-apply post-fix-regression
+legacy-center-code-safety
 no-provider-api
 -->
 
@@ -69,6 +70,14 @@ chronology; omitted or invented information; and speaker voice plus natural Engl
 translations containing third-person pronouns are shown in every distinct scene context; other
 pronoun-bearing translations spoken by different detected speakers receive one representative scene per speaker.
 Ordinary safe repetition remains deduplicated.
+
+For MV/MZ code 401 live message text, preserve `\ac` center alignment. DazedTL strips it from model
+input and deterministically restores `\ac ` to every nonempty translated display line after
+wrapping. Flag `\ac` directly before Latin text, including after a newline: RPG Maker reads the
+following letters as part of the escape-code name, so `\acWhat` hides `What`. Correct it to
+`\ac What`; never delete the centering code as the fix. A following control such as `\ac\C[...]`
+already delimits the code safely. Also flag a centered `_original` whose live code 401 text lost
+`\ac` entirely. Preserve surrounding newlines and all other required controls.
 
 Recurring-joke and wordplay rules with distinctive Japanese anchors in translation quirks become
 deterministic motif families. Every matching variant is reviewed together and receives an explicit

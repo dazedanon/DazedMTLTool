@@ -81,6 +81,18 @@ def _map_fixture():
                             },
                             {
                                 "code": 401,
+                                "parameters": ["\n\\acWhat your partner wants to do is..."],
+                                "_original": "\n\\ac相手がしたがっていることは……",
+                            },
+                            {
+                                "code": 401,
+                                "parameters": [
+                                    "\\ac First centered line.\nSecond line lost centering."
+                                ],
+                                "_original": "\\ac中央揃え。",
+                            },
+                            {
+                                "code": 401,
                                 "parameters": ["\\C[2]Danger"],
                                 "_original": "\\C[2]危険\\C[0]",
                             },
@@ -211,6 +223,12 @@ class TestRPGMakerQAManifest(unittest.TestCase):
         control = next(record for record in records if "危険" in record["source"])
         variable_name = next(record for record in records if record["source"] == "変数名")
         variable_line = next(record for record in records if record["source"] == "変数話者。")
+        unsafe_center = next(
+            record for record in records if "したがっている" in record["source"]
+        )
+        missing_center = next(
+            record for record in records if "中央揃え" in record["source"]
+        )
 
         self.assertEqual(first["live"], "First translated line.\nSecond translated line.")
         self.assertEqual(len(first["live_pointers"]), 2)
@@ -223,6 +241,12 @@ class TestRPGMakerQAManifest(unittest.TestCase):
         )
         self.assertEqual(scrolling["speaker"]["provenance"], "none")
         self.assertIn("runtime-token-mismatch", control["mechanical"]["flags"])
+        self.assertIn(
+            "unsafe-bare-center-code", unsafe_center["mechanical"]["flags"]
+        )
+        self.assertIn(
+            "missing-center-alignment", missing_center["mechanical"]["flags"]
+        )
         self.assertEqual(
             choices[0]["choice_context"]["branches"],
             [{"index": 0, "label": "Stay"}, {"index": 1, "label": "Leave"}],
@@ -311,7 +335,7 @@ class TestRPGMakerQAManifest(unittest.TestCase):
         self.assertEqual(quest["live_pointers"][0].rsplit("/", 2)[-2:], ["3", "DetailNote"])
         self.assertEqual(comment["live"], "Translated comment header\nTranslated continuation")
         self.assertEqual(script["live"], "showText('First')\nshowText('Second')")
-        self.assertEqual(release["counts"]["records"], 17)
+        self.assertEqual(release["counts"]["records"], 19)
         self.assertEqual(release["counts"]["unresolved"], 2)
         nested_record = next(item for item in release["records"] if item["source"] == "入れ子")
         self.assertEqual(nested_record["file"], "nested/Other.json")

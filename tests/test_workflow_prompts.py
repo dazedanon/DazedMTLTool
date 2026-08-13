@@ -284,6 +284,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             "preserve-original",
             "atomic-apply",
             "post-fix-regression",
+            "legacy-center-code-safety",
             "no-provider-api",
         }
         focus_signatures = {
@@ -297,7 +298,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
                 prompt = load_rpgmaker_qa_skill(focus)
                 lowered = prompt.casefold()
                 contract = re.search(
-                    r"<!-- qa-contract:rpgmaker-qa-local-v9\s+(.*?)-->",
+                    r"<!-- qa-contract:rpgmaker-qa-local-v10\s+(.*?)-->",
                     prompt,
                     re.DOTALL,
                 )

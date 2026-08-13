@@ -2753,6 +2753,7 @@ def searchCodes(page, pbar, jobList, filename):
                 groupStart = j
                 endtag = ""
                 instantLineFlag = False
+                centerLineFlag = False
 
                 # Grab String
                 if len(codeList[i]["parameters"]) > 0:
@@ -3023,6 +3024,9 @@ def searchCodes(page, pbar, jobList, filename):
 
                     finalJAString = rawSource
                     oldjaString = rawSource
+                    centerLineFlag = bool(
+                        re.search(r"\\ac", finalJAString, re.IGNORECASE)
+                    )
 
                     # Set Back
                     if not setData:
@@ -3084,10 +3088,14 @@ def searchCodes(page, pbar, jobList, filename):
                         finalJAString = finalJAString.replace(ffMatch.group(1), "")
                         nametag += ffMatch.group(1)
 
-                    # Center Lines (We Nuke These)
-                    if "\\CL" in finalJAString or "\\ac" in finalJAString or "\\#" in finalJAString:
+                    # Strip center markers from model input, then restore \ac in a
+                    # delimiter-safe form after translation and wrapping.
+                    if centerLineFlag:
+                        finalJAString = re.sub(
+                            r"\\ac[ \t]*", "", finalJAString, flags=re.IGNORECASE
+                        )
+                    if "\\CL" in finalJAString or "\\#" in finalJAString:
                         finalJAString = finalJAString.replace("\\CL", "")
-                        finalJAString = finalJAString.replace("\\ac", "")
                         finalJAString = finalJAString.replace("\\#", "")
 
                     # Handle Formatting Codes
@@ -3175,6 +3183,15 @@ def searchCodes(page, pbar, jobList, filename):
 
                             # Reset the flag after using it
                             reduceWidthFlag = False
+
+                            # RPG Maker greedily reads Latin letters after a bare
+                            # escape, so `\\acWhat` becomes one unknown code. Keep
+                            # every translated display line centered with `\\ac `.
+                            if centerLineFlag:
+                                translatedText = "\n".join(
+                                    f"\\ac {line}" if line.strip() else line
+                                    for line in translatedText.split("\n")
+                                )
 
                             # Formatting Code
                             if instantLineFlag:

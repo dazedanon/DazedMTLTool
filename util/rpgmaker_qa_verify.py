@@ -65,6 +65,10 @@ _RUNTIME_TOKEN_RE = re.compile(
     r"|__PROTECTED_\d+__"
     r"|%(?:\d+\$)?[-+#0 ]*(?:\d+|\*)?(?:\.\d+)?[A-Za-z]"
 )
+_UNSAFE_BARE_CENTER_RE = re.compile(
+    r"\\(?:ac|cl)(?=[A-Za-z])", re.IGNORECASE
+)
+_CENTER_ALIGNMENT_RE = re.compile(r"\\ac", re.IGNORECASE)
 _JAPANESE_RE = re.compile(r"[一-龠々〆〤ぁ-ゔァ-ヴー]")
 _VISIBLE_NUMBER_RE = re.compile(
     r"(?<![A-Za-z0-9_])[-+]?\d+(?:[.,]\d+)?(?![A-Za-z0-9_])"
@@ -178,7 +182,7 @@ def _decode_pointer(json_pointer: str) -> list[str]:
     ]
 
 
-def _mechanical(source: str, live: str) -> dict[str, Any]:
+def _mechanical(source: str, live: str, code: int | None) -> dict[str, Any]:
     source_tokens = _RUNTIME_TOKEN_RE.findall(source)
     live_tokens = _RUNTIME_TOKEN_RE.findall(live)
     source_visible = unicodedata.normalize(
@@ -198,6 +202,15 @@ def _mechanical(source: str, live: str) -> dict[str, Any]:
         flags.append("source-language-residue")
     if Counter(source_tokens) != Counter(live_tokens):
         flags.append("runtime-token-mismatch")
+    live_lines = [line for line in live.splitlines() if line.strip()]
+    safe_centered_live = bool(live_lines) and all(
+        re.match(r"^\s*\\ac(?=[^A-Za-z]|$)", line, re.IGNORECASE)
+        for line in live_lines
+    )
+    if code == 401 and _CENTER_ALIGNMENT_RE.search(source) and not safe_centered_live:
+        flags.append("missing-center-alignment")
+    if _UNSAFE_BARE_CENTER_RE.search(live):
+        flags.append("unsafe-bare-center-code")
     if source_numbers != live_numbers and (source_numbers or live_numbers):
         flags.append("visible-number-mismatch")
     if len(source) >= 8 and len(live) >= 1:
@@ -527,7 +540,7 @@ def verify_manifest(data_root: str | Path, manifest: dict[str, Any]) -> dict[str
             expected_band = "short" if len(live) <= 20 else "medium" if len(live) <= 60 else "long"
             if record.get("length_band") != expected_band:
                 raise ValueError("length band mismatch")
-            if record.get("mechanical") != _mechanical(source, live):
+            if record.get("mechanical") != _mechanical(source, live, code):
                 raise ValueError("mechanical evidence mismatch")
             if classification == "database":
                 relative = source_parts[source_parts.index("_original") + 1 :]
