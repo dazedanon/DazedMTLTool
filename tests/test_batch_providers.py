@@ -75,6 +75,7 @@ class BatchProviderDetectionTests(unittest.TestCase):
             params = T.buildOpenAIRequest(
                 "system", '{"Line1":"猫"}', ["prior"], 0.05, "json",
                 "gpt-5.6-terra", 1, vocab_text="\n猫 (Cat)", api_provider="openai",
+                api_url="https://api.openai.com/v1",
             )
         self.assertEqual(params["reasoning_effort"], "none")
         self.assertEqual(params["response_format"]["type"], "json_schema")
@@ -101,6 +102,29 @@ class BatchProviderDetectionTests(unittest.TestCase):
             m.get("role") == "assistant" and "prior" in str(m.get("content"))
             for m in params["messages"]
         ))
+
+    def test_only_openai_api_uses_positional_array_schema(self):
+        cases = (
+            ("openai", "https://api.openai.com/v1", ["translations"]),
+            ("openai", "http://127.0.0.1:8000/v1", ["Line1", "Line2"]),
+            (
+                "gemini",
+                "https://generativelanguage.googleapis.com/v1beta/openai/",
+                ["Line1", "Line2"],
+            ),
+        )
+        for provider, endpoint, required in cases:
+            with self.subTest(provider=provider, endpoint=endpoint):
+                with mock.patch.dict(
+                    "os.environ",
+                    {"API_PROVIDER": provider, "api": endpoint},
+                ):
+                    params = T.buildOpenAIRequest(
+                        "system", '{"Line1":"猫","Line2":"犬"}', [], 0,
+                        "json", "test-model", 2, api_provider=provider,
+                    )
+                schema = params["response_format"]["json_schema"]["schema"]
+                self.assertEqual(schema["required"], required)
 
     def test_keyless_custom_openai_client_uses_sdk_placeholder(self):
         with mock.patch.object(BP.openai, "OpenAI") as client_class:

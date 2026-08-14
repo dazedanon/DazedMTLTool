@@ -1,0 +1,458 @@
+<!doctype html>
+<!--
+  Replace every slot before publication:
+  GAME_TITLE: HTML-escaped player-facing title.
+  GAME_SUMMARY: HTML-escaped Main Route summary.
+  GAME_SLUG: lowercase ASCII storage namespace using letters, digits, and hyphens.
+  ROUTE_STATS_HTML: exactly four .hero-stat elements using verified route totals.
+  MAIN_ROUTE_HTML: source-backed .route-chapter groups containing .route-section sections and validated .route-step articles.
+  OPTIONAL_CONTENT_HTML: source-backed .optional-group sections containing validated .optional-entry articles.
+  BOSSES_HTML: source-backed .boss-group sections containing validated .boss-entry dossiers.
+  Every .route-step must contain one .task-checkbox whose data-task-id equals
+  the article's data-claim-id so checklist state remains stable after rerenders.
+  Every .optional-entry follows the same rule using its data-optional-id.
+  Every .boss-entry follows the same rule using its data-boss-id.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f3f1eb">
+  <meta name="description" content="{{GAME_SUMMARY}}">
+  <title>{{GAME_TITLE}} — Walkthrough</title>
+  <script>document.documentElement.classList.add('js');</script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3f1eb; --bg-deep: #e8e5dc; --surface: rgba(255,255,252,.92);
+      --surface-solid: #fffefb; --ink: #202521; --muted: #667069; --faint: #8b938e;
+      --line: #d8dcd6; --line-strong: #bdc8c0; --accent: #1f7357;
+      --accent-bright: #2d9875; --accent-soft: #dcefe7; --accent-ink: #104b38;
+      --gold: #a87828; --gold-soft: #f3e7c9; --danger: #a73b46; --danger-soft: #f8e2e4;
+      --choice: #6d55a4; --choice-soft: #ece5f7; --info: #396c94; --info-soft: #e1eef7;
+      --shadow: 0 18px 55px rgba(28,43,35,.11); --shadow-soft: 0 7px 24px rgba(28,43,35,.08);
+      --sidebar: 19rem; --topbar: 4.25rem; --content: 52rem; --radius: 1.1rem;
+      --font-body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-display: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #111713; --bg-deep: #0b100d; --surface: rgba(24,32,27,.94);
+      --surface-solid: #18201b; --ink: #edf2ee; --muted: #abb7af; --faint: #7d8b82;
+      --line: #344039; --line-strong: #4b5b51; --accent: #63c79e;
+      --accent-bright: #85d9b7; --accent-soft: #183a2d; --accent-ink: #bdf1dc;
+      --gold: #e0b45f; --gold-soft: #3b301b; --danger: #f0848e; --danger-soft: #402328;
+      --choice: #b9a0f0; --choice-soft: #332b48; --info: #83b6dc; --info-soft: #203647;
+      --shadow: 0 20px 65px rgba(0,0,0,.36); --shadow-soft: 0 8px 25px rgba(0,0,0,.25);
+    }
+    @media (prefers-color-scheme: dark) {
+      html:not([data-theme]) {
+        color-scheme: dark;
+        --bg: #111713; --bg-deep: #0b100d; --surface: rgba(24,32,27,.94);
+        --surface-solid: #18201b; --ink: #edf2ee; --muted: #abb7af; --faint: #7d8b82;
+        --line: #344039; --line-strong: #4b5b51; --accent: #63c79e;
+        --accent-bright: #85d9b7; --accent-soft: #183a2d; --accent-ink: #bdf1dc;
+        --gold: #e0b45f; --gold-soft: #3b301b; --danger: #f0848e; --danger-soft: #402328;
+        --choice: #b9a0f0; --choice-soft: #332b48; --info: #83b6dc; --info-soft: #203647;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--topbar) + 5rem); }
+    body {
+      margin: 0; min-width: 19rem; color: var(--ink); font: 400 1rem/1.72 var(--font-body);
+      background: radial-gradient(circle at 78% -10%, color-mix(in srgb,var(--accent) 12%,transparent), transparent 28rem),
+        linear-gradient(150deg,var(--bg),var(--bg-deep)); text-rendering: optimizeLegibility;
+    }
+    button, input { font: inherit; color: inherit; }
+    a { color: var(--accent); text-underline-offset: .2em; }
+    :focus-visible { outline: .2rem solid var(--accent-bright); outline-offset: .2rem; }
+    .skip-link { position: fixed; z-index: 1000; top: .6rem; left: .6rem; transform: translateY(-180%); padding: .65rem 1rem; border-radius: .6rem; background: var(--ink); color: var(--surface-solid); }
+    .skip-link:focus { transform: translateY(0); }
+    .scroll-progress { position: fixed; z-index: 130; inset: 0 0 auto; height: .22rem; }
+    .scroll-progress span { display: block; width: 0; height: 100%; background: linear-gradient(90deg,var(--accent),var(--gold)); }
+    .topbar { position: fixed; z-index: 100; inset: 0 0 auto var(--sidebar); height: var(--topbar); display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 clamp(1rem,3vw,2.2rem); border-bottom: 1px solid var(--line); background: color-mix(in srgb,var(--surface-solid) 84%,transparent); backdrop-filter: blur(18px) saturate(135%); }
+    .topbar-group, .topbar-actions { display: flex; align-items: center; gap: .45rem; min-width: 0; }
+    .topbar-title { min-width: 0; }
+    .topbar-title strong { display: block; overflow: hidden; font-size: .82rem; letter-spacing: .12em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+    .topbar-location { display: block; overflow: hidden; color: var(--muted); font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
+    .icon-button { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; padding: .62rem; border: 1px solid var(--line); border-radius: .8rem; background: var(--surface); cursor: pointer; }
+    .icon-button:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .icon-button svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 1.8; }
+    .menu-button { display: none; }
+    .sidebar { position: fixed; z-index: 110; inset: 0 auto 0 0; width: var(--sidebar); display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--line); background: var(--surface-solid); box-shadow: var(--shadow-soft); }
+    .brand { display: flex; align-items: center; gap: .9rem; min-height: var(--topbar); padding: .8rem 1.15rem; border-bottom: 1px solid var(--line); }
+    .brand-mark { position: relative; width: 2.25rem; height: 2.25rem; flex: none; border: 1px solid var(--accent); border-radius: 50%; background: radial-gradient(circle,var(--gold) 0 .13rem,transparent .16rem),var(--accent-soft); }
+    .brand-mark::before, .brand-mark::after { content: ""; position: absolute; inset: .38rem; border: 1px solid var(--accent); border-radius: 50%; }
+    .brand-mark::after { inset: .76rem -.15rem; border-width: 1px 0 0; border-radius: 0; transform: rotate(-28deg); }
+    .brand strong { display: block; letter-spacing: .14em; font-size: .8rem; }
+    .brand small { display: block; color: var(--muted); font-size: .67rem; letter-spacing: .08em; text-transform: uppercase; }
+    .sidebar-tools { padding: .9rem; border-bottom: 1px solid var(--line); }
+    .search-trigger { display: flex; align-items: center; width: 100%; gap: .7rem; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: .75rem; background: var(--bg); color: var(--muted); cursor: pointer; }
+    .search-trigger kbd { margin-left: auto; padding: .05rem .35rem; border: 1px solid var(--line); border-radius: .3rem; font-size: .65rem; }
+    .nav-label { padding: .9rem 1.1rem .35rem; color: var(--faint); font-size: .66rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+    .section-nav { flex: 1; overflow: auto; padding: 0 .65rem 1rem; }
+    .nav-link { position: relative; display: block; margin: .08rem 0; padding: .5rem .7rem; border-radius: .55rem; color: var(--muted); font-size: .79rem; line-height: 1.35; text-decoration: none; }
+    .nav-link:hover { background: var(--bg); color: var(--ink); }
+    .nav-link.active { background: var(--accent-soft); color: var(--accent-ink); font-weight: 700; }
+    .nav-link.active::before { content: ""; position: absolute; left: -.08rem; top: .48rem; bottom: .48rem; width: .18rem; border-radius: 1rem; background: var(--accent); }
+    .nav-link.nav-level-2 { padding-left: 1.25rem; font-size: .73rem; }
+    .sidebar-progress { padding: .9rem 1rem 1rem; border-top: 1px solid var(--line); background: var(--surface); }
+    .progress-copy { display: flex; justify-content: space-between; gap: .8rem; margin-bottom: .45rem; font-size: .72rem; }
+    .task-meter { overflow: hidden; height: .38rem; border-radius: 1rem; background: var(--line); }
+    .task-meter span { display: block; width: 0; height: 100%; background: linear-gradient(90deg,var(--accent),var(--gold)); }
+    .reset-button { margin-top: .7rem; padding: 0; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: .7rem; text-decoration: underline; }
+    .page { margin-left: var(--sidebar); padding: calc(var(--topbar) + 1rem) clamp(1rem,4vw,4rem) 6rem; }
+    .primary-tabs { position: sticky; z-index: 80; top: var(--topbar); display: flex; width: min(100%,var(--content)); margin: 0 auto 1.35rem; overflow-x: auto; border-bottom: 1px solid var(--line-strong); background: color-mix(in srgb,var(--bg) 90%,transparent); backdrop-filter: blur(14px); scrollbar-width: thin; }
+    .primary-tab { position: relative; display: flex; align-items: center; min-height: 3.25rem; padding: .75rem 1rem; color: var(--muted); font-size: .77rem; font-weight: 800; letter-spacing: .04em; text-decoration: none; text-transform: uppercase; white-space: nowrap; }
+    .primary-tab:hover { color: var(--ink); }
+    .primary-tab[aria-selected="true"] { color: var(--accent-ink); }
+    .primary-tab[aria-selected="true"]::after { content: ""; position: absolute; inset: auto .75rem -.05rem; height: .2rem; border-radius: 1rem; background: var(--accent); }
+    .guide-content { width: min(100%,var(--content)); margin: 0 auto; }
+    .js .guide-view[hidden] { display: none; }
+    body.reader-mode .sidebar { transform: translateX(-105%); }
+    body.reader-mode .topbar { left: 0; }
+    body.reader-mode .page { margin-left: 0; }
+    .hero { position: relative; overflow: hidden; margin-bottom: 3rem; padding: clamp(2rem,6vw,4.5rem); border: 1px solid var(--line); border-radius: clamp(1.1rem,3vw,2rem); background: radial-gradient(circle at 78% 12%,color-mix(in srgb,var(--gold) 24%,transparent),transparent 18rem),radial-gradient(circle at 15% 100%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 22rem),var(--surface-solid); box-shadow: var(--shadow); }
+    .eyebrow { color: var(--accent); font-size: .73rem; font-weight: 850; letter-spacing: .16em; text-transform: uppercase; }
+    .hero h1 { max-width: 13ch; margin: .45rem 0 .8rem; font: 700 clamp(2.6rem,7vw,5.4rem)/.96 var(--font-display); letter-spacing: -.045em; }
+    .hero-copy { max-width: 43rem; color: var(--muted); font-size: clamp(1rem,2vw,1.18rem); }
+    .hero-stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: .7rem; margin-top: 2rem; }
+    .hero-stat { padding: .9rem; border: 1px solid var(--line); border-radius: .8rem; background: var(--surface); }
+    .hero-stat strong { display: block; color: var(--accent); font: 700 1.5rem/1 var(--font-display); }
+    .hero-stat span { color: var(--muted); font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; }
+    .guide-content h2 { margin: 4rem 0 1.15rem; padding-top: 1.5rem; border-top: 1px solid var(--line); font: 720 clamp(1.8rem,4vw,2.7rem)/1.12 var(--font-display); }
+    .guide-content h3 { margin: 2.5rem 0 .8rem; color: var(--accent-ink); font: 720 clamp(1.35rem,3vw,1.9rem)/1.18 var(--font-display); }
+    .guide-content h4 { margin: 2.5rem 0 .8rem; color: var(--accent-ink); font-size: 1.15rem; }
+    .guide-content h2, .guide-content h3, .guide-content h4 { scroll-margin-top: calc(var(--topbar) + 5rem); }
+    .route-chapter { margin-top: 5rem; }
+    .chapter-head { padding-top: 1.7rem; border-top: .18rem solid var(--accent); }
+    .chapter-head h2 { max-width: 24ch; margin: .35rem 0 .6rem; padding-top: 0; border-top: 0; }
+    .chapter-summary { max-width: 46rem; margin: 0; color: var(--muted); }
+    .route-section { margin: 2.75rem 0 0; padding-left: clamp(.8rem,2vw,1.4rem); border-left: 1px solid var(--line-strong); }
+    .section-head { padding-top: 1rem; }
+    .section-head h3 { max-width: 34ch; margin: .3rem 0 1.25rem; }
+    .route-step { padding-bottom: 1.5rem; border-bottom: 1px solid color-mix(in srgb,var(--line) 70%,transparent); }
+    .optional-hero { margin-bottom: 3rem; padding: clamp(1.7rem,5vw,3.2rem); border: 1px solid var(--line); border-radius: var(--radius); background: radial-gradient(circle at 88% 0,color-mix(in srgb,var(--gold) 22%,transparent),transparent 17rem),var(--surface-solid); box-shadow: var(--shadow); }
+    .optional-hero h1 { margin: .4rem 0 .7rem; font: 700 clamp(2.4rem,6vw,4.6rem)/1 var(--font-display); letter-spacing: -.04em; }
+    .optional-hero p { max-width: 45rem; color: var(--muted); }
+    .optional-group { margin-top: 4.5rem; }
+    .optional-group-head { padding-top: 1.5rem; border-top: .18rem solid var(--gold); }
+    .optional-group-head h2 { margin: .35rem 0 .7rem; padding-top: 0; border-top: 0; }
+    .optional-group-head p { max-width: 44rem; color: var(--muted); }
+    .optional-entry { margin: 1.5rem 0; padding: clamp(1.1rem,3vw,1.65rem); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-soft); }
+    .optional-entry h3 { margin: .25rem 0 .8rem; }
+    .optional-meta { display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: .8rem; }
+    .optional-meta span { padding: .28rem .55rem; border: 1px solid var(--line); border-radius: 999px; background: var(--gold-soft); color: var(--ink); font-size: .75rem; font-weight: 720; }
+    .optional-reward { margin: 1rem 0; padding: .75rem .9rem; border-left: .22rem solid var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+    .optional-dependencies { color: var(--muted); font-size: .92rem; }
+    .boss-hero { position: relative; overflow: hidden; margin-bottom: 3rem; padding: clamp(1.8rem,5vw,3.4rem); border: 1px solid var(--line); border-radius: var(--radius); background: radial-gradient(circle at 86% 5%,color-mix(in srgb,var(--danger) 20%,transparent),transparent 18rem),radial-gradient(circle at 5% 100%,color-mix(in srgb,var(--gold) 16%,transparent),transparent 20rem),var(--surface-solid); box-shadow: var(--shadow); }
+    .boss-hero h1 { margin: .4rem 0 .7rem; font: 700 clamp(2.4rem,6vw,4.6rem)/1 var(--font-display); letter-spacing: -.04em; }
+    .boss-hero p { max-width: 46rem; color: var(--muted); }
+    .boss-legend { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.2rem; }
+    .boss-legend span, .boss-meta span { padding: .28rem .58rem; border: 1px solid var(--line); border-radius: 999px; background: var(--danger-soft); font-size: .74rem; font-weight: 720; }
+    .boss-group { margin-top: 4.75rem; }
+    .boss-group-head { padding-top: 1.5rem; border-top: .18rem solid var(--danger); }
+    .boss-group-head h2 { margin: .35rem 0 .7rem; padding-top: 0; border-top: 0; }
+    .boss-group-head p { max-width: 45rem; color: var(--muted); }
+    .boss-entry { margin: 1.65rem 0; padding: clamp(1.15rem,3vw,1.8rem); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-soft); }
+    .boss-entry h3 { margin: .3rem 0 .8rem; color: var(--ink); }
+    .boss-entry h4 { margin: 1.35rem 0 .55rem; color: var(--accent-ink); font: 720 1.05rem/1.25 var(--font-display); }
+    .boss-meta { display: flex; flex-wrap: wrap; gap: .45rem; }
+    .boss-meta span:nth-child(2) { background: var(--gold-soft); }
+    .boss-party { margin: .45rem 0 .8rem; color: var(--muted); }
+    .boss-party strong { color: var(--ink); }
+    .boss-read { margin: 1rem 0; padding: .85rem 1rem; border-left: .24rem solid var(--danger); background: var(--danger-soft); }
+    .boss-outcome { margin: 1rem 0; padding: .8rem 1rem; border-left: .24rem solid var(--gold); background: var(--gold-soft); }
+    .boss-phase { margin-top: 1.3rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+    .boss-phase:first-of-type { border-top: 0; }
+    .boss-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: .75rem; background: var(--surface-solid); }
+    .boss-stats { width: 100%; min-width: 43rem; border-collapse: collapse; font-size: .82rem; font-variant-numeric: tabular-nums; }
+    .boss-stats th, .boss-stats td { padding: .58rem .65rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+    .boss-stats th:first-child, .boss-stats td:first-child { text-align: left; }
+    .boss-stats th { background: var(--accent-soft); color: var(--accent-ink); font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; }
+    .boss-stats tr:last-child td { border-bottom: 0; }
+    .boss-stats th:last-child, .boss-stats td:last-child { border-right: 0; }
+    .boss-guidance { display: grid; grid-template-columns: minmax(0,.9fr) minmax(0,1.1fr); gap: 1rem; margin-top: 1rem; }
+    .boss-watch, .boss-win { padding: 1rem 1.05rem; border: 1px solid var(--line); border-radius: .8rem; background: var(--surface-solid); }
+    .boss-watch { border-top: .2rem solid var(--danger); }
+    .boss-win { border-top: .2rem solid var(--accent); }
+    .boss-guidance h5 { margin: 0 0 .7rem; color: var(--ink); font: 720 1rem/1.25 var(--font-display); }
+    .boss-guidance h6 { margin: 1rem 0 .45rem; color: var(--muted); font: 750 .7rem/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; }
+    .boss-guidance h5 + h6 { margin-top: 0; }
+    .boss-threats, .boss-tools, .boss-plan { margin: .45rem 0 0; padding-left: 1.2rem; }
+    .boss-threats li, .boss-tools li, .boss-plan li { margin: .55rem 0; }
+    .boss-tools li { padding-left: .15rem; }
+    .access-label { display: block; margin-bottom: .12rem; color: var(--accent-ink); font-size: .72rem; font-weight: 760; letter-spacing: .035em; text-transform: uppercase; }
+    .boss-links { margin: .9rem 0; color: var(--muted); font-size: .9rem; }
+    .task-row { display: inline-flex; align-items: center; gap: .65rem; min-height: 2.75rem; margin: .65rem 0 0; color: var(--muted); cursor: pointer; }
+    .task-checkbox { width: 1.15rem; height: 1.15rem; margin: 0; accent-color: var(--accent-ink); cursor: pointer; }
+    .task-row:has(.task-checkbox:checked) { color: var(--accent-ink); text-decoration: line-through; text-decoration-thickness: .08em; }
+    .guide-content blockquote, .callout { margin: 1.3rem 0; padding: 1rem 1.15rem; border: 1px solid var(--line); border-left: .3rem solid var(--info); border-radius: .75rem; background: var(--info-soft); box-shadow: var(--shadow-soft); }
+    .callout[data-callout="boss"] { border-left-color: var(--danger); background: var(--danger-soft); }
+    .callout[data-callout="optional"] { border-left-color: var(--gold); background: var(--gold-soft); }
+    .callout[data-callout="choice"] { border-left-color: var(--choice); background: var(--choice-soft); }
+    .callout[data-callout="pickup"] { border-left-color: var(--accent); background: var(--accent-soft); }
+    details { margin: 1.35rem 0; border: 1px solid var(--line-strong); border-radius: .85rem; background: var(--surface-solid); box-shadow: var(--shadow-soft); }
+    summary { position: relative; padding: 1rem 3rem 1rem 1.1rem; cursor: pointer; font-weight: 720; list-style: none; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: "+"; position: absolute; right: 1.1rem; top: .78rem; color: var(--accent); font-size: 1.45rem; transition: transform .2s; }
+    details[open] summary { border-bottom: 1px solid var(--line); }
+    details[open] summary::after { transform: rotate(45deg); }
+    details > :not(summary) { margin-left: 1.1rem; margin-right: 1.1rem; }
+    details > :last-child { margin-bottom: 1.1rem; }
+    .evidence { color: var(--muted); font-size: .88rem; }
+    .evidence-status { color: var(--accent-ink); font-weight: 750; }
+    .evidence code { white-space: normal; overflow-wrap: anywhere; }
+    code { padding: .16em .42em; border: 1px solid var(--line); border-radius: .38rem; background: var(--accent-soft); color: var(--accent-ink); font: 700 .85em/1.4 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .placeholder { min-height: 45vh; padding: clamp(2rem,6vw,4rem); border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface); text-align: center; }
+    .placeholder h1 { font: 700 clamp(2rem,5vw,3.5rem)/1 var(--font-display); }
+    .placeholder p { max-width: 35rem; margin: 1rem auto; color: var(--muted); }
+    .placeholder a { display: inline-flex; min-height: 2.75rem; align-items: center; margin-top: .8rem; padding: .55rem .9rem; border: 1px solid var(--line); border-radius: .7rem; background: var(--accent-soft); text-decoration: none; }
+    .search-dialog { width: min(44rem,calc(100% - 1.5rem)); max-height: calc(100dvh - 2rem); padding: 0; border: 1px solid var(--line-strong); border-radius: 1rem; background: var(--surface-solid); color: var(--ink); box-shadow: 0 25px 90px rgba(0,0,0,.35); }
+    .search-dialog::backdrop { background: rgba(5,10,7,.58); backdrop-filter: blur(5px); }
+    .search-head { display: flex; gap: .6rem; padding: .8rem; border-bottom: 1px solid var(--line); }
+    .search-field { width: 100%; padding: .8rem 1rem; border: 1px solid var(--line-strong); border-radius: .7rem; background: var(--bg); color: var(--ink); }
+    .search-results { max-height: 65dvh; padding: .65rem; overflow: auto; }
+    .search-result { display: block; width: 100%; padding: .85rem .9rem; border: 0; border-radius: .7rem; background: transparent; color: var(--ink); cursor: pointer; text-align: left; }
+    .search-result:hover { background: var(--accent-soft); }
+    .search-result small { display: block; color: var(--muted); }
+    .resume-toast { position: fixed; z-index: 90; right: 1rem; bottom: 1rem; display: none; max-width: min(28rem,calc(100% - 2rem)); padding: .8rem 1rem; border: 1px solid var(--line-strong); border-radius: .85rem; background: var(--surface-solid); box-shadow: var(--shadow); }
+    .resume-toast.show { display: block; }
+    .back-to-top { position: fixed; z-index: 80; right: 1rem; bottom: 1rem; width: 2.8rem; height: 2.8rem; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface-solid); cursor: pointer; opacity: 0; pointer-events: none; }
+    .back-to-top.show { opacity: 1; pointer-events: auto; }
+    .sidebar-scrim { display: none; }
+    .page-footer { margin-top: 5rem; padding-top: 1.5rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .76rem; text-align: center; }
+    @media (max-width: 64rem) {
+      .topbar { left: 0; }
+      .menu-button { display: grid; }
+      .sidebar { transform: translateX(-105%); transition: transform .24s; }
+      body.nav-open .sidebar { transform: translateX(0); }
+      body.nav-open .sidebar-scrim { position: fixed; z-index: 105; inset: 0; display: block; border: 0; background: rgba(4,8,6,.52); }
+      .page { margin-left: 0; }
+    }
+    @media (max-width: 48rem) {
+      .boss-guidance { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 42rem) {
+      :root { --topbar: 3.8rem; }
+      body { font-size: .96rem; }
+      .topbar { padding: 0 .75rem; }
+      .page { padding: calc(var(--topbar) + .55rem) .72rem 5rem; }
+      .primary-tabs { margin-bottom: .8rem; }
+      .hero { padding: 1.5rem 1.2rem; border-radius: 1rem; }
+      .hero h1 { max-width: none; font-size: clamp(2rem,10.5vw,3rem); }
+      .hero-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .search-trigger kbd { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+    @media print {
+      :root { color-scheme: light; --ink: #111; --muted: #444; --line: #bbb; --surface-solid: #fff; --bg: #fff; }
+      body { background: #fff; font-size: 10pt; }
+      .sidebar,.topbar,.primary-tabs,.scroll-progress,.resume-toast,.back-to-top,.sidebar-scrim { display: none !important; }
+      .page { margin: 0; padding: 0; }
+      .guide-content { width: 100%; max-width: none; }
+      .js .guide-view[hidden] { display: block !important; }
+      details > * { display: block !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#guide-content">Skip to walkthrough</a>
+  <div class="scroll-progress" aria-hidden="true"><span id="reading-progress"></span></div>
+  <header class="topbar">
+    <div class="topbar-group">
+      <button class="icon-button menu-button" id="menu-button" type="button" aria-label="Open route navigation" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <div class="topbar-title"><strong>{{GAME_TITLE}}</strong><span class="topbar-location" id="current-location">Main Route</span></div>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-button" id="reader-button" type="button" aria-label="Enter focused reading mode" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h5A2.5 2.5 0 0 1 12 8v11a2.5 2.5 0 0 0-2.5-2.5h-5zM19.5 5.5h-5A2.5 2.5 0 0 0 12 8v11a2.5 2.5 0 0 1 2.5-2.5h5z"/></svg></button>
+      <button class="icon-button" type="button" data-open-search aria-label="Search walkthrough"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg></button>
+      <button class="icon-button" id="theme-button" type="button" aria-label="Change theme"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg></button>
+    </div>
+  </header>
+  <aside class="sidebar" id="sidebar" aria-label="Walkthrough navigation">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span><strong>{{GAME_TITLE}}</strong><small>Field guide</small></span></div>
+    <div class="sidebar-tools"><button class="search-trigger" type="button" data-open-search>Search guide <kbd>/</kbd></button></div>
+    <div class="nav-label">Current view</div>
+    <nav class="section-nav" id="section-nav"></nav>
+    <div class="sidebar-progress">
+      <div class="progress-copy"><span>Checklist progress</span><strong id="task-count">0 / 0</strong></div>
+      <div class="task-meter" aria-hidden="true"><span id="task-fill"></span></div>
+      <button class="reset-button" id="reset-progress" type="button">Reset saved checkmarks</button>
+    </div>
+  </aside>
+  <button class="sidebar-scrim" id="sidebar-scrim" type="button" aria-label="Close navigation"></button>
+  <main class="page">
+    <nav class="primary-tabs" aria-label="Walkthrough sections" role="tablist">
+      <a class="primary-tab" id="tab-main-route" data-view-target="main-route" href="#view-main-route" role="tab" aria-controls="view-main-route">Main Route</a>
+      <a class="primary-tab" id="tab-optional-content" data-view-target="optional-content" href="#view-optional-content" role="tab" aria-controls="view-optional-content">Optional Content</a>
+      <a class="primary-tab" id="tab-bosses" data-view-target="bosses" href="#view-bosses" role="tab" aria-controls="view-bosses">Bosses</a>
+      <a class="primary-tab" id="tab-scenes-cg" data-view-target="scenes-cg" href="#view-scenes-cg" role="tab" aria-controls="view-scenes-cg">Scenes &amp; CG</a>
+    </nav>
+    <article class="guide-content" id="guide-content">
+      <section class="guide-view" id="view-main-route" data-view="main-route" role="tabpanel" aria-labelledby="tab-main-route">
+        <header class="hero">
+          <div class="eyebrow">Source-traceable walkthrough</div>
+          <h1>{{GAME_TITLE}}</h1>
+          <div class="hero-copy"><p>{{GAME_SUMMARY}}</p><blockquote><strong>AI-generated guide:</strong> This walkthrough was created with AI by analyzing the translated game's code and data. Main progression, optional-event chains, gates, and rewards are source-traceable; directions intentionally focus on verified destinations and interactions rather than tile-perfect walking paths.</blockquote></div>
+          <div class="hero-stats" aria-label="Route coverage">{{ROUTE_STATS_HTML}}</div>
+        </header>
+        {{MAIN_ROUTE_HTML}}
+      </section>
+      <section class="guide-view" id="view-optional-content" data-view="optional-content" role="tabpanel" aria-labelledby="tab-optional-content">
+        <header class="optional-hero"><div class="eyebrow">Verified detours</div><h1>Optional Content</h1><p>Side events are ordered by when the Main Route first puts you in position to begin them. Each entry keeps prerequisites, the complete event path, rewards, and source evidence together. Boss dossiers and companion scenes remain in their dedicated tabs.</p></header>
+        {{OPTIONAL_CONTENT_HTML}}
+      </section>
+      <section class="guide-view" id="view-bosses" data-view="bosses" role="tabpanel" aria-labelledby="tab-bosses">
+        {{BOSSES_HTML}}
+      </section>
+      <section class="guide-view" id="view-scenes-cg" data-view="scenes-cg" data-placeholder="true" role="tabpanel" aria-labelledby="tab-scenes-cg">
+        <div class="placeholder"><div class="eyebrow">Future milestone</div><h1>Scenes &amp; CG</h1><p>The scene and CG catalog will be added in a later milestone.</p><a href="#view-main-route">Return to Main Route</a></div>
+      </section>
+      <footer class="page-footer">Generated from translated game data · {{GAME_TITLE}}</footer>
+    </article>
+  </main>
+  <dialog class="search-dialog" id="search-dialog">
+    <div class="search-head"><input class="search-field" id="search-input" type="search" aria-label="Search walkthrough" placeholder="Search the guide"><button class="icon-button" id="close-search" type="button" aria-label="Close search">×</button></div>
+    <div class="search-results" id="search-results"></div>
+  </dialog>
+  <div class="resume-toast" id="resume-toast"><strong id="resume-title"></strong> <button id="resume-button" type="button">Continue</button> <button id="resume-dismiss" type="button">Dismiss</button></div>
+  <button class="back-to-top" id="back-to-top" type="button" aria-label="Back to top">↑</button>
+  <script>
+  (() => {
+    'use strict';
+    const namespace = '{{GAME_SLUG}}-walkthrough-v1';
+    const store = {
+      get(key, fallback = null) { try { const value = localStorage.getItem(`${namespace}:${key}`); return value === null ? fallback : JSON.parse(value); } catch (_) { return fallback; } },
+      set(key, value) { try { localStorage.setItem(`${namespace}:${key}`, JSON.stringify(value)); } catch (_) {} }
+    };
+    const body = document.body;
+    const tabs = [...document.querySelectorAll('.primary-tab')];
+    const panels = [...document.querySelectorAll('.guide-view')];
+    const nav = document.getElementById('section-nav');
+    const locationLabel = document.getElementById('current-location');
+    let activeView = 'main-route';
+    let headings = [];
+    let navLinks = [];
+
+    function viewForTarget(target) {
+      const panel = target?.closest?.('.guide-view');
+      return panel?.dataset.view || 'main-route';
+    }
+    function targetFromHash() {
+      if (!location.hash) return null;
+      try { return document.getElementById(decodeURIComponent(location.hash.slice(1))); } catch (_) { return null; }
+    }
+    function rebuildNav() {
+      const panel = panels.find(row => row.dataset.view === activeView);
+      headings = panel ? [...panel.querySelectorAll('h2[id],h3[id]')] : [];
+      nav.innerHTML = headings.map(heading => `<a class="nav-link${heading.tagName === 'H3' ? ' nav-level-2' : ''}" data-target="${heading.id}" href="#${heading.id}">${heading.textContent.trim()}</a>`).join('');
+      navLinks = [...nav.querySelectorAll('.nav-link')];
+      navLinks.forEach(link => link.addEventListener('click', closeNav));
+    }
+    function activate(view, destination = null) {
+      if (!panels.some(panel => panel.dataset.view === view)) view = 'main-route';
+      activeView = view;
+      panels.forEach(panel => { panel.hidden = panel.dataset.view !== view; });
+      tabs.forEach(tab => {
+        const selected = tab.dataset.viewTarget === view;
+        tab.setAttribute('aria-selected', String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      rebuildNav();
+      locationLabel.textContent = tabs.find(tab => tab.dataset.viewTarget === view)?.textContent.trim() || 'Main Route';
+      store.set('active-view', view);
+      if (destination && destination.id && destination.id !== `view-${view}`) requestAnimationFrame(() => destination.scrollIntoView({ block: 'start' }));
+      else scrollTo({ top: 0 });
+      updateReadingState();
+    }
+    function navigateTo(target, push = true) {
+      if (!target?.id) return;
+      if (push) history.pushState(null, '', `#${encodeURIComponent(target.id)}`);
+      activate(viewForTarget(target), target);
+    }
+    tabs.forEach(tab => tab.addEventListener('click', event => {
+      event.preventDefault();
+      navigateTo(document.getElementById(tab.getAttribute('aria-controls')));
+    }));
+    tabs.forEach((tab, index) => tab.addEventListener('keydown', event => {
+      const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+      if (!keys.includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      tabs[next].focus();
+      tabs[next].click();
+    }));
+    document.addEventListener('click', event => {
+      const link = event.target.closest('a[data-guide-link]');
+      if (!link) return;
+      const target = document.getElementById(link.hash.slice(1));
+      if (!target) return;
+      event.preventDefault();
+      navigateTo(target);
+    });
+    addEventListener('hashchange', () => { const target = targetFromHash(); activate(viewForTarget(target), target); });
+    const initialTarget = targetFromHash();
+
+    const menuButton = document.getElementById('menu-button');
+    const scrim = document.getElementById('sidebar-scrim');
+    function closeNav() { body.classList.remove('nav-open'); menuButton.setAttribute('aria-expanded', 'false'); }
+    menuButton.addEventListener('click', () => { const open = body.classList.toggle('nav-open'); menuButton.setAttribute('aria-expanded', String(open)); });
+    scrim.addEventListener('click', closeNav);
+
+    const themes = ['auto', 'dark', 'light'];
+    const themeButton = document.getElementById('theme-button');
+    let theme = store.get('theme', 'auto');
+    function applyTheme() { if (theme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = theme; themeButton.setAttribute('aria-label', `Theme: ${theme}. Activate to change.`); }
+    themeButton.addEventListener('click', () => { theme = themes[(themes.indexOf(theme) + 1) % themes.length]; store.set('theme', theme); applyTheme(); });
+    applyTheme();
+
+    const readerButton = document.getElementById('reader-button');
+    let reader = store.get('reader', false);
+    function applyReader() { body.classList.toggle('reader-mode', reader); readerButton.setAttribute('aria-pressed', String(reader)); }
+    readerButton.addEventListener('click', () => { reader = !reader; store.set('reader', reader); applyReader(); });
+    applyReader();
+
+    const tasks = [...document.querySelectorAll('.task-checkbox')];
+    let taskState = store.get('tasks', {});
+    function updateTasks() { let checked = 0; tasks.forEach(task => { task.checked = Boolean(taskState[task.dataset.taskId]); if (task.checked) checked += 1; }); document.getElementById('task-count').textContent = `${checked} / ${tasks.length}`; document.getElementById('task-fill').style.width = tasks.length ? `${checked / tasks.length * 100}%` : '0%'; }
+    tasks.forEach(task => task.addEventListener('change', () => { taskState[task.dataset.taskId] = task.checked; store.set('tasks', taskState); updateTasks(); }));
+    document.getElementById('reset-progress').addEventListener('click', () => { if (!confirm('Reset all saved walkthrough checkmarks on this device?')) return; taskState = {}; store.set('tasks', taskState); updateTasks(); });
+    updateTasks();
+
+    const progress = document.getElementById('reading-progress');
+    const backToTop = document.getElementById('back-to-top');
+    function updateReadingState() {
+      const maximum = Math.max(1, document.documentElement.scrollHeight - innerHeight);
+      progress.style.width = `${Math.min(1, Math.max(0, scrollY / maximum)) * 100}%`;
+      backToTop.classList.toggle('show', scrollY > innerHeight * 1.2);
+      let current = headings[0];
+      for (const heading of headings) { if (heading.getBoundingClientRect().top <= 150) current = heading; else break; }
+      if (current) { navLinks.forEach(link => link.classList.toggle('active', link.dataset.target === current.id)); locationLabel.textContent = current.textContent.trim(); store.set('last-heading', { id: current.id, title: current.textContent.trim() }); }
+    }
+    addEventListener('scroll', updateReadingState, { passive: true });
+    addEventListener('resize', updateReadingState);
+    backToTop.addEventListener('click', () => scrollTo({ top: 0, behavior: 'smooth' }));
+
+    const dialog = document.getElementById('search-dialog');
+    const searchInput = document.getElementById('search-input');
+    const results = document.getElementById('search-results');
+    const searchRows = [...document.querySelectorAll('.guide-view:not([data-placeholder="true"]) h2[id],.guide-view:not([data-placeholder="true"]) h3[id],.route-step p,.optional-entry p,.boss-entry p,.boss-entry li')].map(node => ({ node: node.closest('.route-step,.optional-entry,.boss-entry') || node, text: node.textContent.replace(/\s+/g, ' ').trim(), view: viewForTarget(node) }));
+    function escapeHtml(value) { return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]); }
+    function search() { const query = searchInput.value.trim().toLocaleLowerCase(); const matches = query.length < 2 ? [] : searchRows.filter(row => row.text.toLocaleLowerCase().includes(query)).slice(0, 40); results.innerHTML = matches.length ? matches.map((row, index) => `<button class="search-result" type="button" data-result="${index}">${escapeHtml(row.text)}<small>${escapeHtml(row.view)}</small></button>`).join('') : '<p>Type at least two characters or try another search.</p>'; results.querySelectorAll('[data-result]').forEach(button => button.addEventListener('click', () => { const row = matches[Number(button.dataset.result)]; dialog.close(); navigateTo(row.node); })); }
+    function openSearch() { dialog.showModal(); searchInput.value = ''; search(); requestAnimationFrame(() => searchInput.focus()); }
+    document.querySelectorAll('[data-open-search]').forEach(button => button.addEventListener('click', openSearch));
+    document.getElementById('close-search').addEventListener('click', () => dialog.close());
+    searchInput.addEventListener('input', search);
+
+    // Activate only after every function-scoped UI dependency has been initialized.
+    activate(initialTarget ? viewForTarget(initialTarget) : store.get('active-view', 'main-route'), initialTarget);
+
+    const resume = document.getElementById('resume-toast');
+    const saved = store.get('last-heading');
+    if (!location.hash && saved?.id && document.getElementById(saved.id)) { document.getElementById('resume-title').textContent = saved.title; resume.classList.add('show'); document.getElementById('resume-button').addEventListener('click', () => { navigateTo(document.getElementById(saved.id)); resume.classList.remove('show'); }); document.getElementById('resume-dismiss').addEventListener('click', () => resume.classList.remove('show')); }
+    addEventListener('keydown', event => { if (event.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { event.preventDefault(); openSearch(); } if (event.key === 'Escape') closeNav(); });
+  })();
+  </script>
+</body>
+</html>

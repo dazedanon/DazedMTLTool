@@ -703,6 +703,10 @@ class EvaluationManifestTests(unittest.TestCase):
             openrouter["max_tokens"], evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST
         )
         self.assertIsInstance(openrouter["messages"][0]["content"], str)
+        self.assertEqual(
+            openrouter["response_format"]["json_schema"]["schema"]["required"],
+            [f"Line{i}" for i in range(1, request["schema_line_count"] + 1)],
+        )
         self.assertNotIn("temperature", params["gemini"])
         self.assertNotIn("extra_body", params["gemini"])
         self.assertEqual(

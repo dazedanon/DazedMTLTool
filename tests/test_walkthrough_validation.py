@@ -1,8 +1,9 @@
-"""Regression tests for deterministic walkthrough claim validation."""
+"""Regression tests for the walkthrough publication contract."""
 
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import sys
 import tempfile
@@ -24,58 +25,144 @@ finally:
     sys.dont_write_bytecode = _DONT_WRITE_BYTECODE
 
 
-def _database(*names: str) -> list[dict | None]:
-    return [None, *({"name": name} for name in names)]
-
-
 class WalkthroughValidationTests(unittest.TestCase):
     def _write_json(self, path: Path, value: object) -> None:
         path.write_text(json.dumps(value), encoding="utf-8")
 
-    def _build_project(self, root: Path) -> tuple[Path, Path]:
+    def test_pronoun_window_does_not_turn_heal_into_he(self) -> None:
+        issues: list[dict[str, object]] = []
+        text = "Weeu " + ("x" * 176) + " Heal"
+
+        walkthrough_validator._validate_glossary_pronouns(
+            text,
+            "Guide",
+            [{"name": "Weeu", "gender": "female", "source": ".dazedtl/glossary.txt"}],
+            issues,
+        )
+
+        self.assertEqual([], issues)
+
+    def _html(self, *, source_id: str = "front-door-transfer", bosses_class: str = "guide-view") -> str:
+        tabs = "".join(
+            f'<a class="primary-tab" data-view-target="{view}" href="#{panel}">{label}</a>'
+            for view, panel, label in (
+                ("main-route", "view-main-route", "Main Route"),
+                ("optional-content", "view-optional-content", "Optional Content"),
+                ("bosses", "view-bosses", "Bosses"),
+                ("scenes-cg", "view-scenes-cg", "Scenes &amp; CG"),
+            )
+        )
+        return f"""<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Fixture Walkthrough</title><style>body {{ color: #222; }}</style></head>
+<body>
+  <a class="skip-link" href="#guide-content">Skip to walkthrough</a>
+  <div class="scroll-progress"><span></span></div>
+  <header class="topbar"><span class="topbar-location">Opening</span></header>
+  <aside class="sidebar">
+    <div class="brand">Fixture</div>
+    <nav class="section-nav"><a href="#step-reach-town">Reach Town</a></nav>
+    <div class="sidebar-progress">0 / 1</div>
+  </aside>
+  <button class="sidebar-scrim" type="button">Close navigation</button>
+  <main class="page">
+    <nav class="primary-tabs">{tabs}</nav>
+    <article class="guide-content" id="guide-content">
+      <section class="guide-view" id="view-main-route" data-view="main-route">
+        <header class="hero"><h1>Fixture Main Route</h1><div class="hero-stats"><div class="hero-stat">1</div><div class="hero-stat">1</div><div class="hero-stat">0</div><div class="hero-stat">1</div></div></header>
+        <section class="route-chapter" id="group-prologue" data-chapter-id="prologue" data-chapter-label="Prologue">
+          <header><p>Game chapter</p><h2 id="prologue">Prologue</h2></header>
+          <section class="route-section" id="section-objective-reach-town" data-section-id="objective-reach-town" data-section-label="Reach Town">
+            <header><p>In-game objective</p><h3 id="objective-reach-town">Reach Town</h3></header>
+            <article class="route-step" id="step-reach-town" data-claim-id="reach-town">
+              <h4 id="reach-town">Leave through the front door</h4>
+            <p class="route-lead">Speak to Mina beside the front door, then leave through that door.</p>
+            <p class="route-outcome">You arrive in Town.</p>
+            <aside><a data-guide-link data-guide-link-position="after" href="#town-errand">Town Errand</a> is now available.</aside>
+            <p><a data-guide-link href="#boss-door-warden">Door Warden</a> boss dossier.</p>
+            <label class="task-row"><input class="task-checkbox" type="checkbox" data-task-id="reach-town"> Mark complete</label>
+            <details class="evidence" data-evidence-id="reach-town">
+              <summary>Evidence</summary>
+              <p data-evidence-status="verified">Verified from game data</p>
+              <ul>
+                <li data-source-id="{source_id}">The front door transfers the party to the town map.</li>
+                <li data-source-id="town-map-name">The destination map is named Town.</li>
+              </ul>
+            </details>
+            </article>
+          </section>
+        </section>
+      </section>
+      <section class="guide-view" id="view-optional-content" data-view="optional-content">
+        <h1>Optional Content</h1>
+        <section class="optional-group" data-optional-group-id="optional-prologue" data-optional-group-label="Prologue Detours">
+          <h2 id="optional-prologue">Prologue Detours</h2>
+          <article class="optional-entry" id="optional-entry-town-errand" data-optional-id="town-errand">
+            <h3 id="town-errand">Town Errand</h3>
+            <p>After reaching Town, speak to Mina again to hear her optional request.</p>
+            <label><input class="task-checkbox" type="checkbox" data-task-id="town-errand"> Done</label>
+            <details class="evidence" data-evidence-id="town-errand">
+              <summary>Evidence</summary>
+              <p data-evidence-status="verified">Verified from game data</p>
+              <ul><li data-source-id="town-errand-journal">The journal names this optional event Town Errand.</li></ul>
+            </details>
+          </article>
+        </section>
+      </section>
+      <section class="{bosses_class}" id="view-bosses" data-view="bosses">
+        <h1>Bosses</h1>
+        <section class="boss-group" data-boss-group-id="boss-story" data-boss-group-label="Story Bosses">
+          <h2 id="boss-story">Story Bosses</h2>
+          <article class="boss-entry" id="boss-entry-door-warden" data-boss-id="door-warden">
+            <h3 id="boss-door-warden">Door Warden</h3>
+            <p>The Door Warden confronts you before Town.</p>
+            <section class="boss-phase" data-boss-phase-index="1">
+              <p>Battle setup: the protagonist fights alone.</p>
+              <p>Door Warden has no encoded elemental weakness or resistance.</p>
+              <table><tbody><tr>
+                <td data-boss-stat="Form">Door Warden</td>
+                <td data-boss-stat="HP">100</td>
+                <td data-boss-stat="SP">10</td>
+                <td data-boss-stat="EXP">20</td>
+                <td data-boss-stat="Gold">5</td>
+                <td data-boss-stat="Database drops">None</td>
+              </tr></tbody></table>
+              <p>Shield Bash is dangerous because Stun can cost the target its next action.</p>
+              <p>Use Fire damage when available, then Guard before Shield Bash.</p>
+            </section>
+            <p>Defeating it opens the front door.</p>
+            <p><a data-guide-link href="#reach-town">Main Route: Reach Town</a></p>
+            <label><input class="task-checkbox" type="checkbox" data-task-id="door-warden"> Defeated</label>
+            <details class="evidence" data-evidence-id="door-warden">
+              <summary>Evidence</summary>
+              <p data-evidence-status="verified">Verified from game data</p>
+              <ul>
+                <li data-source-id="door-warden-battle">The front-door event starts the Door Warden battle.</li>
+                <li data-source-id="door-warden-troop">The troop contains the Door Warden enemy.</li>
+                <li data-source-id="door-warden-enemy">The enemy record pins the Door Warden's stats and actions.</li>
+                <li data-source-id="door-warden-action">The skill record defines Shield Bash and its Stun effect.</li>
+                <li data-source-id="door-warden-guard">The skill record defines the standard Guard command.</li>
+              </ul>
+            </details>
+          </article>
+        </section>
+      </section>
+      <section class="guide-view" id="view-scenes-cg" data-view="scenes-cg" data-placeholder="true">
+        <h1>Scenes &amp; CG</h1><p>Coming later.</p>
+      </section>
+      <footer>Fixture</footer>
+    </article>
+  </main>
+  <dialog class="search-dialog"></dialog>
+  <div class="resume-toast"></div>
+  <button class="back-to-top" type="button">Top</button>
+</body>
+</html>
+"""
+
+    def _build_project(self, root: Path) -> tuple[Path, Path, Path]:
         data = root / "data"
         data.mkdir()
-        plugins = root / "js"
-        plugins.mkdir()
-        achievement_data = json.dumps([json.dumps({"key": "S1", "title": "Mission", "description": "Begin."})])
-        (plugins / "plugins.js").write_text(
-            "var $plugins = "
-            + json.dumps(
-                [
-                    {
-                        "name": "FixtureAchievement",
-                        "status": True,
-                        "description": "Achievement fixture",
-                        "parameters": {"baseAchievementData": achievement_data},
-                    }
-                ]
-            )
-            + ";\n",
-            encoding="utf-8",
-        )
-        self._write_json(data / "System.json", {"gameTitle": "Fixture", "switches": ["", *([""] * 209), "Route marker"]})
-        self._write_json(data / "Items.json", _database("Scholar's Insignia"))
-        self._write_json(
-            data / "Weapons.json",
-            _database("Scissor's Dagger", "Great Warrior's Sword"),
-        )
-        self._write_json(
-            data / "Armors.json",
-            _database("Scissor's Garb", "Great Warrior's Armor"),
-        )
-        self._write_json(
-            data / "Troops.json",
-            _database("Great Warrior Baru Balta", "Scissor, Bandit Leader"),
-        )
-        for filename in (
-            "Actors.json",
-            "Classes.json",
-            "Enemies.json",
-            "Skills.json",
-            "States.json",
-        ):
-            self._write_json(data / filename, [None])
-
         empty_conditions = {
             "switch1Valid": False,
             "switch2Valid": False,
@@ -84,274 +171,821 @@ class WalkthroughValidationTests(unittest.TestCase):
             "itemValid": False,
             "actorValid": False,
         }
-        choice_commands = [
-            {"code": 102, "indent": 0, "parameters": [["Side with the Bandits", "Side with the Barbarians"], -1, 0, 2, 0]},
-            {"code": 402, "indent": 0, "parameters": [0, "Side with the Bandits"]},
-            {"code": 121, "indent": 1, "parameters": [210, 210, 0]},
-            {"code": 117, "indent": 1, "parameters": [1]},
-            {"code": 402, "indent": 0, "parameters": [1, "Side with the Barbarians"]},
-            {"code": 301, "indent": 1, "parameters": [0, 2, True, True]},
-            {"code": 404, "indent": 0, "parameters": []},
-            {
-                "code": 357,
-                "indent": 0,
-                "parameters": [
-                    "FixtureAchievement",
-                    "gainAchievement",
-                    "Gain achievement",
-                    {"key": "S1"},
-                ],
-            },
-            {"code": 0, "indent": 0, "parameters": []},
-        ]
-        reward_commands = [
-            {"code": 111, "indent": 0, "parameters": [0, 210, 0]},
-            {"code": 127, "indent": 1, "parameters": [1, 0, 0, 1, False]},
-            {"code": 128, "indent": 1, "parameters": [1, 0, 0, 1, False]},
-            {"code": 411, "indent": 0, "parameters": []},
-            {"code": 127, "indent": 1, "parameters": [2, 0, 0, 1, False]},
-            {"code": 128, "indent": 1, "parameters": [2, 0, 0, 1, False]},
-            {"code": 412, "indent": 0, "parameters": []},
-            {"code": 126, "indent": 0, "parameters": [1, 0, 0, 1]},
-            {"code": 0, "indent": 0, "parameters": []},
-        ]
-
-        def event(name: str, commands: list[dict]) -> dict:
-            return {
-                "name": name,
-                "pages": [{"conditions": empty_conditions, "list": commands}],
-            }
-
         self._write_json(
             data / "Map001.json",
-            {"events": [None, event("Sunward Hill", choice_commands)]},
+            {
+                "events": [
+                    None,
+                    {
+                        "name": "Front Door",
+                        "pages": [
+                            {
+                                "conditions": empty_conditions,
+                                "list": [
+                                    {"code": 201, "indent": 0, "parameters": [0, 2, 8, 11, 2, 0]},
+                                    {"code": 301, "indent": 0, "parameters": [0, 1, True, False]},
+                                    {"code": 0, "indent": 0, "parameters": []},
+                                ],
+                            }
+                        ],
+                    },
+                ]
+            },
+        )
+        self._write_json(data / "MapInfos.json", [None, {"name": "Home"}, {"name": "Town"}])
+        self._write_json(
+            data / "Troops.json",
+            [None, {"id": 1, "name": "Prologue", "members": [{"enemyId": 1, "x": 0, "y": 0}]}],
         )
         self._write_json(
-            data / "Map002.json",
-            {"events": [None, event("Sacred Mount Vinculum: Chapel", reward_commands)]},
-        )
-        self._write_json(
-            data / "CommonEvents.json",
+            data / "Enemies.json",
             [
                 None,
                 {
-                    "name": "Bandit Battle",
-                    "list": [
-                        {"code": 301, "indent": 0, "parameters": [0, 1, True, True]},
-                        {"code": 0, "indent": 0, "parameters": []},
+                    "name": "Door Warden",
+                    "params": [100, 10, 12, 8, 5, 5, 7, 6],
+                    "exp": 20,
+                    "gold": 5,
+                    "dropItems": [],
+                    "actions": [
+                        {
+                            "skillId": 3,
+                            "rating": 5,
+                            "conditionType": 1,
+                            "conditionParam1": 3,
+                            "conditionParam2": 3,
+                        }
                     ],
-                },
-                {
-                    "name": "Objective Gate",
-                    "list": [
-                        {"code": 111, "indent": 0, "parameters": [1, 83, 0, 1000, 5]},
-                        {"code": 115, "indent": 1, "parameters": []},
-                        {"code": 412, "indent": 0, "parameters": []},
-                        {"code": 111, "indent": 0, "parameters": [1, 84, 0, 1000, 5]},
-                        {"code": 115, "indent": 1, "parameters": []},
-                        {"code": 412, "indent": 0, "parameters": []},
-                        {"code": 0, "indent": 0, "parameters": []},
-                    ],
+                    "traits": [],
                 },
             ],
         )
+        self._write_json(
+            data / "Skills.json",
+            [
+                None,
+                None,
+                {
+                    "name": "Guard",
+                    "scope": 11,
+                    "effects": [{"code": 21, "dataId": 2, "value1": 1, "value2": 0}],
+                    "note": "standard defense command",
+                },
+                {
+                    "name": "Shield Bash",
+                    "description": "A heavy strike that can Stun.",
+                    "scope": 1,
+                    "hitType": 1,
+                    "damage": {"type": 1, "elementId": -1, "formula": "a.atk * 4 - b.def * 2"},
+                    "effects": [{"code": 21, "dataId": 11, "value1": 1, "value2": 0}],
+                    "note": "",
+                },
+            ],
+        )
+        scripts = root / "js"
+        scripts.mkdir()
+        (scripts / "plugins.js").write_text(
+            'DestinationText":"Reach Town"\nOptionalTitle":"Town Errand"\n',
+            encoding="utf-8",
+        )
+        pictures = root / "img" / "pictures"
+        pictures.mkdir(parents=True)
+        chapter_card = pictures / "Prologue.bin"
+        chapter_card.write_bytes(b"fixture prologue title card")
 
-        walkthrough = root / "WALKTHROUGH.md"
+        context_root = root / ".dazedtl"
+        context_root.mkdir()
+        glossary = context_root / "glossary.txt"
+        glossary.write_text(
+            "# Game Characters\n"
+            "ミナ (Mina) - Female guide who waits by the door.\n"
+            "インティーグ (Intrigue) - Guide of unspecified gender.\n",
+            encoding="utf-8",
+        )
+        quirks = context_root / "skills" / "quirks.md"
+        quirks.parent.mkdir()
+        quirks.write_text("- Use established character names and identities.\n", encoding="utf-8")
+
+        work = context_root / "walkthrough"
+        work.mkdir(parents=True)
+        walkthrough = work / "WALKTHROUGH.md"
         walkthrough.write_text(
-            "Activate **Sunward Hill** `[W01]` and collect "
-            "**Scholar's Insignia** `[I01]`. Earn **Mission** `[S1]`.\n\n"
-            "Legend: **Choice Ahead** — a decision with different outcomes.\n\n"
-            "Complete both objectives.\n\n"
-            "**Choice Ahead — The Scum's Plight:** save first.\n\n"
-            "- **Side with the Bandits:** fight **Great Warrior Baru Balta**; "
-            "receive **Scissor's Dagger** and **Scissor's Garb**.\n"
-            "- **Side with the Barbarians:** fight **Scissor, Bandit Leader**; "
-            "receive **Great Warrior's Sword** and **Great Warrior's Armor**.\n",
+            "# Fixture Main Route\n\n"
+            "<!-- route-chapter:prologue -->\n"
+            "## Prologue\n\n"
+            "<!-- route-section:objective-reach-town -->\n"
+            "### Reach Town\n\n"
+            "<!-- route-claim:reach-town -->\n"
+            "#### Leave through the front door\n\n"
+            "Speak to Mina beside the front door, then leave through that door.\n\n"
+            "# Optional Content\n\n"
+            "<!-- optional-group:optional-prologue -->\n"
+            "## Prologue Detours\n\n"
+            "<!-- optional-entry:town-errand -->\n"
+            "### Town Errand\n\n"
+            "After reaching Town, speak to Mina again to hear her optional request.\n"
+            "# Bosses\n\n"
+            "<!-- boss-group:boss-story -->\n"
+            "## Story Bosses\n\n"
+            "<!-- boss-entry:door-warden -->\n"
+            "### Door Warden\n\n"
+            "The Door Warden confronts you before Town.\n\n"
+            "Battle setup: the protagonist fights alone.\n\n"
+            "Door Warden has no encoded elemental weakness or resistance.\n\n"
+            "Shield Bash is dangerous because Stun can cost the target its next action.\n\n"
+            "Use Fire damage when available, then Guard before Shield Bash.\n\n"
+            "Defeating it opens the front door.\n",
             encoding="utf-8",
         )
-        (root / "WALKTHROUGH.html").write_text(
-            "<html><body><h1>Guide</h1><p>Activate <strong>Sunward Hill</strong> "
-            "<code>[W01]</code> and collect <strong>Scholar's Insignia</strong> "
-            "<code>[I01]</code>. Earn <strong>Mission</strong> <code>[S1]</code>.</p>"
-            "<p>Side with the Bandits: Great Warrior Baru Balta; Scissor's Dagger; "
-            "Scissor's Garb. Side with the Barbarians: Scissor, Bandit Leader; "
-            "Great Warrior's Sword; Great Warrior's Armor.</p></body></html>",
-            encoding="utf-8",
-        )
-        evidence = root / "evidence.json"
+        evidence = work / "evidence.json"
         self._write_json(
             evidence,
             {
-                "schema_version": 1,
-                "badges_reviewed": True,
-                "achievement_unlocks_reviewed": True,
-                "badges": {"W01": "Sunward Hill"},
-                "acquisitions": [
+                "schema_version": 10,
+                "milestone": "main-route-optional-content-and-bosses",
+                "project_context": {
+                    "glossary": {
+                        "file": ".dazedtl/glossary.txt",
+                        "sha256": hashlib.sha256(glossary.read_bytes()).hexdigest(),
+                    },
+                    "quirks": {
+                        "file": ".dazedtl/skills/quirks.md",
+                        "sha256": hashlib.sha256(quirks.read_bytes()).hexdigest(),
+                    },
+                },
+                "route_structure": {
+                    "mode": "chapters-and-sections",
+                    "source_label": "Game chapters and in-game objectives",
+                    "chapters": [
+                        {
+                            "id": "prologue",
+                            "label": "Prologue",
+                            "section_ids": ["objective-reach-town"],
+                            "sources": [
+                                {
+                                    "id": "prologue-label",
+                                    "type": "database-record",
+                                    "file": "data/Troops.json",
+                                    "record_id": 1,
+                                    "expected": {"name": "Prologue"},
+                                    "supports": "The game groups its opening encounters under Prologue.",
+                                },
+                                {
+                                    "id": "prologue-title-card",
+                                    "type": "file-hash",
+                                    "file": "img/pictures/Prologue.bin",
+                                    "sha256": hashlib.sha256(chapter_card.read_bytes()).hexdigest(),
+                                    "supports": "The inspected title card visibly identifies the Prologue.",
+                                }
+                            ],
+                        }
+                    ],
+                    "sections": [
+                        {
+                            "id": "objective-reach-town",
+                            "label": "Reach Town",
+                            "claim_ids": ["reach-town"],
+                            "sources": [
+                                {
+                                    "id": "objective-reach-town-label",
+                                    "type": "file-excerpt",
+                                    "file": "js/plugins.js",
+                                    "contains": 'DestinationText":"Reach Town"',
+                                    "supports": "The game's objective system names this route phase Reach Town.",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                "route_claims": [
                     {
-                        "name": "Scholar's Insignia",
-                        "kind": "item",
-                        "expected_total": 1,
-                        "badges": {"prefix": "I", "first": 1, "last": 1, "width": 2},
+                        "id": "reach-town",
+                        "kind": "navigation",
+                        "status": "verified",
+                        "guide_phrases": [
+                            "Speak to Mina beside the front door, then leave through that door."
+                        ],
                         "sources": [
                             {
-                                "badge": "I01",
-                                "source": {
-                                    "file": "data/Map002.json",
+                                "id": "front-door-transfer",
+                                "type": "event-command",
+                                "file": "data/Map001.json",
+                                "event_id": 1,
+                                "page_index": 0,
+                                "command_index": 0,
+                                "expected": {"code": 201, "parameters": [0, 2, 8, 11, 2, 0]},
+                                "supports": "The front door transfers the party to the town map.",
+                            },
+                            {
+                                "id": "town-map-name",
+                                "type": "database-record",
+                                "file": "data/MapInfos.json",
+                                "record_id": 2,
+                                "expected": {"name": "Town"},
+                                "supports": "The destination map is named Town.",
+                            },
+                        ],
+                    }
+                ],
+                "optional_content": {
+                    "source_label": "Game journal events",
+                    "groups": [
+                        {
+                            "id": "optional-prologue",
+                            "label": "Prologue Detours",
+                            "route_chapter_id": "prologue",
+                            "entry_ids": ["town-errand"],
+                        }
+                    ],
+                    "entries": [
+                        {
+                            "id": "town-errand",
+                            "title": "Town Errand",
+                            "kind": "side-event",
+                            "status": "verified",
+                            "route_anchor_id": "reach-town",
+                            "route_anchor_position": "after",
+                            "prerequisite_entry_ids": [],
+                            "guide_phrases": [
+                                "After reaching Town, speak to Mina again to hear her optional request."
+                            ],
+                            "sources": [
+                                {
+                                    "id": "town-errand-journal",
+                                    "type": "file-excerpt",
+                                    "file": "js/plugins.js",
+                                    "contains": 'OptionalTitle":"Town Errand"',
+                                    "supports": "The journal names this optional event Town Errand.",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                "bosses": {
+                    "source_label": "Battle encounters and enemy records",
+                    "groups": [
+                        {
+                            "id": "boss-story",
+                            "label": "Story Bosses",
+                            "entry_ids": ["door-warden"],
+                        }
+                    ],
+                    "entries": [
+                        {
+                            "id": "door-warden",
+                            "title": "Door Warden",
+                            "kind": "story-boss",
+                            "status": "verified",
+                            "route_claim_ids": ["reach-town"],
+                            "optional_entry_ids": [],
+                            "guide_phrases": [
+                                "The Door Warden confronts you before Town.",
+                                "Battle setup: the protagonist fights alone.",
+                                "Door Warden has no encoded elemental weakness or resistance.",
+                                "Shield Bash is dangerous because Stun can cost the target its next action.",
+                                "Use Fire damage when available, then Guard before Shield Bash.",
+                                "Defeating it opens the front door.",
+                            ],
+                            "phases": [
+                                {
+                                    "label": "Door Warden",
+                                    "enemy_id": 1,
+                                    "participants": {
+                                        "mode": "solo",
+                                        "active_actor_ids": [1],
+                                        "conditional_actor_ids": [],
+                                        "removed_actor_ids": [],
+                                        "max_active_battlers": 1,
+                                        "text": "Battle setup: the protagonist fights alone.",
+                                        "source_ids": ["door-warden-battle"],
+                                    },
+                                    "stats": {"HP": 100, "SP": 10},
+                                    "exp": 20,
+                                    "gold": 5,
+                                    "drops": "None",
+                                    "element_read": "Door Warden has no encoded elemental weakness or resistance.",
+                                    "threats": [
+                                        {
+                                            "text": "Shield Bash is dangerous because Stun can cost the target its next action.",
+                                            "source_ids": ["door-warden-enemy", "door-warden-action"],
+                                        }
+                                    ],
+                                    "how_to_win": {
+                                        "tools": [],
+                                        "plan": [
+                                            {
+                                                "text": "Use Fire damage when available, then Guard before Shield Bash.",
+                                                "source_ids": ["door-warden-enemy", "door-warden-action", "door-warden-guard"],
+                                            }
+                                        ],
+                                    },
+                                }
+                            ],
+                            "sources": [
+                                {
+                                    "id": "door-warden-battle",
+                                    "type": "event-command",
+                                    "file": "data/Map001.json",
                                     "event_id": 1,
                                     "page_index": 0,
-                                    "command_index": 7,
+                                    "command_index": 1,
+                                    "expected": {"code": 301, "parameters": [0, 1, True, False]},
+                                    "supports": "The front-door event starts the Door Warden battle.",
                                 },
-                            }
-                        ],
-                    }
-                ],
-                "switch_sets": [
-                    {
-                        "id": "one-marker",
-                        "expected_total": 1,
-                        "switch_ids": [210],
-                        "guide_phrases": ["Complete both objectives"],
-                    }
-                ],
-                "achievement_switch_sets": [
-                    {
-                        "id": "one-native-achievement",
-                        "first_switch_id": 210,
-                        "last_switch_id": 210,
-                        "expected_total": 1,
-                        "source": {"file": "data/Map002.json", "event_id": 1, "page_index": 0},
-                        "guide_phrases": ["Mission"],
-                    }
-                ],
-                "requirements": [
-                    {
-                        "id": "two-objective-gate",
-                        "expected_total": 2,
-                        "source": {
-                            "file": "data/CommonEvents.json",
-                            "event_id": 2,
-                            "page_index": 0,
-                        },
-                        "guide_phrases": ["Complete both objectives"],
-                        "entries": [
-                            {"variable_id": 83, "operator": "==", "value": 1000},
-                            {"variable_id": 84, "operator": "==", "value": 1000},
-                        ],
-                    }
-                ],
-                "choices": [
-                    {
-                        "name": "The Scum's Plight",
-                        "source": {"file": "data/Map001.json", "event_id": 1, "page_index": 0},
-                        "initial_state": {"switches": {"210": False}},
-                        "reward_scope": [
-                            "Scissor's Dagger",
-                            "Scissor's Garb",
-                            "Great Warrior's Sword",
-                            "Great Warrior's Armor",
-                        ],
-                        "branches": [
-                            {
-                                "label": "Side with the Bandits",
-                                "state": {"switches": {"210": True}},
-                                "fights": ["Great Warrior Baru Balta"],
-                                "rewards": ["Scissor's Dagger", "Scissor's Garb"],
-                            },
-                            {
-                                "label": "Side with the Barbarians",
-                                "state": {"switches": {"210": False}},
-                                "fights": ["Scissor, Bandit Leader"],
-                                "rewards": ["Great Warrior's Sword", "Great Warrior's Armor"],
-                            },
-                        ],
-                    }
-                ],
+                                {
+                                    "id": "door-warden-troop",
+                                    "type": "database-record",
+                                    "file": "data/Troops.json",
+                                    "record_id": 1,
+                                    "expected": {"members": [{"enemyId": 1, "x": 0, "y": 0}]},
+                                    "supports": "The troop contains the Door Warden enemy.",
+                                },
+                                {
+                                    "id": "door-warden-enemy",
+                                    "type": "database-record",
+                                    "file": "data/Enemies.json",
+                                    "record_id": 1,
+                                    "expected": {
+                                        "name": "Door Warden",
+                                        "params": [100, 10, 12, 8, 5, 5, 7, 6],
+                                        "exp": 20,
+                                        "gold": 5,
+                                        "dropItems": [],
+                                        "actions": [
+                                            {
+                                                "skillId": 3,
+                                                "rating": 5,
+                                                "conditionType": 1,
+                                                "conditionParam1": 3,
+                                                "conditionParam2": 3,
+                                            }
+                                        ],
+                                        "traits": [],
+                                    },
+                                    "supports": "The enemy record pins the Door Warden's stats and actions.",
+                                },
+                                {
+                                    "id": "door-warden-action",
+                                    "type": "database-record",
+                                    "file": "data/Skills.json",
+                                    "record_id": 3,
+                                    "expected": {
+                                        "name": "Shield Bash",
+                                        "description": "A heavy strike that can Stun.",
+                                        "scope": 1,
+                                        "hitType": 1,
+                                        "damage": {"type": 1, "elementId": -1, "formula": "a.atk * 4 - b.def * 2"},
+                                        "effects": [{"code": 21, "dataId": 11, "value1": 1, "value2": 0}],
+                                        "note": "",
+                                    },
+                                    "supports": "The skill record defines Shield Bash and its Stun effect.",
+                                },
+                                {
+                                    "id": "door-warden-guard",
+                                    "type": "database-record",
+                                    "file": "data/Skills.json",
+                                    "record_id": 2,
+                                    "expected": {
+                                        "name": "Guard",
+                                        "scope": 11,
+                                        "effects": [{"code": 21, "dataId": 2, "value1": 1, "value2": 0}],
+                                        "note": "standard defense command",
+                                    },
+                                    "supports": "The skill record defines the standard Guard command.",
+                                },
+                            ],
+                        }
+                    ],
+                },
             },
         )
-        return walkthrough, evidence
+        publication = root / "WALKTHROUGH.html"
+        publication.write_text(self._html(), encoding="utf-8")
+        return walkthrough, evidence, publication
 
-    def test_else_branch_rewards_are_forward_and_reverse_validated(self):
-        """Protect the exact conditional-Else error that swapped choice rewards."""
+    def _validate(self, root: Path, walkthrough: Path, evidence: Path, publication: Path) -> dict:
+        return walkthrough_validator.validate_project(root, walkthrough, evidence, publication)
+
+    def test_verified_claim_and_four_view_publication_pass(self):
+        """Protect all three completed views and the exact four-view milestone contract."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
-            walkthrough, evidence = self._build_project(root)
-            report = walkthrough_validator.validate_project(root, walkthrough, evidence, root / "WALKTHROUGH.html")
+            walkthrough, evidence, publication = self._build_project(root)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
             self.assertEqual(report["status"], "passed", report["issues"])
-            self.assertEqual(report["summary"]["coverage"]["unresolved"], 0)
-            self.assertEqual(report["achievements"]["definitions"]["S1"]["title"], "Mission")
-            self.assertEqual(report["acquisitions"][0]["observed_total"], 1)
-            self.assertEqual(report["switch_sets"][0]["expected_total"], 1)
-            self.assertEqual(report["achievements"]["switch_sets"][0]["observed_total"], 1)
-            self.assertTrue(report["event_graph"]["common_event_calls"])
-            branches = report["choices"][0]["branches"]
-            self.assertEqual(
-                branches[0]["observed_reward_scope"],
-                ["Scissor's Dagger", "Scissor's Garb"],
-            )
-            self.assertEqual(
-                branches[1]["observed_reward_scope"],
-                ["Great Warrior's Armor", "Great Warrior's Sword"],
-            )
+            self.assertEqual(report["summary"]["verified"], 1)
+            self.assertEqual(report["summary"]["optional_verified"], 1)
+            self.assertEqual(report["summary"]["boss_verified"], 1)
+            self.assertEqual(set(report["publication"]["views"]), set(walkthrough_validator.REQUIRED_VIEWS))
 
-            manifest = json.loads(evidence.read_text(encoding="utf-8"))
-            manifest["choices"][0]["branches"][0]["rewards"] = [
-                "Great Warrior's Sword",
-                "Great Warrior's Armor",
-            ]
-            self._write_json(evidence, manifest)
-            failed = walkthrough_validator.validate_project(root, walkthrough, evidence, root / "WALKTHROUGH.html")
-            self.assertEqual(failed["status"], "failed")
-            self.assertIn(
-                "reward-branch-mismatch",
-                {issue["code"] for issue in failed["issues"]},
-            )
-
-    def test_badges_require_one_canonical_full_name(self):
-        """Protect player-visible names from opaque or contradictory badge-only prose."""
+    def test_changed_boss_enemy_snapshot_blocks_publication(self):
+        """Protect published boss stats from silently surviving changed enemy data."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
-            walkthrough, evidence = self._build_project(root)
-            walkthrough.write_text(
-                "Warp to `[W02]`. Use **Sunward Hill** `[W01]`, then **Sacred Mount Vinculum: Chapel** `[W01]`.\n",
+            walkthrough, evidence, publication = self._build_project(root)
+            enemies = json.loads((root / "data" / "Enemies.json").read_text(encoding="utf-8"))
+            enemies[1]["params"][0] = 999
+            self._write_json(root / "data" / "Enemies.json", enemies)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "boss-entry-invalid")
+            self.assertIn("field 'params' changed", " ".join(issue["failures"]))
+
+    def test_rendered_boss_stat_must_match_the_single_canonical_table(self):
+        """Protect the visible stat table without requiring a duplicate prose stat line."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            publication.write_text(
+                self._html().replace(
+                    '<td data-boss-stat="HP">100</td>',
+                    '<td data-boss-stat="HP">999</td>',
+                ),
                 encoding="utf-8",
             )
-            manifest = json.loads(evidence.read_text(encoding="utf-8"))
-            manifest["badges"] = {"W01": "Sunward Hill"}
-            manifest["choices"] = []
-            self._write_json(evidence, manifest)
 
-            report = walkthrough_validator.validate_project(root, walkthrough, evidence)
-            codes = {issue["code"] for issue in report["issues"]}
-            self.assertIn("badge-without-full-name", codes)
-            self.assertIn("badge-name-contradiction", codes)
-            self.assertIn("expected-badge-missing", codes)
+            report = self._validate(root, walkthrough, evidence, publication)
 
-    def test_coverage_ledger_exposes_stale_html_wrong_totals_and_unproven_order(self):
-        """Protect reports from presenting unchecked or contradicted claims as clean."""
+            self.assertEqual(report["status"], "failed")
+            codes = {row["code"] for row in report["issues"]}
+            self.assertIn("boss-stat-value-mismatch", codes)
+
+    def test_boss_threat_and_strategy_rows_must_cite_local_sources(self):
+        """Protect player-facing boss advice from becoming unsupported prose."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
-            walkthrough, evidence = self._build_project(root)
+            walkthrough, evidence, publication = self._build_project(root)
             manifest = json.loads(evidence.read_text(encoding="utf-8"))
-            manifest["acquisitions"][0]["expected_total"] = 2
-            manifest["acquisitions"][0].pop("sources")
-            manifest["requirements"][0]["entries"].pop()
+            phase = manifest["bosses"]["entries"][0]["phases"][0]
+            phase["threats"][0]["source_ids"] = ["missing-boss-source"]
             self._write_json(evidence, manifest)
-            (root / "WALKTHROUGH.html").write_text("<html><body>Stale guide</body></html>", encoding="utf-8")
 
-            report = walkthrough_validator.validate_project(root, walkthrough, evidence, root / "WALKTHROUGH.html")
+            report = self._validate(root, walkthrough, evidence, publication)
+
             self.assertEqual(report["status"], "failed")
-            codes = {issue["code"] for issue in report["issues"]}
-            self.assertIn("acquisition-total-mismatch", codes)
-            self.assertIn("requirement-set-mismatch", codes)
-            self.assertIn("markdown-html-parity-mismatch", codes)
-            self.assertGreater(report["summary"]["coverage"]["contradicted"], 0)
-            self.assertIn(
-                "acquisition_route_order",
-                {row["category"] for row in report["live_play_checklist"]},
+            issue = next(row for row in report["issues"] if row["code"] == "boss-entry-invalid")
+            self.assertIn("cites unknown source_ids", " ".join(issue["failures"]))
+
+    def test_boss_phase_requires_source_bound_encounter_participants(self):
+        """Protect solo and temporary-party fights from inheriting the wider story party."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            phase = manifest["bosses"]["entries"][0]["phases"][0]
+            phase.pop("participants")
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "boss-entry-invalid")
+            self.assertIn("participants must be an object", " ".join(issue["failures"]))
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            participants = manifest["bosses"]["entries"][0]["phases"][0]["participants"]
+            participants["max_active_battlers"] = 2
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "boss-entry-invalid")
+            self.assertIn("without exceeding", " ".join(issue["failures"]))
+
+    def test_boss_dossier_requires_link_from_declared_route_encounter(self):
+        """Protect route-to-boss navigation from drifting away from the encounter it documents."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            publication.write_text(
+                self._html().replace(
+                    '<a data-guide-link href="#boss-door-warden">Door Warden</a>',
+                    '<a href="#boss-door-warden">Door Warden</a>',
+                ),
+                encoding="utf-8",
             )
-            checklist = root / "live-play-checklist.md"
-            walkthrough_validator._write_live_play_checklist(checklist, report)
-            self.assertIn("acquisition_route_order", checklist.read_text(encoding="utf-8"))
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            codes = {row["code"] for row in report["issues"]}
+            self.assertIn("boss-main-route-link-invalid", codes)
+
+    def test_changed_optional_source_snapshot_blocks_publication(self):
+        """Protect optional-event instructions from silently surviving changed game data."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            manifest["optional_content"]["entries"][0]["sources"][0]["contains"] = (
+                'OptionalTitle":"Missing Errand"'
+            )
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "optional-entry-invalid")
+            self.assertIn("exact excerpt is no longer present", " ".join(issue["failures"]))
+
+    def test_unknown_optional_prerequisite_blocks_publication(self):
+        """Protect players from being sent through a dependency that has no guide entry."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            manifest["optional_content"]["entries"][0]["prerequisite_entry_ids"] = [
+                "missing-prerequisite"
+            ]
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            codes = {row["code"] for row in report["issues"]}
+            self.assertIn("optional-prerequisite-missing", codes)
+
+    def test_optional_entry_requires_link_from_declared_route_anchor(self):
+        """Protect first-availability links from drifting to the wrong Main Route step."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            publication.write_text(
+                self._html().replace(
+                    '<a data-guide-link data-guide-link-position="after" href="#town-errand">Town Errand</a>',
+                    '<a data-guide-link data-guide-link-position="after" href="#optional-prologue">Town Errand</a>',
+                ),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            codes = {row["code"] for row in report["issues"]}
+            self.assertIn("optional-main-route-link-invalid", codes)
+
+    def test_optional_entry_requires_declared_before_or_after_placement(self):
+        """Protect timely detour notices from always drifting below a completed route step."""
+        link_line = (
+            '            <aside><a data-guide-link data-guide-link-position="after" '
+            'href="#town-errand">Town Errand</a> is now available.</aside>\n'
+        )
+        cases = {
+            "wrong declared position": (
+                lambda source: source.replace(
+                    'data-guide-link-position="after" href="#town-errand"',
+                    'data-guide-link-position="before" href="#town-errand"',
+                ),
+                "optional-main-route-link-position-invalid",
+            ),
+            "wrong document order": (
+                lambda source: source.replace(link_line, "").replace(
+                    '            <p class="route-lead">',
+                    link_line + '            <p class="route-lead">',
+                ),
+                "optional-main-route-link-order-invalid",
+            ),
+        }
+        for label, (mutate, expected_code) in cases.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                walkthrough, evidence, publication = self._build_project(root)
+                publication.write_text(mutate(self._html()), encoding="utf-8")
+
+                report = self._validate(root, walkthrough, evidence, publication)
+
+                self.assertEqual(report["status"], "failed")
+                codes = {row["code"] for row in report["issues"]}
+                self.assertIn(expected_code, codes)
+
+    def test_changed_source_snapshot_blocks_publication(self):
+        """Protect route facts from silently surviving changed executable game data."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            manifest["route_claims"][0]["sources"][0]["expected"]["parameters"][1] = 99
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            claim_issue = next(issue for issue in report["issues"] if issue["code"] == "route-claim-invalid")
+            self.assertIn("command parameters changed", " ".join(claim_issue["failures"]))
+
+    def test_changed_chapter_title_card_is_rejected(self):
+        """Protect visually inspected chapter labels from silently outliving their source asset."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            (root / "img" / "pictures" / "Prologue.bin").write_bytes(b"changed title card")
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "route-chapter-invalid")
+            self.assertIn("file hash changed", " ".join(issue["failures"]))
+
+    def test_missing_view_and_rendered_evidence_source_are_rejected(self):
+        """Protect usable tabs and the visible claim-to-source audit trail."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            publication.write_text(
+                self._html(source_id="wrong-source", bosses_class="unfinished-view"),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            codes = {issue["code"] for issue in report["issues"]}
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("guide-views-invalid", codes)
+            self.assertIn("rendered-evidence-sources-mismatch", codes)
+
+    def test_route_step_must_stay_in_its_source_backed_section(self):
+        """Protect game-authored objective organization from drifting during HTML rendering."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            publication.write_text(
+                self._html().replace(
+                    'data-section-id="objective-reach-town"',
+                    'data-section-id="invented-chapter"',
+                ),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            codes = {issue["code"] for issue in report["issues"]}
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("route-step-section-context-invalid", codes)
+            self.assertIn("rendered-section-undeclared", codes)
+
+    def test_route_section_heading_must_be_a_direct_navigation_target(self):
+        """Protect objective-level sidebar navigation from disappearing during rendering."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            publication.write_text(
+                self._html().replace(
+                    '<h3 id="objective-reach-town">',
+                    '<h3 id="unlinked-objective">',
+                ),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            codes = {issue["code"] for issue in report["issues"]}
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("route-section-heading-link-invalid", codes)
+
+    def test_route_section_must_stay_in_its_source_backed_chapter(self):
+        """Protect game-authored chapter boundaries from drifting during HTML rendering."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            publication.write_text(
+                self._html().replace(
+                    'data-chapter-id="prologue"',
+                    'data-chapter-id="invented-chapter"',
+                ),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            codes = {issue["code"] for issue in report["issues"]}
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("route-section-chapter-context-invalid", codes)
+            self.assertIn("rendered-chapter-undeclared", codes)
+
+    def test_unverified_claim_is_rejected_instead_of_exposing_live_play_checks(self):
+        """Protect players from internal live-play caveats while keeping core route claims verified."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            claim = manifest["route_claims"][0]
+            claim["status"] = "requires-playtest"
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "route-claim-invalid")
+            self.assertIn("status must be one of", " ".join(issue["failures"]))
+
+    def test_misbound_route_checkbox_is_rejected(self):
+        """Protect persisted checklist progress from silently binding to the wrong route step."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            publication.write_text(
+                self._html().replace('data-task-id="reach-town"', 'data-task-id="wrong-step"'),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            codes = {issue["code"] for issue in report["issues"]}
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("route-task-binding-invalid", codes)
+            self.assertIn("rendered-task-undeclared", codes)
+
+    def test_player_copy_rejects_coordinates_and_developer_ids(self):
+        """Protect directions from exposing data that only an event editor can see."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            walkthrough.write_text(
+                walkthrough.read_text(encoding="utf-8")
+                + "Continue from Map001 at (8, 11).\n",
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            codes = [issue["code"] for issue in report["issues"]]
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("technical-locator-in-player-copy", codes)
+
+    def test_player_copy_rejects_mechanical_progression_jargon(self):
+        """Protect the Main Route from reading like an event-state audit instead of a player guide."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            walkthrough.write_text(
+                walkthrough.read_text(encoding="utf-8")
+                + "The victory branch advances the route state.\n",
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            codes = [issue["code"] for issue in report["issues"]]
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("mechanical-progression-language", codes)
+
+    def test_changed_project_glossary_blocks_publication(self):
+        """Protect generated prose from silently outliving its glossary and quirks context."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            (root / ".dazedtl" / "glossary.txt").write_text(
+                "# Game Characters\nミナ (Mina) - Male guide who waits by the door.\n",
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            codes = [issue["code"] for issue in report["issues"]]
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("project-context-invalid", codes)
+
+    def test_glossary_gender_rejects_conflicting_pronoun(self):
+        """Protect known character identities when natural guide prose uses later pronouns."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            walkthrough.write_text(
+                walkthrough.read_text(encoding="utf-8")
+                + "\nMina leads you outside. Stay with him until the next scene.\n",
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            codes = [issue["code"] for issue in report["issues"]]
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("glossary-pronoun-conflict", codes)
+
+    def test_glossary_name_rejects_near_miss(self):
+        """Protect canonical project names from plausible-looking one-letter drift."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            walkthrough.write_text(
+                walkthrough.read_text(encoding="utf-8")
+                + "\nSpeak to Intigue before entering the Meeting Hall.\n",
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            codes = [issue["code"] for issue in report["issues"]]
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("glossary-name-near-miss", codes)
 
 
 if __name__ == "__main__":

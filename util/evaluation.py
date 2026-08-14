@@ -2364,6 +2364,7 @@ def _provider_params(candidate: dict, request: dict) -> dict:
         context_kind=request.get("context_kind", CONTEXT_SOURCE),
         request_instructions=request.get("instructions"),
         use_cache_routing=(candidate.get("execution", "batch") == "live"),
+        api_url=str(candidate.get("endpoint") or ""),
     )
     if provider == "gemini":
         # Gemini's OpenAI-compatible Batch API accepts reasoning_effort

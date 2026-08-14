@@ -13,6 +13,7 @@ import tiktoken
 import openai
 import anthropic
 import urllib.request
+from urllib.parse import urlparse
 from openai import APIError, APIConnectionError, RateLimitError, APIStatusError
 import hashlib
 import threading
@@ -3659,9 +3660,9 @@ def createTranslationSchema(numLines):
 def createLegacyTranslationSchema(numLines):
     """Create the historical ``LineN`` object schema.
 
-    Claude's native structured-output path does not accept the newer
-    ``minItems``/``maxItems`` array contract, so this compatibility schema
-    keeps explicit ``Line1`` ... ``LineN`` required fields.
+    Non-OpenAI providers may not accept the newer ``minItems``/``maxItems``
+    array contract, so this compatibility schema keeps explicit ``Line1`` ...
+    ``LineN`` required fields.
     """
     count = max(1, int(numLines or 1))
     properties = {}
@@ -3676,6 +3677,19 @@ def createLegacyTranslationSchema(numLines):
         "required": required,
         "additionalProperties": False,
     }
+
+
+def _uses_openai_translation_schema(api_provider=None, api_url=None):
+    """Return whether this request targets OpenAI's own API."""
+    provider = (
+        api_provider or os.getenv("API_PROVIDER", "openai")
+    ).strip().lower()
+    endpoint = (
+        os.getenv("api", "") if api_url is None else str(api_url or "")
+    ).strip()
+    if provider != "openai" or not endpoint:
+        return provider == "openai" and not endpoint
+    return (urlparse(endpoint).hostname or "").lower() == "api.openai.com"
 
 
 def format_translation_response_for_log(raw_text) -> str:
@@ -3866,7 +3880,8 @@ def buildClaudeRequest(system, user, history, formatType, model, numLines=None,
 def buildOpenAIRequest(system, user, history, penalty, formatType, model,
                        numLines=None, vocab_text="", api_provider=None,
                        context_kind=CONTEXT_SOURCE,
-                       request_instructions=None, use_cache_routing=False):
+                       request_instructions=None, use_cache_routing=False,
+                       api_url=None):
     """Build OpenAI-compatible kwargs shared by live and batch requests."""
     if not system or not str(system).strip():
         raise ValueError("System content cannot be empty")
@@ -3915,6 +3930,11 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
             )
         params["extra_body"] = cache_fields
     if formatType == "json" and numLines is not None:
+        schema_factory = (
+            createTranslationSchema
+            if _uses_openai_translation_schema(provider, api_url)
+            else createLegacyTranslationSchema
+        )
         params["response_format"] = (
             {"type": "json_object"}
             if is_deepseek else {
@@ -3922,7 +3942,7 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
                 "json_schema": {
                     "name": "translation_response",
                     "strict": True,
-                    "schema": createTranslationSchema(numLines),
+                    "schema": schema_factory(numLines),
                 },
             }
         )
