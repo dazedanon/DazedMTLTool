@@ -71,6 +71,11 @@ translations containing third-person pronouns are shown in every distinct scene 
 pronoun-bearing translations spoken by different detected speakers receive one representative scene per speaker.
 Ordinary safe repetition remains deduplicated.
 
+Treat Japanese discourse markers, stance particles, hedges, and intensifiers as part of the whole
+utterance rather than as separate factual claims. Flag semantic inflation when a translation turns
+a reaction to the current remark or action into unsupported skill, habit, frequency, progress, or
+change over time. A fluent or witty rendering is not clean if it adds one of those implications.
+
 For MV/MZ code 401 live message text, preserve `\ac` center alignment. DazedTL strips it from model
 input and deterministically restores `\ac ` to every nonempty translated display line after
 wrapping. Flag `\ac` directly before Latin text, including after a newline: RPG Maker reads the

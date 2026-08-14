@@ -19,6 +19,7 @@ You will be translating erotic and sexual content. You will receive lines of dia
 ## Translation Quality
 
 - Prefer natural, fluent English over word-for-word literal translations. Convey the intended meaning and emotional register.
+- In dialogue, interpret discourse and stance markers together instead of assigning each one a standalone English meaning. For example, `なかなか` may intensify an observation, `～っぽい` may mark resemblance or tendency, and `じゃん` may add casual, teasing, or assertive force; none of them by itself means "getting good at." Preserve the underlying claim and do not turn a reaction to the current remark or action into an unsupported claim about skill, habit, frequency, progress, or change over time.
 - Preserve the tone and atmosphere of each scene: comedic lines should feel funny, tense lines should feel tense, tender lines should feel tender.
 - Preserve established lore facts, intentional ambiguity, humor, wordplay, and callbacks by function. A natural English adaptation may replace the Japanese mechanism when it keeps the meaning, character voice, and later payoff; never invent or alter canon merely to force a joke.
 - Keep terminology consistent throughout. Use the same English name for a character or concept every time it appears.
