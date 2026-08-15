@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 16
 MILESTONE = "complete-four-view-walkthrough"
 PROJECT_CONTEXT_FILES = {
     "glossary": ".dazedtl/glossary.txt",
@@ -49,14 +49,24 @@ CLAIM_STATUSES = {"verified"}
 OPTIONAL_KINDS = {
     "activity",
     "collection",
+    "companion-recruitment",
     "optional-area",
     "postgame-event",
+    "progression-guide",
     "service-unlock",
     "side-event",
 }
+RECRUITMENT_FAILURE_KINDS = {
+    "missable",
+    "permanent-lockout",
+    "point-of-no-return",
+    "retryable",
+}
+SYSTEM_DECISIONS = {"deep-audit", "trace-on-demand", "ignore"}
 BOSS_KINDS = {"story-boss", "side-boss", "apex-monster"}
 SCENE_KINDS = {
     "character-scene",
+    "combat-scene",
     "defeat-scene",
     "encounter-scene",
     "gallery-entry",
@@ -130,6 +140,58 @@ OPPOSING_PRONOUNS = {
 
 class ValidationInputError(ValueError):
     """Raised when a required walkthrough input cannot be read."""
+
+
+def _validate_recruitment_contract(
+    entry: dict[str, Any],
+    kind: str,
+    phrases: list[str],
+    markdown: str,
+    local_source_ids: set[str],
+) -> list[str]:
+    failures: list[str] = []
+    recruitment = entry.get("recruitment")
+    if kind != "companion-recruitment":
+        if recruitment is not None:
+            failures.append("recruitment is only valid for companion-recruitment entries")
+        return failures
+    if not isinstance(recruitment, dict):
+        return ["companion-recruitment entries require a recruitment object"]
+
+    normalized_markdown = _normalize(markdown)
+    for field, needs_kind in (("success_steps", False), ("failure_modes", True)):
+        raw_rows = recruitment.get(field)
+        if not isinstance(raw_rows, list) or not raw_rows:
+            failures.append(f"recruitment.{field} must contain at least one source-bound row")
+            continue
+        for row_index, raw_row in enumerate(raw_rows):
+            row = raw_row if isinstance(raw_row, dict) else {}
+            row_text = str(row.get("text", "")).strip()
+            row_sources = row.get("source_ids")
+            if not row_text:
+                failures.append(f"recruitment.{field}[{row_index}].text must be nonempty")
+            else:
+                if row_text not in phrases:
+                    failures.append(
+                        f"recruitment.{field}[{row_index}].text must also appear in guide_phrases"
+                    )
+                if _normalize(row_text) not in normalized_markdown:
+                    failures.append(f"recruitment.{field}[{row_index}].text is missing from Markdown")
+            if not isinstance(row_sources, list) or not row_sources or any(
+                not isinstance(source_id, str) for source_id in row_sources
+            ):
+                failures.append(f"recruitment.{field}[{row_index}].source_ids must be a nonempty list")
+            else:
+                unknown_sources = sorted(set(row_sources) - local_source_ids)
+                if unknown_sources:
+                    failures.append(
+                        f"recruitment.{field}[{row_index}] references unknown local source {unknown_sources[0]!r}"
+                    )
+            if needs_kind and str(row.get("kind", "")).strip() not in RECRUITMENT_FAILURE_KINDS:
+                failures.append(
+                    f"recruitment.{field}[{row_index}].kind must be one of {sorted(RECRUITMENT_FAILURE_KINDS)}"
+                )
+    return failures
 
 
 def _normalize(value: str) -> str:
@@ -919,6 +981,205 @@ def _validate_route_structure(
     }
 
 
+def _validate_system_reconnaissance(
+    evidence_path: Path,
+    evidence: dict[str, Any],
+    record_ids: set[str],
+    source_ids: set[str],
+    issues: list[dict[str, Any]],
+) -> dict[str, Any]:
+    raw = evidence.get("system_reconnaissance")
+    if not isinstance(raw, dict):
+        _issue(
+            issues,
+            "error",
+            "system-reconnaissance-missing",
+            "evidence.json must bind its active-system inventory and deep-audit coverage.",
+        )
+        return {"inventory_artifact": "", "systems": [], "coverage": []}
+
+    artifact_name = str(raw.get("inventory_artifact", "")).strip()
+    artifact_path = evidence_path.parent / artifact_name
+    if (
+        not artifact_name
+        or Path(artifact_name).name != artifact_name
+        or artifact_path.resolve().parent != evidence_path.parent.resolve()
+        or not artifact_path.is_file()
+    ):
+        _issue(
+            issues,
+            "error",
+            "systems-inventory-missing",
+            "system_reconnaissance.inventory_artifact must name an existing sibling JSON file.",
+            inventory_artifact=artifact_name,
+        )
+        return {"inventory_artifact": artifact_name, "systems": [], "coverage": []}
+    try:
+        inventory = _read_json(artifact_path)
+    except ValidationInputError as exc:
+        _issue(issues, "error", "systems-inventory-invalid", str(exc))
+        return {"inventory_artifact": artifact_name, "systems": [], "coverage": []}
+
+    inventory_rows = inventory.get("systems") if isinstance(inventory, dict) else None
+    if not isinstance(inventory_rows, list) or not inventory_rows:
+        _issue(
+            issues,
+            "error",
+            "systems-inventory-invalid",
+            "systems-inventory.json must contain a nonempty systems list.",
+        )
+        inventory_rows = []
+
+    declared_decisions = raw.get("decisions")
+    if not isinstance(declared_decisions, dict):
+        declared_decisions = {}
+        _issue(
+            issues,
+            "error",
+            "system-decisions-invalid",
+            "system_reconnaissance.decisions must map every inventory system to its decision.",
+        )
+
+    coverage_rows = raw.get("coverage")
+    if not isinstance(coverage_rows, list):
+        coverage_rows = []
+        _issue(
+            issues,
+            "error",
+            "system-coverage-invalid",
+            "system_reconnaissance.coverage must be a list.",
+        )
+    coverage_by_system: dict[str, dict[str, Any]] = {}
+    for raw_coverage in coverage_rows:
+        coverage = raw_coverage if isinstance(raw_coverage, dict) else {}
+        system_id = str(coverage.get("system_id", "")).strip()
+        if not ID_RE.fullmatch(system_id) or system_id in coverage_by_system:
+            _issue(
+                issues,
+                "error",
+                "system-coverage-invalid",
+                "Every coverage row needs a unique kebab-case system_id.",
+                system_id=system_id,
+            )
+            continue
+        coverage_by_system[system_id] = coverage
+
+    inventory_decisions: dict[str, str] = {}
+    system_results: list[dict[str, Any]] = []
+    for raw_system in inventory_rows:
+        system = raw_system if isinstance(raw_system, dict) else {}
+        system_id = str(system.get("id", "")).strip()
+        decision = str(system.get("decision", "")).strip()
+        failures: list[str] = []
+        if not ID_RE.fullmatch(system_id) or system_id in inventory_decisions:
+            failures.append("system id must be unique kebab-case")
+        if decision not in SYSTEM_DECISIONS:
+            failures.append(f"decision must be one of {sorted(SYSTEM_DECISIONS)}")
+        inventory_decisions[system_id] = decision
+        if declared_decisions.get(system_id) != decision:
+            failures.append("evidence decision does not match the inventory")
+
+        required_rows = system.get("required_topics", [])
+        if decision == "deep-audit" and (not isinstance(required_rows, list) or not required_rows):
+            failures.append("deep-audit systems require at least one required_topics row")
+            required_rows = []
+        elif not isinstance(required_rows, list):
+            failures.append("required_topics must be a list")
+            required_rows = []
+
+        coverage = coverage_by_system.get(system_id, {})
+        topic_rows = coverage.get("topics", []) if isinstance(coverage, dict) else []
+        if decision == "deep-audit" and (not isinstance(topic_rows, list) or not topic_rows):
+            failures.append("deep-audit system has no evidence coverage topics")
+            topic_rows = []
+        elif not isinstance(topic_rows, list):
+            failures.append("coverage topics must be a list")
+            topic_rows = []
+        topics_by_id: dict[str, dict[str, Any]] = {}
+        for raw_topic in topic_rows:
+            topic = raw_topic if isinstance(raw_topic, dict) else {}
+            topic_id = str(topic.get("id", "")).strip()
+            if not ID_RE.fullmatch(topic_id) or topic_id in topics_by_id:
+                failures.append("coverage topic ids must be unique kebab-case")
+                continue
+            topics_by_id[topic_id] = topic
+
+        required_ids: list[str] = []
+        for raw_required in required_rows:
+            required = raw_required if isinstance(raw_required, dict) else {}
+            topic_id = str(required.get("id", "")).strip()
+            label = str(required.get("label", "")).strip()
+            if not ID_RE.fullmatch(topic_id) or topic_id in required_ids:
+                failures.append("required topic ids must be unique kebab-case")
+                continue
+            required_ids.append(topic_id)
+            if not label:
+                failures.append(f"required topic {topic_id!r} needs a label")
+            topic = topics_by_id.get(topic_id)
+            if topic is None:
+                failures.append(f"required topic {topic_id!r} has no coverage row")
+                continue
+            guide_ids = topic.get("guide_record_ids")
+            bound_sources = topic.get("source_ids")
+            if not isinstance(guide_ids, list) or not guide_ids or any(
+                not isinstance(record_id, str) for record_id in guide_ids
+            ):
+                failures.append(f"topic {topic_id!r} needs guide_record_ids")
+            else:
+                unknown_records = sorted(set(guide_ids) - record_ids)
+                if unknown_records:
+                    failures.append(
+                        f"topic {topic_id!r} references unknown guide record {unknown_records[0]!r}"
+                    )
+            if not isinstance(bound_sources, list) or not bound_sources or any(
+                not isinstance(source_id, str) for source_id in bound_sources
+            ):
+                failures.append(f"topic {topic_id!r} needs source_ids")
+            else:
+                unknown_sources = sorted(set(bound_sources) - source_ids)
+                if unknown_sources:
+                    failures.append(
+                        f"topic {topic_id!r} references unknown evidence source {unknown_sources[0]!r}"
+                    )
+        extra_topics = sorted(set(topics_by_id) - set(required_ids))
+        if extra_topics:
+            failures.append(f"coverage topic {extra_topics[0]!r} is not required by the inventory")
+        if failures:
+            _issue(
+                issues,
+                "error",
+                "system-deep-audit-coverage-invalid",
+                f"System {system_id!r} is invalid: {failures[0]}",
+                system_id=system_id,
+                failures=failures,
+            )
+        system_results.append(
+            {"id": system_id, "decision": decision, "required_topic_ids": required_ids, "failures": failures}
+        )
+
+    undeclared_decisions = sorted(set(declared_decisions) - set(inventory_decisions))
+    if undeclared_decisions:
+        _issue(
+            issues,
+            "error",
+            "system-decisions-invalid",
+            f"Evidence declares unknown system decision {undeclared_decisions[0]!r}.",
+        )
+    unknown_coverage = sorted(set(coverage_by_system) - set(inventory_decisions))
+    if unknown_coverage:
+        _issue(
+            issues,
+            "error",
+            "system-coverage-invalid",
+            f"Evidence covers unknown system {unknown_coverage[0]!r}.",
+        )
+    return {
+        "inventory_artifact": artifact_name,
+        "systems": system_results,
+        "coverage": coverage_rows,
+    }
+
+
 def _validate_optional_content(
     game_root: Path,
     markdown: str,
@@ -1036,6 +1297,9 @@ def _validate_optional_content(
             failures.extend(f"source {source_id or '<unnamed>'}: {failure}" for failure in source_failures)
             source_results.append({"id": source_id, "failures": source_failures})
 
+        failures.extend(
+            _validate_recruitment_contract(entry, kind, phrases, markdown, local_ids)
+        )
         if failures:
             _issue(
                 issues,
@@ -1748,6 +2012,7 @@ def _validate_scenes_cg(
         entry = raw_entry if isinstance(raw_entry, dict) else {}
         entry_id = str(entry.get("id", "")).strip()
         title = str(entry.get("title", "")).strip()
+        catalog_title = str(entry.get("catalog_title", "")).strip()
         failures: list[str] = []
         if not ID_RE.fullmatch(entry_id):
             failures.append("id must be a nonempty kebab-case identifier")
@@ -1761,6 +2026,14 @@ def _validate_scenes_cg(
             failures.append("title must be nonempty")
         elif _normalize(title) not in normalized_markdown:
             failures.append(f"title is missing from Markdown: {title!r}")
+        if not catalog_title:
+            failures.append("catalog_title must preserve the exact player-facing catalog/replay title")
+        elif _normalize(catalog_title) not in normalized_markdown:
+            failures.append(f"catalog_title is missing from Markdown: {catalog_title!r}")
+        elif _normalize(catalog_title) != _normalize(title):
+            catalog_label = f"Recollection title: {catalog_title}"
+            if _normalize(catalog_label) not in normalized_markdown:
+                failures.append("a differing catalog_title must be rendered once as 'Recollection title: <catalog title>' in Markdown")
         kind = str(entry.get("kind", "")).strip()
         if kind not in SCENE_KINDS:
             failures.append(f"kind must be one of {sorted(SCENE_KINDS)}")
@@ -1777,6 +2050,31 @@ def _validate_scenes_cg(
         ):
             failures.append("requirements must contain player-visible unlock requirements")
             requirements = []
+        route_anchor_id = str(entry.get("route_anchor_id", "")).strip()
+        if route_anchor_id not in claims:
+            failures.append(f"route_anchor_id {route_anchor_id!r} is not a Main Route claim")
+        route_anchor_position = str(entry.get("route_anchor_position", "")).strip()
+        if route_anchor_position not in ROUTE_ANCHOR_POSITIONS:
+            failures.append(f"route_anchor_position must be one of {sorted(ROUTE_ANCHOR_POSITIONS)}")
+        prerequisite_scene_ids = entry.get("prerequisite_scene_ids")
+        if not isinstance(prerequisite_scene_ids, list) or any(
+            not isinstance(row, str) or not row.strip() for row in prerequisite_scene_ids
+        ):
+            failures.append("prerequisite_scene_ids must be a list of scene ids")
+            prerequisite_scene_ids = []
+        elif len(set(prerequisite_scene_ids)) != len(prerequisite_scene_ids):
+            failures.append("prerequisite_scene_ids must not contain duplicates")
+        story_gate_claim_ids = entry.get("story_gate_claim_ids")
+        if not isinstance(story_gate_claim_ids, list) or any(
+            not isinstance(row, str) or not row.strip() for row in story_gate_claim_ids
+        ):
+            failures.append("story_gate_claim_ids must be a list of Main Route claim ids")
+            story_gate_claim_ids = []
+        elif len(set(story_gate_claim_ids)) != len(story_gate_claim_ids):
+            failures.append("story_gate_claim_ids must not contain duplicates")
+        for claim_id in story_gate_claim_ids:
+            if claim_id not in claims:
+                failures.append(f"story_gate_claim_id {claim_id!r} is not a Main Route claim")
         acquisition_mode = str(entry.get("acquisition_mode", "")).strip()
         if acquisition_mode not in SCENE_ACQUISITION_MODES:
             failures.append(f"acquisition_mode must be one of {sorted(SCENE_ACQUISITION_MODES)}")
@@ -1786,6 +2084,35 @@ def _validate_scenes_cg(
         ):
             failures.append("acquisition_steps must contain the actionable normal-play path or a proven gallery-only explanation")
             acquisition_steps = []
+        combatants: list[str] = []
+        encounter_locations: list[str] = []
+        combat_mechanic = ""
+        if kind == "combat-scene":
+            if acquisition_mode != "normal-play":
+                failures.append("combat-scene entries must use normal-play acquisition")
+            raw_combatants = entry.get("combatants")
+            if not isinstance(raw_combatants, list) or not raw_combatants or any(
+                not isinstance(row, str) or not row.strip() for row in raw_combatants
+            ):
+                failures.append("combatants must list every exact player-visible enemy needed for the combat scene")
+            else:
+                combatants = raw_combatants
+                if len(set(combatants)) != len(combatants):
+                    failures.append("combatants must not contain duplicates")
+            raw_locations = entry.get("encounter_locations")
+            if not isinstance(raw_locations, list) or not raw_locations or any(
+                not isinstance(row, str) or not row.strip() for row in raw_locations
+            ):
+                failures.append("encounter_locations must list a recognizable player-visible battle area or encounter")
+            else:
+                encounter_locations = raw_locations
+                if len(set(encounter_locations)) != len(encounter_locations):
+                    failures.append("encounter_locations must not contain duplicates")
+            combat_mechanic = str(entry.get("combat_mechanic", "")).strip()
+            if not combat_mechanic:
+                failures.append("combat_mechanic must explain the action/state sequence that triggers the scene")
+            elif combat_mechanic not in acquisition_steps:
+                failures.append("combat_mechanic must be one exact acquisition_steps sentence")
         aliases = entry.get("aliases")
         if not isinstance(aliases, list) or any(not isinstance(row, str) or not row.strip() for row in aliases):
             failures.append("aliases must be a list of nonempty trigger-title aliases")
@@ -1805,6 +2132,16 @@ def _validate_scenes_cg(
         for phrase in phrases:
             if _normalize(phrase) not in normalized_markdown:
                 failures.append(f"guide phrase is missing from Markdown: {phrase!r}")
+        if kind == "combat-scene":
+            acquisition_copy = _normalize(" ".join([*requirements, *acquisition_steps]))
+            for combatant in combatants:
+                if _normalize(combatant) not in acquisition_copy:
+                    failures.append(f"combatant {combatant!r} must be named in requirements or acquisition_steps")
+                if _normalize(combatant) not in _normalize(title):
+                    failures.append(f"combat-scene title must name combatant {combatant!r}")
+            for location in encounter_locations:
+                if _normalize(location) not in acquisition_copy:
+                    failures.append(f"encounter location {location!r} must appear in requirements or acquisition_steps")
         sources = entry.get("sources")
         if not isinstance(sources, list) or not sources:
             failures.append("sources must prove requirements, title, live trigger, unlock, replay/viewer dispatch, and illustrated-set coverage")
@@ -1823,7 +2160,7 @@ def _validate_scenes_cg(
             source_failures = _validate_source(game_root, source)
             failures.extend(f"source {source_id or '<unnamed>'}: {failure}" for failure in source_failures)
             source_results.append({"id": source_id, "failures": source_failures})
-        required_source_roles = {"requirements", "replay_title", "replay_call"}
+        required_source_roles = {"requirements", "availability", "replay_title", "replay_call"}
         if acquisition_mode == "normal-play":
             required_source_roles.update({"normal_acquisition", "live_trigger", "live_completion"})
         elif acquisition_mode == "gallery-only":
@@ -1832,6 +2169,8 @@ def _validate_scenes_cg(
                 failures.append("gallery-only acquisition requires kind 'gallery-entry'")
         if cg_image_count > 0:
             required_source_roles.add("cg_viewer")
+        if kind == "combat-scene":
+            required_source_roles.update({"combat_enemy", "combat_trigger", "encounter_access"})
         _validate_scene_source_roles(
             entry.get("source_roles"),
             required_source_roles,
@@ -1841,9 +2180,11 @@ def _validate_scenes_cg(
         )
         roles = entry.get("source_roles") if isinstance(entry.get("source_roles"), dict) else {}
         if acquisition_mode == "normal-play":
-            live_roles = ["normal_acquisition", "live_trigger", "live_completion"]
+            live_roles = ["availability", "normal_acquisition", "live_trigger", "live_completion"]
             if "unlock" in roles:
                 live_roles.append("unlock")
+            if kind == "combat-scene":
+                live_roles.extend(["combat_enemy", "combat_trigger", "encounter_access"])
             for role in live_roles:
                 role_sources = [
                     local_sources[source_id]
@@ -1882,11 +2223,16 @@ def _validate_scenes_cg(
             {
                 "id": entry_id,
                 "title": title,
+                "catalog_title": catalog_title,
                 "kind": kind,
                 "status": "contradicted" if failures else "verified",
                 "evidence_status": status,
                 "cg_image_count": cg_image_count,
                 "acquisition_mode": acquisition_mode,
+                "route_anchor_id": route_anchor_id,
+                "route_anchor_position": route_anchor_position,
+                "prerequisite_scene_ids": prerequisite_scene_ids,
+                "story_gate_claim_ids": story_gate_claim_ids,
                 "sources": source_results,
                 "failures": failures,
             }
@@ -1900,6 +2246,55 @@ def _validate_scenes_cg(
             f"Markdown scene-entry marker {undeclared_entry_markers[0]!r} has no evidence entry.",
             scene_ids=undeclared_entry_markers,
         )
+
+    route_order = {claim_id: index for index, claim_id in enumerate(claims)}
+    for entry_id, entry in entries.items():
+        failures: list[str] = []
+        anchor_id = str(entry.get("route_anchor_id", "")).strip()
+        anchor_position = str(entry.get("route_anchor_position", "")).strip()
+        anchor_key = (route_order.get(anchor_id, -1), 0 if anchor_position == "before" else 1)
+        anchor_slot = route_order.get(anchor_id, -1) * 2 + (0 if anchor_position == "before" else 1)
+        boundary_slots: list[int] = []
+        for claim_id in entry.get("story_gate_claim_ids") or []:
+            if claim_id in route_order and anchor_key < (route_order[claim_id], 1):
+                failures.append(
+                    f"route anchor {anchor_id!r} is earlier than story gate {claim_id!r}"
+                )
+            if claim_id in route_order:
+                boundary_slots.append(route_order[claim_id] * 2 + 1)
+        for prerequisite_id in entry.get("prerequisite_scene_ids") or []:
+            if prerequisite_id == entry_id:
+                failures.append("a scene cannot depend on itself")
+                continue
+            prerequisite = entries.get(prerequisite_id)
+            if prerequisite is None:
+                failures.append(f"prerequisite scene {prerequisite_id!r} does not exist")
+                continue
+            prerequisite_key = (
+                route_order.get(str(prerequisite.get("route_anchor_id", "")), -1),
+                0 if prerequisite.get("route_anchor_position") == "before" else 1,
+            )
+            boundary_slots.append(
+                route_order.get(str(prerequisite.get("route_anchor_id", "")), -1) * 2
+                + (0 if prerequisite.get("route_anchor_position") == "before" else 1)
+            )
+            if anchor_key < prerequisite_key:
+                failures.append(
+                    f"route anchor is earlier than prerequisite scene {prerequisite_id!r}"
+                )
+        if boundary_slots and anchor_slot > max(boundary_slots) + 1:
+            failures.append(
+                "route anchor is later than the latest declared story gate or prerequisite availability boundary"
+            )
+        if failures:
+            _issue(
+                issues,
+                "error",
+                "scene-availability-order-invalid",
+                f"Scene entry {entry_id!r} has an invalid Main Route availability order: {failures[0]}",
+                scene_id=entry_id,
+                failures=failures,
+            )
 
     group_rows = raw.get("groups")
     if not isinstance(group_rows, list) or not group_rows:
@@ -2098,6 +2493,7 @@ class WalkthroughHTMLParser(HTMLParser):
         self.scene_entry_views: dict[str, set[str | None]] = defaultdict(set)
         self.scene_entry_group_contexts: dict[str, set[str | None]] = defaultdict(set)
         self.scene_entry_heading_ids: dict[str, Counter[str]] = defaultdict(Counter)
+        self.scene_entry_catalog_titles: dict[str, Counter[str]] = defaultdict(Counter)
         self.scene_entry_text_parts: dict[str, list[str]] = defaultdict(list)
         self.scene_entry_acquisition_modes: dict[str, Counter[str]] = defaultdict(Counter)
         self.scene_acquisition_sections: dict[str, Counter[str]] = defaultdict(Counter)
@@ -2122,6 +2518,7 @@ class WalkthroughHTMLParser(HTMLParser):
         self.guide_link_scene_group_contexts: dict[str, set[str | None]] = defaultdict(set)
         self.guide_link_positions: dict[str, Counter[str]] = defaultdict(Counter)
         self.guide_link_dom_positions: dict[str, Counter[str]] = defaultdict(Counter)
+        self.guide_link_kinds_in_claims: dict[str, Counter[str]] = defaultdict(Counter)
         self.external_references: list[str] = []
         self.public_text_parts: list[str] = []
         self.all_text_parts: list[str] = []
@@ -2291,6 +2688,7 @@ class WalkthroughHTMLParser(HTMLParser):
             self.scene_entry_views[scene_id].add(self._view)
             self.scene_entry_group_contexts[scene_id].add(self._scene_group)
             self.scene_entry_acquisition_modes[scene_id][attrs.get("data-acquisition-mode", "")] += 1
+            self.scene_entry_catalog_titles[scene_id][attrs.get("data-catalog-title", "")] += 1
         if "scene-acquisition" in classes and self._scene_entry is not None:
             self.scene_acquisition_sections[self._scene_entry][attrs.get("data-acquisition-mode", "")] += 1
         if tag == "h2" and self._scene_group is not None and self._scene_entry is None:
@@ -2338,6 +2736,7 @@ class WalkthroughHTMLParser(HTMLParser):
             self.guide_link_scene_contexts[href].add(self._scene_entry)
             self.guide_link_scene_group_contexts[href].add(self._scene_group)
             if self._claim is not None:
+                self.guide_link_kinds_in_claims[href][attrs.get("data-guide-kind", "")] += 1
                 self.guide_link_positions[href][attrs.get("data-guide-link-position", "")] += 1
                 if self._claim in self.route_outcome_started:
                     dom_position = "after"
@@ -3095,6 +3494,15 @@ def _validate_publication(
                 expected_position=anchor_position,
                 observed=dict(parser.guide_link_dom_positions.get(href, Counter())),
             )
+        if parser.guide_link_kinds_in_claims.get(href, Counter()) != Counter({"optional": 1}):
+            _issue(
+                issues,
+                "error",
+                "optional-main-route-link-kind-invalid",
+                f"Optional entry {entry_id!r} must use the optional cross-tab link style.",
+                entry_id=entry_id,
+                observed=dict(parser.guide_link_kinds_in_claims.get(href, Counter())),
+            )
 
     declared_boss_group_ids = set(boss_groups)
     rendered_boss_group_ids = {
@@ -3390,6 +3798,17 @@ def _validate_publication(
                 expected=sorted(expected_route_contexts),
                 observed=sorted(observed_route_contexts),
             )
+        expected_route_link_kinds = Counter({"boss": len(expected_route_contexts)})
+        if parser.guide_link_kinds_in_claims.get(href, Counter()) != expected_route_link_kinds:
+            _issue(
+                issues,
+                "error",
+                "boss-main-route-link-kind-invalid",
+                f"Boss dossier {boss_id!r} must use the boss cross-tab link style from every Main Route source.",
+                boss_id=boss_id,
+                expected=dict(expected_route_link_kinds),
+                observed=dict(parser.guide_link_kinds_in_claims.get(href, Counter())),
+            )
         expected_optional_contexts = set(entry.get("optional_entry_ids") or [])
         observed_optional_contexts = {
             row for row in parser.guide_link_optional_contexts.get(href, set()) if row is not None
@@ -3550,6 +3969,35 @@ def _validate_publication(
                 f"Scene group {group_id!r} does not visibly render its label.",
                 group_id=group_id,
             )
+        member_entries = [
+            scene_entries[scene_id]
+            for scene_id in group.get("entry_ids") or []
+            if scene_id in scene_entries
+        ]
+        route_order = {claim_id: index for index, claim_id in enumerate(claims)}
+        if member_entries:
+            earliest = min(
+                member_entries,
+                key=lambda entry: (
+                    route_order.get(str(entry.get("route_anchor_id", "")), -1),
+                    0 if entry.get("route_anchor_position") == "before" else 1,
+                ),
+            )
+            expected_group_anchor = str(earliest.get("route_anchor_id", ""))
+            expected_group_position = str(earliest.get("route_anchor_position", ""))
+            if (
+                str(group.get("route_anchor_id", "")) != expected_group_anchor
+                or str(group.get("route_anchor_position", "")) != expected_group_position
+            ):
+                _issue(
+                    issues,
+                    "error",
+                    "scene-group-earliest-anchor-invalid",
+                    f"Scene group {group_id!r} must use its earliest member's Main Route anchor.",
+                    group_id=group_id,
+                    expected_anchor=expected_group_anchor,
+                    expected_position=expected_group_position,
+                )
         anchor_id = str(group.get("route_anchor_id", ""))
         anchor_position = str(group.get("route_anchor_position", ""))
         href = f"#{group_id}"
@@ -3586,19 +4034,34 @@ def _validate_publication(
                 expected_position=anchor_position,
                 observed=dict(parser.guide_link_dom_positions.get(href, Counter())),
             )
+        if parser.guide_link_kinds_in_claims.get(href, Counter()) != Counter({"scene": 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-group-main-route-link-kind-invalid",
+                f"Scene group {group_id!r} must use the scene cross-tab link style.",
+                group_id=group_id,
+                observed=dict(parser.guide_link_kinds_in_claims.get(href, Counter())),
+            )
         observed_group_backlinks = {
             row
             for row in parser.guide_link_scene_group_contexts.get(f"#{anchor_id}", set())
             if row is not None
         }
-        if observed_group_backlinks != {group_id}:
+        expected_group_backlinks = {
+            candidate_id
+            for candidate_id, candidate in scene_groups.items()
+            if str(candidate.get("route_anchor_id", "")) == anchor_id
+        }
+        if observed_group_backlinks != expected_group_backlinks:
             _issue(
                 issues,
                 "error",
                 "scene-route-backlink-invalid",
-                f"Scene group {group_id!r} must link back to its declared Main Route context.",
+                f"Scene groups bound to {anchor_id!r} must each link back to that Main Route context.",
                 group_id=group_id,
                 expected_anchor=anchor_id,
+                expected_groups=sorted(expected_group_backlinks),
                 observed=sorted(observed_group_backlinks),
             )
 
@@ -3645,6 +4108,51 @@ def _validate_publication(
                 f"Scene entry {scene_id!r} must be inside Scenes & CG.",
                 scene_id=scene_id,
             )
+        anchor_id = str(entry.get("route_anchor_id", ""))
+        anchor_position = str(entry.get("route_anchor_position", ""))
+        href = f"#{scene_id}"
+        observed_claim_contexts = {
+            row for row in parser.guide_link_claim_contexts.get(href, set()) if row is not None
+        }
+        if observed_claim_contexts != {anchor_id}:
+            _issue(
+                issues,
+                "error",
+                "scene-entry-main-route-link-invalid",
+                f"Scene entry {scene_id!r} must have a Main Route link from its declared availability anchor.",
+                scene_id=scene_id,
+                expected_anchor=anchor_id,
+                observed=sorted(observed_claim_contexts),
+            )
+        if parser.guide_link_positions.get(href, Counter()) != Counter({anchor_position: 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-entry-main-route-link-position-invalid",
+                f"Scene entry {scene_id!r} must render at its declared point relative to the Main Route step.",
+                scene_id=scene_id,
+                expected_position=anchor_position,
+                observed=dict(parser.guide_link_positions.get(href, Counter())),
+            )
+        if parser.guide_link_dom_positions.get(href, Counter()) != Counter({anchor_position: 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-entry-main-route-link-order-invalid",
+                f"Scene entry {scene_id!r} is not placed {anchor_position} its Main Route prose.",
+                scene_id=scene_id,
+                expected_position=anchor_position,
+                observed=dict(parser.guide_link_dom_positions.get(href, Counter())),
+            )
+        if parser.guide_link_kinds_in_claims.get(href, Counter()) != Counter({"scene": 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-entry-main-route-link-kind-invalid",
+                f"Scene entry {scene_id!r} must use the scene cross-tab link style.",
+                scene_id=scene_id,
+                observed=dict(parser.guide_link_kinds_in_claims.get(href, Counter())),
+            )
         expected_groups = {
             group_id
             for group_id, group in scene_groups.items()
@@ -3667,6 +4175,17 @@ def _validate_publication(
                 "scene-entry-heading-link-invalid",
                 f"Scene entry {scene_id!r} must expose one h3 with its exact id.",
                 scene_id=scene_id,
+            )
+        catalog_title = str(entry.get("catalog_title", "")).strip()
+        if parser.scene_entry_catalog_titles[scene_id] != Counter({catalog_title: 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-catalog-title-binding-invalid",
+                f"Scene entry {scene_id!r} must bind its exact catalog title on the article.",
+                scene_id=scene_id,
+                expected=catalog_title,
+                observed=dict(parser.scene_entry_catalog_titles[scene_id]),
             )
         if parser.scene_entry_acquisition_modes[scene_id] != Counter({acquisition_mode: 1}):
             _issue(
@@ -3762,6 +4281,17 @@ def _validate_publication(
                 f"Scene entry {scene_id!r} does not visibly render its title.",
                 scene_id=scene_id,
             )
+        normalized_catalog_title = _normalize(catalog_title)
+        if normalized_catalog_title and normalized_catalog_title != title:
+            catalog_label = _normalize(f"Recollection title: {catalog_title}")
+            if catalog_label not in entry_text:
+                _issue(
+                    issues,
+                    "error",
+                    "scene-catalog-title-not-visible",
+                    f"Scene entry {scene_id!r} must visibly render its differing catalog title beneath the guide title.",
+                    scene_id=scene_id,
+                )
         for phrase in entry.get("guide_phrases") or []:
             if _normalize(str(phrase)) not in entry_text:
                 _issue(
@@ -3954,6 +4484,13 @@ def validate_project(
         all_source_ids,
         issues,
     )
+    system_reconnaissance = _validate_system_reconnaissance(
+        evidence_path,
+        evidence,
+        set(claims) | set(optional_entries) | set(boss_entries) | set(scene_entries) | {"scenes-cg-system"},
+        all_source_ids,
+        issues,
+    )
     publication = _validate_publication(
         html_path,
         claims,
@@ -4005,6 +4542,7 @@ def validate_project(
         "optional_content": optional_content,
         "bosses": bosses,
         "scenes_cg": scenes_cg,
+        "system_reconnaissance": system_reconnaissance,
         "project_context": project_context,
         "publication": publication,
     }

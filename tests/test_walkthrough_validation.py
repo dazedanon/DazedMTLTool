@@ -78,9 +78,9 @@ class WalkthroughValidationTests(unittest.TestCase):
               <h4 id="reach-town">Leave through the front door</h4>
             <p class="route-lead">Speak to Mina beside the front door, then leave through that door.</p>
             <p class="route-outcome">You arrive in Town.</p>
-            <aside><a data-guide-link data-guide-link-position="after" href="#town-errand">Town Errand</a> is now available.</aside>
-            <aside><a data-guide-link data-guide-link-position="after" href="#scene-group-mina">Mina scenes</a> are now available.</aside>
-            <p><a data-guide-link href="#boss-door-warden">Door Warden</a> boss dossier.</p>
+            <aside><a data-guide-link data-guide-kind="optional" data-guide-link-position="after" href="#town-errand">Town Errand</a> is now available.</aside>
+            <aside><a data-guide-link data-guide-kind="scene" data-guide-link-position="after" href="#scene-group-mina">Mina scenes</a> are now available. <a data-guide-link data-guide-kind="scene" data-guide-link-position="after" href="#scene-town-memory">Town Memory</a></aside>
+            <p><a data-guide-link data-guide-kind="boss" href="#boss-door-warden">Door Warden</a> boss dossier.</p>
             <label class="task-row"><input class="task-checkbox" type="checkbox" data-task-id="reach-town"> Mark complete</label>
             <details class="evidence" data-evidence-id="reach-town">
               <summary>Evidence</summary>
@@ -167,7 +167,7 @@ class WalkthroughValidationTests(unittest.TestCase):
         <section class="scene-group" data-scene-group-id="scene-group-mina" data-scene-group-label="Mina">
           <h2 id="scene-group-mina">Mina</h2>
           <p><a data-guide-link href="#reach-town">Main Route: Reach Town</a></p>
-          <article class="scene-entry" id="scene-entry-scene-town-memory" data-scene-id="scene-town-memory" data-acquisition-mode="normal-play">
+          <article class="scene-entry" id="scene-entry-scene-town-memory" data-scene-id="scene-town-memory" data-acquisition-mode="normal-play" data-catalog-title="Town Memory">
             <h3 id="scene-town-memory">Town Memory</h3>
             <p>Town Memory appears in the Memory Gallery after every listed requirement is met.</p>
             <section class="scene-acquisition" data-acquisition-mode="normal-play">
@@ -377,8 +377,25 @@ class WalkthroughValidationTests(unittest.TestCase):
         self._write_json(
             evidence,
             {
-                "schema_version": 12,
+                "schema_version": 16,
                 "milestone": "complete-four-view-walkthrough",
+                "system_reconnaissance": {
+                    "inventory_artifact": "systems-inventory.json",
+                    "deep_audit_artifacts": ["route-graph.json"],
+                    "decisions": {"world-travel": "deep-audit"},
+                    "coverage": [
+                        {
+                            "system_id": "world-travel",
+                            "topics": [
+                                {
+                                    "id": "town-access",
+                                    "guide_record_ids": ["reach-town"],
+                                    "source_ids": ["front-door-transfer"],
+                                }
+                            ],
+                        }
+                    ],
+                },
                 "project_context": {
                     "glossary": {
                         "file": ".dazedtl/glossary.txt",
@@ -691,9 +708,14 @@ class WalkthroughValidationTests(unittest.TestCase):
                         {
                             "id": "scene-town-memory",
                             "title": "Town Memory",
+                            "catalog_title": "Town Memory",
                             "kind": "character-scene",
                             "status": "verified",
                             "group_id": "scene-group-mina",
+                            "route_anchor_id": "reach-town",
+                            "route_anchor_position": "after",
+                            "prerequisite_scene_ids": [],
+                            "story_gate_claim_ids": ["reach-town"],
                             "acquisition_mode": "normal-play",
                             "acquisition_steps": [
                                 "Reach Town, then speak to Mina at the fountain to play Town Memory during the journey."
@@ -709,6 +731,7 @@ class WalkthroughValidationTests(unittest.TestCase):
                             ],
                             "source_roles": {
                                 "requirements": ["scene-town-memory-requirements"],
+                                "availability": ["scene-town-memory-trigger"],
                                 "replay_title": ["scene-town-memory-title"],
                                 "replay_call": ["scene-town-memory-replay"],
                                 "normal_acquisition": ["scene-town-memory-trigger"],
@@ -770,6 +793,24 @@ class WalkthroughValidationTests(unittest.TestCase):
                         }
                     ],
                 },
+            },
+        )
+        self._write_json(
+            work / "systems-inventory.json",
+            {
+                "schema_version": 1,
+                "game": "Fixture",
+                "systems": [
+                    {
+                        "id": "world-travel",
+                        "name": "World travel",
+                        "status": "enabled-and-active",
+                        "decision": "deep-audit",
+                        "required_topics": [
+                            {"id": "town-access", "label": "Reach the first town"}
+                        ],
+                    }
+                ],
             },
         )
         publication = root / "WALKTHROUGH.html"
@@ -844,6 +885,103 @@ class WalkthroughValidationTests(unittest.TestCase):
             issue = next(row for row in report["issues"] if row["code"] == "scene-entry-invalid")
             self.assertIn("outside the catalog/recollection interface", " ".join(issue["failures"]))
 
+    def test_combat_scene_requires_player_visible_enemy_and_encounter_attribution(self):
+        """Protect combat-scene cards from exposing only a numbered animation or generic opponent."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            manifest["scenes_cg"]["entries"][0]["kind"] = "combat-scene"
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "scene-entry-invalid")
+            failures = " ".join(issue["failures"])
+            self.assertIn("combatants", failures)
+            self.assertIn("encounter_locations", failures)
+            self.assertIn("combat_mechanic", failures)
+            self.assertIn("combat_enemy", failures)
+            self.assertIn("combat_trigger", failures)
+            self.assertIn("encounter_access", failures)
+
+    def test_combat_scene_guide_title_must_name_every_required_enemy(self):
+        """Protect scene navigation from retaining a generic numbered combat heading."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            entry = manifest["scenes_cg"]["entries"][0]
+            requirement = "On Lead Mine Road, fight Ghost S and Dominated Warrior."
+            mechanic = "Let Ghost S restrain Fumika, then allow Dominated Warrior's follow-up attack."
+            entry.update(
+                title="Combat 6",
+                catalog_title="Combat 6",
+                kind="combat-scene",
+                requirements=[requirement],
+                acquisition_steps=[mechanic],
+                combatants=["Ghost S", "Dominated Warrior"],
+                encounter_locations=["Lead Mine Road"],
+                combat_mechanic=mechanic,
+                guide_phrases=[requirement, mechanic],
+            )
+            entry["source_roles"].update(
+                combat_enemy=["scene-town-memory-trigger"],
+                combat_trigger=["scene-town-memory-trigger"],
+                encounter_access=["scene-town-memory-trigger"],
+            )
+            self._write_json(evidence, manifest)
+            walkthrough.write_text(
+                walkthrough.read_text(encoding="utf-8") + f"\n### Combat 6\n\n{requirement}\n\n{mechanic}\n",
+                encoding="utf-8",
+            )
+            publication.write_text(
+                publication.read_text(encoding="utf-8")
+                .replace('data-catalog-title="Town Memory"', 'data-catalog-title="Combat 6"')
+                .replace('<h3 id="scene-town-memory">Town Memory</h3>', '<h3 id="scene-town-memory">Combat 6</h3>')
+                .replace(
+                    '<p>Town Memory appears in the Memory Gallery after every listed requirement is met.</p>',
+                    f'<p>{requirement} {mechanic}</p>',
+                ),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "scene-entry-invalid")
+            failures = " ".join(issue["failures"])
+            self.assertIn("combat-scene title must name combatant 'Ghost S'", failures)
+            self.assertIn("combat-scene title must name combatant 'Dominated Warrior'", failures)
+
+    def test_specific_scene_guide_title_preserves_the_exact_catalog_title(self):
+        """Protect distinct guide and catalog titles as one rendered, source-traceable entry."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            manifest["scenes_cg"]["entries"][0]["title"] = "Mina at the Town Fountain"
+            self._write_json(evidence, manifest)
+            walkthrough.write_text(
+                walkthrough.read_text(encoding="utf-8").replace(
+                    "### Town Memory\n\n",
+                    "### Mina at the Town Fountain\n\nRecollection title: Town Memory\n\n",
+                ),
+                encoding="utf-8",
+            )
+            publication.write_text(
+                publication.read_text(encoding="utf-8").replace(
+                    '<h3 id="scene-town-memory">Town Memory</h3>',
+                    '<h3 id="scene-town-memory">Mina at the Town Fountain</h3><p class="scene-catalog-title"><strong>Recollection title:</strong> Town Memory</p>',
+                ),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "passed", report["issues"])
+
     def test_scene_group_requires_link_from_declared_route_anchor(self):
         """Protect scene availability links from drifting away from their route context."""
         with tempfile.TemporaryDirectory() as raw:
@@ -851,7 +989,7 @@ class WalkthroughValidationTests(unittest.TestCase):
             walkthrough, evidence, publication = self._build_project(root)
             publication.write_text(
                 self._html().replace(
-                    '<a data-guide-link data-guide-link-position="after" href="#scene-group-mina">',
+                    '<a data-guide-link data-guide-kind="scene" data-guide-link-position="after" href="#scene-group-mina">',
                     '<a href="#scene-group-mina">',
                 ),
                 encoding="utf-8",
@@ -862,6 +1000,116 @@ class WalkthroughValidationTests(unittest.TestCase):
             self.assertEqual(report["status"], "failed")
             codes = {row["code"] for row in report["issues"]}
             self.assertIn("scene-main-route-link-invalid", codes)
+
+    def test_scene_entry_requires_link_from_its_exact_availability_anchor(self):
+        """Protect individual scene timing from being hidden behind a broad catalog-group link."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            publication.write_text(
+                self._html().replace(
+                    '<a data-guide-link data-guide-kind="scene" data-guide-link-position="after" href="#scene-town-memory">',
+                    '<a href="#scene-town-memory">',
+                ),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            codes = {row["code"] for row in report["issues"]}
+            self.assertIn("scene-entry-main-route-link-invalid", codes)
+
+    def test_scene_availability_cannot_precede_its_story_gate(self):
+        """Protect chronological scene notices from appearing before their proven story gate."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            earlier = json.loads(json.dumps(manifest["route_claims"][0]))
+            earlier["id"] = "opening-door"
+            earlier["guide_phrases"] = ["The opening door is ready."]
+            for source in earlier["sources"]:
+                source["id"] = f'opening-{source["id"]}'
+            manifest["route_claims"].insert(0, earlier)
+            manifest["route_structure"]["sections"][0]["claim_ids"].insert(0, "opening-door")
+            scene = manifest["scenes_cg"]["entries"][0]
+            scene["route_anchor_id"] = "opening-door"
+            manifest["scenes_cg"]["groups"][0]["route_anchor_id"] = "opening-door"
+            self._write_json(evidence, manifest)
+            walkthrough.write_text(
+                walkthrough.read_text(encoding="utf-8").replace(
+                    "<!-- route-claim:reach-town -->",
+                    "<!-- route-claim:opening-door -->\nThe opening door is ready.\n\n<!-- route-claim:reach-town -->",
+                ),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            codes = {row["code"] for row in report["issues"]}
+            self.assertIn("scene-availability-order-invalid", codes)
+
+    def test_scene_availability_cannot_be_delayed_past_its_proven_boundary(self):
+        """Protect open-world scene notices from being postponed to a convenient later route visit."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            later = json.loads(json.dumps(manifest["route_claims"][0]))
+            later["id"] = "late-cleanup"
+            later["guide_phrases"] = ["Late cleanup begins."]
+            for source in later["sources"]:
+                source["id"] = f'late-{source["id"]}'
+            manifest["route_claims"].append(later)
+            manifest["route_structure"]["sections"][0]["claim_ids"].append("late-cleanup")
+            scene = manifest["scenes_cg"]["entries"][0]
+            scene["route_anchor_id"] = "late-cleanup"
+            manifest["scenes_cg"]["groups"][0]["route_anchor_id"] = "late-cleanup"
+            self._write_json(evidence, manifest)
+            walkthrough.write_text(
+                walkthrough.read_text(encoding="utf-8")
+                + "\n<!-- route-claim:late-cleanup -->\nLate cleanup begins.\n",
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "scene-availability-order-invalid")
+            self.assertIn("later than", " ".join(issue["failures"]))
+
+    def test_main_route_cross_tab_links_require_their_content_kind(self):
+        """Protect the red, orange, and purple route-link categories from becoming ambiguous."""
+        cases = {
+            "boss": (
+                'data-guide-kind="boss" href="#boss-door-warden"',
+                'data-guide-kind="scene" href="#boss-door-warden"',
+                "boss-main-route-link-kind-invalid",
+            ),
+            "optional": (
+                'data-guide-kind="optional" data-guide-link-position="after" href="#town-errand"',
+                'data-guide-kind="boss" data-guide-link-position="after" href="#town-errand"',
+                "optional-main-route-link-kind-invalid",
+            ),
+            "scene": (
+                'data-guide-kind="scene" data-guide-link-position="after" href="#scene-town-memory"',
+                'data-guide-kind="optional" data-guide-link-position="after" href="#scene-town-memory"',
+                "scene-entry-main-route-link-kind-invalid",
+            ),
+        }
+        for label, (old, new, expected_code) in cases.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                walkthrough, evidence, publication = self._build_project(root)
+                publication.write_text(self._html().replace(old, new), encoding="utf-8")
+
+                report = self._validate(root, walkthrough, evidence, publication)
+
+                self.assertEqual(report["status"], "failed")
+                codes = {row["code"] for row in report["issues"]}
+                self.assertIn(expected_code, codes)
 
     def test_rendered_boss_stat_must_match_the_single_canonical_table(self):
         """Protect the visible stat table without requiring a duplicate prose stat line."""
@@ -935,7 +1183,7 @@ class WalkthroughValidationTests(unittest.TestCase):
             walkthrough, evidence, publication = self._build_project(root)
             publication.write_text(
                 self._html().replace(
-                    '<a data-guide-link href="#boss-door-warden">Door Warden</a>',
+                    '<a data-guide-link data-guide-kind="boss" href="#boss-door-warden">Door Warden</a>',
                     '<a href="#boss-door-warden">Door Warden</a>',
                 ),
                 encoding="utf-8",
@@ -964,6 +1212,38 @@ class WalkthroughValidationTests(unittest.TestCase):
             issue = next(row for row in report["issues"] if row["code"] == "optional-entry-invalid")
             self.assertIn("exact excerpt is no longer present", " ".join(issue["failures"]))
 
+    def test_companion_entry_requires_source_bound_success_and_failure_paths(self):
+        """Protect recruit guides from omitting the actual join outcome or irreversible failure analysis."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            manifest["optional_content"]["entries"][0]["kind"] = "companion-recruitment"
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "optional-entry-invalid")
+            self.assertIn("recruitment object", " ".join(issue["failures"]))
+
+    def test_deep_audit_required_topic_must_bind_guide_and_source_records(self):
+        """Protect selected deep audits from being marked complete without player-facing coverage."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            manifest["system_reconnaissance"]["coverage"] = []
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(
+                row for row in report["issues"] if row["code"] == "system-deep-audit-coverage-invalid"
+            )
+            self.assertIn("coverage", " ".join(issue["failures"]))
+
     def test_unknown_optional_prerequisite_blocks_publication(self):
         """Protect players from being sent through a dependency that has no guide entry."""
         with tempfile.TemporaryDirectory() as raw:
@@ -988,8 +1268,8 @@ class WalkthroughValidationTests(unittest.TestCase):
             walkthrough, evidence, publication = self._build_project(root)
             publication.write_text(
                 self._html().replace(
-                    '<a data-guide-link data-guide-link-position="after" href="#town-errand">Town Errand</a>',
-                    '<a data-guide-link data-guide-link-position="after" href="#optional-prologue">Town Errand</a>',
+                    '<a data-guide-link data-guide-kind="optional" data-guide-link-position="after" href="#town-errand">Town Errand</a>',
+                    '<a data-guide-link data-guide-kind="optional" data-guide-link-position="after" href="#optional-prologue">Town Errand</a>',
                 ),
                 encoding="utf-8",
             )
@@ -1003,7 +1283,7 @@ class WalkthroughValidationTests(unittest.TestCase):
     def test_optional_entry_requires_declared_before_or_after_placement(self):
         """Protect timely detour notices from always drifting below a completed route step."""
         link_line = (
-            '            <aside><a data-guide-link data-guide-link-position="after" '
+            '            <aside><a data-guide-link data-guide-kind="optional" data-guide-link-position="after" '
             'href="#town-errand">Town Errand</a> is now available.</aside>\n'
         )
         cases = {

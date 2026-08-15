@@ -22,8 +22,14 @@ Create `<game>/.dazedtl/walkthrough/evidence.json`:
 
 ```json
 {
-  "schema_version": 12,
+  "schema_version": 16,
   "milestone": "complete-four-view-walkthrough",
+  "system_reconnaissance": {
+    "inventory_artifact": "systems-inventory.json",
+    "deep_audit_artifacts": [],
+    "decisions": {},
+    "coverage": []
+  },
   "project_context": {},
   "route_structure": {},
   "route_claims": [],
@@ -47,6 +53,29 @@ Create `<game>/.dazedtl/walkthrough/evidence.json`:
 ```
 
 The completed milestone supports one claim per Main Route step, one record per Optional Content entry, one dossier per boss, and one record per illustrated scene/catalog entry. Keep claim, group, entry, boss, scene, and source IDs stable after publication so saved hashes and review notes survive regeneration.
+
+## Active-system reconnaissance and coverage
+
+`system_reconnaissance` binds the private active-system inventory to the completed guide. `inventory_artifact` is the filename of the sibling private JSON artifact. `decisions` must reproduce every inventory system's `deep-audit`, `trace-on-demand`, or `ignore` decision. `deep_audit_artifacts` lists focused private artifacts produced during research.
+
+Every active `deep-audit` system in `systems-inventory.json` has a nonempty `required_topics` list. Each topic has a stable kebab-case `id`, a short player-facing `label`, and describes one outcome that could otherwise disappear from the guide: a recruit, irreversible refusal, mandatory vehicle, required dungeon/item chain, danger band, unusual battle rule, shop tier, or capacity increase. It must not merely name a plugin, file, or generic view.
+
+Mirror those topics in `system_reconnaissance.coverage`:
+
+```json
+{
+  "system_id": "world-travel",
+  "topics": [
+    {
+      "id": "airship-route",
+      "guide_record_ids": ["build-the-airship"],
+      "source_ids": ["airship-award", "wind-gem-hand-in"]
+    }
+  ]
+}
+```
+
+Every required topic must be covered exactly once, bind at least one completed guide record, and cite at least one source snapshot owned by the evidence ledger. This reconciliation does not require reverse-engineering every installed extension; it makes the helper finish the bounded deep audits it chose.
 
 ## Project language context
 
@@ -217,13 +246,15 @@ Each entry has:
 
 - `id`: a globally unique kebab-case identifier, distinct from route and group IDs.
 - `title`: the canonical player-facing journal or event name.
-- `kind`: `side-event`, `optional-area`, `service-unlock`, `activity`, `collection`, or `postgame-event`. Boss dossiers and relationship/CG scene entries remain in their dedicated views.
+- `kind`: `side-event`, `optional-area`, `service-unlock`, `activity`, `collection`, `postgame-event`, `companion-recruitment`, or `progression-guide`. Use `companion-recruitment` for an ally/recruit/finale-support route whose success and failure paths matter. Use `progression-guide` for a source-backed danger ladder, shop/capacity guide, or other cross-regional system explanation; it does not turn mandatory progression into optional content. Boss dossiers and relationship/CG scene entries remain in their dedicated views.
 - `status`: `verified`.
 - `route_anchor_id`: the Main Route claim where the entry first becomes actionable, not merely where its data record exists.
 - `route_anchor_position`: `before` when the notice must appear before the player undertakes the anchor step, or `after` when completing that step creates the availability state.
 - `prerequisite_entry_ids`: the complete direct dependency list, or an empty list.
 - `guide_phrases`: one or more exact actionable phrases present in both Markdown and HTML.
 - `sources`: globally unique source snapshots proving the major lifecycle.
+
+A `companion-recruitment` entry also has a `recruitment` object with nonempty `success_steps` and `failure_modes`. Every row has player-facing `text` and local `source_ids`; failure rows also use `kind` `retryable`, `missable`, `permanent-lockout`, or `point-of-no-return`. The successful route must bind the actual recruit/support outcome, not merely a personal-quest completion. Failure analysis distinguishes a harmless “not now” branch from a real lockout and identifies the last opportunity when timing can close the route. Include every row's text in `guide_phrases` and render it in the entry.
 
 The source set must establish the entry's real start, important intermediate updates or branch convergence, requirements, completion, and meaningful fixed outcomes. Cite database records as well as event commands when an item or reward is identified only by ID. For a long chain, prefer several focused sources to one incidental match. If the game exposes a journal title but no reachable start or completion, investigate and classify it in private research instead of publishing it as a complete player route.
 
@@ -317,7 +348,7 @@ Each boss entry has:
 - `how_to_win.plan`: actionable tactics connecting the threat pattern to those available tools. Each row has player-facing `text` and local `source_ids` for both mechanic and counter.
 - `sources`: globally unique snapshots proving every displayed encounter, phase, stat, threat interpretation, recommended tool and its availability, transform/reinforcement rule, and fixed outcome.
 
-The encounter source must prove that the troop is actually started by reachable game logic; an enemy database record alone is insufficient. Snapshot the troop composition for the initial fight, the enemy record fields used in the table, each skill and state record used in a threat explanation, plugin or troop logic needed to prove chained/setup behavior, system element names used to decode traits, troop pages used for transformations or reinforcements, every troop-page or script-forced action that materially affects the encounter, and event commands used for fixed rewards or special loss behavior. Forced-action evidence must identify its trigger, repeat/span behavior, acting battler, forced skill, target rule, and applicable phase; an enemy action record cannot stand in for a forced command that is absent from that record. When strategy depends on a move being forced, targetable, random, interruptible, or avoidable, also pin the engine or plugin selection/targeting logic that establishes that behavior; a schedule condition alone does not prove the move is chosen. A recommended tool also needs its item/equipment/skill record and a source proving the player can obtain or already has it by that encounter. For a temporary party member, also prove initialization or reset, entry and removal branches when material, encounter-start HP/MP/TP, and the engine or plugin rule that changes or preserves those resources at battle start. Distinguish fixed event rewards from database drops and disambiguate same-named skills, items, equipment, and commands in both the evidence and player copy.
+The encounter source must prove that the troop is actually started by reachable game logic; an enemy database record alone is insufficient. Snapshot the troop composition for the initial fight, the enemy record fields used in the table, each skill and state record used in a threat explanation, plugin or troop logic needed to prove chained/setup behavior, system element names used to decode traits, troop pages used for transformations or reinforcements, every troop-page or script-forced action that materially affects the encounter, and event commands used for fixed rewards or special loss behavior. This includes troop pages gated by player switches, variables, equipment, clothing, status, or party state when they force a counter, self-action, instant enemy defeat, or alternate resolution. Forced-action evidence must identify its trigger, repeat/span behavior, acting battler, forced skill, target rule, and applicable phase; an enemy action record cannot stand in for a forced command that is absent from that record. When strategy depends on a move being forced, targetable, random, interruptible, or avoidable, also pin the engine or plugin selection/targeting logic that establishes that behavior; a schedule condition alone does not prove the move is chosen. A recommended tool also needs its item/equipment/skill record and a source proving the player can obtain or already has it by that encounter. For a temporary party member, also prove initialization or reset, entry and removal branches when material, encounter-start HP/MP/TP, and the engine or plugin rule that changes or preserves those resources at battle start. Distinguish fixed event rewards from database drops and disambiguate same-named skills, items, equipment, and commands in both the evidence and player copy.
 
 The participant chain must cover party mutations and substitutions before battle, the battle command, and restoration afterward when it proves that a companion was only removed temporarily. A recommended character tool must belong to an actor in `active_actor_ids`, or in `conditional_actor_ids` with matching conditional prose. A recommended item must be usable by one of those active battlers under the engine's battle-item rules. Interpret action scope, random targeting, recovery pressure, and available commands against this encounter-local set rather than the wider story party.
 
@@ -365,6 +396,10 @@ For every equipment-bound candidate, record the materially competitive reachable
         "kind": "character-scene",
         "status": "verified",
         "group_id": "scene-group-mina",
+        "route_anchor_id": "reach-town",
+        "route_anchor_position": "after",
+        "prerequisite_scene_ids": [],
+        "story_gate_claim_ids": ["reach-town"],
         "acquisition_mode": "normal-play",
         "acquisition_steps": ["Reach Town, then speak to Mina at the fountain to play Town Memory during the journey."],
         "requirements": ["Reach Town and speak to Mina at the fountain."],
@@ -378,6 +413,7 @@ For every equipment-bound candidate, record the materially competitive reachable
         ],
         "source_roles": {
           "requirements": ["scene-town-memory-requirements"],
+          "availability": ["scene-town-memory-trigger"],
           "replay_title": ["scene-town-memory-title"],
           "replay_call": ["scene-town-memory-replay"],
           "normal_acquisition": ["scene-town-memory-trigger"],
@@ -397,15 +433,20 @@ The catalog object has the fixed ID `scenes-cg-system`, a player-facing title, e
 
 When the game has a verified catalog-wide unlock-all or completion shortcut, add its exact player-facing explanation as `completion_shortcut`, include that same string once in `guide_phrases`, and bind a `completion_shortcut` source role. Render it once in the `.scene-system` overview. Omit the field and role when the game has no such behavior. Individual `normal-play` entries must not repeat it or use it as a requirement. Add other roles such as relationship-status display, skip behavior, defeat handling, reset behavior, or settings only when that game actually uses them and the guide discusses them.
 
-Each group has a globally unique kebab-case `id`, a visible `label`, a complete ordered `entry_ids` list, and one Main Route availability binding. `route_anchor_position` is `before` when the player should know about the group before taking the step or `after` when completing the step first makes the group actionable. Every scene belongs to exactly one group; group membership is organizational and does not claim that all entries share one unlock time.
+Each group has a globally unique kebab-case `id`, a visible `label`, a complete ordered `entry_ids` list, and one Main Route availability binding equal to its earliest member's binding. `route_anchor_position` is `before` when the player should know about the group before taking the step or `after` when completing the step first makes the first member actionable. Every scene belongs to exactly one group; group membership is organizational and does not claim that all entries share one unlock time.
 
 Each scene entry has:
 
 - `id`: a globally unique kebab-case ID, distinct from every route, optional, boss, catalog, and group ID.
-- `title`: the canonical player-facing catalog/replay title.
-- `kind`: `relationship-scene`, `character-scene`, `story-scene`, `encounter-scene`, `defeat-scene`, `gallery-entry`, or `other-scene`. Preserve a more specific game-authored category in visible prose when useful.
+- `title`: the concise, source-backed guide heading. Use the exact catalog name when it is already specific and player-recognizable; otherwise replace a generic, numbered, untranslated, or implementation-facing label with a name built from the verified character, enemy, encounter, location, objective, or distinguishing stage.
+- `catalog_title`: the exact player-facing catalog/replay title. Preserve it even when `title` improves on it, and render it once beneath the guide heading when the two differ so players can match the in-game menu.
+- `kind`: `relationship-scene`, `character-scene`, `story-scene`, `encounter-scene`, `defeat-scene`, `combat-scene`, `gallery-entry`, or `other-scene`. Use `combat-scene` whenever a live battle skill, action, state, loss, restraint, or troop interaction produces the entry; preserve a more specific game-authored category in visible prose when useful.
 - `status`: `verified`.
 - `group_id`: the one group that contains the entry.
+- `route_anchor_id`: the first Main Route claim where the scene can actually be obtained, after accounting for story phase, accessible area, party/character presence, prerequisite scenes, relationship values, items, and any other executable predicate. Do not use catalog order or a convenient later visit as a substitute for this trace.
+- `route_anchor_position`: `before` when the live scene is available before undertaking that claim, or `after` when completing the claim first satisfies its story/access gate.
+- `prerequisite_scene_ids`: all directly required scene entries, or an empty list. The anchor may not precede any prerequisite scene's anchor.
+- `story_gate_claim_ids`: the Main Route claims whose completion directly proves story/access predicates for the live path, or an empty list when availability is independent of story progress. The anchor may not precede any declared gate.
 - `acquisition_mode`: `normal-play` for a scene reached through executable story, exploration, interaction, choice, relationship, optional-content, or defeat logic outside the catalog interface; `gallery-only` only for a viewer/reference record proven to have no standalone live event.
 - `acquisition_steps`: one or more exact player-facing steps for the normal live path. For `gallery-only`, explain that the record is a viewer-only collection and how to recognize it without repeating the catalog-wide completion shortcut.
 - `requirements`: one or more exact, player-facing requirements for that acquisition path. Translate executable gates into actions and visible states without exposing internal IDs.
@@ -413,8 +454,19 @@ Each scene entry has:
 - `viewer_mode`: a nonempty kebab-case description of what the catalog opens, such as `replay-and-cg-gallery`, `replay`, or `still-gallery`; this is descriptive, not a fixed plugin enum.
 - `cg_image_count`: the nonnegative number of illustrated sets explicitly selected by this entry's viewer. Count sets, not animation frames or similarly named files.
 - `guide_phrases`: the exact availability statement, every acquisition step, every requirement, and any other material player-facing behavior rendered in Markdown and HTML.
-- `source_roles`: local evidence bindings. `normal-play` requires `requirements`, `normal_acquisition`, `replay_title`, `replay_call`, `live_trigger`, and `live_completion`; at least one source for each live role must be outside `catalog.interface_files` and must not duplicate a catalog-system locator. Add `unlock` when the live event writes a separate persistent catalog state; omit it when the catalog has no per-entry locking and the live scene simply completes. `gallery-only` requires `requirements`, `replay_title`, `replay_call`, and `gallery_access`, must use kind `gallery-entry`, and must not claim live acquisition/completion roles. Both modes also require `cg_viewer` when `cg_image_count` is positive. A role describes what the source proves, not which engine construct must carry it. For example, `replay_call` may cite an event command, plugin command, script dispatch, or configured gallery record.
+- `source_roles`: local evidence bindings. Both modes require `requirements`, `availability`, `replay_title`, and `replay_call`; `availability` proves the complete predicates used to place the route notice. `normal-play` also requires `normal_acquisition`, `live_trigger`, and `live_completion`; at least one source for every availability/live role must be outside `catalog.interface_files` and must not duplicate a catalog-system locator. Add `unlock` when the live event writes a separate persistent catalog state; omit it when the catalog has no per-entry locking and the live scene simply completes. `gallery-only` also requires `gallery_access`, must use kind `gallery-entry`, and must not claim live acquisition/completion roles. Both modes require `cg_viewer` when `cg_image_count` is positive. A role describes what the source proves, not which engine construct must carry it. For example, `replay_call` may cite an event command, plugin command, script dispatch, or configured gallery record.
 - `sources`: globally unique snapshots proving every source role and published behavior. `cg_viewer` must cite exactly one source per counted illustrated set.
+
+A `combat-scene` is always `normal-play` and additionally requires:
+
+- `combatants`: one or more exact player-visible enemy names. Include every required participant in a multi-enemy setup.
+- `encounter_locations`: one or more recognizable player-visible areas or named encounters where that combatant combination is reachable.
+- `combat_mechanic`: one exact acquisition-step sentence explaining the action, state, restraint, telegraph, loss, or setup-follow-up sequence the player must allow.
+- `source_roles.combat_enemy`: enemy or combatant evidence.
+- `source_roles.combat_trigger`: skill, action, state, common-event, or equivalent evidence proving what invokes the scene.
+- `source_roles.encounter_access`: a reachable troop, battle event, map encounter, or equivalent source proving where the player can actually meet the combatant(s).
+
+Every combatant must appear directly in a `combat-scene` guide title, and every combatant and location must appear in the entry's player-facing requirements or acquisition steps. Use a source-backed mechanic or stage to distinguish multiple scenes belonging to the same enemy. Generic animation labels such as “person,” “matching enemy,” or a numbered combat tile do not satisfy combat attribution. When reverse tracing finds no reachable combatant for a viewer routine, use a source-backed `gallery-only` entry instead of `combat-scene`.
 
 Implementation details such as switches, variables, common-event IDs, plugin keys, and asset filenames may be retained in private `scene-inventory.json` or evidence locators, but they are not portable required fields and must not appear in player prose. A source role cannot cite an ID outside the entry's own sources.
 
@@ -576,7 +628,7 @@ Render them inside the completed Optional Content view:
 </section>
 ```
 
-The group heading ID and entry article ID are the durable deep-link destinations. Every Optional Content entry gets exactly one saved checklist input and exactly one Evidence disclosure. The Main Route step named by `route_anchor_id` must contain exactly one working link whose placement matches the ledger, such as `<a data-guide-link data-guide-link-position="after" href="#optional-lost-delivery">`. Put a `before` callout above the route prose and an `after` callout below its outcome. Do not link from an earlier chapter merely because the quest is configured there, do not delay a link until a recommended regional visit when its gates open earlier, and do not emit a link to an unfinished Scenes & CG destination.
+The group heading ID and entry article ID are the durable deep-link destinations. Every Optional Content entry gets exactly one saved checklist input and exactly one Evidence disclosure. The Main Route step named by `route_anchor_id` must contain exactly one working link whose placement matches the ledger, such as `<a data-guide-link data-guide-kind="optional" data-guide-link-position="after" href="#optional-lost-delivery">`. Put a `before` callout above the route prose and an `after` callout below its outcome. Do not link from an earlier chapter merely because the quest is configured there, do not delay a link until a recommended regional visit when its gates open earlier, and do not emit a link to an unfinished Scenes & CG destination.
 
 ### Bosses
 
@@ -609,7 +661,7 @@ Render each dossier inside the completed Bosses view:
 </section>
 ```
 
-The group heading uses the exact group ID. The dossier heading uses `boss-<boss-id>`, giving route and optional links a durable destination. Every dossier gets exactly one matching checklist and Evidence disclosure. Each declared route or optional source must contain a working `data-guide-link` to the dossier, and the dossier must link back to every declared source entry. The validator treats missing, extra, or misbound links as publication failures.
+The group heading uses the exact group ID. The dossier heading uses `boss-<boss-id>`, giving route and optional links a durable destination. Every dossier gets exactly one matching checklist and Evidence disclosure. Each declared route source must contain a working `data-guide-link data-guide-kind="boss"` link to the dossier; optional sources use an ordinary working guide link, and the dossier links back to every declared source entry. The validator treats missing, extra, miscategorized, or misbound links as publication failures.
 
 ### Scenes & CG
 
@@ -651,14 +703,14 @@ Render the overview and entries inside the completed Scenes & CG view:
 </section>
 ```
 
-The catalog overview has exactly one verified Evidence disclosure and contains every catalog `guide_phrase`, including any completion shortcut once. Every group heading exposes its exact group ID; every entry heading exposes its exact scene ID. Every entry has exactly one matching `.scene-acquisition` section, checklist, and Evidence disclosure and visibly renders its exact `cg_image_count`. The Main Route anchor contains exactly one `data-guide-link` to each declared group at the declared `before` or `after` position, and the group links back to that route claim. The validator rejects missing entries, mismatched totals, unbound evidence roles, catalog-interface evidence masquerading as normal acquisition, repeated completion shortcuts in normal entries, uncounted viewer sets, extra/dead links, and entries outside the Scenes & CG view.
+The catalog overview has exactly one verified Evidence disclosure and contains every catalog `guide_phrase`, including any completion shortcut once. Every group heading exposes its exact group ID; every entry heading exposes its exact scene ID. Every entry has exactly one matching `.scene-acquisition` section, checklist, and Evidence disclosure and visibly renders its exact `cg_image_count`. Each entry's Main Route anchor contains exactly one `data-guide-link data-guide-kind="scene"` at the declared `before` or `after` position. The group also receives one matching scene link at its earliest member anchor and links back to that route claim. When several entries open together, a collapsed `.route-link-batch` may contain the direct links. The validator rejects early/late availability bindings, missing entries, mismatched totals, unbound evidence roles, catalog-interface evidence masquerading as normal acquisition, repeated completion shortcuts in normal entries, uncounted viewer sets, wrong link categories, extra/dead links, and entries outside the Scenes & CG view.
 
 ## Verification boundary
 
 - `verified` means every material part of the published player-facing phrase is supported by source snapshots and the relevant branch trace.
 - For Optional Content, `verified` also means the major lifecycle, direct dependencies, availability anchor, completion interaction, and stated fixed outcomes have been traced.
 - For Bosses, `verified` also means every displayed phase, stat, action, elemental read, drop, fixed reward, transformation, special outcome, and route/optional binding has been traced.
-- For Scenes & CG, `verified` also means the catalog boundary, exact title, acquisition classification, displayed requirements, normal acquisition/live trigger/live completion for `normal-play` and any separate persistent unlock write the game actually uses (or a reconciled lack of a standalone event for `gallery-only`), replay/viewer dispatch, illustrated-set count, and group/route binding have been traced.
+- For Scenes & CG, `verified` also means the catalog boundary, exact catalog title, source-backed guide title, acquisition classification, displayed requirements, earliest route availability and its preceding blocker, prerequisite scene order, story gates, normal acquisition/live trigger/live completion for `normal-play` and any separate persistent unlock write the game actually uses (or a reconciled lack of a standalone event for `gallery-only`), replay/viewer dispatch, illustrated-set count, and group/route binding have been traced. A `combat-scene` additionally requires the complete combatant/action-or-state/troop-or-encounter chain and player-visible location.
 - Exact walking lines, visual prominence, and route efficiency are not required publication claims. Do not add them unless the data proves them.
 - Research notes about omitted precision may stay in private working files or a non-rendered `navigation_note`; they are not claim statuses and must not appear in HTML Evidence.
 
@@ -677,6 +729,6 @@ Never use `assumed`, `likely`, `requires-playtest`, or an untracked confidence s
 - Cite page conditions and state writes for progression gates; do not infer causality from similarly named switches.
 - Keep one evidence claim focused enough that a reviewer can explain why every source is present.
 - Reconcile configured optional records with executable activation and completion writes. Record unreachable, test-only, duplicate, superseded, boss-dossier, and scene-only exclusions in private research so missing catalog entries are deliberate rather than accidental.
-- Reconcile every authoritative illustrated catalog slot with its normal acquisition path, reachable live trigger, unlock state, replay/viewer dispatch, and counted illustrated sets. Search reverse common-event calls, picture/viewer calls, state writes, battle-loss branches, and map triggers before classifying a record `gallery-only`. Do not derive completeness from asset filenames, installed plugin defaults, or similarly named options. Trace relationship, skip, rest, defeat, reset, and other scene mechanics only when the active game uses them and they affect a published entry.
+- Reconcile every authoritative illustrated catalog slot with its normal acquisition path, reachable live trigger, unlock state, replay/viewer dispatch, and counted illustrated sets. Search reverse common-event calls, picture/viewer calls, state writes, battle-loss branches, and map triggers before classifying a record `gallery-only`. For battle scenes, continue backward through the state carrier, skill/action, enemy action list, troop or battle composition, and reachable encounter source; list every enemy needed by a combo. Do not derive completeness from asset filenames, installed plugin defaults, or similarly named options. Trace relationship, skip, rest, defeat, reset, and other scene mechanics only when the active game uses them and they affect a published entry.
 - When discovery, classification, evidence, strategy, prose, or rendering behavior changes, regenerate the complete walkthrough and all affected private manifests. Re-audit every already-completed view touched by that behavior; never update only the reported example and treat unchanged entries as reviewed.
 - Re-run validation after any game-data, Markdown, evidence, or HTML change. A snapshot mismatch means the guide must be re-audited, not that the expected snapshot should be updated automatically.
