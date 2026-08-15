@@ -5,6 +5,7 @@ Use this schema with `scripts/validate_walkthrough.py`. The evidence ledger exis
 ## Contents
 
 - Top-level schema
+- Dependency closure
 - Project language context
 - Route structure
 - Route claims
@@ -22,13 +23,19 @@ Create `<game>/.dazedtl/walkthrough/evidence.json`:
 
 ```json
 {
-  "schema_version": 16,
+  "schema_version": 17,
   "milestone": "complete-four-view-walkthrough",
   "system_reconnaissance": {
     "inventory_artifact": "systems-inventory.json",
     "deep_audit_artifacts": [],
     "decisions": {},
     "coverage": []
+  },
+  "dependency_closure": {
+    "artifact": "dependency-closure.json",
+    "index_artifact": "state-dependency-index.json",
+    "required_chain_ids": [],
+    "bindings": []
   },
   "project_context": {},
   "route_structure": {},
@@ -76,6 +83,100 @@ Mirror those topics in `system_reconnaissance.coverage`:
 ```
 
 Every required topic must be covered exactly once, bind at least one completed guide record, and cite at least one source snapshot owned by the evidence ledger. This reconciliation does not require reverse-engineering every installed extension; it makes the helper finish the bounded deep audits it chose.
+
+## Dependency closure
+
+An individually verified event command proves only that command. It does not prove that a long recruitment, relationship, vehicle, key-item, or scene route is complete. Use the dependency-closure contract for every chain whose omitted prefix, intermediate loss branch, or hidden prerequisite would materially mislead a player. Every `companion-recruitment` entry requires one complete binding; add other high-risk chains to `required_chain_ids` when reconnaissance finds them.
+
+For RPG Maker MV/MZ, first run:
+
+```bash
+python scripts/index_rpgmaker_dependencies.py \
+  --game-root <game> \
+  --output <game>/.dazedtl/walkthrough/state-dependency-index.json \
+  --flow-output <game>/.dazedtl/walkthrough/state-dependency-index-flows.json
+```
+
+The compact index inventories structured page conditions, conditionals, and state writes; the companion flow artifact records choices, battles and their outcomes, common-event calls, transfers, scripts, and plugin commands. Both pin the hashes of every indexed executable data file, and the validator rejects source drift. Carriers with more than 500 expanded sites are summarized under `omitted_high_frequency_carriers`; if a decisive carrier appears there, rerun the command with `--include-carrier switch:123` (or the relevant `variable`, `item`, `weapon`, `armor`, or `actor` kind). The option is repeatable and preserves the selected carrier's complete site set for classification. JavaScript and plugin commands remain opaque discovery sites until a focused audit resolves them; their presence is never evidence that a chain is complete.
+
+Create the sibling `dependency-closure.json`:
+
+```json
+{
+  "schema_version": 1,
+  "game": "Example",
+  "chains": [
+    {
+      "id": "mina-recruitment",
+      "title": "Mina recruitment",
+      "coverage_status": "complete",
+      "terminal_node_ids": ["mina-joins"],
+      "nodes": [
+        {
+          "id": "accept-minas-request",
+          "kind": "player-action",
+          "text": "Accept Mina's request in Town.",
+          "source_ids": ["mina-request-choice"],
+          "predecessor_ids": []
+        },
+        {
+          "id": "mina-joins",
+          "kind": "terminal",
+          "text": "Invite Mina after the rescue so she joins.",
+          "source_ids": ["mina-join-command"],
+          "predecessor_ids": ["accept-minas-request"]
+        }
+      ],
+      "invalidators": [
+        {
+          "kind": "permanent-lockout",
+          "text": "Leaving Town after refusing the rescue closes Mina's route.",
+          "source_ids": ["mina-refusal", "mina-town-exit-lock"],
+          "node_ids": ["accept-minas-request"]
+        }
+      ],
+      "unresolved_leaf_ids": [],
+      "tracked_carriers": [
+        {
+          "kind": "switch",
+          "id": 42,
+          "classified_sites": [
+            {
+              "site_id": "map-007-event-003-page-001-command-0012-switch-0042",
+              "node_ids": ["mina-joins"]
+            }
+          ],
+          "excluded_sites": [
+            {
+              "site_id": "map-099-event-001-page-000-page-condition-switch-0042",
+              "reason": "Unreachable development-room display, proven by its transfer graph."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Each chain is a source-bound acyclic graph traced backward from one or more `terminal` nodes. Valid node kinds are `player-action`, `story-gate`, `automatic`, `choice`, `battle-outcome`, `item-change`, `state-predicate`, `state-transition`, `terminal`, and `unresolved`. A leaf with no predecessor must be a concrete `player-action`, an externally proven `story-gate`, an `automatic` new-game/setup fact, or explicitly `unresolved`. `coverage_status: complete` forbids unresolved leaves.
+
+`invalidators` record retryable, missable, permanent-lockout, and point-of-no-return paths and bind them to the affected graph nodes. A chain may have no invalidator only when the executable route truly has none. For every state carrier whose value establishes or invalidates the result, `tracked_carriers` must classify every matching indexed read/write site into graph nodes or exclude it with a concrete source-review reason. This is what distinguishes `coverage complete` from a collection of individually true suffix facts.
+
+Bind completed chains back to published records in `evidence.json`:
+
+```json
+{
+  "dependency_closure": {
+    "artifact": "dependency-closure.json",
+    "index_artifact": "state-dependency-index.json",
+    "required_chain_ids": ["mina-recruitment"],
+    "bindings": [
+      {"guide_record_id": "mina-recruitment", "chain_id": "mina-recruitment"}
+    ]
+  }
+}
+```
 
 ## Project language context
 

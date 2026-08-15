@@ -13,8 +13,13 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+from index_rpgmaker_dependencies import build_index
 
-SCHEMA_VERSION = 16
+
+SCHEMA_VERSION = 17
 MILESTONE = "complete-four-view-walkthrough"
 PROJECT_CONTEXT_FILES = {
     "glossary": ".dazedtl/glossary.txt",
@@ -62,6 +67,21 @@ RECRUITMENT_FAILURE_KINDS = {
     "point-of-no-return",
     "retryable",
 }
+DEPENDENCY_NODE_KINDS = {
+    "automatic",
+    "battle-outcome",
+    "choice",
+    "item-change",
+    "player-action",
+    "state-predicate",
+    "state-transition",
+    "story-gate",
+    "terminal",
+    "unresolved",
+}
+DEPENDENCY_LEAF_KINDS = {"automatic", "player-action", "story-gate"}
+DEPENDENCY_COVERAGE_STATUSES = {"complete", "partial"}
+DEPENDENCY_CARRIER_KINDS = {"actor", "armor", "item", "switch", "variable", "weapon"}
 SYSTEM_DECISIONS = {"deep-audit", "trace-on-demand", "ignore"}
 BOSS_KINDS = {"story-boss", "side-boss", "apex-monster"}
 SCENE_KINDS = {
@@ -2835,6 +2855,405 @@ class WalkthroughHTMLParser(HTMLParser):
             self.public_text_parts.append(data)
 
 
+def _validate_dependency_closure(
+    game_root: Path,
+    evidence_path: Path,
+    evidence: dict[str, Any],
+    guide_record_ids: set[str],
+    companion_entry_ids: set[str],
+    source_ids: set[str],
+    issues: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Validate source-bound prerequisite graphs and their carrier-use accounting."""
+    raw = evidence.get("dependency_closure")
+    if not isinstance(raw, dict):
+        _issue(
+            issues,
+            "error",
+            "dependency-closure-missing",
+            "evidence.json must declare dependency_closure and its reviewed artifacts.",
+        )
+        return {"chains": [], "bindings": [], "failures": ["dependency_closure is missing"]}
+
+    failures: list[str] = []
+    artifact_name = str(raw.get("artifact", "")).strip()
+    index_name = str(raw.get("index_artifact", "")).strip()
+    if not artifact_name or Path(artifact_name).name != artifact_name:
+        failures.append("artifact must name a sibling JSON file")
+    if not index_name or Path(index_name).name != index_name:
+        failures.append("index_artifact must name a sibling JSON file")
+
+    artifact_path = evidence_path.parent / artifact_name
+    index_path = evidence_path.parent / index_name
+    artifact: Any = None
+    index: Any = None
+    if artifact_name:
+        try:
+            artifact = _read_json(artifact_path)
+        except ValidationInputError as exc:
+            failures.append(f"could not read dependency artifact: {exc}")
+    if index_name:
+        try:
+            index = _read_json(index_path)
+        except ValidationInputError as exc:
+            failures.append(f"could not read dependency index: {exc}")
+
+    if isinstance(index, dict):
+        if index.get("schema_version") != 1:
+            failures.append("dependency index schema_version must be 1")
+        else:
+            source_files = index.get("source_files")
+            if not isinstance(source_files, list) or not source_files:
+                failures.append("dependency index source_files must pin every indexed data file")
+            else:
+                for source_file in source_files:
+                    source_file = source_file if isinstance(source_file, dict) else {}
+                    path, failure = _project_file(game_root, source_file.get("file"))
+                    if failure:
+                        failures.append(f"dependency index source file is invalid: {failure}")
+                        break
+                    expected_hash = str(source_file.get("sha256", ""))
+                    if not re.fullmatch(r"[0-9a-f]{64}", expected_hash):
+                        failures.append("dependency index source file has an invalid sha256")
+                        break
+                    assert path is not None
+                    if _sha256(path) != expected_hash:
+                        failures.append(
+                            f"dependency index no longer matches executable file {source_file.get('file')!r}"
+                        )
+                        break
+    elif index is not None:
+        failures.append("dependency index must be a JSON object")
+
+    if not isinstance(artifact, dict):
+        if artifact is not None:
+            failures.append("dependency artifact must be a JSON object")
+        artifact = {}
+    if artifact.get("schema_version") != 1:
+        failures.append("dependency artifact schema_version must be 1")
+
+    raw_chains = artifact.get("chains")
+    if not isinstance(raw_chains, list) or not raw_chains:
+        failures.append("dependency artifact chains must be a nonempty list")
+        raw_chains = []
+    chains: dict[str, dict[str, Any]] = {}
+    chain_results: list[dict[str, Any]] = []
+    index_sites = {
+        str(site.get("id", "")): site
+        for site in (index.get("carrier_sites", []) if isinstance(index, dict) else [])
+        if isinstance(site, dict) and str(site.get("id", ""))
+    }
+
+    for chain_index, raw_chain in enumerate(raw_chains):
+        chain = raw_chain if isinstance(raw_chain, dict) else {}
+        chain_id = str(chain.get("id", "")).strip()
+        chain_failures: list[str] = []
+        if not ID_RE.fullmatch(chain_id):
+            chain_failures.append("id must be a nonempty kebab-case identifier")
+            chain_id = chain_id or f"invalid-dependency-chain-{chain_index + 1}"
+        if chain_id in chains:
+            chain_failures.append("chain id is duplicated")
+        chains[chain_id] = chain
+        if not str(chain.get("title", "")).strip():
+            chain_failures.append("title must be nonempty")
+        coverage_status = str(chain.get("coverage_status", "")).strip()
+        if coverage_status not in DEPENDENCY_COVERAGE_STATUSES:
+            chain_failures.append(
+                f"coverage_status must be one of {sorted(DEPENDENCY_COVERAGE_STATUSES)}"
+            )
+
+        raw_nodes = chain.get("nodes")
+        if not isinstance(raw_nodes, list) or not raw_nodes:
+            chain_failures.append("nodes must be a nonempty list")
+            raw_nodes = []
+        nodes: dict[str, dict[str, Any]] = {}
+        predecessor_map: dict[str, list[str]] = {}
+        for node_index, raw_node in enumerate(raw_nodes):
+            node = raw_node if isinstance(raw_node, dict) else {}
+            node_id = str(node.get("id", "")).strip()
+            if not ID_RE.fullmatch(node_id):
+                chain_failures.append(f"nodes[{node_index}].id must be kebab-case")
+                node_id = node_id or f"invalid-node-{node_index + 1}"
+            if node_id in nodes:
+                chain_failures.append(f"node {node_id!r} is duplicated")
+            nodes[node_id] = node
+            kind = str(node.get("kind", "")).strip()
+            if kind not in DEPENDENCY_NODE_KINDS:
+                chain_failures.append(
+                    f"node {node_id!r}.kind must be one of {sorted(DEPENDENCY_NODE_KINDS)}"
+                )
+            if not str(node.get("text", "")).strip():
+                chain_failures.append(f"node {node_id!r}.text must be nonempty")
+            node_sources = node.get("source_ids")
+            if not isinstance(node_sources, list) or not node_sources or any(
+                not isinstance(source_id, str) for source_id in node_sources
+            ):
+                chain_failures.append(f"node {node_id!r}.source_ids must be a nonempty list")
+            else:
+                unknown = sorted(set(node_sources) - source_ids)
+                if unknown:
+                    chain_failures.append(
+                        f"node {node_id!r} references unknown source {unknown[0]!r}"
+                    )
+            predecessors = node.get("predecessor_ids", [])
+            if not isinstance(predecessors, list) or any(not isinstance(row, str) for row in predecessors):
+                chain_failures.append(f"node {node_id!r}.predecessor_ids must be a list")
+                predecessors = []
+            if len(predecessors) != len(set(predecessors)):
+                chain_failures.append(f"node {node_id!r}.predecessor_ids contains duplicates")
+            if node_id in predecessors:
+                chain_failures.append(f"node {node_id!r} cannot depend on itself")
+            predecessor_map[node_id] = predecessors
+
+        for node_id, predecessors in predecessor_map.items():
+            unknown = sorted(set(predecessors) - set(nodes))
+            if unknown:
+                chain_failures.append(
+                    f"node {node_id!r} references unknown predecessor {unknown[0]!r}"
+                )
+            if not predecessors and str(nodes[node_id].get("kind", "")) not in DEPENDENCY_LEAF_KINDS | {"unresolved"}:
+                chain_failures.append(
+                    f"leaf node {node_id!r} must be a player-action, story-gate, automatic, or unresolved leaf"
+                )
+
+        terminal_ids = chain.get("terminal_node_ids")
+        if not isinstance(terminal_ids, list) or not terminal_ids or any(
+            not isinstance(row, str) for row in terminal_ids
+        ):
+            chain_failures.append("terminal_node_ids must be a nonempty list")
+            terminal_ids = []
+        for terminal_id in terminal_ids:
+            if terminal_id not in nodes:
+                chain_failures.append(f"terminal node {terminal_id!r} does not exist")
+            elif str(nodes[terminal_id].get("kind", "")) != "terminal":
+                chain_failures.append(f"terminal node {terminal_id!r} must have kind 'terminal'")
+
+        visiting: set[str] = set()
+        visited: set[str] = set()
+        cycle_found = False
+
+        def walk(node_id: str) -> None:
+            nonlocal cycle_found
+            if node_id in visiting:
+                cycle_found = True
+                return
+            if node_id in visited or node_id not in nodes:
+                return
+            visiting.add(node_id)
+            for predecessor_id in predecessor_map.get(node_id, []):
+                walk(predecessor_id)
+            visiting.remove(node_id)
+            visited.add(node_id)
+
+        for terminal_id in terminal_ids:
+            walk(terminal_id)
+        if cycle_found:
+            chain_failures.append("dependency graph contains a cycle")
+        unconnected = sorted(set(nodes) - visited)
+        if unconnected:
+            chain_failures.append(
+                f"node {unconnected[0]!r} is not connected to a declared terminal"
+            )
+
+        unresolved_ids = chain.get("unresolved_leaf_ids", [])
+        if not isinstance(unresolved_ids, list) or any(not isinstance(row, str) for row in unresolved_ids):
+            chain_failures.append("unresolved_leaf_ids must be a list")
+            unresolved_ids = []
+        actual_unresolved = {
+            node_id for node_id, node in nodes.items() if str(node.get("kind", "")) == "unresolved"
+        }
+        if set(unresolved_ids) != actual_unresolved:
+            chain_failures.append("unresolved_leaf_ids must exactly list every unresolved node")
+        if coverage_status == "complete" and unresolved_ids:
+            chain_failures.append("complete chains cannot contain unresolved leaves")
+
+        raw_invalidators = chain.get("invalidators")
+        if not isinstance(raw_invalidators, list):
+            chain_failures.append("invalidators must be a list")
+            raw_invalidators = []
+        for invalidator_index, raw_invalidator in enumerate(raw_invalidators):
+            invalidator = raw_invalidator if isinstance(raw_invalidator, dict) else {}
+            label = f"invalidators[{invalidator_index}]"
+            if str(invalidator.get("kind", "")).strip() not in RECRUITMENT_FAILURE_KINDS:
+                chain_failures.append(
+                    f"{label}.kind must be one of {sorted(RECRUITMENT_FAILURE_KINDS)}"
+                )
+            if not str(invalidator.get("text", "")).strip():
+                chain_failures.append(f"{label}.text must be nonempty")
+            invalidator_sources = invalidator.get("source_ids")
+            if not isinstance(invalidator_sources, list) or not invalidator_sources:
+                chain_failures.append(f"{label}.source_ids must be a nonempty list")
+            else:
+                unknown = sorted(set(invalidator_sources) - source_ids)
+                if unknown:
+                    chain_failures.append(f"{label} references unknown source {unknown[0]!r}")
+            invalidator_nodes = invalidator.get("node_ids")
+            if not isinstance(invalidator_nodes, list) or not invalidator_nodes:
+                chain_failures.append(f"{label}.node_ids must be a nonempty list")
+            else:
+                unknown = sorted(set(invalidator_nodes) - set(nodes))
+                if unknown:
+                    chain_failures.append(f"{label} references unknown node {unknown[0]!r}")
+
+        raw_carriers = chain.get("tracked_carriers")
+        if not isinstance(raw_carriers, list) or not raw_carriers:
+            chain_failures.append("tracked_carriers must be a nonempty list")
+            raw_carriers = []
+        seen_carriers: set[tuple[str, Any]] = set()
+        for carrier_index, raw_carrier in enumerate(raw_carriers):
+            carrier = raw_carrier if isinstance(raw_carrier, dict) else {}
+            label = f"tracked_carriers[{carrier_index}]"
+            kind = str(carrier.get("kind", "")).strip()
+            carrier_id = carrier.get("id")
+            if kind not in DEPENDENCY_CARRIER_KINDS:
+                chain_failures.append(
+                    f"{label}.kind must be one of {sorted(DEPENDENCY_CARRIER_KINDS)}"
+                )
+            if not isinstance(carrier_id, int) or isinstance(carrier_id, bool) or carrier_id < 1:
+                chain_failures.append(f"{label}.id must be a positive integer")
+            key = (kind, carrier_id)
+            if key in seen_carriers:
+                chain_failures.append(f"tracked carrier {kind} {carrier_id!r} is duplicated")
+            seen_carriers.add(key)
+            expected_sites = {
+                site_id
+                for site_id, site in index_sites.items()
+                if (
+                    site.get("carrier") == {"kind": kind, "id": carrier_id}
+                    or (
+                        isinstance(site.get("carrier"), dict)
+                        and site["carrier"].get("kind") == kind
+                        and isinstance(site["carrier"].get("start_id"), int)
+                        and isinstance(site["carrier"].get("end_id"), int)
+                        and site["carrier"]["start_id"] <= carrier_id <= site["carrier"]["end_id"]
+                    )
+                )
+            }
+            if not expected_sites:
+                chain_failures.append(f"tracked carrier {kind} {carrier_id!r} has no indexed sites")
+            classified_rows = carrier.get("classified_sites")
+            if not isinstance(classified_rows, list):
+                chain_failures.append(f"{label}.classified_sites must be a list")
+                classified_rows = []
+            if not classified_rows:
+                chain_failures.append(f"{label}.classified_sites must bind at least one indexed site")
+            classified_ids: list[str] = []
+            for classified_index, raw_classified in enumerate(classified_rows):
+                classified = raw_classified if isinstance(raw_classified, dict) else {}
+                site_id = str(classified.get("site_id", "")).strip()
+                classified_ids.append(site_id)
+                node_ids = classified.get("node_ids")
+                if not isinstance(node_ids, list) or not node_ids:
+                    chain_failures.append(
+                        f"{label}.classified_sites[{classified_index}].node_ids must be nonempty"
+                    )
+                elif sorted(set(node_ids) - set(nodes)):
+                    chain_failures.append(
+                        f"{label}.classified_sites[{classified_index}] references an unknown node"
+                    )
+            excluded_rows = carrier.get("excluded_sites")
+            if not isinstance(excluded_rows, list):
+                chain_failures.append(f"{label}.excluded_sites must be a list")
+                excluded_rows = []
+            excluded_ids: list[str] = []
+            for excluded_index, raw_excluded in enumerate(excluded_rows):
+                excluded = raw_excluded if isinstance(raw_excluded, dict) else {}
+                excluded_ids.append(str(excluded.get("site_id", "")).strip())
+                if len(str(excluded.get("reason", "")).strip()) < 12:
+                    chain_failures.append(
+                        f"{label}.excluded_sites[{excluded_index}].reason must explain the exclusion"
+                    )
+            accounted = classified_ids + excluded_ids
+            if len(accounted) != len(set(accounted)):
+                chain_failures.append(f"{label} classifies or excludes a site more than once")
+            unknown_sites = sorted(set(accounted) - expected_sites)
+            missing_sites = sorted(expected_sites - set(accounted))
+            if unknown_sites:
+                chain_failures.append(f"{label} references unrelated site {unknown_sites[0]!r}")
+            if missing_sites:
+                chain_failures.append(f"{label} leaves indexed site {missing_sites[0]!r} unclassified")
+
+        if chain_failures:
+            _issue(
+                issues,
+                "error",
+                "dependency-chain-invalid",
+                f"Dependency chain {chain_id!r} is invalid: {chain_failures[0]}",
+                chain_id=chain_id,
+                failures=chain_failures,
+            )
+        chain_results.append(
+            {
+                "id": chain_id,
+                "coverage_status": coverage_status,
+                "nodes": len(nodes),
+                "unresolved_leaves": len(unresolved_ids),
+                "failures": chain_failures,
+            }
+        )
+
+    required_chain_ids = raw.get("required_chain_ids")
+    if not isinstance(required_chain_ids, list) or not required_chain_ids or any(
+        not isinstance(row, str) for row in required_chain_ids
+    ):
+        failures.append("required_chain_ids must be a nonempty list")
+        required_chain_ids = []
+    if len(required_chain_ids) != len(set(required_chain_ids)):
+        failures.append("required_chain_ids contains duplicates")
+    missing_required = sorted(set(required_chain_ids) - set(chains))
+    if missing_required:
+        failures.append(f"required dependency chain {missing_required[0]!r} does not exist")
+    for chain_id in required_chain_ids:
+        if chain_id in chains and chains[chain_id].get("coverage_status") != "complete":
+            failures.append(f"required dependency chain {chain_id!r} is not complete")
+
+    raw_bindings = raw.get("bindings")
+    if not isinstance(raw_bindings, list) or not raw_bindings:
+        failures.append("bindings must be a nonempty list")
+        raw_bindings = []
+    binding_results: list[dict[str, str]] = []
+    bound_records: list[str] = []
+    for binding_index, raw_binding in enumerate(raw_bindings):
+        binding = raw_binding if isinstance(raw_binding, dict) else {}
+        guide_record_id = str(binding.get("guide_record_id", "")).strip()
+        chain_id = str(binding.get("chain_id", "")).strip()
+        if guide_record_id not in guide_record_ids:
+            failures.append(
+                f"bindings[{binding_index}] references unknown guide record {guide_record_id!r}"
+            )
+        if chain_id not in chains:
+            failures.append(f"bindings[{binding_index}] references unknown chain {chain_id!r}")
+        elif chains[chain_id].get("coverage_status") != "complete":
+            failures.append(
+                f"bindings[{binding_index}] cannot publish incomplete chain {chain_id!r}"
+            )
+        bound_records.append(guide_record_id)
+        binding_results.append({"guide_record_id": guide_record_id, "chain_id": chain_id})
+    if len(binding_results) != len({(row["guide_record_id"], row["chain_id"]) for row in binding_results}):
+        failures.append("bindings contains duplicate guide-record/chain pairs")
+    missing_companions = sorted(companion_entry_ids - set(bound_records))
+    if missing_companions:
+        failures.append(
+            f"companion recruitment {missing_companions[0]!r} has no complete dependency-chain binding"
+        )
+
+    if failures:
+        _issue(
+            issues,
+            "error",
+            "dependency-closure-invalid",
+            f"Dependency closure is invalid: {failures[0]}",
+            failures=failures,
+        )
+    return {
+        "artifact": artifact_name,
+        "index_artifact": index_name,
+        "chains": chain_results,
+        "bindings": binding_results,
+        "failures": failures,
+    }
+
+
 def _validate_publication(
     html_path: Path | None,
     claims: dict[str, dict[str, Any]],
@@ -4491,6 +4910,19 @@ def validate_project(
         all_source_ids,
         issues,
     )
+    dependency_closure = _validate_dependency_closure(
+        game_root,
+        evidence_path,
+        evidence,
+        set(claims) | set(optional_entries) | set(boss_entries) | set(scene_entries) | {"scenes-cg-system"},
+        {
+            entry_id
+            for entry_id, entry in optional_entries.items()
+            if entry.get("kind") == "companion-recruitment"
+        },
+        all_source_ids,
+        issues,
+    )
     publication = _validate_publication(
         html_path,
         claims,
@@ -4543,6 +4975,7 @@ def validate_project(
         "bosses": bosses,
         "scenes_cg": scenes_cg,
         "system_reconnaissance": system_reconnaissance,
+        "dependency_closure": dependency_closure,
         "project_context": project_context,
         "publication": publication,
     }

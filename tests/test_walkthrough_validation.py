@@ -226,6 +226,8 @@ class WalkthroughValidationTests(unittest.TestCase):
                                 "list": [
                                     {"code": 201, "indent": 0, "parameters": [0, 2, 8, 11, 2, 0]},
                                     {"code": 301, "indent": 0, "parameters": [0, 1, True, False]},
+                                    {"code": 121, "indent": 0, "parameters": [5, 5, 0]},
+                                    {"code": 111, "indent": 0, "parameters": [0, 5, 0]},
                                     {"code": 0, "indent": 0, "parameters": []},
                                 ],
                             }
@@ -377,8 +379,16 @@ class WalkthroughValidationTests(unittest.TestCase):
         self._write_json(
             evidence,
             {
-                "schema_version": 16,
+                "schema_version": 17,
                 "milestone": "complete-four-view-walkthrough",
+                "dependency_closure": {
+                    "artifact": "dependency-closure.json",
+                    "index_artifact": "state-dependency-index.json",
+                    "required_chain_ids": ["town-errand-chain"],
+                    "bindings": [
+                        {"guide_record_id": "town-errand", "chain_id": "town-errand-chain"}
+                    ],
+                },
                 "system_reconnaissance": {
                     "inventory_artifact": "systems-inventory.json",
                     "deep_audit_artifacts": ["route-graph.json"],
@@ -813,6 +823,60 @@ class WalkthroughValidationTests(unittest.TestCase):
                 ],
             },
         )
+        self._write_json(
+            work / "state-dependency-index.json",
+            walkthrough_validator.build_index(root),
+        )
+        self._write_json(
+            work / "dependency-closure.json",
+            {
+                "schema_version": 1,
+                "game": "Fixture",
+                "chains": [
+                    {
+                        "id": "town-errand-chain",
+                        "title": "Town Errand dependency chain",
+                        "coverage_status": "complete",
+                        "terminal_node_ids": ["town-errand-complete"],
+                        "nodes": [
+                            {
+                                "id": "leave-home",
+                                "kind": "player-action",
+                                "text": "Leave Home through the front door.",
+                                "source_ids": ["front-door-transfer"],
+                                "predecessor_ids": [],
+                            },
+                            {
+                                "id": "town-errand-complete",
+                                "kind": "terminal",
+                                "text": "Town Errand is available in Town.",
+                                "source_ids": ["town-errand-journal"],
+                                "predecessor_ids": ["leave-home"],
+                            },
+                        ],
+                        "invalidators": [],
+                        "unresolved_leaf_ids": [],
+                        "tracked_carriers": [
+                            {
+                                "kind": "switch",
+                                "id": 5,
+                                "classified_sites": [
+                                    {
+                                        "site_id": "map-001-event-001-page-000-command-0002-switch-0005",
+                                        "node_ids": ["town-errand-complete"],
+                                    },
+                                    {
+                                        "site_id": "map-001-event-001-page-000-command-0003-switch-0005",
+                                        "node_ids": ["town-errand-complete"],
+                                    },
+                                ],
+                                "excluded_sites": [],
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
         publication = root / "WALKTHROUGH.html"
         publication.write_text(self._html(), encoding="utf-8")
         return walkthrough, evidence, publication
@@ -1226,6 +1290,121 @@ class WalkthroughValidationTests(unittest.TestCase):
             self.assertEqual(report["status"], "failed")
             issue = next(row for row in report["issues"] if row["code"] == "optional-entry-invalid")
             self.assertIn("recruitment object", " ".join(issue["failures"]))
+
+    def test_companion_entry_requires_complete_dependency_chain_binding(self):
+        """Protect a verified recruit suffix from being published as a complete recruitment route."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            entry = manifest["optional_content"]["entries"][0]
+            entry["kind"] = "companion-recruitment"
+            entry["recruitment"] = {
+                "success_steps": [
+                    {
+                        "text": entry["guide_phrases"][0],
+                        "source_ids": ["town-errand-journal"],
+                    }
+                ],
+                "failure_modes": [
+                    {
+                        "kind": "retryable",
+                        "text": entry["guide_phrases"][0],
+                        "source_ids": ["town-errand-journal"],
+                    }
+                ],
+            }
+            manifest["dependency_closure"]["bindings"] = []
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "dependency-closure-invalid")
+            self.assertIn("companion recruitment", " ".join(issue["failures"]))
+
+    def test_complete_dependency_chain_rejects_unresolved_leaf(self):
+        """Protect coverage-complete claims from hiding an opaque or untraced prerequisite."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            closure_path = evidence.parent / "dependency-closure.json"
+            closure = json.loads(closure_path.read_text(encoding="utf-8"))
+            chain = closure["chains"][0]
+            chain["nodes"][0]["kind"] = "unresolved"
+            chain["unresolved_leaf_ids"] = [chain["nodes"][0]["id"]]
+            self._write_json(closure_path, closure)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "dependency-chain-invalid")
+            self.assertIn("complete chains cannot contain unresolved leaves", " ".join(issue["failures"]))
+
+    def test_tracked_carrier_requires_every_indexed_site_to_be_classified(self):
+        """Protect dependency reviews from silently ignoring another read or write of the same state carrier."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            closure_path = evidence.parent / "dependency-closure.json"
+            closure = json.loads(closure_path.read_text(encoding="utf-8"))
+            closure["chains"][0]["tracked_carriers"][0]["classified_sites"].pop()
+            self._write_json(closure_path, closure)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "dependency-chain-invalid")
+            self.assertIn("unclassified", " ".join(issue["failures"]))
+
+    def test_dependency_index_captures_state_and_flow_sites(self):
+        """Protect the reusable index from missing the branch, state, battle, and transfer primitives closures need."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self._build_project(root)
+
+            index = walkthrough_validator.build_index(root)
+
+            carrier_roles = {
+                (row["carrier"]["kind"], row["carrier"]["id"], row["role"])
+                for row in index["carrier_sites"]
+            }
+            flow_kinds = {row["kind"] for row in index["flow_sites"]}
+            self.assertIn(("switch", 5, "write"), carrier_roles)
+            self.assertIn(("switch", 5, "read"), carrier_roles)
+            self.assertTrue({"battle", "transfer"}.issubset(flow_kinds))
+
+    def test_dependency_index_can_focus_a_high_frequency_decisive_carrier(self):
+        """Protect complete closure audits from losing a decisive carrier to index compaction."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self._build_project(root)
+            map_path = root / "data" / "Map001.json"
+            map_data = json.loads(map_path.read_text(encoding="utf-8"))
+            commands = map_data["events"][1]["pages"][0]["list"]
+            commands[:0] = [
+                {"code": 121, "indent": 0, "parameters": [6, 6, 0]}
+                for _ in range(501)
+            ]
+            self._write_json(map_path, map_data)
+
+            compact = walkthrough_validator.build_index(root)
+            focused = walkthrough_validator.build_index(root, {("switch", 6)})
+
+            self.assertIn(
+                {"kind": "switch", "id": 6, "site_count": 501},
+                compact["omitted_high_frequency_carriers"],
+            )
+            self.assertFalse(
+                any(row["carrier"] == {"kind": "switch", "id": 6} for row in compact["carrier_sites"])
+            )
+            self.assertEqual(
+                501,
+                sum(
+                    row["carrier"] == {"kind": "switch", "id": 6}
+                    for row in focused["carrier_sites"]
+                ),
+            )
 
     def test_deep_audit_required_topic_must_bind_guide_and_source_records(self):
         """Protect selected deep audits from being marked complete without player-facing coverage."""

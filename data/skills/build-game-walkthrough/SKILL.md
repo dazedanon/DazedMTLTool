@@ -66,6 +66,14 @@ Do a bounded reconnaissance pass before choosing system-specific research. Do no
 7. Convert every applicable gap check into explicit `required_topics` under the affected deep-audit system. A topic names the player-facing outcome that must be covered—such as a vehicle milestone, recruit, danger band, special mechanic, shop tier, or slot increase—not merely the file or plugin inspected. Bind each topic to the guide record IDs and evidence source IDs that cover it through `system_reconnaissance.coverage` in `evidence.json`. If an authoritative roster or progression chain has an uncovered topic, research is incomplete.
 8. Save `systems-inventory.json` in the private walkthrough work area. For each candidate record its source/configuration signal, active-use proof, player-facing entry point if any, affected views, decision, required topics when deep-audited, and the focused artifacts produced by that audit.
 
+## Prove long-chain coverage, not only individual facts
+
+After reconnaissance and before drafting, build a deterministic state/dependency index for engines with structured event data. For RPG Maker MV/MZ, run `scripts/index_rpgmaker_dependencies.py` and save `state-dependency-index.json` plus its companion `state-dependency-index-flows.json` beside the evidence ledger. Use both as search surfaces, not as an automatic story solver: scripts and plugin commands are opaque until a focused audit explains them. The compact carrier index summarizes extremely high-frequency system carriers instead of expanding every site; when a decisive carrier appears in that summary, rerun with one or more `--include-carrier KIND:ID` arguments so that carrier's complete site set is preserved before claiming complete coverage.
+
+Create `dependency-closure.json` for every recruitment/support route and every other long chain whose omitted prefix, intermediate branch, item loss, alternate battle outcome, capture, transfer, or story gate would materially mislead the player. Work backward from the actual terminal outcome. Recursively resolve every condition into the writes that satisfy or invalidate it, then continue through choices, victory/defeat/escape branches, common events, required item gains/removals, and player-visible actions. Classify every indexed use of each decisive switch, variable, item, weapon, or armor into the chain or exclude it with a concrete reviewed reason.
+
+Keep `verified` and `coverage complete` separate. A source snapshot can verify one true suffix without proving the route begins there. Mark a closure complete only when every backward leaf is a concrete player action, a source-backed story gate, or an automatic setup fact and no opaque dependency remains. Otherwise record an unresolved leaf, keep the chain partial, and do not bind it to a completed player-facing route. Follow the exact schema and validation rules in [`references/validation-evidence.md`](references/validation-evidence.md).
+
 ## Inventory Optional Content before writing it
 
 Do not assume that a game's visible quest menu is the whole optional catalog. Perform a repeatable discovery pass that can transfer to other games and engines:
@@ -81,7 +89,7 @@ Start with a broad category checklist: named side quests and quest chains; optio
 7. Reconcile the configured inventory with the event-write inventory. Investigate configured entries with no reachable activation, state variables reused by test maps, active events with no journal record, and duplicate or stale translated titles. Exclude development/test content only after proving it is unreachable or superseded.
 8. Save a compact inventory in the private walkthrough work area with each entry's canonical title, category, state carrier, start source, update sources, completion source, dependencies, first Main Route anchor, whether its link belongs before or after that step, the preceding blocked state, and fixed outcomes. Treat missing major lifecycle or availability evidence as a blocker for publishing that entry.
 
-For every companion recruitment or finale-support entry, publish a compact failure analysis alongside the successful route. Distinguish choices that only postpone acceptance from permanent lockouts, distinguish completing a personal quest from setting the actual recruit/support flag, and name the last player-visible opportunity before the route closes. If the game has no failure path, say so only after proving that the route remains retryable or automatic. Record this as the entry's source-bound `recruitment` object instead of hiding it in research notes.
+For every companion recruitment or finale-support entry, publish a compact failure analysis alongside the successful route and bind the entry to its complete dependency closure. Distinguish choices that only postpone acceptance from permanent lockouts, distinguish completing a personal quest from setting the actual recruit/support flag, and name the last player-visible opportunity before the route closes. Include scripted captures, deliberate losses, escape branches, conversations while captive, prerequisite rescues, required item custody, and later re-entry only when the current game's closure exposes them; do not assume a universal recruitment pattern. If the game has no failure path, say so only after proving that the route remains retryable or automatic. Record this as the entry's source-bound `recruitment` object instead of hiding it in research notes.
 
 Aim to capture all major actionable content through static analysis. A player may still need to adjust their local movement inside a map when exact geometry is not provable, but they should not have to discover the quest chain, prerequisite, destination, required item, completion interaction, or meaningful reward on their own.
 
@@ -219,6 +227,9 @@ Preserve the game and all user-authored files. Keep working files under `<game>/
 - `evidence.json` — source snapshots, route-claim ledger, optional dependency graph, boss dossiers, scene catalog, and view bindings.
 - `route-graph.json` — maps/events and progression edges used during research.
 - `systems-inventory.json` — bounded inventory of installed candidates, active-use proof, view relevance, and deep-audit/trace/ignore decisions.
+- `state-dependency-index.json` — deterministic structured state reads and writes, source-file hashes, and summaries of extremely high-frequency carriers.
+- `state-dependency-index-flows.json` — deterministic choices, battles, transfers, common-event calls, and opaque script/plugin-command discovery sites kept separate from the carrier index for scalable review.
+- `dependency-closure.json` — source-bound complete/partial graphs for recruitments and other high-risk long chains, including failure paths and full decisive-carrier accounting.
 - `boss-inventory.json` — private reconciliation of configured boss systems, reachable encounters, forms, classifications, and guide bindings.
 - `scene-inventory.json` — private reconciliation of catalog slots, live triggers, requirements, unlock state, aliases, viewer references, illustrated-set counts, bindings, and exclusions.
 - `project-context.md` — the completed-view subset of authoritative glossary identities, spellings, and quirks used during writing.
@@ -259,6 +270,7 @@ Also verify manually:
 - Every character name, pronoun, relationship, location name, and fixed term agrees with the snapshotted glossary and quirks.
 - Every route transfer, gate, mandatory battle, useful pickup, and branch outcome is backed by the cited sources.
 - Every system used to support a published claim is marked active in `systems-inventory.json`; every deep audit is bounded to a completed-view need, and installed-but-unused systems are not treated as game mechanics.
+- Every companion recruitment and other required high-risk chain is bound to a complete dependency closure; no complete closure has an unresolved leaf, and every indexed use of its decisive carriers is classified or explicitly excluded after review.
 - All four tabs work with mouse, touch, keyboard, direct hashes, Back, and Forward.
 - Search activates the destination's owning view before scrolling to it.
 - Completed views contain no dead cross-links, raw coordinates, or developer identifiers.

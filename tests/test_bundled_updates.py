@@ -39,6 +39,7 @@ _SHIPPED_DATA_FILES = (
     "data/skills/build-game-walkthrough/assets/walkthrough-shell.html",
     "data/skills/build-game-walkthrough/references/validation-evidence.md",
     "data/skills/build-game-walkthrough/references/walkthrough-design.md",
+    "data/skills/build-game-walkthrough/scripts/index_rpgmaker_dependencies.py",
     "data/skills/build-game-walkthrough/scripts/validate_walkthrough.py",
     "data/help/index.json",
     "data/help/00-welcome.md",
