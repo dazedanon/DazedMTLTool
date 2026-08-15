@@ -8,10 +8,12 @@
   MAIN_ROUTE_HTML: source-backed .route-chapter groups containing .route-section sections and validated .route-step articles.
   OPTIONAL_CONTENT_HTML: source-backed .optional-group sections containing validated .optional-entry articles.
   BOSSES_HTML: source-backed .boss-group sections containing validated .boss-entry dossiers.
+  SCENES_CG_HTML: source-backed .scene-group sections containing validated .scene-entry articles.
   Every .route-step must contain one .task-checkbox whose data-task-id equals
   the article's data-claim-id so checklist state remains stable after rerenders.
   Every .optional-entry follows the same rule using its data-optional-id.
   Every .boss-entry follows the same rule using its data-boss-id.
+  Every .scene-entry follows the same rule using its data-scene-id.
 -->
 <html lang="en">
 <head>
@@ -184,6 +186,35 @@
     .boss-tools li { padding-left: .15rem; }
     .access-label { display: block; margin-bottom: .12rem; color: var(--accent-ink); font-size: .72rem; font-weight: 760; letter-spacing: .035em; text-transform: uppercase; }
     .boss-links { margin: .9rem 0; color: var(--muted); font-size: .9rem; }
+    .scenes-hero { position: relative; overflow: hidden; margin-bottom: 2.4rem; padding: clamp(1.8rem,5vw,3.4rem); border: 1px solid var(--line); border-radius: var(--radius); background: radial-gradient(circle at 88% 0,color-mix(in srgb,var(--choice) 18%,transparent),transparent 18rem),radial-gradient(circle at 8% 100%,color-mix(in srgb,var(--accent) 15%,transparent),transparent 21rem),var(--surface-solid); box-shadow: var(--shadow); }
+    .scenes-hero h1 { margin: .4rem 0 .7rem; font: 700 clamp(2.4rem,6vw,4.6rem)/1 var(--font-display); letter-spacing: -.04em; }
+    .scenes-hero > p { max-width: 46rem; color: var(--muted); }
+    .scene-stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .65rem; max-width: 34rem; margin-top: 1.4rem; }
+    .scene-stat { padding: .8rem .9rem; border: 1px solid var(--line); border-radius: .78rem; background: var(--surface); }
+    .scene-stat strong { display: block; color: var(--choice); font: 720 1.4rem/1 var(--font-display); }
+    .scene-stat span { color: var(--muted); font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; }
+    .scene-system { margin: 1.4rem 0 4rem; padding: clamp(1.15rem,3vw,1.75rem); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-soft); }
+    .scene-system > h2 { margin: 0 0 1rem; padding: 0; border: 0; font-size: clamp(1.6rem,4vw,2.2rem); }
+    .scene-system-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; }
+    .scene-system-grid > div { padding: .9rem 1rem; border-left: .22rem solid var(--choice); background: var(--choice-soft); }
+    .scene-system-grid h3 { margin: 0 0 .35rem; color: var(--ink); font: 720 1rem/1.25 var(--font-display); }
+    .scene-system-grid p { margin: 0; color: var(--muted); font-size: .92rem; }
+    .scene-group { margin-top: 4.75rem; }
+    .scene-group-head { padding-top: 1.5rem; border-top: .18rem solid var(--choice); }
+    .scene-group-head h2 { margin: .35rem 0 .7rem; padding-top: 0; border-top: 0; }
+    .scene-group-head > p { max-width: 45rem; color: var(--muted); }
+    .scene-route-link { font-size: .86rem; }
+    .scene-entry { margin: 1.25rem 0; padding: 1.1rem 0 1.4rem; border-bottom: 1px solid var(--line); }
+    .scene-entry h3 { margin: .3rem 0 .55rem; color: var(--ink); }
+    .scene-meta { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .scene-meta span { padding: .25rem .52rem; border: 1px solid var(--line); border-radius: 999px; background: var(--choice-soft); font-size: .71rem; font-weight: 720; }
+    .scene-meta span:nth-child(2) { background: var(--accent-soft); }
+    .scene-meta span:nth-child(3) { background: var(--gold-soft); }
+    .scene-requirements { margin: .85rem 0; padding: .8rem 1rem; border-left: .22rem solid var(--choice); background: color-mix(in srgb,var(--choice-soft) 68%,transparent); }
+    .scene-requirements h4 { margin: 0 0 .35rem; color: var(--ink); font: 760 .7rem/1.25 var(--font-body); letter-spacing: .08em; text-transform: uppercase; }
+    .scene-requirements ul { margin: .35rem 0 0; padding-left: 1.15rem; }
+    .scene-requirements li { margin: .32rem 0; }
+    .scene-alias { color: var(--muted); font-size: .85rem; }
     .task-row { display: inline-flex; align-items: center; gap: .65rem; min-height: 2.75rem; margin: .65rem 0 0; color: var(--muted); cursor: pointer; }
     .task-checkbox { width: 1.15rem; height: 1.15rem; margin: 0; accent-color: var(--accent-ink); cursor: pointer; }
     .task-row:has(.task-checkbox:checked) { color: var(--accent-ink); text-decoration: line-through; text-decoration-thickness: .08em; }
@@ -192,6 +223,7 @@
     .callout[data-callout="optional"] { border-left-color: var(--gold); background: var(--gold-soft); }
     .callout[data-callout="choice"] { border-left-color: var(--choice); background: var(--choice-soft); }
     .callout[data-callout="pickup"] { border-left-color: var(--accent); background: var(--accent-soft); }
+    .callout[data-callout="scenes"] { border-left-color: var(--choice); background: var(--choice-soft); }
     details { margin: 1.35rem 0; border: 1px solid var(--line-strong); border-radius: .85rem; background: var(--surface-solid); box-shadow: var(--shadow-soft); }
     summary { position: relative; padding: 1rem 3rem 1rem 1.1rem; cursor: pointer; font-weight: 720; list-style: none; }
     summary::-webkit-details-marker { display: none; }
@@ -232,6 +264,7 @@
     }
     @media (max-width: 48rem) {
       .boss-guidance { grid-template-columns: 1fr; }
+      .scene-system-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 42rem) {
       :root { --topbar: 3.8rem; }
@@ -242,6 +275,7 @@
       .hero { padding: 1.5rem 1.2rem; border-radius: 1rem; }
       .hero h1 { max-width: none; font-size: clamp(2rem,10.5vw,3rem); }
       .hero-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .scene-stats { grid-template-columns: 1fr; }
       .search-trigger kbd { display: none; }
     }
     @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
@@ -306,8 +340,8 @@
       <section class="guide-view" id="view-bosses" data-view="bosses" role="tabpanel" aria-labelledby="tab-bosses">
         {{BOSSES_HTML}}
       </section>
-      <section class="guide-view" id="view-scenes-cg" data-view="scenes-cg" data-placeholder="true" role="tabpanel" aria-labelledby="tab-scenes-cg">
-        <div class="placeholder"><div class="eyebrow">Future milestone</div><h1>Scenes &amp; CG</h1><p>The scene and CG catalog will be added in a later milestone.</p><a href="#view-main-route">Return to Main Route</a></div>
+      <section class="guide-view" id="view-scenes-cg" data-view="scenes-cg" role="tabpanel" aria-labelledby="tab-scenes-cg">
+        {{SCENES_CG_HTML}}
       </section>
       <footer class="page-footer">Generated from translated game data · {{GAME_TITLE}}</footer>
     </article>
@@ -354,11 +388,14 @@
       if (!panels.some(panel => panel.dataset.view === view)) view = 'main-route';
       activeView = view;
       panels.forEach(panel => { panel.hidden = panel.dataset.view !== view; });
+      let selectedTab = null;
       tabs.forEach(tab => {
         const selected = tab.dataset.viewTarget === view;
         tab.setAttribute('aria-selected', String(selected));
         tab.tabIndex = selected ? 0 : -1;
+        if (selected) selectedTab = tab;
       });
+      selectedTab?.scrollIntoView({ block: 'nearest', inline: 'center' });
       rebuildNav();
       locationLabel.textContent = tabs.find(tab => tab.dataset.viewTarget === view)?.textContent.trim() || 'Main Route';
       store.set('active-view', view);
@@ -437,7 +474,7 @@
     const dialog = document.getElementById('search-dialog');
     const searchInput = document.getElementById('search-input');
     const results = document.getElementById('search-results');
-    const searchRows = [...document.querySelectorAll('.guide-view:not([data-placeholder="true"]) h2[id],.guide-view:not([data-placeholder="true"]) h3[id],.route-step p,.optional-entry p,.boss-entry p,.boss-entry li')].map(node => ({ node: node.closest('.route-step,.optional-entry,.boss-entry') || node, text: node.textContent.replace(/\s+/g, ' ').trim(), view: viewForTarget(node) }));
+    const searchRows = [...document.querySelectorAll('.guide-view:not([data-placeholder="true"]) h2[id],.guide-view:not([data-placeholder="true"]) h3[id],.route-step p,.optional-entry p,.boss-entry p,.boss-entry li,.scene-entry p,.scene-entry li')].map(node => ({ node: node.closest('.route-step,.optional-entry,.boss-entry,.scene-entry') || node, text: node.textContent.replace(/\s+/g, ' ').trim(), view: viewForTarget(node) }));
     function escapeHtml(value) { return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]); }
     function search() { const query = searchInput.value.trim().toLocaleLowerCase(); const matches = query.length < 2 ? [] : searchRows.filter(row => row.text.toLocaleLowerCase().includes(query)).slice(0, 40); results.innerHTML = matches.length ? matches.map((row, index) => `<button class="search-result" type="button" data-result="${index}">${escapeHtml(row.text)}<small>${escapeHtml(row.view)}</small></button>`).join('') : '<p>Type at least two characters or try another search.</p>'; results.querySelectorAll('[data-result]').forEach(button => button.addEventListener('click', () => { const row = matches[Number(button.dataset.result)]; dialog.close(); navigateTo(row.node); })); }
     function openSearch() { dialog.showModal(); searchInput.value = ''; search(); requestAnimationFrame(() => searchInput.focus()); }

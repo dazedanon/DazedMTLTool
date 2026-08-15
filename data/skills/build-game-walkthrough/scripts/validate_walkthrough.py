@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Main Route, Optional Content, and Bosses walkthrough publication."""
+"""Validate the complete four-view walkthrough publication."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 10
-MILESTONE = "main-route-optional-content-and-bosses"
+SCHEMA_VERSION = 12
+MILESTONE = "complete-four-view-walkthrough"
 PROJECT_CONTEXT_FILES = {
     "glossary": ".dazedtl/glossary.txt",
     "quirks": ".dazedtl/skills/quirks.md",
@@ -26,8 +26,8 @@ REQUIRED_VIEWS = {
     "bosses": "view-bosses",
     "scenes-cg": "view-scenes-cg",
 }
-COMPLETE_VIEWS = {"main-route", "optional-content", "bosses"}
-PLACEHOLDER_VIEWS = {"scenes-cg"}
+COMPLETE_VIEWS = set(REQUIRED_VIEWS)
+PLACEHOLDER_VIEWS: set[str] = set()
 REQUIRED_HOOKS = {
     "topbar",
     "topbar-location",
@@ -55,6 +55,16 @@ OPTIONAL_KINDS = {
     "side-event",
 }
 BOSS_KINDS = {"story-boss", "side-boss", "apex-monster"}
+SCENE_KINDS = {
+    "character-scene",
+    "defeat-scene",
+    "encounter-scene",
+    "gallery-entry",
+    "other-scene",
+    "relationship-scene",
+    "story-scene",
+}
+SCENE_ACQUISITION_MODES = {"normal-play", "gallery-only"}
 ROUTE_ANCHOR_POSITIONS = {"before", "after"}
 ROUTE_STRUCTURE_MODES = {"chapters-and-sections", "sections"}
 SOURCE_TYPES = {"event-command", "database-record", "file-excerpt", "file-hash"}
@@ -80,6 +90,12 @@ BOSS_GROUP_MARKER_RE = re.compile(
 BOSS_ENTRY_MARKER_RE = re.compile(
     r"<!--\s*boss-entry:(?P<id>[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\s*-->"
 )
+SCENE_GROUP_MARKER_RE = re.compile(
+    r"<!--\s*scene-group:(?P<id>[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\s*-->"
+)
+SCENE_ENTRY_MARKER_RE = re.compile(
+    r"<!--\s*scene-entry:(?P<id>[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\s*-->"
+)
 INTERNAL_LOCATOR_PATTERNS = (
     re.compile(r"\bMap\d{3,}\b", re.IGNORECASE),
     re.compile(
@@ -95,6 +111,10 @@ MECHANICAL_PROGRESSION_PATTERNS = (
     re.compile(r"\b(?:route|story|objective|opening|progression) state\b", re.IGNORECASE),
     re.compile(r"\b(?:shared )?(?:completion|progression) process\b", re.IGNORECASE),
     re.compile(r"\bthe event (?:advances|sets|calls|enables)\b", re.IGNORECASE),
+)
+ENGINE_CONTROL_CODE_RE = re.compile(
+    r"\\(?:C|I|FS|PX|PY|OW|OC|V|N|P)\s*\[[^\]\r\n]*\]",
+    re.IGNORECASE,
 )
 VOID_ELEMENTS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 GLOSSARY_GENDER_RE = re.compile(
@@ -508,6 +528,15 @@ def _validate_source(game_root: Path, source: dict[str, Any]) -> list[str]:
 
 def _validate_player_copy(text: str, label: str, issues: list[dict[str, Any]]) -> None:
     without_comments = re.sub(r"<!--.*?-->", " ", text, flags=re.DOTALL)
+    control_code = ENGINE_CONTROL_CODE_RE.search(without_comments)
+    if control_code:
+        _issue(
+            issues,
+            "error",
+            "engine-control-code-in-player-copy",
+            f"{label} contains engine control code {control_code.group(0)!r} outside an Evidence disclosure.",
+            control_code=control_code.group(0),
+        )
     for pattern in INTERNAL_LOCATOR_PATTERNS:
         match = pattern.search(without_comments)
         if match:
@@ -1555,6 +1584,445 @@ def _validate_bosses(
     }
 
 
+def _validate_scene_source_roles(
+    roles: Any,
+    required_roles: set[str],
+    local_source_ids: set[str],
+    failures: list[str],
+    *,
+    cg_image_count: int | None = None,
+) -> None:
+    if not isinstance(roles, dict):
+        failures.append("source_roles must be an object")
+        return
+    missing_roles = sorted(required_roles - set(roles))
+    if missing_roles:
+        failures.append(f"source_roles is missing required roles {missing_roles}")
+    for role, source_ids in roles.items():
+        if (
+            not isinstance(role, str)
+            or not role
+            or not isinstance(source_ids, list)
+            or not source_ids
+            or any(not isinstance(source_id, str) or not source_id for source_id in source_ids)
+        ):
+            failures.append(f"source_roles.{role} must contain one or more source ids")
+            continue
+        unknown = sorted(set(source_ids) - local_source_ids)
+        if unknown:
+            failures.append(f"source_roles.{role} cites unknown source ids {unknown}")
+    if cg_image_count is not None and isinstance(roles.get("cg_viewer"), list):
+        if len(roles["cg_viewer"]) != cg_image_count:
+            failures.append("source_roles.cg_viewer must cite exactly one source per illustrated set")
+
+
+def _scene_source_locator(source: dict[str, Any]) -> tuple[Any, ...]:
+    """Return the executable locator used to distinguish live play from a catalog surface."""
+    source_type = str(source.get("type", ""))
+    base: tuple[Any, ...] = (source_type, str(source.get("file", "")))
+    if source_type == "event-command":
+        return base + (
+            source.get("event_id"),
+            source.get("page_index"),
+            source.get("command_index"),
+        )
+    if source_type == "database-record":
+        return base + (source.get("record_id"),)
+    if source_type == "file-excerpt":
+        return base + (source.get("contains"),)
+    if source_type == "file-hash":
+        return base + (source.get("sha256"),)
+    return base
+
+
+def _validate_scenes_cg(
+    game_root: Path,
+    markdown: str,
+    evidence: dict[str, Any],
+    claims: dict[str, dict[str, Any]],
+    optional_entries: dict[str, dict[str, Any]],
+    boss_entries: dict[str, dict[str, Any]],
+    all_source_ids: set[str],
+    issues: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], dict[str, Any], dict[str, Any]]:
+    raw = evidence.get("scenes_cg")
+    if not isinstance(raw, dict):
+        _issue(issues, "error", "scenes-cg-missing", "evidence.json must define the completed Scenes & CG catalog.")
+        return {}, {}, {}, {"source_label": "", "catalog": {}, "groups": [], "entries": []}
+
+    source_label = str(raw.get("source_label", "")).strip()
+    if not source_label:
+        _issue(issues, "error", "scenes-cg-label-missing", "scenes_cg.source_label is required.")
+    normalized_markdown = _normalize(markdown)
+    reserved_ids = set(claims) | set(optional_entries) | set(boss_entries)
+
+    catalog_raw = raw.get("catalog")
+    catalog = catalog_raw if isinstance(catalog_raw, dict) else {}
+    catalog_failures: list[str] = []
+    catalog_id = str(catalog.get("id", "")).strip()
+    if catalog_id != "scenes-cg-system":
+        catalog_failures.append("catalog.id must be 'scenes-cg-system'")
+    title = str(catalog.get("title", "")).strip()
+    if not title:
+        catalog_failures.append("catalog.title must be nonempty")
+    entry_count = catalog.get("entry_count")
+    cg_total = catalog.get("cg_image_count")
+    if not isinstance(entry_count, int) or entry_count <= 0:
+        catalog_failures.append("catalog.entry_count must be a positive integer")
+    if not isinstance(cg_total, int) or cg_total < 0:
+        catalog_failures.append("catalog.cg_image_count must be a nonnegative integer")
+    catalog_phrases = catalog.get("guide_phrases")
+    if not isinstance(catalog_phrases, list) or not catalog_phrases or any(
+        not isinstance(row, str) or not row.strip() for row in catalog_phrases
+    ):
+        catalog_failures.append("catalog.guide_phrases must contain nonempty player-facing text")
+        catalog_phrases = []
+    for phrase in catalog_phrases:
+        if _normalize(phrase) not in normalized_markdown:
+            catalog_failures.append(f"catalog guide phrase is missing from Markdown: {phrase!r}")
+    completion_shortcut = str(catalog.get("completion_shortcut", "")).strip()
+    if completion_shortcut:
+        if completion_shortcut not in catalog_phrases:
+            catalog_failures.append("catalog.completion_shortcut must also be one exact catalog guide phrase")
+        if _normalize(completion_shortcut) not in normalized_markdown:
+            catalog_failures.append("catalog.completion_shortcut is missing from Markdown")
+    interface_files = catalog.get("interface_files")
+    if not isinstance(interface_files, list) or not interface_files or any(
+        not isinstance(row, str) or not row.strip() for row in interface_files
+    ):
+        catalog_failures.append("catalog.interface_files must list the dedicated catalog/recollection interface files")
+        interface_files = []
+    elif len(set(interface_files)) != len(interface_files):
+        catalog_failures.append("catalog.interface_files must not contain duplicates")
+    for interface_file in interface_files:
+        _path, failure = _project_file(game_root, interface_file)
+        if failure:
+            catalog_failures.append(f"catalog.interface_files entry {interface_file!r}: {failure}")
+    catalog_sources = catalog.get("sources")
+    if not isinstance(catalog_sources, list) or not catalog_sources:
+        catalog_failures.append("catalog.sources must prove its player-facing entry point and scope boundary")
+        catalog_sources = []
+    catalog_source_results: list[dict[str, Any]] = []
+    catalog_source_ids: set[str] = set()
+    for raw_source in catalog_sources:
+        source = raw_source if isinstance(raw_source, dict) else {}
+        source_id = str(source.get("id", "")).strip()
+        if source_id in catalog_source_ids or source_id in all_source_ids:
+            catalog_failures.append(f"source id {source_id!r} must be globally unique")
+        catalog_source_ids.add(source_id)
+        all_source_ids.add(source_id)
+        source_failures = _validate_source(game_root, source)
+        catalog_failures.extend(f"source {source_id or '<unnamed>'}: {failure}" for failure in source_failures)
+        catalog_source_results.append({"id": source_id, "failures": source_failures})
+    required_catalog_roles = {"entry_point", "scope_boundary"}
+    if completion_shortcut:
+        required_catalog_roles.add("completion_shortcut")
+    _validate_scene_source_roles(
+        catalog.get("source_roles"),
+        required_catalog_roles,
+        catalog_source_ids,
+        catalog_failures,
+    )
+    catalog_source_locators = {
+        _scene_source_locator(source)
+        for source in catalog_sources
+        if isinstance(source, dict)
+    }
+    if catalog_failures:
+        _issue(
+            issues,
+            "error",
+            "scenes-cg-catalog-invalid",
+            f"Scenes & CG catalog metadata is invalid: {catalog_failures[0]}",
+            failures=catalog_failures,
+        )
+
+    entry_rows = raw.get("entries")
+    if not isinstance(entry_rows, list) or not entry_rows:
+        _issue(issues, "error", "scene-entries-missing", "scenes_cg.entries must not be empty.")
+        entry_rows = []
+    entry_markers = Counter(match.group("id") for match in SCENE_ENTRY_MARKER_RE.finditer(markdown))
+    entries: dict[str, dict[str, Any]] = {}
+    entry_results: list[dict[str, Any]] = []
+    for index, raw_entry in enumerate(entry_rows):
+        entry = raw_entry if isinstance(raw_entry, dict) else {}
+        entry_id = str(entry.get("id", "")).strip()
+        title = str(entry.get("title", "")).strip()
+        failures: list[str] = []
+        if not ID_RE.fullmatch(entry_id):
+            failures.append("id must be a nonempty kebab-case identifier")
+            entry_id = entry_id or f"invalid-scene-entry-{index + 1}"
+        if entry_id in entries:
+            failures.append("scene id is duplicated")
+        if entry_id in reserved_ids:
+            failures.append("scene id must be globally unique from route, optional, and boss entry ids")
+        entries[entry_id] = entry
+        if not title:
+            failures.append("title must be nonempty")
+        elif _normalize(title) not in normalized_markdown:
+            failures.append(f"title is missing from Markdown: {title!r}")
+        kind = str(entry.get("kind", "")).strip()
+        if kind not in SCENE_KINDS:
+            failures.append(f"kind must be one of {sorted(SCENE_KINDS)}")
+        status = str(entry.get("status", "")).strip()
+        if status not in CLAIM_STATUSES:
+            failures.append(f"status must be one of {sorted(CLAIM_STATUSES)}")
+        if entry_markers.get(entry_id, 0) != 1:
+            failures.append(
+                f"Markdown must contain exactly one scene-entry marker; observed {entry_markers.get(entry_id, 0)}"
+            )
+        requirements = entry.get("requirements")
+        if not isinstance(requirements, list) or not requirements or any(
+            not isinstance(row, str) or not row.strip() for row in requirements
+        ):
+            failures.append("requirements must contain player-visible unlock requirements")
+            requirements = []
+        acquisition_mode = str(entry.get("acquisition_mode", "")).strip()
+        if acquisition_mode not in SCENE_ACQUISITION_MODES:
+            failures.append(f"acquisition_mode must be one of {sorted(SCENE_ACQUISITION_MODES)}")
+        acquisition_steps = entry.get("acquisition_steps")
+        if not isinstance(acquisition_steps, list) or not acquisition_steps or any(
+            not isinstance(row, str) or not row.strip() for row in acquisition_steps
+        ):
+            failures.append("acquisition_steps must contain the actionable normal-play path or a proven gallery-only explanation")
+            acquisition_steps = []
+        aliases = entry.get("aliases")
+        if not isinstance(aliases, list) or any(not isinstance(row, str) or not row.strip() for row in aliases):
+            failures.append("aliases must be a list of nonempty trigger-title aliases")
+        viewer_mode = str(entry.get("viewer_mode", "")).strip()
+        if not ID_RE.fullmatch(viewer_mode):
+            failures.append("viewer_mode must be a nonempty kebab-case description")
+        cg_image_count = entry.get("cg_image_count")
+        if not isinstance(cg_image_count, int) or cg_image_count < 0:
+            failures.append("cg_image_count must be a nonnegative integer")
+            cg_image_count = 0
+        phrases = entry.get("guide_phrases")
+        if not isinstance(phrases, list) or not phrases or any(
+            not isinstance(row, str) or not row.strip() for row in phrases
+        ):
+            failures.append("guide_phrases must contain nonempty player-facing text")
+            phrases = []
+        for phrase in phrases:
+            if _normalize(phrase) not in normalized_markdown:
+                failures.append(f"guide phrase is missing from Markdown: {phrase!r}")
+        sources = entry.get("sources")
+        if not isinstance(sources, list) or not sources:
+            failures.append("sources must prove requirements, title, live trigger, unlock, replay/viewer dispatch, and illustrated-set coverage")
+            sources = []
+        local_source_ids: set[str] = set()
+        local_sources: dict[str, dict[str, Any]] = {}
+        source_results: list[dict[str, Any]] = []
+        for raw_source in sources:
+            source = raw_source if isinstance(raw_source, dict) else {}
+            source_id = str(source.get("id", "")).strip()
+            if source_id in local_source_ids or source_id in all_source_ids:
+                failures.append(f"source id {source_id!r} must be globally unique")
+            local_source_ids.add(source_id)
+            local_sources[source_id] = source
+            all_source_ids.add(source_id)
+            source_failures = _validate_source(game_root, source)
+            failures.extend(f"source {source_id or '<unnamed>'}: {failure}" for failure in source_failures)
+            source_results.append({"id": source_id, "failures": source_failures})
+        required_source_roles = {"requirements", "replay_title", "replay_call"}
+        if acquisition_mode == "normal-play":
+            required_source_roles.update({"normal_acquisition", "live_trigger", "live_completion"})
+        elif acquisition_mode == "gallery-only":
+            required_source_roles.add("gallery_access")
+            if kind != "gallery-entry":
+                failures.append("gallery-only acquisition requires kind 'gallery-entry'")
+        if cg_image_count > 0:
+            required_source_roles.add("cg_viewer")
+        _validate_scene_source_roles(
+            entry.get("source_roles"),
+            required_source_roles,
+            local_source_ids,
+            failures,
+            cg_image_count=cg_image_count,
+        )
+        roles = entry.get("source_roles") if isinstance(entry.get("source_roles"), dict) else {}
+        if acquisition_mode == "normal-play":
+            live_roles = ["normal_acquisition", "live_trigger", "live_completion"]
+            if "unlock" in roles:
+                live_roles.append("unlock")
+            for role in live_roles:
+                role_sources = [
+                    local_sources[source_id]
+                    for source_id in roles.get(role, [])
+                    if source_id in local_sources
+                ]
+                if role_sources and not any(
+                    str(source.get("file", "")) not in interface_files
+                    and _scene_source_locator(source) not in catalog_source_locators
+                    for source in role_sources
+                ):
+                    failures.append(
+                        f"source_roles.{role} must include evidence from normal play outside the catalog/recollection interface"
+                    )
+        elif acquisition_mode == "gallery-only" and any(
+            role in roles for role in ("normal_acquisition", "live_trigger", "live_completion", "unlock")
+        ):
+            failures.append("gallery-only entries must not claim normal_acquisition, live_trigger, live_completion, or unlock roles")
+        for phrase in [*requirements, *acquisition_steps]:
+            if phrase not in phrases:
+                failures.append(f"guide_phrases must include requirement/acquisition text exactly: {phrase!r}")
+        if completion_shortcut and acquisition_mode == "normal-play":
+            entry_copy = " ".join([*requirements, *acquisition_steps, *phrases])
+            if _normalize(completion_shortcut) in _normalize(entry_copy):
+                failures.append("normal-play entries must not repeat the catalog-wide completion shortcut")
+        if failures:
+            _issue(
+                issues,
+                "error",
+                "scene-entry-invalid",
+                f"Scene entry {entry_id!r} is invalid: {failures[0]}",
+                scene_id=entry_id,
+                failures=failures,
+            )
+        entry_results.append(
+            {
+                "id": entry_id,
+                "title": title,
+                "kind": kind,
+                "status": "contradicted" if failures else "verified",
+                "evidence_status": status,
+                "cg_image_count": cg_image_count,
+                "acquisition_mode": acquisition_mode,
+                "sources": source_results,
+                "failures": failures,
+            }
+        )
+    undeclared_entry_markers = sorted(set(entry_markers) - set(entries))
+    if undeclared_entry_markers:
+        _issue(
+            issues,
+            "error",
+            "undeclared-scene-entry",
+            f"Markdown scene-entry marker {undeclared_entry_markers[0]!r} has no evidence entry.",
+            scene_ids=undeclared_entry_markers,
+        )
+
+    group_rows = raw.get("groups")
+    if not isinstance(group_rows, list) or not group_rows:
+        _issue(issues, "error", "scene-groups-missing", "scenes_cg.groups must not be empty.")
+        group_rows = []
+    group_markers = Counter(match.group("id") for match in SCENE_GROUP_MARKER_RE.finditer(markdown))
+    groups: dict[str, dict[str, Any]] = {}
+    group_results: list[dict[str, Any]] = []
+    assigned_entries: list[str] = []
+    for index, raw_group in enumerate(group_rows):
+        group = raw_group if isinstance(raw_group, dict) else {}
+        group_id = str(group.get("id", "")).strip()
+        label = str(group.get("label", "")).strip()
+        failures: list[str] = []
+        if not ID_RE.fullmatch(group_id):
+            failures.append("id must be a nonempty kebab-case identifier")
+            group_id = group_id or f"invalid-scene-group-{index + 1}"
+        if group_id in groups or group_id in reserved_ids or group_id in entries:
+            failures.append("scene group id must be globally unique")
+        groups[group_id] = group
+        if not label:
+            failures.append("label must be nonempty")
+        elif _normalize(label) not in normalized_markdown:
+            failures.append(f"label is missing from Markdown: {label!r}")
+        if group_markers.get(group_id, 0) != 1:
+            failures.append(
+                f"Markdown must contain exactly one scene-group marker; observed {group_markers.get(group_id, 0)}"
+            )
+        entry_ids = group.get("entry_ids")
+        if not isinstance(entry_ids, list) or not entry_ids or any(not isinstance(row, str) for row in entry_ids):
+            failures.append("entry_ids must contain at least one scene id")
+            entry_ids = []
+        if len(set(entry_ids)) != len(entry_ids):
+            failures.append("entry_ids contains duplicates")
+        for entry_id in entry_ids:
+            if entry_id not in entries:
+                failures.append(f"scene entry {entry_id!r} does not exist")
+            elif entries[entry_id].get("group_id") != group_id:
+                failures.append(f"scene entry {entry_id!r} declares a different group_id")
+        assigned_entries.extend(entry_ids)
+        route_anchor_id = str(group.get("route_anchor_id", "")).strip()
+        if route_anchor_id not in claims:
+            failures.append(f"route_anchor_id {route_anchor_id!r} is not a Main Route claim")
+        route_anchor_position = str(group.get("route_anchor_position", "")).strip()
+        if route_anchor_position not in ROUTE_ANCHOR_POSITIONS:
+            failures.append(f"route_anchor_position must be one of {sorted(ROUTE_ANCHOR_POSITIONS)}")
+        if failures:
+            _issue(
+                issues,
+                "error",
+                "scene-group-invalid",
+                f"Scene group {group_id!r} is invalid: {failures[0]}",
+                group_id=group_id,
+                failures=failures,
+            )
+        group_results.append(
+            {
+                "id": group_id,
+                "label": label,
+                "entry_ids": entry_ids,
+                "route_anchor_id": route_anchor_id,
+                "route_anchor_position": route_anchor_position,
+                "failures": failures,
+            }
+        )
+    duplicate_entries = sorted(entry_id for entry_id, count in Counter(assigned_entries).items() if count > 1)
+    missing_entries = sorted(set(entries) - set(assigned_entries))
+    if duplicate_entries or missing_entries:
+        _issue(
+            issues,
+            "error",
+            "scene-group-entry-coverage-invalid",
+            "Every scene entry must belong to exactly one scene group.",
+            duplicated_entries=duplicate_entries,
+            missing_entries=missing_entries,
+        )
+    undeclared_group_markers = sorted(set(group_markers) - set(groups))
+    if undeclared_group_markers:
+        _issue(
+            issues,
+            "error",
+            "undeclared-scene-group",
+            f"Markdown scene-group marker {undeclared_group_markers[0]!r} has no evidence group.",
+            group_ids=undeclared_group_markers,
+        )
+    if isinstance(entry_count, int) and entry_count != len(entries):
+        _issue(
+            issues,
+            "error",
+            "scene-catalog-entry-count-mismatch",
+            "scenes_cg.catalog.entry_count must equal the number of declared scene entries.",
+            expected=len(entries),
+            observed=entry_count,
+        )
+    observed_cg_total = sum(
+        entry.get("cg_image_count", 0)
+        for entry in entries.values()
+        if isinstance(entry.get("cg_image_count"), int)
+    )
+    if isinstance(cg_total, int) and cg_total != observed_cg_total:
+        _issue(
+            issues,
+            "error",
+            "scene-catalog-cg-count-mismatch",
+            "scenes_cg.catalog.cg_image_count must equal the sum of entry CG counts.",
+            expected=observed_cg_total,
+            observed=cg_total,
+        )
+
+    return groups, entries, catalog, {
+        "source_label": source_label,
+        "catalog": {
+            "id": catalog_id,
+            "entry_count": entry_count,
+            "cg_image_count": cg_total,
+            "sources": catalog_source_results,
+            "failures": catalog_failures,
+        },
+        "groups": group_results,
+        "entries": entry_results,
+    }
+
+
 class WalkthroughHTMLParser(HTMLParser):
     """Collect the structural contract without requiring third-party HTML packages."""
 
@@ -1621,10 +2089,27 @@ class WalkthroughHTMLParser(HTMLParser):
         self.boss_tasks: Counter[str] = Counter()
         self.boss_task_entry_contexts: dict[str, set[str | None]] = defaultdict(set)
         self.boss_task_views: dict[str, set[str | None]] = defaultdict(set)
+        self.scene_groups: Counter[str] = Counter()
+        self.scene_group_labels: dict[str, Counter[str]] = defaultdict(Counter)
+        self.scene_group_heading_ids: dict[str, Counter[str]] = defaultdict(Counter)
+        self.scene_group_views: dict[str, set[str | None]] = defaultdict(set)
+        self.scene_group_text_parts: dict[str, list[str]] = defaultdict(list)
+        self.scene_entries: Counter[str] = Counter()
+        self.scene_entry_views: dict[str, set[str | None]] = defaultdict(set)
+        self.scene_entry_group_contexts: dict[str, set[str | None]] = defaultdict(set)
+        self.scene_entry_heading_ids: dict[str, Counter[str]] = defaultdict(Counter)
+        self.scene_entry_text_parts: dict[str, list[str]] = defaultdict(list)
+        self.scene_entry_acquisition_modes: dict[str, Counter[str]] = defaultdict(Counter)
+        self.scene_acquisition_sections: dict[str, Counter[str]] = defaultdict(Counter)
+        self.scene_system_text_parts: list[str] = []
+        self.scene_tasks: Counter[str] = Counter()
+        self.scene_task_entry_contexts: dict[str, set[str | None]] = defaultdict(set)
+        self.scene_task_views: dict[str, set[str | None]] = defaultdict(set)
         self.evidence: Counter[str] = Counter()
         self.evidence_claim_contexts: dict[str, set[str | None]] = defaultdict(set)
         self.evidence_optional_contexts: dict[str, set[str | None]] = defaultdict(set)
         self.evidence_boss_contexts: dict[str, set[str | None]] = defaultdict(set)
+        self.evidence_scene_contexts: dict[str, set[str | None]] = defaultdict(set)
         self.evidence_statuses: dict[str, Counter[str]] = defaultdict(Counter)
         self.evidence_sources: dict[str, Counter[str]] = defaultdict(Counter)
         self.evidence_text_parts: dict[str, list[str]] = defaultdict(list)
@@ -1633,6 +2118,8 @@ class WalkthroughHTMLParser(HTMLParser):
         self.guide_link_claim_contexts: dict[str, set[str | None]] = defaultdict(set)
         self.guide_link_optional_contexts: dict[str, set[str | None]] = defaultdict(set)
         self.guide_link_boss_contexts: dict[str, set[str | None]] = defaultdict(set)
+        self.guide_link_scene_contexts: dict[str, set[str | None]] = defaultdict(set)
+        self.guide_link_scene_group_contexts: dict[str, set[str | None]] = defaultdict(set)
         self.guide_link_positions: dict[str, Counter[str]] = defaultdict(Counter)
         self.guide_link_dom_positions: dict[str, Counter[str]] = defaultdict(Counter)
         self.external_references: list[str] = []
@@ -1648,6 +2135,9 @@ class WalkthroughHTMLParser(HTMLParser):
         self._boss_entry: str | None = None
         self._boss_phase_index: str | None = None
         self._boss_stat: str | None = None
+        self._scene_group: str | None = None
+        self._scene_entry: str | None = None
+        self._scene_system = False
         self._evidence: str | None = None
         self._source: str | None = None
         self._ignored_depth = 0
@@ -1666,6 +2156,9 @@ class WalkthroughHTMLParser(HTMLParser):
                 str | None,
                 str | None,
                 str | None,
+                str | None,
+                str | None,
+                bool,
                 int,
             ]
         ] = []
@@ -1685,6 +2178,9 @@ class WalkthroughHTMLParser(HTMLParser):
             self._boss_entry,
             self._boss_phase_index,
             self._boss_stat,
+            self._scene_group,
+            self._scene_entry,
+            self._scene_system,
             self._evidence,
             self._source,
             self._ignored_depth,
@@ -1780,6 +2276,27 @@ class WalkthroughHTMLParser(HTMLParser):
             self.boss_group_heading_ids[self._boss_group][attrs.get("id", "")] += 1
         if tag == "h3" and self._boss_entry is not None:
             self.boss_entry_heading_ids[self._boss_entry][attrs.get("id", "")] += 1
+        if "scene-group" in classes:
+            group_id = attrs.get("data-scene-group-id", "")
+            self._scene_group = group_id
+            self.scene_groups[group_id] += 1
+            self.scene_group_labels[group_id][attrs.get("data-scene-group-label", "")] += 1
+            self.scene_group_views[group_id].add(self._view)
+        if "scene-system" in classes and attrs.get("id") == "scenes-cg-system":
+            self._scene_system = True
+        if "scene-entry" in classes:
+            scene_id = attrs.get("data-scene-id", "")
+            self._scene_entry = scene_id
+            self.scene_entries[scene_id] += 1
+            self.scene_entry_views[scene_id].add(self._view)
+            self.scene_entry_group_contexts[scene_id].add(self._scene_group)
+            self.scene_entry_acquisition_modes[scene_id][attrs.get("data-acquisition-mode", "")] += 1
+        if "scene-acquisition" in classes and self._scene_entry is not None:
+            self.scene_acquisition_sections[self._scene_entry][attrs.get("data-acquisition-mode", "")] += 1
+        if tag == "h2" and self._scene_group is not None and self._scene_entry is None:
+            self.scene_group_heading_ids[self._scene_group][attrs.get("id", "")] += 1
+        if tag == "h3" and self._scene_entry is not None:
+            self.scene_entry_heading_ids[self._scene_entry][attrs.get("id", "")] += 1
         if "task-checkbox" in classes:
             task_id = attrs.get("data-task-id", "")
             if self._claim is not None:
@@ -1794,12 +2311,17 @@ class WalkthroughHTMLParser(HTMLParser):
                 self.boss_tasks[task_id] += 1
                 self.boss_task_entry_contexts[task_id].add(self._boss_entry)
                 self.boss_task_views[task_id].add(self._view)
+            elif self._scene_entry is not None:
+                self.scene_tasks[task_id] += 1
+                self.scene_task_entry_contexts[task_id].add(self._scene_entry)
+                self.scene_task_views[task_id].add(self._view)
         if tag == "details" and "evidence" in classes:
             self._evidence = attrs.get("data-evidence-id", "")
             self.evidence[self._evidence] += 1
             self.evidence_claim_contexts[self._evidence].add(self._claim)
             self.evidence_optional_contexts[self._evidence].add(self._optional_entry)
             self.evidence_boss_contexts[self._evidence].add(self._boss_entry)
+            self.evidence_scene_contexts[self._evidence].add(self._scene_entry)
         evidence_status = attrs.get("data-evidence-status", "")
         if evidence_status and self._evidence is not None:
             self.evidence_statuses[self._evidence][evidence_status] += 1
@@ -1813,6 +2335,8 @@ class WalkthroughHTMLParser(HTMLParser):
             self.guide_link_claim_contexts[href].add(self._claim)
             self.guide_link_optional_contexts[href].add(self._optional_entry)
             self.guide_link_boss_contexts[href].add(self._boss_entry)
+            self.guide_link_scene_contexts[href].add(self._scene_entry)
+            self.guide_link_scene_group_contexts[href].add(self._scene_group)
             if self._claim is not None:
                 self.guide_link_positions[href][attrs.get("data-guide-link-position", "")] += 1
                 if self._claim in self.route_outcome_started:
@@ -1852,6 +2376,9 @@ class WalkthroughHTMLParser(HTMLParser):
                 previous_boss_entry,
                 previous_boss_phase_index,
                 previous_boss_stat,
+                previous_scene_group,
+                previous_scene_entry,
+                previous_scene_system,
                 previous_evidence,
                 previous_source,
                 previous_ignored,
@@ -1867,6 +2394,9 @@ class WalkthroughHTMLParser(HTMLParser):
             self._boss_entry = previous_boss_entry
             self._boss_phase_index = previous_boss_phase_index
             self._boss_stat = previous_boss_stat
+            self._scene_group = previous_scene_group
+            self._scene_entry = previous_scene_entry
+            self._scene_system = previous_scene_system
             self._evidence = previous_evidence
             self._source = previous_source
             self._ignored_depth = previous_ignored
@@ -1888,6 +2418,10 @@ class WalkthroughHTMLParser(HTMLParser):
             self.boss_entry_text_parts[self._boss_entry].append(data)
             if self._boss_phase_index is not None and self._boss_stat is not None:
                 self.boss_stat_text_parts[self._boss_entry][self._boss_phase_index][self._boss_stat].append(data)
+        elif self._scene_entry is not None:
+            self.scene_entry_text_parts[self._scene_entry].append(data)
+        elif self._scene_system:
+            self.scene_system_text_parts.append(data)
         if self._chapter is not None:
             self.route_chapter_text_parts[self._chapter].append(data)
         if self._section is not None:
@@ -1896,6 +2430,8 @@ class WalkthroughHTMLParser(HTMLParser):
             self.optional_group_text_parts[self._optional_group].append(data)
         if self._boss_group is not None:
             self.boss_group_text_parts[self._boss_group].append(data)
+        if self._scene_group is not None:
+            self.scene_group_text_parts[self._scene_group].append(data)
         if self._evidence is None:
             self.public_text_parts.append(data)
 
@@ -1909,6 +2445,9 @@ def _validate_publication(
     optional_entries: dict[str, dict[str, Any]],
     boss_groups: dict[str, dict[str, Any]],
     boss_entries: dict[str, dict[str, Any]],
+    scene_groups: dict[str, dict[str, Any]],
+    scene_entries: dict[str, dict[str, Any]],
+    scene_catalog: dict[str, Any],
     glossary_names: list[str],
     gender_facts: list[dict[str, str]],
     issues: list[dict[str, Any]],
@@ -2883,6 +3422,395 @@ def _validate_publication(
                 observed=sorted(observed_bosses),
             )
 
+    catalog_id = str(scene_catalog.get("id", ""))
+    if parser.ids[catalog_id] != 1 or parser.id_views.get(catalog_id) != "scenes-cg":
+        _issue(
+            issues,
+            "error",
+            "scene-catalog-binding-invalid",
+            "The Scenes & CG system overview must render once inside its completed view.",
+            catalog_id=catalog_id,
+        )
+    if parser.evidence[catalog_id] != 1:
+        _issue(
+            issues,
+            "error",
+            "scene-catalog-evidence-binding-invalid",
+            "The Scenes & CG system overview must have one matching Evidence disclosure.",
+            catalog_id=catalog_id,
+        )
+    if parser.evidence_scene_contexts[catalog_id] != {None}:
+        _issue(
+            issues,
+            "error",
+            "scene-catalog-evidence-context-invalid",
+            "The Scenes & CG system evidence must sit outside individual scene entries.",
+            catalog_id=catalog_id,
+        )
+    if parser.evidence_statuses[catalog_id] != Counter({"verified": 1}):
+        _issue(
+            issues,
+            "error",
+            "scene-catalog-evidence-status-mismatch",
+            "The Scenes & CG system overview must render verified evidence status exactly once.",
+            catalog_id=catalog_id,
+        )
+    expected_catalog_sources = Counter(
+        str(source.get("id", ""))
+        for source in scene_catalog.get("sources") or []
+        if isinstance(source, dict)
+    )
+    if parser.evidence_sources[catalog_id] != expected_catalog_sources:
+        _issue(
+            issues,
+            "error",
+            "scene-catalog-evidence-sources-mismatch",
+            "The Scenes & CG system overview does not render the same source IDs as evidence.json.",
+            expected=dict(expected_catalog_sources),
+            observed=dict(parser.evidence_sources[catalog_id]),
+        )
+    catalog_text = _normalize(" ".join(parser.scene_system_text_parts))
+    for phrase in scene_catalog.get("guide_phrases") or []:
+        if _normalize(str(phrase)) not in catalog_text:
+            _issue(
+                issues,
+                "error",
+                "scene-catalog-guide-phrase-missing",
+                f"Scenes & CG system overview is missing its guide phrase: {phrase!r}",
+            )
+    for source in scene_catalog.get("sources") or []:
+        if not isinstance(source, dict):
+            continue
+        supports = _normalize(str(source.get("supports", "")))
+        source_id = str(source.get("id", ""))
+        source_text = _normalize(" ".join(parser.source_text_parts[catalog_id][source_id]))
+        if supports and supports not in source_text:
+            _issue(
+                issues,
+                "error",
+                "scene-catalog-evidence-explanation-missing",
+                f"Catalog evidence source {source_id!r} does not show what it proves.",
+                source_id=source_id,
+            )
+
+    declared_scene_group_ids = set(scene_groups)
+    rendered_scene_group_ids = {
+        group_id for group_id, count in parser.scene_groups.items() if group_id and count
+    }
+    for group_id in sorted(declared_scene_group_ids | rendered_scene_group_ids):
+        if group_id not in declared_scene_group_ids:
+            _issue(
+                issues,
+                "error",
+                "rendered-scene-group-undeclared",
+                f"Rendered scene group {group_id!r} has no scenes_cg entry.",
+                group_id=group_id,
+            )
+            continue
+        group = scene_groups[group_id]
+        if parser.scene_groups[group_id] != 1:
+            _issue(
+                issues,
+                "error",
+                "scene-group-binding-invalid",
+                f"Scene group {group_id!r} must render exactly once.",
+                group_id=group_id,
+            )
+        if parser.scene_group_views.get(group_id, set()) != {"scenes-cg"}:
+            _issue(
+                issues,
+                "error",
+                "scene-group-outside-view",
+                f"Scene group {group_id!r} must be inside Scenes & CG.",
+                group_id=group_id,
+            )
+        label = str(group.get("label", ""))
+        if parser.scene_group_labels[group_id] != Counter({label: 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-group-label-mismatch",
+                f"Scene group {group_id!r} must bind its declared label.",
+                group_id=group_id,
+            )
+        if parser.scene_group_heading_ids[group_id] != Counter({group_id: 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-group-heading-link-invalid",
+                f"Scene group {group_id!r} must expose one h2 with that exact id.",
+                group_id=group_id,
+            )
+        group_text = _normalize(" ".join(parser.scene_group_text_parts[group_id]))
+        if _normalize(label) not in group_text:
+            _issue(
+                issues,
+                "error",
+                "scene-group-label-not-visible",
+                f"Scene group {group_id!r} does not visibly render its label.",
+                group_id=group_id,
+            )
+        anchor_id = str(group.get("route_anchor_id", ""))
+        anchor_position = str(group.get("route_anchor_position", ""))
+        href = f"#{group_id}"
+        observed_claim_contexts = {
+            row for row in parser.guide_link_claim_contexts.get(href, set()) if row is not None
+        }
+        if observed_claim_contexts != {anchor_id}:
+            _issue(
+                issues,
+                "error",
+                "scene-main-route-link-invalid",
+                f"Scene group {group_id!r} must have a Main Route link from its declared anchor.",
+                group_id=group_id,
+                expected_anchor=anchor_id,
+                observed=sorted(observed_claim_contexts),
+            )
+        if parser.guide_link_positions.get(href, Counter()) != Counter({anchor_position: 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-main-route-link-position-invalid",
+                f"Scene group {group_id!r} must render at its declared point relative to the Main Route step.",
+                group_id=group_id,
+                expected_position=anchor_position,
+                observed=dict(parser.guide_link_positions.get(href, Counter())),
+            )
+        if parser.guide_link_dom_positions.get(href, Counter()) != Counter({anchor_position: 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-main-route-link-order-invalid",
+                f"Scene group {group_id!r} is not placed {anchor_position} its Main Route prose.",
+                group_id=group_id,
+                expected_position=anchor_position,
+                observed=dict(parser.guide_link_dom_positions.get(href, Counter())),
+            )
+        observed_group_backlinks = {
+            row
+            for row in parser.guide_link_scene_group_contexts.get(f"#{anchor_id}", set())
+            if row is not None
+        }
+        if observed_group_backlinks != {group_id}:
+            _issue(
+                issues,
+                "error",
+                "scene-route-backlink-invalid",
+                f"Scene group {group_id!r} must link back to its declared Main Route context.",
+                group_id=group_id,
+                expected_anchor=anchor_id,
+                observed=sorted(observed_group_backlinks),
+            )
+
+    declared_scene_ids = set(scene_entries)
+    rendered_scene_ids = {
+        scene_id for scene_id, count in parser.scene_entries.items() if scene_id and count
+    }
+    rendered_scene_task_ids = {
+        task_id for task_id, count in parser.scene_tasks.items() if task_id and count
+    }
+    for task_id in sorted(rendered_scene_task_ids - declared_scene_ids):
+        _issue(
+            issues,
+            "error",
+            "rendered-scene-task-undeclared",
+            f"Rendered scene checklist task {task_id!r} has no evidence entry.",
+            scene_id=task_id,
+        )
+    for scene_id in sorted(declared_scene_ids | rendered_scene_ids):
+        if scene_id not in declared_scene_ids:
+            _issue(
+                issues,
+                "error",
+                "rendered-scene-entry-undeclared",
+                f"Rendered scene entry {scene_id!r} has no evidence entry.",
+                scene_id=scene_id,
+            )
+            continue
+        entry = scene_entries[scene_id]
+        acquisition_mode = str(entry.get("acquisition_mode", ""))
+        if parser.scene_entries[scene_id] != 1:
+            _issue(
+                issues,
+                "error",
+                "scene-entry-binding-invalid",
+                f"Scene entry {scene_id!r} must render exactly once.",
+                scene_id=scene_id,
+            )
+        if parser.scene_entry_views.get(scene_id, set()) != {"scenes-cg"}:
+            _issue(
+                issues,
+                "error",
+                "scene-entry-outside-view",
+                f"Scene entry {scene_id!r} must be inside Scenes & CG.",
+                scene_id=scene_id,
+            )
+        expected_groups = {
+            group_id
+            for group_id, group in scene_groups.items()
+            if scene_id in (group.get("entry_ids") or [])
+        }
+        if parser.scene_entry_group_contexts.get(scene_id, set()) != expected_groups:
+            _issue(
+                issues,
+                "error",
+                "scene-entry-group-context-invalid",
+                f"Scene entry {scene_id!r} must be nested in its declared group.",
+                scene_id=scene_id,
+                expected=sorted(expected_groups),
+                observed=sorted(row or "" for row in parser.scene_entry_group_contexts.get(scene_id, set())),
+            )
+        if parser.scene_entry_heading_ids[scene_id] != Counter({scene_id: 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-entry-heading-link-invalid",
+                f"Scene entry {scene_id!r} must expose one h3 with its exact id.",
+                scene_id=scene_id,
+            )
+        if parser.scene_entry_acquisition_modes[scene_id] != Counter({acquisition_mode: 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-acquisition-mode-binding-invalid",
+                f"Scene entry {scene_id!r} must bind its declared acquisition mode on the article.",
+                scene_id=scene_id,
+                expected=acquisition_mode,
+                observed=dict(parser.scene_entry_acquisition_modes[scene_id]),
+            )
+        if parser.scene_acquisition_sections[scene_id] != Counter({acquisition_mode: 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-acquisition-section-invalid",
+                f"Scene entry {scene_id!r} must render one acquisition section for its declared mode.",
+                scene_id=scene_id,
+                expected=acquisition_mode,
+                observed=dict(parser.scene_acquisition_sections[scene_id]),
+            )
+        if parser.scene_tasks[scene_id] != 1:
+            _issue(
+                issues,
+                "error",
+                "scene-task-binding-invalid",
+                f"Scene entry {scene_id!r} must render one matching checklist task.",
+                scene_id=scene_id,
+            )
+        if parser.scene_task_entry_contexts.get(scene_id, set()) != {scene_id}:
+            _issue(
+                issues,
+                "error",
+                "scene-task-context-invalid",
+                f"Scene checklist task {scene_id!r} must be inside its matching entry.",
+                scene_id=scene_id,
+            )
+        if parser.scene_task_views.get(scene_id, set()) != {"scenes-cg"}:
+            _issue(
+                issues,
+                "error",
+                "scene-task-outside-view",
+                f"Scene checklist task {scene_id!r} must be inside Scenes & CG.",
+                scene_id=scene_id,
+            )
+        if parser.evidence[scene_id] != 1:
+            _issue(
+                issues,
+                "error",
+                "scene-evidence-binding-invalid",
+                f"Scene entry {scene_id!r} must have one matching Evidence disclosure.",
+                scene_id=scene_id,
+            )
+        if parser.evidence_scene_contexts[scene_id] != {scene_id}:
+            _issue(
+                issues,
+                "error",
+                "scene-evidence-outside-entry",
+                f"Evidence disclosure {scene_id!r} must be inside its matching scene entry.",
+                scene_id=scene_id,
+            )
+        expected_status = str(entry.get("status", ""))
+        if parser.evidence_statuses[scene_id] != Counter({expected_status: 1}):
+            _issue(
+                issues,
+                "error",
+                "scene-evidence-status-mismatch",
+                f"Scene entry {scene_id!r} must render evidence status {expected_status!r} exactly once.",
+                scene_id=scene_id,
+            )
+        expected_sources = Counter(
+            str(source.get("id", ""))
+            for source in entry.get("sources") or []
+            if isinstance(source, dict)
+        )
+        if parser.evidence_sources[scene_id] != expected_sources:
+            _issue(
+                issues,
+                "error",
+                "scene-evidence-sources-mismatch",
+                f"Scene entry {scene_id!r} does not render the same source IDs as evidence.json.",
+                scene_id=scene_id,
+                expected=dict(expected_sources),
+                observed=dict(parser.evidence_sources[scene_id]),
+            )
+        entry_text = _normalize(" ".join(parser.scene_entry_text_parts[scene_id]))
+        title = _normalize(str(entry.get("title", "")))
+        if title and title not in entry_text:
+            _issue(
+                issues,
+                "error",
+                "scene-title-not-visible",
+                f"Scene entry {scene_id!r} does not visibly render its title.",
+                scene_id=scene_id,
+            )
+        for phrase in entry.get("guide_phrases") or []:
+            if _normalize(str(phrase)) not in entry_text:
+                _issue(
+                    issues,
+                    "error",
+                    "scene-guide-phrase-missing",
+                    f"Scene entry {scene_id!r} is missing its guide phrase: {phrase!r}",
+                    scene_id=scene_id,
+                )
+        completion_shortcut = str(scene_catalog.get("completion_shortcut", "")).strip()
+        if (
+            completion_shortcut
+            and acquisition_mode == "normal-play"
+            and _normalize(completion_shortcut) in entry_text
+        ):
+            _issue(
+                issues,
+                "error",
+                "scene-completion-shortcut-repeated",
+                f"Scene entry {scene_id!r} repeats the catalog-wide completion shortcut instead of leading with normal acquisition.",
+                scene_id=scene_id,
+            )
+        cg_count = entry.get("cg_image_count")
+        cg_label = "set" if cg_count == 1 else "sets"
+        expected_cg_text = f"{cg_count} illustrated {cg_label}"
+        if _normalize(expected_cg_text) not in entry_text:
+            _issue(
+                issues,
+                "error",
+                "scene-cg-count-not-visible",
+                f"Scene entry {scene_id!r} does not visibly render its evidence-backed illustrated-set count.",
+                scene_id=scene_id,
+            )
+        for source in entry.get("sources") or []:
+            if not isinstance(source, dict):
+                continue
+            supports = _normalize(str(source.get("supports", "")))
+            source_id = str(source.get("id", ""))
+            source_text = _normalize(" ".join(parser.source_text_parts[scene_id][source_id]))
+            if supports and supports not in source_text:
+                _issue(
+                    issues,
+                    "error",
+                    "scene-evidence-explanation-missing",
+                    f"Evidence source {source_id!r} in scene entry {scene_id!r} does not show what it proves.",
+                    scene_id=scene_id,
+                    source_id=source_id,
+                )
+
     for href in parser.guide_links:
         if not href.startswith("#") or len(href) == 1:
             _issue(
@@ -2943,6 +3871,9 @@ def _validate_publication(
         "boss_groups": dict(parser.boss_groups),
         "boss_entries": dict(parser.boss_entries),
         "boss_tasks": dict(parser.boss_tasks),
+        "scene_groups": dict(parser.scene_groups),
+        "scene_entries": dict(parser.scene_entries),
+        "scene_tasks": dict(parser.scene_tasks),
         "evidence_disclosures": dict(parser.evidence),
         "guide_links": parser.guide_links,
     }
@@ -3013,6 +3944,16 @@ def validate_project(
         all_source_ids,
         issues,
     )
+    scene_groups, scene_entries, scene_catalog, scenes_cg = _validate_scenes_cg(
+        game_root,
+        markdown,
+        evidence,
+        claims,
+        optional_entries,
+        boss_entries,
+        all_source_ids,
+        issues,
+    )
     publication = _validate_publication(
         html_path,
         claims,
@@ -3022,6 +3963,9 @@ def validate_project(
         optional_entries,
         boss_groups,
         boss_entries,
+        scene_groups,
+        scene_entries,
+        scene_catalog,
         glossary_names,
         gender_facts,
         issues,
@@ -3032,6 +3976,7 @@ def validate_project(
     counts = Counter(result["status"] for result in claim_results)
     optional_counts = Counter(result["status"] for result in optional_content["entries"])
     boss_counts = Counter(result["status"] for result in bosses["entries"])
+    scene_counts = Counter(result["status"] for result in scenes_cg["entries"])
     status = "failed" if errors else "passed"
     return {
         "schema_version": SCHEMA_VERSION,
@@ -3049,12 +3994,17 @@ def validate_project(
             "boss_entries": len(bosses["entries"]),
             "boss_verified": boss_counts["verified"],
             "boss_contradicted": boss_counts["contradicted"],
+            "scene_entries": len(scenes_cg["entries"]),
+            "scene_verified": scene_counts["verified"],
+            "scene_contradicted": scene_counts["contradicted"],
+            "scene_cg_images": scene_catalog.get("cg_image_count", 0),
         },
         "issues": issues,
         "route_claims": claim_results,
         "route_structure": route_structure,
         "optional_content": optional_content,
         "bosses": bosses,
+        "scenes_cg": scenes_cg,
         "project_context": project_context,
         "publication": publication,
     }
@@ -3093,7 +4043,10 @@ def main(argv: list[str] | None = None) -> int:
         f"optional entries {summary['optional_verified']} verified, "
         f"{summary['optional_contradicted']} contradicted; "
         f"boss entries {summary['boss_verified']} verified, "
-        f"{summary['boss_contradicted']} contradicted"
+        f"{summary['boss_contradicted']} contradicted; "
+        f"scene entries {summary['scene_verified']} verified, "
+        f"{summary['scene_contradicted']} contradicted across "
+        f"{summary['scene_cg_images']} illustrated sets"
     )
     print(f"Report: {report_path}")
     for issue in report["issues"]:

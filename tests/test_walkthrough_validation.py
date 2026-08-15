@@ -79,6 +79,7 @@ class WalkthroughValidationTests(unittest.TestCase):
             <p class="route-lead">Speak to Mina beside the front door, then leave through that door.</p>
             <p class="route-outcome">You arrive in Town.</p>
             <aside><a data-guide-link data-guide-link-position="after" href="#town-errand">Town Errand</a> is now available.</aside>
+            <aside><a data-guide-link data-guide-link-position="after" href="#scene-group-mina">Mina scenes</a> are now available.</aside>
             <p><a data-guide-link href="#boss-door-warden">Door Warden</a> boss dossier.</p>
             <label class="task-row"><input class="task-checkbox" type="checkbox" data-task-id="reach-town"> Mark complete</label>
             <details class="evidence" data-evidence-id="reach-town">
@@ -147,8 +148,49 @@ class WalkthroughValidationTests(unittest.TestCase):
           </article>
         </section>
       </section>
-      <section class="guide-view" id="view-scenes-cg" data-view="scenes-cg" data-placeholder="true">
-        <h1>Scenes &amp; CG</h1><p>Coming later.</p>
+      <section class="guide-view" id="view-scenes-cg" data-view="scenes-cg">
+        <header class="scenes-hero"><h1>Scenes &amp; CG</h1><p>1 verified entry and 1 illustrated set.</p></header>
+        <section class="scene-system" id="scenes-cg-system">
+          <h2>Using the Memory Gallery</h2>
+          <p>Choose Reminisce at the bedroom journal to enter the Memory Gallery.</p>
+          <p>After a cleared ending, Unlock All opens every gallery entry; the cards below still explain how to encounter scenes during normal play.</p>
+          <details class="evidence" data-evidence-id="scenes-cg-system">
+            <summary>Evidence</summary>
+            <p data-evidence-status="verified">Verified from game data</p>
+            <ul>
+              <li data-source-id="scene-catalog-entry">The bedroom journal opens the Memory Gallery.</li>
+              <li data-source-id="scene-catalog-slots">The gallery's configured slots define its illustrated catalog.</li>
+              <li data-source-id="scene-catalog-unlock-all">The gallery exposes its completion shortcut after a cleared ending.</li>
+            </ul>
+          </details>
+        </section>
+        <section class="scene-group" data-scene-group-id="scene-group-mina" data-scene-group-label="Mina">
+          <h2 id="scene-group-mina">Mina</h2>
+          <p><a data-guide-link href="#reach-town">Main Route: Reach Town</a></p>
+          <article class="scene-entry" id="scene-entry-scene-town-memory" data-scene-id="scene-town-memory" data-acquisition-mode="normal-play">
+            <h3 id="scene-town-memory">Town Memory</h3>
+            <p>Town Memory appears in the Memory Gallery after every listed requirement is met.</p>
+            <section class="scene-acquisition" data-acquisition-mode="normal-play">
+              <h4>How to get it normally</h4>
+              <p>Reach Town, then speak to Mina at the fountain to play Town Memory during the journey.</p>
+              <ul><li>Reach Town and speak to Mina at the fountain.</li></ul>
+            </section>
+            <p>1 illustrated set</p>
+            <label><input class="task-checkbox" type="checkbox" data-task-id="scene-town-memory"> Unlocked</label>
+            <details class="evidence" data-evidence-id="scene-town-memory">
+              <summary>Evidence</summary>
+              <p data-evidence-status="verified">Verified from game data</p>
+              <ul>
+                <li data-source-id="scene-town-memory-requirements">The locked entry displays the complete player-facing requirement.</li>
+                <li data-source-id="scene-town-memory-title">The unlocked catalog names the entry Town Memory.</li>
+                <li data-source-id="scene-town-memory-replay">The catalog dispatches the Town Memory replay.</li>
+                <li data-source-id="scene-town-memory-trigger">A reachable fountain interaction triggers Town Memory.</li>
+                <li data-source-id="scene-town-memory-unlock">Completing the live event unlocks its catalog entry.</li>
+                <li data-source-id="scene-town-memory-cg">The viewer includes one illustrated set for Town Memory.</li>
+              </ul>
+            </details>
+          </article>
+        </section>
       </section>
       <footer>Fixture</footer>
     </article>
@@ -242,6 +284,29 @@ class WalkthroughValidationTests(unittest.TestCase):
                 },
             ],
         )
+        self._write_json(
+            data / "SceneCatalog.json",
+            [
+                None,
+                {"entryPoint": "Bedroom journal"},
+                {"slots": ["Town Memory"]},
+                {"requirements": ["Reach Town", "Speak to Mina"]},
+                {"title": "Town Memory"},
+                {"replay": "town-memory"},
+                {"trigger": "Mina fountain"},
+                {"unlock": "town-memory"},
+                {"illustratedSet": "town-memory-a"},
+                {"unlockAll": "after-cleared-ending"},
+            ],
+        )
+        self._write_json(
+            data / "LiveScenes.json",
+            [
+                None,
+                {"trigger": "Mina fountain"},
+                {"unlock": "town-memory"},
+            ],
+        )
         scripts = root / "js"
         scripts.mkdir()
         (scripts / "plugins.js").write_text(
@@ -294,15 +359,26 @@ class WalkthroughValidationTests(unittest.TestCase):
             "Door Warden has no encoded elemental weakness or resistance.\n\n"
             "Shield Bash is dangerous because Stun can cost the target its next action.\n\n"
             "Use Fire damage when available, then Guard before Shield Bash.\n\n"
-            "Defeating it opens the front door.\n",
+            "Defeating it opens the front door.\n\n"
+            "# Scenes & CG\n\n"
+            "## Using the Memory Gallery\n\n"
+            "Choose Reminisce at the bedroom journal to enter the Memory Gallery.\n\n"
+            "After a cleared ending, Unlock All opens every gallery entry; the cards below still explain how to encounter scenes during normal play.\n\n"
+            "<!-- scene-group:scene-group-mina -->\n"
+            "## Mina\n\n"
+            "<!-- scene-entry:scene-town-memory -->\n"
+            "### Town Memory\n\n"
+            "Town Memory appears in the Memory Gallery after every listed requirement is met.\n\n"
+            "Reach Town, then speak to Mina at the fountain to play Town Memory during the journey.\n\n"
+            "- Reach Town and speak to Mina at the fountain.\n",
             encoding="utf-8",
         )
         evidence = work / "evidence.json"
         self._write_json(
             evidence,
             {
-                "schema_version": 10,
-                "milestone": "main-route-optional-content-and-bosses",
+                "schema_version": 12,
+                "milestone": "complete-four-view-walkthrough",
                 "project_context": {
                     "glossary": {
                         "file": ".dazedtl/glossary.txt",
@@ -557,6 +633,143 @@ class WalkthroughValidationTests(unittest.TestCase):
                         }
                     ],
                 },
+                "scenes_cg": {
+                    "source_label": "Player-facing scene catalog and executable unlock path",
+                    "catalog": {
+                        "id": "scenes-cg-system",
+                        "title": "Using the Memory Gallery",
+                        "entry_count": 1,
+                        "cg_image_count": 1,
+                        "interface_files": ["data/SceneCatalog.json"],
+                        "completion_shortcut": "After a cleared ending, Unlock All opens every gallery entry; the cards below still explain how to encounter scenes during normal play.",
+                        "guide_phrases": [
+                            "Choose Reminisce at the bedroom journal to enter the Memory Gallery.",
+                            "After a cleared ending, Unlock All opens every gallery entry; the cards below still explain how to encounter scenes during normal play.",
+                        ],
+                        "source_roles": {
+                            "entry_point": ["scene-catalog-entry"],
+                            "scope_boundary": ["scene-catalog-slots"],
+                            "completion_shortcut": ["scene-catalog-unlock-all"],
+                        },
+                        "sources": [
+                            {
+                                "id": "scene-catalog-entry",
+                                "type": "database-record",
+                                "file": "data/SceneCatalog.json",
+                                "record_id": 1,
+                                "expected": {"entryPoint": "Bedroom journal"},
+                                "supports": "The bedroom journal opens the Memory Gallery.",
+                            },
+                            {
+                                "id": "scene-catalog-slots",
+                                "type": "database-record",
+                                "file": "data/SceneCatalog.json",
+                                "record_id": 2,
+                                "expected": {"slots": ["Town Memory"]},
+                                "supports": "The gallery's configured slots define its illustrated catalog.",
+                            },
+                            {
+                                "id": "scene-catalog-unlock-all",
+                                "type": "database-record",
+                                "file": "data/SceneCatalog.json",
+                                "record_id": 9,
+                                "expected": {"unlockAll": "after-cleared-ending"},
+                                "supports": "The gallery exposes its completion shortcut after a cleared ending.",
+                            },
+                        ],
+                    },
+                    "groups": [
+                        {
+                            "id": "scene-group-mina",
+                            "label": "Mina",
+                            "route_anchor_id": "reach-town",
+                            "route_anchor_position": "after",
+                            "entry_ids": ["scene-town-memory"],
+                        }
+                    ],
+                    "entries": [
+                        {
+                            "id": "scene-town-memory",
+                            "title": "Town Memory",
+                            "kind": "character-scene",
+                            "status": "verified",
+                            "group_id": "scene-group-mina",
+                            "acquisition_mode": "normal-play",
+                            "acquisition_steps": [
+                                "Reach Town, then speak to Mina at the fountain to play Town Memory during the journey."
+                            ],
+                            "requirements": ["Reach Town and speak to Mina at the fountain."],
+                            "aliases": [],
+                            "viewer_mode": "replay-and-cg-gallery",
+                            "cg_image_count": 1,
+                            "guide_phrases": [
+                                "Town Memory appears in the Memory Gallery after every listed requirement is met.",
+                                "Reach Town, then speak to Mina at the fountain to play Town Memory during the journey.",
+                                "Reach Town and speak to Mina at the fountain.",
+                            ],
+                            "source_roles": {
+                                "requirements": ["scene-town-memory-requirements"],
+                                "replay_title": ["scene-town-memory-title"],
+                                "replay_call": ["scene-town-memory-replay"],
+                                "normal_acquisition": ["scene-town-memory-trigger"],
+                                "live_trigger": ["scene-town-memory-trigger"],
+                                "live_completion": ["scene-town-memory-unlock"],
+                                "unlock": ["scene-town-memory-unlock"],
+                                "cg_viewer": ["scene-town-memory-cg"],
+                            },
+                            "sources": [
+                                {
+                                    "id": "scene-town-memory-requirements",
+                                    "type": "database-record",
+                                    "file": "data/SceneCatalog.json",
+                                    "record_id": 3,
+                                    "expected": {"requirements": ["Reach Town", "Speak to Mina"]},
+                                    "supports": "The locked entry displays the complete player-facing requirement.",
+                                },
+                                {
+                                    "id": "scene-town-memory-title",
+                                    "type": "database-record",
+                                    "file": "data/SceneCatalog.json",
+                                    "record_id": 4,
+                                    "expected": {"title": "Town Memory"},
+                                    "supports": "The unlocked catalog names the entry Town Memory.",
+                                },
+                                {
+                                    "id": "scene-town-memory-replay",
+                                    "type": "database-record",
+                                    "file": "data/SceneCatalog.json",
+                                    "record_id": 5,
+                                    "expected": {"replay": "town-memory"},
+                                    "supports": "The catalog dispatches the Town Memory replay.",
+                                },
+                                {
+                                    "id": "scene-town-memory-trigger",
+                                    "type": "database-record",
+                                    "file": "data/LiveScenes.json",
+                                    "record_id": 1,
+                                    "expected": {"trigger": "Mina fountain"},
+                                    "supports": "A reachable fountain interaction triggers Town Memory.",
+                                },
+                                {
+                                    "id": "scene-town-memory-unlock",
+                                    "type": "database-record",
+                                    "file": "data/LiveScenes.json",
+                                    "record_id": 2,
+                                    "expected": {"unlock": "town-memory"},
+                                    "supports": "Completing the live event unlocks its catalog entry.",
+                                },
+                                {
+                                    "id": "scene-town-memory-cg",
+                                    "type": "database-record",
+                                    "file": "data/SceneCatalog.json",
+                                    "record_id": 8,
+                                    "expected": {"illustratedSet": "town-memory-a"},
+                                    "supports": "The viewer includes one illustrated set for Town Memory.",
+                                },
+                            ],
+                        }
+                    ],
+                },
             },
         )
         publication = root / "WALKTHROUGH.html"
@@ -567,7 +780,7 @@ class WalkthroughValidationTests(unittest.TestCase):
         return walkthrough_validator.validate_project(root, walkthrough, evidence, publication)
 
     def test_verified_claim_and_four_view_publication_pass(self):
-        """Protect all three completed views and the exact four-view milestone contract."""
+        """Protect all four completed views and the exact four-view milestone contract."""
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             walkthrough, evidence, publication = self._build_project(root)
@@ -578,6 +791,8 @@ class WalkthroughValidationTests(unittest.TestCase):
             self.assertEqual(report["summary"]["verified"], 1)
             self.assertEqual(report["summary"]["optional_verified"], 1)
             self.assertEqual(report["summary"]["boss_verified"], 1)
+            self.assertEqual(report["summary"]["scene_verified"], 1)
+            self.assertEqual(report["summary"]["scene_cg_images"], 1)
             self.assertEqual(set(report["publication"]["views"]), set(walkthrough_validator.REQUIRED_VIEWS))
 
     def test_changed_boss_enemy_snapshot_blocks_publication(self):
@@ -594,6 +809,59 @@ class WalkthroughValidationTests(unittest.TestCase):
             self.assertEqual(report["status"], "failed")
             issue = next(row for row in report["issues"] if row["code"] == "boss-entry-invalid")
             self.assertIn("field 'params' changed", " ".join(issue["failures"]))
+
+    def test_scene_entry_requires_source_bound_illustrated_sets(self):
+        """Protect catalog counts from drifting away from the viewer references that prove them."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            manifest["scenes_cg"]["entries"][0]["source_roles"]["cg_viewer"] = []
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "scene-entry-invalid")
+            self.assertIn("source_roles.cg_viewer", " ".join(issue["failures"]))
+
+    def test_scene_normal_acquisition_cannot_be_the_gallery_interface(self):
+        """Protect scene guides from presenting recollection access as the normal live trigger."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            manifest = json.loads(evidence.read_text(encoding="utf-8"))
+            entry = manifest["scenes_cg"]["entries"][0]
+            trigger = next(source for source in entry["sources"] if source["id"] == "scene-town-memory-trigger")
+            trigger.update(file="data/SceneCatalog.json", record_id=6)
+            unlock = next(source for source in entry["sources"] if source["id"] == "scene-town-memory-unlock")
+            unlock.update(file="data/SceneCatalog.json", record_id=7)
+            self._write_json(evidence, manifest)
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            issue = next(row for row in report["issues"] if row["code"] == "scene-entry-invalid")
+            self.assertIn("outside the catalog/recollection interface", " ".join(issue["failures"]))
+
+    def test_scene_group_requires_link_from_declared_route_anchor(self):
+        """Protect scene availability links from drifting away from their route context."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            publication.write_text(
+                self._html().replace(
+                    '<a data-guide-link data-guide-link-position="after" href="#scene-group-mina">',
+                    '<a href="#scene-group-mina">',
+                ),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            codes = {row["code"] for row in report["issues"]}
+            self.assertIn("scene-main-route-link-invalid", codes)
 
     def test_rendered_boss_stat_must_match_the_single_canonical_table(self):
         """Protect the visible stat table without requiring a duplicate prose stat line."""
@@ -936,6 +1204,24 @@ class WalkthroughValidationTests(unittest.TestCase):
             codes = [issue["code"] for issue in report["issues"]]
             self.assertEqual(report["status"], "failed")
             self.assertIn("mechanical-progression-language", codes)
+
+    def test_player_copy_rejects_engine_control_codes(self):
+        """Protect browser prose from leaking RPG engine formatting escapes."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            walkthrough.write_text(
+                walkthrough.read_text(encoding="utf-8")
+                + r"Bring \C[24]Red Wine\C[0] to the bedroom."
+                + "\n",
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            codes = [issue["code"] for issue in report["issues"]]
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("engine-control-code-in-player-copy", codes)
 
     def test_changed_project_glossary_blocks_publication(self):
         """Protect generated prose from silently outliving its glossary and quirks context."""

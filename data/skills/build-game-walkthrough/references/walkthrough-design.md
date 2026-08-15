@@ -10,6 +10,7 @@ This is the portable presentation contract. It preserves the visual language of 
 - Main Route components
 - Optional Content components
 - Bosses components
+- Scenes & CG components
 - View routing and cross-links
 - Responsive and accessible behavior
 - Interaction baseline
@@ -25,11 +26,11 @@ Use exactly these durable view keys, labels, and panel IDs:
 | `main-route` | Main Route | `view-main-route` | Complete |
 | `optional-content` | Optional Content | `view-optional-content` | Complete |
 | `bosses` | Bosses | `view-bosses` | Complete |
-| `scenes-cg` | Scenes & CG | `view-scenes-cg` | Coming later |
+| `scenes-cg` | Scenes & CG | `view-scenes-cg` | Complete |
 
 Place the four `.primary-tab` controls in `.primary-tabs` at the top of the application reading area. Each control uses `data-view-target` with the exact view key and links to its panel hash. Do not add more top-level categories in this milestone.
 
-Each `.guide-view` owns its header and content. Main Route, Optional Content, and Bosses are complete and must not carry `data-placeholder="true"`. Mark only Scenes & CG as a future panel. Keep its visible treatment intentional: name the category, explain that it will be added later, and return the reader to Main Route. Do not include invented counts or summaries.
+Each `.guide-view` owns its header and content. All four views are complete and none may carry `data-placeholder="true"`. Counts and summaries must come from the evidence ledger rather than asset filenames or installed plugin defaults.
 
 ## Required shell
 
@@ -63,6 +64,9 @@ body
 │       │   ├── .boss-hero
 │       │   └── .boss-group sections containing .boss-entry articles
 │       ├── section.guide-view#view-scenes-cg
+│       │   ├── .scenes-hero
+│       │   ├── .scene-system#scenes-cg-system
+│       │   └── .scene-group sections containing .scene-entry articles
 │       └── footer
 ├── .search-dialog
 ├── .resume-toast
@@ -142,7 +146,7 @@ Evidence disclosures are visually secondary:
 - Allow internal IDs and coordinates only inside this disclosure.
 - Do not expose raw JSON, full event command lists, or long dialogue excerpts.
 
-Completed cross-view entries use globally unique destination IDs. A working cross-link carries `data-guide-link` and an ordinary `href="#destination-id"`. If an entry does not exist yet, render neutral text such as `Detailed scene entry coming later`; do not emit an anchor.
+Completed cross-view entries use globally unique destination IDs. A working cross-link carries `data-guide-link` and an ordinary `href="#destination-id"`. Never emit an anchor to material absent from the ledger and publication.
 
 ## Optional Content components
 
@@ -166,7 +170,7 @@ At the `route_anchor_id` step, add one concise callout with a working link to th
 
 ## Bosses components
 
-Open the view with a compact `.boss-hero` that explains the evidence boundary: encounters and mechanics are verified from game data, multi-form fights are kept together, and fixed rewards are distinct from database drops. A restrained legend may name the published dossier groups; do not claim completion percentages or recommend guessed levels.
+Open the view with a compact `.boss-hero` that explains the evidence boundary: encounters and mechanics are verified from game data, multi-form fights are kept together, and fixed rewards are distinct from database drops. State any verified game-wide active-roster cap and reserve/Formation behavior here once. A restrained legend may name the published dossier groups; do not claim completion percentages or recommend guessed levels.
 
 Render `evidence.json.bosses.groups` as `.boss-group[data-boss-group-id]` sections with a matching `data-boss-group-label` and directly linkable `h2`. Use player-meaningful, source-derived group labels such as Main Story Bosses, Side-Event Bosses, the game's explicit superboss category, or a verified rematch system. Grouping is organizational and must not invent a new in-game rank.
 
@@ -177,7 +181,7 @@ Render every dossier as `.boss-entry[data-boss-id]` with:
 - A `Where and when` paragraph tied to its Main Route or Optional Content source.
 - Working links back to every declared source entry; those source entries link to the dossier in return.
 - One phase section per materially distinct enemy form or component shown to the player. Keep transformations and required adds in encounter order.
-- A compact `Battle setup` line for each phase, derived from its participant audit. Name fixed or solo battlers, distinguish reserve/formation-eligible members from simultaneous active battlers, state a relevant battle-member cap, and describe later recruits as conditional when an optional encounter can be delayed. Do not list a companion who is removed to watch from outside combat.
+- A compact `Battle setup` line for each phase, derived from its participant audit. Name fixed or solo battlers and describe meaningful later substitutes or encounter-specific locks when an optional encounter can be delayed. Put the game's global battle-member cap and reserve/Formation semantics in the view introduction instead of repeating the same sentence in every dossier. Do not list a companion who is removed to watch from outside combat.
 - One horizontally scrollable stat table for exact HP, SP, core parameters, experience, gold, and database drops. Do not repeat the same values in a prose stat sentence, and never collapse fixed event rewards into the drops column. Bind every visible cell to its phase/stat key so validation compares the rendered value with evidence.
 - A prominent weakness/resistance read derived from enemy traits and the system element table. Say when no elemental rate is encoded rather than inventing a weakness.
 - A short `What to watch for` list derived from enemy schedules, skills, states, formulas, and chained/setup logic. Explain the battle consequence—such as a setup unlocking a party-wide landing attack, random hits concentrating on one ally, a buff creating an extra-action burst, a drain exhausting the party, or a turn-scaling move imposing a deadline—not merely the move's target and condition. Omit an interpretation when the data does not establish it.
@@ -188,6 +192,26 @@ Render every dossier as `.boss-entry[data-boss-id]` with:
 
 Boss dossiers may use bordered editorial cards because each is a self-contained reference entry. Phase sections should read vertically; only the stat table scrolls horizontally. On wide layouts, `What to watch for` and `How to win` may sit side by side, but stack them on narrow screens. Keep numeric density inside the table and lead the prose with decisions a player can act on. Do not expose troop IDs, enemy IDs, map IDs, command indices, or coordinates outside Evidence.
 
+## Scenes & CG components
+
+Open with a compact `.scenes-hero` that states the catalog boundary and exact evidence-backed totals for entries and illustrated sets. Say what those totals count. Do not imply that dialogue replay, BGM playback, ordinary cutscenes, animation frames, or unrelated image files are included unless the game puts them in the same catalog.
+
+Render one `.scene-system#scenes-cg-system` overview explaining how the player opens the catalog and any verified system-level help that materially clarifies unlocks. If the game has an ending-based unlock-all path, complete recollection room, or other catalog-wide shortcut, state it once here so completion-focused players know it exists. Frame it as an alternate viewing/completion method; the entries below still lead with their normal in-world acquisition. Examples may also include a relationship-status readout or view/skip behavior, but only when the current game's active systems prove it. End the overview with one Evidence disclosure; keep settings, state carriers, and implementation identifiers inside Evidence.
+
+Render `evidence.json.scenes_cg.groups` as `.scene-group[data-scene-group-id]` sections with matching `data-scene-group-label` and directly linkable `h2` IDs. Use game-authored or player-meaningful source-backed groups such as characters, relationships, encounters, defeats, story phases, or gallery pages. Group headings divide a long catalog; they do not claim every contained entry becomes available together.
+
+Render every catalog record as `.scene-entry[data-scene-id][data-acquisition-mode]` with:
+
+- A stable article ID and a directly linkable `h3` whose ID exactly matches the scene ID.
+- A compact type/status line and the exact canonical catalog title.
+- One `.scene-acquisition[data-acquisition-mode]` section. For `normal-play`, title it `How to get it normally` and give the nearest verified player-visible sequence through the live game, followed by a short `Requirements` list that translates every gate into actionable terms. Do not replace this with the ending, recollection-room entrance, unlock-all method, or replay-tile interaction described in the overview. Do not repeat an umbrella catalog summary such as “continue this interaction event” when the live chain identifies a location, named interaction, prior scene, journal instruction, or story milestone. Preserve that summary in Evidence and cite the executable path used to expand it. For a proven `gallery-only` reference collection, title the section `Gallery-only` and plainly say that the catalog exposes no standalone in-world scene.
+- A trigger-time alias only when it differs and helps the player recognize the live event.
+- A restrained viewer note and exact `illustrated sets` count. Count the entry's selected sets, not frames, variants, or loose filesystem assets.
+- Exactly one checklist input whose `data-task-id` matches the scene ID.
+- One final collapsed Evidence disclosure covering catalog requirements/title, normal acquisition and live trigger/unlock behavior for `normal-play`, the reconciled viewer-only classification for `gallery-only`, replay/viewer dispatch, and every counted illustrated set.
+
+Use compact editorial cards in a single-column catalog. Avoid thumbnails: the HTML must be self-contained, and guide navigation does not require reproducing the game's CGs. Keep descriptions practical and discreet—tell the player how to unlock and replay an entry, not what intimate content occurs. At each group's declared Main Route anchor, render one concise `Scenes & CG now available` callout before or after the route prose as specified. Link the group back to that route context.
+
 ## View routing and cross-links
 
 Enhance ordinary anchors with a small hash router:
@@ -196,7 +220,7 @@ Enhance ordinary anchors with a small hash router:
 2. Activate that view, update selected-tab state, rebuild or filter `.section-nav`, and then scroll to the destination.
 3. Use `history.pushState` for user navigation and respond to `hashchange`/`popstate` so Back and Forward work.
 4. On first load, honor a valid deep link. Fall back to Main Route for an unknown hash without throwing.
-5. Search all three completed views. Before scrolling to a result, activate its owning view.
+5. Search all four completed views. Before scrolling to a result, activate its owning view.
 6. Do not create separate per-view copies of search, theme, progress, or drawer logic.
 
 Add a short inline script in the document head that marks JavaScript availability. Hide inactive panels only after that marker exists. Without JavaScript, display all panels in document order and let tab anchors jump normally.
@@ -237,14 +261,15 @@ Do not use the old all-in-one table of contents as the primary information archi
 Before publishing:
 
 0. If skill behavior or guide-generation logic changed, regenerate the entire single-file publication and all affected private artifacts from source. Re-audit every already-completed affected view; a hand-edited example is not evidence that the behavior propagated.
-1. Confirm all required shell hooks, exact tabs, exact panels, unique IDs, and placeholder states.
+1. Confirm all required shell hooks, exact tabs, exact panels, unique IDs, and absence of placeholder views.
 2. Confirm Main Route is the initial view and each tab/deep link/Back/Forward transition updates selected state and content correctly.
 3. Confirm every `.route-step` has exactly one matching evidence claim and disclosure.
 4. Confirm every rendered evidence source matches the manifest and every working `data-guide-link` resolves.
 5. Confirm every Optional Content group and entry matches the evidence ledger, has one checklist and disclosure, and receives exactly one link from its declared Main Route anchor.
-6. Confirm every Bosses group and dossier matches the evidence ledger, has one checklist and disclosure, and has exact two-way links to every declared Main Route or Optional Content source. Confirm only Scenes & CG remains a polished placeholder.
-7. Confirm the page makes no external request and ordinary anchors/all content work without JavaScript.
-8. Exercise search across all three completed views, theme, focused reading, checklists/reset, progress, resume, drawer, and Back to Top.
-9. Render desktop and phone views. Check hierarchy, tab overflow, drawer behavior, optional and boss cards, evidence wrapping, controls, boss-table scrollers, and page overflow.
-10. Check keyboard order, focus visibility, accessible names, dialog focus, selected-tab semantics, contrast, and reduced motion.
-11. Print or print-preview; confirm all views and expanded evidence remain readable.
+6. Confirm every Bosses group and dossier matches the evidence ledger, has one checklist and disclosure, and has exact two-way links to every declared Main Route or Optional Content source.
+7. Confirm the Scenes & CG overview, groups, acquisition modes, normal acquisition steps, requirements, aliases, viewer modes, illustrated-set totals, checklists, and disclosures match the evidence ledger. Confirm any catalog-wide completion shortcut appears once in the overview, every `normal-play` entry leads with its live path outside the catalog interface, `gallery-only` is backed by a completed reverse search, umbrella summaries were expanded wherever the executable chain provides a more actionable step, every group has its exact two-way Main Route link, and every counted set has a viewer source.
+8. Confirm the page makes no external request, public prose contains no leaked engine control codes, and ordinary anchors/all content work without JavaScript.
+9. Exercise search across all four completed views, theme, focused reading, checklists/reset, progress, resume, drawer, and Back to Top.
+10. Render desktop and phone views. Check hierarchy, tab overflow, drawer behavior, optional, boss, and scene cards, evidence wrapping, controls, boss-table scrollers, and page overflow.
+11. Check keyboard order, focus visibility, accessible names, dialog focus, selected-tab semantics, contrast, and reduced motion.
+12. Print or print-preview; confirm all views and expanded evidence remain readable.

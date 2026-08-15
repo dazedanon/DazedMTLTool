@@ -10,6 +10,7 @@ Use this schema with `scripts/validate_walkthrough.py`. The evidence ledger exis
 - Route claims
 - Optional Content groups and entries
 - Boss groups and entries
+- Scenes & CG catalog, groups, and entries
 - Source snapshots
 - Markdown and HTML binding
 - Verification boundary
@@ -21,8 +22,8 @@ Create `<game>/.dazedtl/walkthrough/evidence.json`:
 
 ```json
 {
-  "schema_version": 10,
-  "milestone": "main-route-optional-content-and-bosses",
+  "schema_version": 12,
+  "milestone": "complete-four-view-walkthrough",
   "project_context": {},
   "route_structure": {},
   "route_claims": [],
@@ -35,11 +36,17 @@ Create `<game>/.dazedtl/walkthrough/evidence.json`:
     "source_label": "Battle events, troop phases, enemy and skill records, and fixed outcomes",
     "groups": [],
     "entries": []
+  },
+  "scenes_cg": {
+    "source_label": "Player-facing scene catalog, live triggers, unlock state, and viewer dispatch",
+    "catalog": {},
+    "groups": [],
+    "entries": []
   }
 }
 ```
 
-The current milestone supports one claim per Main Route step, one record per published Optional Content entry, and one dossier per published boss. Keep claim, group, entry, boss, and source IDs stable after publication so saved hashes and review notes survive later expansion.
+The completed milestone supports one claim per Main Route step, one record per Optional Content entry, one dossier per boss, and one record per illustrated scene/catalog entry. Keep claim, group, entry, boss, scene, and source IDs stable after publication so saved hashes and review notes survive regeneration.
 
 ## Project language context
 
@@ -316,6 +323,101 @@ The participant chain must cover party mutations and substitutions before battle
 
 For every equipment-bound candidate, record the materially competitive reachable loadouts, relevant parameter/trait/skill differences, and the resulting `recommend`, `conditional-tradeoff`, or `suppress` decision in private `boss-inventory.json`; preserve suppressed candidates there instead of silently discarding the comparison. If an optional encounter can be delayed across equipment milestones, audit that wider availability window and avoid presenting starter gear as the assumed current loadout.
 
+## Scenes & CG catalog, groups, and entries
+
+`scenes_cg` is the reconciled player-facing illustrated catalog, not a filesystem inventory. Its scope comes from the game's reachable recollection, memory, gallery, or replay interface and the executable entries that interface exposes. Record excluded neighboring systems—such as dialogue/BGM replay or ordinary cutscenes—in private research when they could otherwise be mistaken for catalog entries.
+
+```json
+{
+  "scenes_cg": {
+    "source_label": "Player-facing scene catalog, live triggers, unlock state, and viewer dispatch",
+    "catalog": {
+      "id": "scenes-cg-system",
+      "title": "Using the Memory Gallery",
+      "entry_count": 1,
+      "cg_image_count": 2,
+      "interface_files": ["data/SceneCatalog.json"],
+      "completion_shortcut": "After a cleared ending, the gallery's Unlock All option opens every entry; the individual cards below explain how to encounter each scene during normal play.",
+      "guide_phrases": [
+        "Choose Reminisce at the bedroom journal to enter the Memory Gallery.",
+        "After a cleared ending, the gallery's Unlock All option opens every entry; the individual cards below explain how to encounter each scene during normal play."
+      ],
+      "source_roles": {
+        "entry_point": ["scene-catalog-entry"],
+        "scope_boundary": ["scene-catalog-slots"],
+        "completion_shortcut": ["scene-catalog-unlock-all"]
+      },
+      "sources": []
+    },
+    "groups": [
+      {
+        "id": "scene-group-mina",
+        "label": "Mina",
+        "route_anchor_id": "reach-town",
+        "route_anchor_position": "after",
+        "entry_ids": ["scene-town-memory"]
+      }
+    ],
+    "entries": [
+      {
+        "id": "scene-town-memory",
+        "title": "Town Memory",
+        "kind": "character-scene",
+        "status": "verified",
+        "group_id": "scene-group-mina",
+        "acquisition_mode": "normal-play",
+        "acquisition_steps": ["Reach Town, then speak to Mina at the fountain to play Town Memory during the journey."],
+        "requirements": ["Reach Town and speak to Mina at the fountain."],
+        "aliases": ["A Memory by the Fountain"],
+        "viewer_mode": "replay-and-cg-gallery",
+        "cg_image_count": 2,
+        "guide_phrases": [
+          "Town Memory appears in the Memory Gallery after every listed requirement is met.",
+          "Reach Town, then speak to Mina at the fountain to play Town Memory during the journey.",
+          "Reach Town and speak to Mina at the fountain."
+        ],
+        "source_roles": {
+          "requirements": ["scene-town-memory-requirements"],
+          "replay_title": ["scene-town-memory-title"],
+          "replay_call": ["scene-town-memory-replay"],
+          "normal_acquisition": ["scene-town-memory-trigger"],
+          "live_trigger": ["scene-town-memory-trigger"],
+          "live_completion": ["scene-town-memory-unlock"],
+          "unlock": ["scene-town-memory-unlock"],
+          "cg_viewer": ["scene-town-memory-cg-a", "scene-town-memory-cg-b"]
+        },
+        "sources": []
+      }
+    ]
+  }
+}
+```
+
+The catalog object has the fixed ID `scenes-cg-system`, a player-facing title, exact published entry and illustrated-set totals, one or more exact `guide_phrases`, globally unique source snapshots, a `source_roles` mapping, and `interface_files` listing the dedicated maps/data files that implement the catalog or recollection surface. Do not put a mixed-use common-event database in `interface_files` merely because the catalog calls a common event; list the dedicated interface sources so the validator can reject a catalog interaction reused as live acquisition evidence. `entry_point` proves how the player reaches the catalog. `scope_boundary` proves which authoritative slots or records define its included entries and any material exclusion boundary.
+
+When the game has a verified catalog-wide unlock-all or completion shortcut, add its exact player-facing explanation as `completion_shortcut`, include that same string once in `guide_phrases`, and bind a `completion_shortcut` source role. Render it once in the `.scene-system` overview. Omit the field and role when the game has no such behavior. Individual `normal-play` entries must not repeat it or use it as a requirement. Add other roles such as relationship-status display, skip behavior, defeat handling, reset behavior, or settings only when that game actually uses them and the guide discusses them.
+
+Each group has a globally unique kebab-case `id`, a visible `label`, a complete ordered `entry_ids` list, and one Main Route availability binding. `route_anchor_position` is `before` when the player should know about the group before taking the step or `after` when completing the step first makes the group actionable. Every scene belongs to exactly one group; group membership is organizational and does not claim that all entries share one unlock time.
+
+Each scene entry has:
+
+- `id`: a globally unique kebab-case ID, distinct from every route, optional, boss, catalog, and group ID.
+- `title`: the canonical player-facing catalog/replay title.
+- `kind`: `relationship-scene`, `character-scene`, `story-scene`, `encounter-scene`, `defeat-scene`, `gallery-entry`, or `other-scene`. Preserve a more specific game-authored category in visible prose when useful.
+- `status`: `verified`.
+- `group_id`: the one group that contains the entry.
+- `acquisition_mode`: `normal-play` for a scene reached through executable story, exploration, interaction, choice, relationship, optional-content, or defeat logic outside the catalog interface; `gallery-only` only for a viewer/reference record proven to have no standalone live event.
+- `acquisition_steps`: one or more exact player-facing steps for the normal live path. For `gallery-only`, explain that the record is a viewer-only collection and how to recognize it without repeating the catalog-wide completion shortcut.
+- `requirements`: one or more exact, player-facing requirements for that acquisition path. Translate executable gates into actions and visible states without exposing internal IDs.
+- `aliases`: trigger-time title variants that help identify the live event, or an empty list.
+- `viewer_mode`: a nonempty kebab-case description of what the catalog opens, such as `replay-and-cg-gallery`, `replay`, or `still-gallery`; this is descriptive, not a fixed plugin enum.
+- `cg_image_count`: the nonnegative number of illustrated sets explicitly selected by this entry's viewer. Count sets, not animation frames or similarly named files.
+- `guide_phrases`: the exact availability statement, every acquisition step, every requirement, and any other material player-facing behavior rendered in Markdown and HTML.
+- `source_roles`: local evidence bindings. `normal-play` requires `requirements`, `normal_acquisition`, `replay_title`, `replay_call`, `live_trigger`, and `live_completion`; at least one source for each live role must be outside `catalog.interface_files` and must not duplicate a catalog-system locator. Add `unlock` when the live event writes a separate persistent catalog state; omit it when the catalog has no per-entry locking and the live scene simply completes. `gallery-only` requires `requirements`, `replay_title`, `replay_call`, and `gallery_access`, must use kind `gallery-entry`, and must not claim live acquisition/completion roles. Both modes also require `cg_viewer` when `cg_image_count` is positive. A role describes what the source proves, not which engine construct must carry it. For example, `replay_call` may cite an event command, plugin command, script dispatch, or configured gallery record.
+- `sources`: globally unique snapshots proving every source role and published behavior. `cg_viewer` must cite exactly one source per counted illustrated set.
+
+Implementation details such as switches, variables, common-event IDs, plugin keys, and asset filenames may be retained in private `scene-inventory.json` or evidence locators, but they are not portable required fields and must not appear in player prose. A source role cannot cite an ID outside the entry's own sources.
+
 ## Source snapshots
 
 Every source requires a unique kebab-case `id`, a supported `type`, a project-relative `file`, a nonempty `supports` explanation, and a source-specific snapshot. Paths must remain inside the game root.
@@ -509,11 +611,54 @@ Render each dossier inside the completed Bosses view:
 
 The group heading uses the exact group ID. The dossier heading uses `boss-<boss-id>`, giving route and optional links a durable destination. Every dossier gets exactly one matching checklist and Evidence disclosure. Each declared route or optional source must contain a working `data-guide-link` to the dossier, and the dossier must link back to every declared source entry. The validator treats missing, extra, or misbound links as publication failures.
 
+### Scenes & CG
+
+Introduce the catalog overview in Markdown, then immediately precede every scene group and scene entry with matching markers:
+
+```markdown
+## Using the Memory Gallery
+
+<!-- scene-group:scene-group-mina -->
+## Mina
+
+<!-- scene-entry:scene-town-memory -->
+### Town Memory
+```
+
+Render the overview and entries inside the completed Scenes & CG view:
+
+```html
+<section class="scene-system" id="scenes-cg-system">
+  <h2>Using the Memory Gallery</h2>
+  <p>Choose Reminisce at the bedroom journal to enter the Memory Gallery.</p>
+  <details class="evidence" data-evidence-id="scenes-cg-system">…</details>
+</section>
+<section class="scene-group" data-scene-group-id="scene-group-mina" data-scene-group-label="Mina">
+  <h2 id="scene-group-mina">Mina</h2>
+  <p><a data-guide-link href="#reach-town">Main Route context</a></p>
+  <article class="scene-entry" id="scene-entry-scene-town-memory" data-scene-id="scene-town-memory" data-acquisition-mode="normal-play">
+    <h3 id="scene-town-memory">Town Memory</h3>
+    <p>Town Memory appears in the Memory Gallery after every listed requirement is met.</p>
+    <section class="scene-acquisition" data-acquisition-mode="normal-play">
+      <h4>How to get it normally</h4>
+      <p>Reach Town, then speak to Mina at the fountain to play Town Memory during the journey.</p>
+      <ul class="scene-requirements"><li>Reach Town and speak to Mina at the fountain.</li></ul>
+    </section>
+    <p class="scene-cg-count">2 illustrated sets</p>
+    <label class="task-row"><input class="task-checkbox" type="checkbox" data-task-id="scene-town-memory"> Mark unlocked</label>
+    <details class="evidence" data-evidence-id="scene-town-memory">…</details>
+  </article>
+</section>
+```
+
+The catalog overview has exactly one verified Evidence disclosure and contains every catalog `guide_phrase`, including any completion shortcut once. Every group heading exposes its exact group ID; every entry heading exposes its exact scene ID. Every entry has exactly one matching `.scene-acquisition` section, checklist, and Evidence disclosure and visibly renders its exact `cg_image_count`. The Main Route anchor contains exactly one `data-guide-link` to each declared group at the declared `before` or `after` position, and the group links back to that route claim. The validator rejects missing entries, mismatched totals, unbound evidence roles, catalog-interface evidence masquerading as normal acquisition, repeated completion shortcuts in normal entries, uncounted viewer sets, extra/dead links, and entries outside the Scenes & CG view.
+
 ## Verification boundary
 
 - `verified` means every material part of the published player-facing phrase is supported by source snapshots and the relevant branch trace.
 - For Optional Content, `verified` also means the major lifecycle, direct dependencies, availability anchor, completion interaction, and stated fixed outcomes have been traced.
 - For Bosses, `verified` also means every displayed phase, stat, action, elemental read, drop, fixed reward, transformation, special outcome, and route/optional binding has been traced.
+- For Scenes & CG, `verified` also means the catalog boundary, exact title, acquisition classification, displayed requirements, normal acquisition/live trigger/live completion for `normal-play` and any separate persistent unlock write the game actually uses (or a reconciled lack of a standalone event for `gallery-only`), replay/viewer dispatch, illustrated-set count, and group/route binding have been traced.
 - Exact walking lines, visual prominence, and route efficiency are not required publication claims. Do not add them unless the data proves them.
 - Research notes about omitted precision may stay in private working files or a non-rendered `navigation_note`; they are not claim statuses and must not appear in HTML Evidence.
 
@@ -522,6 +667,7 @@ Never use `assumed`, `likely`, `requires-playtest`, or an untracked confidence s
 ## Research rules
 
 - Trace forward from the triggering event and backward from the claimed outcome.
+- Treat a catalog phrase such as “continue the event” as catalog evidence, not a complete route. Cite the executable gate, the state transition that reaches it, and any player-visible journal/location/story milestone used to expand that phrase.
 - Begin system-specific tracing from the private active-system inventory. Require enabled configuration plus executable or player-facing use before treating a plugin/module as active, and deep-audit only systems that can materially affect a completed view.
 - Cite all material sides of a branch: choice labels, branch condition/state, reward or transfer, and the later gate when relevant.
 - Cite both the acquisition command and database record for a named important item when the command identifies it only by ID.
@@ -531,5 +677,6 @@ Never use `assumed`, `likely`, `requires-playtest`, or an untracked confidence s
 - Cite page conditions and state writes for progression gates; do not infer causality from similarly named switches.
 - Keep one evidence claim focused enough that a reviewer can explain why every source is present.
 - Reconcile configured optional records with executable activation and completion writes. Record unreachable, test-only, duplicate, superseded, boss-dossier, and scene-only exclusions in private research so missing catalog entries are deliberate rather than accidental.
+- Reconcile every authoritative illustrated catalog slot with its normal acquisition path, reachable live trigger, unlock state, replay/viewer dispatch, and counted illustrated sets. Search reverse common-event calls, picture/viewer calls, state writes, battle-loss branches, and map triggers before classifying a record `gallery-only`. Do not derive completeness from asset filenames, installed plugin defaults, or similarly named options. Trace relationship, skip, rest, defeat, reset, and other scene mechanics only when the active game uses them and they affect a published entry.
 - When discovery, classification, evidence, strategy, prose, or rendering behavior changes, regenerate the complete walkthrough and all affected private manifests. Re-audit every already-completed view touched by that behavior; never update only the reported example and treat unchanged entries as reviewed.
 - Re-run validation after any game-data, Markdown, evidence, or HTML change. A snapshot mismatch means the guide must be re-audited, not that the expected snapshot should be updated automatically.
