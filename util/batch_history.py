@@ -24,8 +24,10 @@ from util.translation import (
     BATCH_STATE_FILE,
     BatchFileCorruptionError,
     _batch_file_lock,
+    _clear_batch_queue_storage,
     _get_anthropic_client,
     _read_batch_file,
+    _read_batch_queue,
     _write_batch_file,
     getPricingConfig,
 )
@@ -520,11 +522,7 @@ def _remove_active_batch_ids(batch_ids: list[str]) -> None:
 
 def _clear_batch_queue_file() -> None:
     """Remove leftover collect queue. Caller must hold the batch file lock."""
-    try:
-        if BATCH_QUEUE_FILE.exists():
-            BATCH_QUEUE_FILE.unlink()
-    except Exception:
-        pass
+    _clear_batch_queue_storage()
 
 
 def _usage_from_message(u) -> dict:
@@ -780,7 +778,7 @@ def _discard_stale_active_locks() -> tuple[dict, dict]:
     state = _discard_stale_canceled_active_state(
         _read_batch_file(BATCH_STATE_FILE, strict=True)
     )
-    queue = _read_batch_file(BATCH_QUEUE_FILE, strict=True)
+    queue = _read_batch_queue(strict=True)
     # A collect queue with no state is leftover from a canceled/cleared submit
     # (queue normally survives until fetch). Legitimate unsubmitted collects
     # always have status=queued state via saveQueuedBatchMetadata.
@@ -931,8 +929,7 @@ def redownload_batch(batch_id: str) -> dict:
                     write_batch_glossary_freeze(freeze_text)
                 except Exception:
                     pass
-            if BATCH_QUEUE_FILE.exists():
-                BATCH_QUEUE_FILE.unlink()
+            _clear_batch_queue_storage()
         T._batch_results = None
 
     for row_id, part, row_errors, row_usage, row_cost in fetched_parts:

@@ -57,6 +57,11 @@ def _batch_freeze_glossary_text(fallback=""):
 
 def _active_batch_cache_key_version() -> int:
     """Return the key version for the active batch run, else the current default."""
+    snapshotted = getattr(
+        _thread_local, "batch_collect_cache_key_version", None
+    )
+    if snapshotted is not None:
+        return snapshotted
     try:
         with _batch_file_lock():
             state = _read_batch_file(BATCH_STATE_FILE)
@@ -946,7 +951,10 @@ def save_cache():
     if _cache is None:
         return
 
-    if _translation_cache_writes_deferred():
+    if (
+        _translation_cache_writes_deferred()
+        or getattr(_thread_local, "batch_collect_cache_snapshot", False)
+    ):
         return
     
     with CACHE_LOCK:
@@ -993,6 +1001,46 @@ def deferred_translation_cache_writes():
                 pass
             if dirty:
                 save_cache()
+
+
+@contextmanager
+def batch_collect_snapshot_reads():
+    """Snapshot read-only collect inputs once for one file subprocess.
+
+    Fresh collection clears the translation cache before speaker preflight.
+    List requests only read that cache and are deduplicated again by their
+    durable queue key, so rereading it under a cross-process lock for every
+    chunk adds contention without changing submitted work. Live scalar name
+    translations still use the synchronized cache path and update this
+    process's in-memory copy.
+    """
+    previous_cache_mode = getattr(
+        _thread_local, "batch_collect_cache_snapshot", None
+    )
+    previous_version = getattr(
+        _thread_local, "batch_collect_cache_key_version", None
+    )
+    load_cache()
+    version = _active_batch_cache_key_version()
+    _thread_local.batch_collect_cache_snapshot = True
+    _thread_local.batch_collect_cache_key_version = version
+    try:
+        yield
+    finally:
+        if previous_cache_mode is None:
+            try:
+                del _thread_local.batch_collect_cache_snapshot
+            except AttributeError:
+                pass
+        else:
+            _thread_local.batch_collect_cache_snapshot = previous_cache_mode
+        if previous_version is None:
+            try:
+                del _thread_local.batch_collect_cache_key_version
+            except AttributeError:
+                pass
+        else:
+            _thread_local.batch_collect_cache_key_version = previous_version
 
 def expand_clean_to_batch(clean_values, tItem, corrupted_map, no_japanese_map):
     """Re-insert skipped originals around AI-translated (clean) values.
@@ -1485,6 +1533,121 @@ def _write_batch_file(path, data):
     tmp_file.replace(path)
 
 
+def _batch_queue_parts_dir():
+    """Directory of append-only collect fragments for the active queue."""
+    return BATCH_QUEUE_FILE.with_name(f"{BATCH_QUEUE_FILE.name}.parts")
+
+
+def _read_batch_queue(*, strict=False):
+    """Read the compact queue snapshot plus all durable collect fragments.
+
+    Callers coordinating queue lifecycle changes must hold ``_batch_file_lock``.
+    A fragment is one atomic write from a collect subprocess, which avoids
+    rewriting and reparsing the full, growing queue for every request.
+    """
+    queue = _read_batch_file(BATCH_QUEUE_FILE, strict=strict)
+    parts_dir = _batch_queue_parts_dir()
+    try:
+        if parts_dir.is_symlink():
+            raise OSError("path is a symbolic link")
+        if not parts_dir.exists():
+            return queue
+        if not parts_dir.is_dir():
+            raise OSError("path is not a trusted directory")
+        paths = sorted(parts_dir.iterdir(), key=lambda path: path.name)
+    except Exception as exc:
+        message = f"Batch recovery directory is corrupt: {parts_dir} ({exc})"
+        print(f"[BATCH] {message}", flush=True)
+        if strict:
+            raise BatchFileCorruptionError(
+                message
+                + ". The operation was blocked to preserve recovery data and "
+                "prevent duplicate paid work."
+            ) from exc
+        return queue
+
+    for path in paths:
+        # Atomic-write leftovers cannot represent committed queue entries.
+        if path.name.endswith(".tmp"):
+            continue
+        if path.suffix != ".json" or path.is_symlink() or not path.is_file():
+            message = f"Batch recovery fragment is invalid: {path}"
+            print(f"[BATCH] {message}", flush=True)
+            if strict:
+                raise BatchFileCorruptionError(
+                    message
+                    + ". The operation was blocked to preserve recovery data and "
+                    "prevent duplicate paid work."
+                )
+            continue
+        fragment = _read_batch_file(path, strict=strict)
+        for key, entry in fragment.items():
+            queue.setdefault(key, entry)
+    return queue
+
+
+def _clear_batch_queue_parts(*, strict=False):
+    """Remove queue fragments without traversing unexpected directories."""
+    parts_dir = _batch_queue_parts_dir()
+    try:
+        if parts_dir.is_symlink():
+            raise OSError(f"Batch queue fragments path is a link: {parts_dir}")
+        if not parts_dir.exists():
+            paths = []
+        elif not parts_dir.is_dir():
+            raise OSError(
+                f"Batch queue fragments path is not a directory: {parts_dir}"
+            )
+        else:
+            paths = list(parts_dir.iterdir())
+    except Exception:
+        if strict:
+            raise
+        return
+
+    for path in paths:
+        try:
+            if path.is_dir() and not path.is_symlink():
+                if strict:
+                    raise OSError(
+                        f"Unexpected directory in batch queue fragments: {path}"
+                    )
+                continue
+            path.unlink()
+        except Exception:
+            if strict:
+                raise
+    try:
+        if parts_dir.exists():
+            parts_dir.rmdir()
+    except Exception:
+        if strict:
+            raise
+
+
+def _clear_batch_queue_storage(*, strict=False):
+    """Remove the compact queue snapshot and its append-only fragments."""
+    try:
+        if BATCH_QUEUE_FILE.exists():
+            BATCH_QUEUE_FILE.unlink()
+    except Exception:
+        if strict:
+            raise
+    _clear_batch_queue_parts(strict=strict)
+
+
+def _compact_batch_queue(*, strict=True):
+    """Merge durable fragments into the legacy queue snapshot once."""
+    queue = _read_batch_queue(strict=strict)
+    parts_dir = _batch_queue_parts_dir()
+    if parts_dir.exists():
+        # Write the complete snapshot before deleting any fragment. A crash can
+        # therefore leave duplicates, but never lose a collected request.
+        _write_batch_file(BATCH_QUEUE_FILE, queue)
+        _clear_batch_queue_parts(strict=strict)
+    return queue
+
+
 def _attach_glossary_freeze(state_doc: dict, source_state: dict | None = None) -> dict:
     """Keep collect-time glossary freeze across batch_state rewrites."""
     text = None
@@ -1517,6 +1680,12 @@ def peek_cached_translation(
     The collect pass uses this instead of get_cached_translation so abandoned
     pending markers can't stall the consume pass for CACHE_PENDING_TTL."""
     key = get_cache_key(payload, language, cache_context, request_context)
+    if getattr(_thread_local, "batch_collect_cache_snapshot", False):
+        with CACHE_LOCK:
+            entry = (_cache or {}).get(key)
+        if entry is None or _is_pending_cache_entry(entry):
+            return None
+        return entry
     with CACHE_LOCK:
         with _translation_cache_file_lock():
             cache = _read_cache_from_disk()
@@ -1536,8 +1705,8 @@ def queue_batch_request(
 
     Deduped by the same key the translation cache uses, so identical payloads
     with identical conversation context are only paid for once. Entries are
-    buffered in memory and merged to disk by flush_batch_queue() at the end of
-    each translateAI call.
+    buffered in memory and atomically persisted as a queue fragment by
+    flush_batch_queue() at the end of each translateAI call.
     """
     typed_request_context = _coerce_typed_request_context(
         request_context, CONTEXT_SOURCE
@@ -1564,7 +1733,7 @@ def queue_batch_request(
 
 
 def flush_batch_queue():
-    """Merge this process's pending queue entries into the on-disk queue."""
+    """Persist this process's pending entries as one atomic queue fragment."""
     global _batch_queue_pending
     with BATCH_LOCK:
         if not _batch_queue_pending:
@@ -1572,15 +1741,21 @@ def flush_batch_queue():
         pending, _batch_queue_pending = _batch_queue_pending, {}
         try:
             with _batch_file_lock():
-                queue = _read_batch_file(BATCH_QUEUE_FILE, strict=True)
-                for key, entry in pending.items():
-                    queue.setdefault(key, entry)
-                _write_batch_file(BATCH_QUEUE_FILE, queue)
+                # A corrupt legacy snapshot must still block new collection;
+                # never hide or overwrite recovery data from an older build.
+                _read_batch_file(BATCH_QUEUE_FILE, strict=True)
+                parts_dir = _batch_queue_parts_dir()
+                part_name = (
+                    f"{time.time_ns():020d}-{os.getpid()}-"
+                    f"{threading.get_ident()}-{uuid.uuid4().hex}.json"
+                )
+                _write_batch_file(parts_dir / part_name, pending)
         except BatchFileCorruptionError:
             _batch_queue_pending.update(pending)
             raise
         except Exception:
-            _batch_queue_pending.update(pending)  # keep entries for the next flush
+            _batch_queue_pending.update(pending)
+            raise
 
 
 def batchQueueStaleContextCount(vocab_text=None, use_sfx_reference=None):
@@ -1600,7 +1775,7 @@ def batchQueueStaleContextCount(vocab_text=None, use_sfx_reference=None):
         )
 
     with _batch_file_lock():
-        queue = _read_batch_file(BATCH_QUEUE_FILE)
+        queue = _read_batch_queue(strict=True)
 
     stale = 0
     for recorded_key, entry in queue.items():
@@ -1699,7 +1874,7 @@ def pendingBatchRequests():
     """Number of queued batch requests (call after the collect pass)."""
     flush_batch_queue()
     with _batch_file_lock():
-        return len(_read_batch_file(BATCH_QUEUE_FILE))
+        return len(_compact_batch_queue(strict=True))
 
 
 def batchRunState():
@@ -1717,7 +1892,7 @@ def batchRunState():
         with _batch_file_lock():
             state = _read_batch_file(BATCH_STATE_FILE, strict=True)
             results = _read_batch_file(BATCH_RESULTS_FILE, strict=True)
-            queue = _read_batch_file(BATCH_QUEUE_FILE, strict=True)
+            queue = _read_batch_queue(strict=True)
             if state.get("status") == "partially_submitted" and state.get("batches"):
                 return "partially_submitted"
             if state.get("batches"):
@@ -1806,7 +1981,8 @@ def clearBatchFiles(*, strict=False):
                 fetched_ids = list(state.get("batch_ids") or [])
                 if not fetched_ids:
                     fetched_ids = [b.get("id") for b in (state.get("batches") or []) if b.get("id")]
-            for path in (BATCH_QUEUE_FILE, BATCH_STATE_FILE, BATCH_RESULTS_FILE):
+            _clear_batch_queue_storage(strict=strict)
+            for path in (BATCH_STATE_FILE, BATCH_RESULTS_FILE):
                 try:
                     if path.exists():
                         path.unlink()
@@ -1819,6 +1995,8 @@ def clearBatchFiles(*, strict=False):
                     for path in (BATCH_QUEUE_FILE, BATCH_STATE_FILE, BATCH_RESULTS_FILE)
                     if path.exists()
                 ]
+                if _batch_queue_parts_dir().exists():
+                    remaining.append(str(_batch_queue_parts_dir()))
                 if remaining:
                     raise OSError(
                         "Could not discard batch recovery files: " + ", ".join(remaining)
@@ -1894,7 +2072,7 @@ def estimateBatchCost(model=None):
     """
     flush_batch_queue()
     with _batch_file_lock():
-        queue = _read_batch_file(BATCH_QUEUE_FILE)
+        queue = _read_batch_queue(strict=True)
     if not queue:
         print("[BATCH] No batch requests queued.", flush=True)
         return None
@@ -2081,7 +2259,7 @@ def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
     """Submit while the caller holds the cross-process submission lock."""
     flush_batch_queue()
     with _batch_file_lock():
-        queue = _read_batch_file(BATCH_QUEUE_FILE, strict=True)
+        queue = _compact_batch_queue(strict=True)
         previous_state = _read_batch_file(BATCH_STATE_FILE, strict=True)
     if not queue:
         print("[BATCH] No batch requests queued.", flush=True)
@@ -2444,11 +2622,7 @@ def fetchTranslationBatches(batches=None):
             _write_batch_file(BATCH_RESULTS_FILE, results)
             # Drop the queue; keep a lightweight fetched marker (ids for consume→history).
             # custom_ids stay in durable history - do not destroy recovery maps.
-            try:
-                if BATCH_QUEUE_FILE.exists():
-                    BATCH_QUEUE_FILE.unlink()
-            except Exception:
-                pass
+            _clear_batch_queue_storage()
             fetched_state = {
                 "status": "fetched",
                 "run_id": state.get("run_id"),

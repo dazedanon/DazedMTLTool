@@ -3897,8 +3897,9 @@ class TranslationTab(QWidget):
                         "Corrupt Batch Recovery",
                         "One or more batch recovery files are corrupt. The run was left "
                         "untouched and submission was blocked to prevent duplicate paid work.\n\n"
-                        "Inspect log/batch_state.json, log/batch_requests.json, and "
-                        "log/batch_results.json before clearing the run.",
+                        "Inspect log/batch_state.json, log/batch_requests.json (and "
+                        "its .parts directory), and log/batch_results.json before "
+                        "clearing the run.",
                     )
                     return
                 if batch_resume_state:

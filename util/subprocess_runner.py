@@ -153,14 +153,19 @@ def run_handler(project_root, module_name, filename, estimate_only):
                 json.loads(runtime_profile_json),
             )
 
-        # A consume pass only applies already-fetched results. Buffer translation
-        # cache mutations for this file and commit them once when the handler
-        # exits instead of rewriting the complete cache for every result.
+        # Batch file subprocesses can avoid repeated cross-process reads/writes:
+        # collect snapshots its read-only cache/state inputs, while consume
+        # buffers cache mutations and commits them once when the handler exits.
         cache_scope = nullcontext()
-        if os.getenv("BATCH_PHASE", "").strip().lower() == "consume":
+        batch_phase = os.getenv("BATCH_PHASE", "").strip().lower()
+        if batch_phase == "consume":
             from util.translation import deferred_translation_cache_writes
 
             cache_scope = deferred_translation_cache_writes()
+        elif batch_phase == "collect":
+            from util.translation import batch_collect_snapshot_reads
+
+            cache_scope = batch_collect_snapshot_reads()
 
         # Run the handler
         with cache_scope:

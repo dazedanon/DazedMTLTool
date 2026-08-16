@@ -127,6 +127,44 @@ class BatchRunStateTests(BatchHistoryTestBase):
         )
         self.assertIn("new-key", T._batch_queue_pending)
 
+    def test_collect_fragments_compact_once_after_collection(self):
+        """The collect hot path must not rewrite the growing queue snapshot."""
+        for payload in ('{"Line1":"猫"}', '{"Line1":"犬"}'):
+            T.queue_batch_request(
+                payload,
+                "English",
+                {"model": "gpt-test"},
+                provider="openai",
+            )
+            T.flush_batch_queue()
+
+        self.assertFalse(T.BATCH_QUEUE_FILE.exists())
+        with T._batch_file_lock():
+            self.assertEqual(len(T._read_batch_queue(strict=True)), 2)
+
+        self.assertEqual(T.pendingBatchRequests(), 2)
+        self.assertEqual(len(T._read_batch_file(T.BATCH_QUEUE_FILE)), 2)
+        self.assertFalse(T._batch_queue_parts_dir().exists())
+
+    def test_corrupt_collect_fragment_blocks_resume_and_submission(self):
+        T.queue_batch_request(
+            '{"Line1":"猫"}',
+            "English",
+            {"model": "gpt-test"},
+            provider="openai",
+        )
+        T.flush_batch_queue()
+        fragment = next(T._batch_queue_parts_dir().glob("*.json"))
+        fragment.write_text("{truncated", encoding="utf-8")
+
+        self.assertEqual(T.batchRunState(), "corrupt")
+        with self.assertRaises(T.BatchFileCorruptionError):
+            T.submitTranslationBatches()
+
+        T.clearBatchFiles(strict=True)
+        self.assertFalse(T._batch_queue_parts_dir().exists())
+        self.assertIsNone(T.batchRunState())
+
     def test_submitted_when_state_has_batches(self):
         T._write_batch_file(
             T.BATCH_STATE_FILE,
@@ -208,7 +246,7 @@ class BatchRunStateTests(BatchHistoryTestBase):
         )
         T.flush_batch_queue()
 
-        queue = T._read_batch_file(T.BATCH_QUEUE_FILE)
+        queue = T._read_batch_queue()
         self.assertEqual(len(queue), 2)
         self.assertEqual(
             {entry["request_context"] for entry in queue.values()},
@@ -232,7 +270,7 @@ class BatchRunStateTests(BatchHistoryTestBase):
         )
         T.flush_batch_queue()
 
-        entry = next(iter(T._read_batch_file(T.BATCH_QUEUE_FILE).values()))
+        entry = next(iter(T._read_batch_queue().values()))
         self.assertEqual(
             json.loads(entry["request_context"]),
             {
@@ -440,7 +478,7 @@ class BatchRunStateTests(BatchHistoryTestBase):
             request_context=request_context,
         )
         T.flush_batch_queue()
-        queue = T._read_batch_file(T.BATCH_QUEUE_FILE)
+        queue = T._read_batch_queue()
         self.assertEqual(len(queue), 1)
         key = next(iter(queue))
         self.assertEqual(

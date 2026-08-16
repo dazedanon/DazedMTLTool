@@ -369,6 +369,38 @@ class ExpandCleanToBatchTests(unittest.TestCase):
 
 
 class SaveLoadTests(CacheTestBase):
+    def test_collect_snapshot_reads_cache_once_for_many_lookups(self):
+        """Collect chunks must not repeatedly parse the shared cache file."""
+        payload = '{"Line1": "一"}'
+        key = T.get_cache_key(payload, "English")
+        T._write_cache_to_disk({key: ["One"]})
+        T._cache = {}
+
+        original_read = T._read_cache_from_disk
+        original_write = T._write_cache_to_disk
+        with (
+            mock.patch.object(
+                T, "_read_cache_from_disk", wraps=original_read
+            ) as read_cache,
+            mock.patch.object(
+                T, "_write_cache_to_disk", wraps=original_write
+            ) as write_cache,
+            mock.patch.object(
+                T, "_active_batch_cache_key_version", return_value=5
+            ),
+            T.batch_collect_snapshot_reads(),
+        ):
+            self.assertEqual(
+                T.peek_cached_translation(payload, "English"), ["One"]
+            )
+            self.assertIsNone(
+                T.peek_cached_translation('{"Line1": "二"}', "English")
+            )
+            T.save_cache()
+
+        self.assertEqual(read_cache.call_count, 1)
+        write_cache.assert_not_called()
+
     def test_deferred_updates_are_visible_and_commit_once(self):
         """Batch consume must not rewrite the whole cache for every result."""
         first_payload = '{"Line1": "一"}'
