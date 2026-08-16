@@ -45,6 +45,7 @@ CODE357_TEXT_ARGUMENTS = {
     "SoR_GabWindow": ("arg1",),
     "DarkPlasma_CharacterText": ("text",),
     "DTextPicture": ("text",),
+    "MM_UltimateTextAnimation": ("text",),
     "TextPicture": ("text",),
     "TRP_SkitMZ": ("name",),
     "LogMessage": ("text",),

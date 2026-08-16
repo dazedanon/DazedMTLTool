@@ -92,6 +92,63 @@ class TestMVMZCode357Plugins(unittest.TestCase):
 
         self.assertNotIn("_original", preservation_disabled_page["list"][0])
 
+    def test_ultimate_text_animation_translates_only_display_text(self):
+        source = "「あの胸で勇者なのか」"
+        translation = '"Is she really the hero with breasts like those?"'
+        page = {
+            "list": [
+                {
+                    "code": 357,
+                    "indent": 0,
+                    "parameters": [
+                        "MM_UltimateTextAnimation",
+                        "ShowPresetText",
+                        "プリセットテキスト表示",
+                        {
+                            "id": "",
+                            "presetId": "ええ",
+                            "text": source,
+                            "x": r"\ev[7]",
+                            "y": r"\ev[7]",
+                            "styleParams": "",
+                            "autoRemove": '{"removeDelay":"70","exitPresetId":""}',
+                        },
+                    ],
+                }
+            ]
+        }
+
+        def translate(text, history, batch=False):
+            return [[translation], [0, 0]]
+
+        with (
+            patch.object(mvmz, "CODE357", True),
+            patch.object(
+                mvmz,
+                "ENABLED_PLUGINS_357",
+                {"MM_UltimateTextAnimation"},
+            ),
+            patch.object(mvmz, "PRESERVEORIGINAL", True),
+            patch.object(mvmz, "translateAI", side_effect=translate),
+        ):
+            translated_page = copy.deepcopy(page)
+            mvmz.searchCodes(translated_page, None, [], "TestMap.json")
+
+        command = translated_page["list"][0]
+        arguments = command["parameters"][3]
+        self.assertEqual(arguments["text"], translation.replace('"', ""))
+        self.assertEqual(arguments["presetId"], "ええ")
+        self.assertEqual(arguments["x"], r"\ev[7]")
+        self.assertEqual(arguments["y"], r"\ev[7]")
+        self.assertEqual(
+            arguments["autoRemove"],
+            '{"removeDelay":"70","exitPresetId":""}',
+        )
+        self.assertEqual(
+            command["_original"],
+            {"parameters": {"3": {"text": source}}},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
