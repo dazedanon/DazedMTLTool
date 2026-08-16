@@ -119,6 +119,12 @@ families into preventive guidance before translation or bounded correction work 
    - every supported member and meaningful exception;
    - one recognizable English mechanism or canonical term;
    - whether the rule belongs in Translation quirks, the Glossary, or a bounded correction list.
+   For a confirmed faux name or other name-based joke, audit the final English Glossary target
+   against that mechanism. When a natural, evidence-supported adaptation is possible, the target
+   itself must carry the recognizable joke; do not merely transliterate the name and leave the
+   wordplay only in its description. Retain a transliteration only when adaptation would distort
+   the character's identity or tone, or no supportable English mechanism exists, and record that
+   reason in the research backlog.
 8. When the project is untranslated, emphasize preventive guidance. When English already exists,
    additionally identify inconsistent members and propose translation corrections, but do not
    apply those corrections. Return proposed guidance to the coordinator; it applies confirmed
