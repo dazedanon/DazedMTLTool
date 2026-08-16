@@ -20,6 +20,7 @@ import threading
 import uuid
 from collections import Counter
 from contextlib import contextmanager
+from functools import wraps
 from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
@@ -944,6 +945,9 @@ def save_cache():
     global _cache
     if _cache is None:
         return
+
+    if _translation_cache_writes_deferred():
+        return
     
     with CACHE_LOCK:
         try:
@@ -954,6 +958,41 @@ def save_cache():
                 _write_cache_to_disk(_cache)
         except Exception:
             pass
+
+
+def _translation_cache_writes_deferred():
+    return bool(getattr(_thread_local, "defer_translation_cache_writes", 0))
+
+
+@contextmanager
+def deferred_translation_cache_writes():
+    """Buffer cache mutations and persist them once when the outer scope exits.
+
+    Batch consume runs one file per subprocess and never makes live provider
+    calls. It therefore does not need per-request pending markers or durable
+    cache writes. Keeping the mutations in memory avoids repeatedly parsing and
+    serializing the complete global cache while a fetched result set is applied.
+    """
+    depth = int(getattr(_thread_local, "defer_translation_cache_writes", 0))
+    outermost = depth == 0
+    if outermost:
+        load_cache()
+        _thread_local.deferred_translation_cache_dirty = False
+    _thread_local.defer_translation_cache_writes = depth + 1
+    try:
+        yield
+    finally:
+        _thread_local.defer_translation_cache_writes = depth
+        if outermost:
+            dirty = bool(
+                getattr(_thread_local, "deferred_translation_cache_dirty", False)
+            )
+            try:
+                del _thread_local.deferred_translation_cache_dirty
+            except AttributeError:
+                pass
+            if dirty:
+                save_cache()
 
 def expand_clean_to_batch(clean_values, tItem, corrupted_map, no_japanese_map):
     """Re-insert skipped originals around AI-translated (clean) values.
@@ -1156,6 +1195,14 @@ def get_cached_translation(
     """Get cached translation if it exists"""
     global _cache
     key = get_cache_key(payload, language, cache_context, request_context)
+
+    if _translation_cache_writes_deferred():
+        with CACHE_LOCK:
+            entry = (_cache or {}).get(key)
+            if entry is None or _is_pending_cache_entry(entry):
+                return None
+            return entry
+
     while True:
         with CACHE_LOCK:
             with _translation_cache_file_lock():
@@ -1187,6 +1234,14 @@ def cache_translation(
     """Cache a translation payload and its response"""
     global _cache
     key = get_cache_key(payload, language, cache_context, request_context)
+
+    if _translation_cache_writes_deferred():
+        with CACHE_LOCK:
+            if _cache is None:
+                _cache = {}
+            _cache[key] = translation
+            _thread_local.deferred_translation_cache_dirty = True
+        return
     
     with CACHE_LOCK:
         with _translation_cache_file_lock():
@@ -4504,8 +4559,21 @@ def last_translation_had_mismatch() -> bool:
     return bool(getattr(_thread_local, "last_translation_had_mismatch", False))
 
 
+def _retry_live_translation(func):
+    """Retry live provider work, but never retry deterministic consume errors."""
+    retried = retry(exceptions=Exception, tries=5, delay=5)(func)
+
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        if get_batch_phase() == "consume":
+            return func(*args, **kwargs)
+        return retried(*args, **kwargs)
+
+    return wrapped
+
+
 @_cache_reservation_scope()
-@retry(exceptions=Exception, tries=5, delay=5)
+@_retry_live_translation
 def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                 mismatchList=None, context_kind=None, request_instructions=None):
     """

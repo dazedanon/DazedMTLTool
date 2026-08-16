@@ -99,6 +99,57 @@ def _load_map_excerpt():
     return {"list": real + [choice_cmd] + synthetic}
 
 
+class ProgressCheckpointTests(unittest.TestCase):
+    def test_missing_batch_result_escapes_event_parser(self):
+        """Consume failures must not be hidden behind a successful map result."""
+        page = {
+            "list": [
+                {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2]},
+                {"code": 401, "indent": 0, "parameters": ["未取得の文章"]},
+            ]
+        }
+
+        def missing_result(*_args, **_kwargs):
+            raise mvmz.BatchResultUnavailableError("missing fetched result")
+
+        with self.assertRaises(mvmz.BatchResultUnavailableError):
+            _run_search_codes(page, translate_fn=missing_result)
+
+    def test_checkpoint_is_throttled_but_forced_save_persists_latest_data(self):
+        """Large maps should checkpoint periodically and always save at finish."""
+        with TemporaryDirectory() as raw:
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(raw)
+                with (
+                    patch.object(mvmz, "ESTIMATE", False),
+                    patch.object(mvmz, "SPEAKER_PARSE_MODE", False),
+                    patch.object(mvmz.time, "monotonic", side_effect=[100.0, 105.0, 106.0]),
+                ):
+                    mvmz.THREAD_CTX.last_progress_save_at = None
+                    self.assertTrue(
+                        mvmz.saveProgress({"value": 1}, "Map001.json")
+                    )
+                    self.assertFalse(
+                        mvmz.saveProgress({"value": 2}, "Map001.json")
+                    )
+                    path = Path("translated/Map001.json")
+                    self.assertEqual(
+                        json.loads(path.read_text(encoding="utf-8")), {"value": 1}
+                    )
+
+                    self.assertTrue(
+                        mvmz.saveProgress(
+                            {"value": 3}, "Map001.json", force=True
+                        )
+                    )
+                    self.assertEqual(
+                        json.loads(path.read_text(encoding="utf-8")), {"value": 3}
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+
 def _resolve_case_command(page_list, entry, marked_cases=None):
     """Find manifest case command by CASE marker or by code + expected _original."""
     marked_cases = marked_cases if marked_cases is not None else _case_commands(page_list)

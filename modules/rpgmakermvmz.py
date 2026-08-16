@@ -13,7 +13,21 @@ from colorama import Fore
 from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
-from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch, convert_corner_brackets, parseVocabWithCategories, last_translation_had_mismatch, split_vocab_source_aliases, speaker_source_lookup_keys, nameplate_gloss_for_alias
+from util.translation import (
+    BatchResultUnavailableError,
+    TranslationConfig,
+    calculateCost,
+    convert_corner_brackets,
+    getPricingConfig,
+    get_var_translation,
+    last_translation_had_mismatch,
+    nameplate_gloss_for_alias,
+    parseVocabWithCategories,
+    set_var_translations_batch,
+    speaker_source_lookup_keys,
+    split_vocab_source_aliases,
+    translateAI as sharedtranslateAI,
+)
 from util.speakers import SPEAKER_BRACKET_INNER, strip_speaker_prefix
 from util.skills import ctx, load_system_prompt
 from util.paths import active_glossary_path, read_active_glossary
@@ -45,6 +59,7 @@ PBAR = None
 FILENAME = None
 TIMETOTAL = 0  # Total Time Taken for all translations
 PREFLIGHT_COUNT_MODE = False  # When True, translateAI wrapper only counts units and never calls API
+PROGRESS_SAVE_INTERVAL_SECONDS = 15.0
 
 # Speakers
 NAMESLIST = []
@@ -232,13 +247,13 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = True
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE101 = False
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
-CODE408 = True
+CODE408 = False
 # Code 408 continues an RPG Maker comment started by code 108. Only known
 # player-facing comment blocks should be sent for translation.
 
@@ -258,7 +273,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE325 = False
-CODE111 = False
+CODE111 = True
 CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
@@ -405,6 +420,7 @@ def handleMVMZ(filename, estimate):
     # Also record per-thread filename to avoid cross-thread interference
     try:
         THREAD_CTX.filename = filename
+        THREAD_CTX.last_progress_save_at = None
     except Exception:
         pass
 
@@ -418,12 +434,12 @@ def handleMVMZ(filename, estimate):
 
     # Translate
     # Skip writing output file during speaker-parse mode
+    if translatedData[2] is not None:
+        if isinstance(translatedData[2], BatchResultUnavailableError):
+            raise translatedData[2]
+
     if not estimate and not SPEAKER_PARSE_MODE:
-        try:
-            with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
-                json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
-        except Exception:
-            traceback.print_exc()
+        if not saveProgress(translatedData[0], filename, force=True):
             return "Fail"
 
     # Print File
@@ -539,14 +555,24 @@ def getResultString(translatedData, translationTime, filename):
             return filename + ": " + totalTokenstring + timeString + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
 
-def saveProgress(data, filename):
+def saveProgress(data, filename, *, force=False):
     """Atomically write current data to translated/filename to avoid progress loss.
-    Skips when running in estimate mode.
+    Intermediate checkpoints are throttled; a forced final save always writes.
     """
     try:
         # Also skip progress saves during speaker-parse mode
         if ESTIMATE or SPEAKER_PARSE_MODE:
-            return
+            return False
+
+        now = time.monotonic()
+        last_save = getattr(THREAD_CTX, "last_progress_save_at", None)
+        if (
+            not force
+            and last_save is not None
+            and now - last_save < PROGRESS_SAVE_INTERVAL_SECONDS
+        ):
+            return False
+
         os.makedirs("translated", exist_ok=True)
         # Use a unique temp file name to avoid collisions across threads/processes
         tmp_path = os.path.join(
@@ -597,9 +623,12 @@ def saveProgress(data, filename):
                 except Exception:
                     pass
                 raise last_err
+        THREAD_CTX.last_progress_save_at = now
+        return True
     except Exception:
         # Best-effort; don't crash the translation if saving fails
         traceback.print_exc()
+        return False
 
 
 def _scalar_original(cmd) -> str | None:
@@ -3726,6 +3755,8 @@ def searchCodes(page, pbar, jobList, filename):
                                         else:
                                             codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(additionalText, translatedAdditionalText)
                                         _apply_original(codeList[i], jaString)
+                        except BatchResultUnavailableError:
+                            raise
                         except Exception as e:
                             # If there's any error loading actors, just extract what's in the brackets
                             speaker = apMatch.group(1)
@@ -4921,6 +4952,8 @@ def searchCodes(page, pbar, jobList, filename):
         # Special Format (Scenario)
         else:
             page[:] = codeListFinal
+    except BatchResultUnavailableError:
+        raise
     except IndexError as e:
         traceback.print_exc()
     except Exception as e:

@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import util.translation as T
 
@@ -368,6 +369,41 @@ class ExpandCleanToBatchTests(unittest.TestCase):
 
 
 class SaveLoadTests(CacheTestBase):
+    def test_deferred_updates_are_visible_and_commit_once(self):
+        """Batch consume must not rewrite the whole cache for every result."""
+        first_payload = '{"Line1": "一"}'
+        second_payload = '{"Line1": "二"}'
+        T._write_cache_to_disk({"existing": ["kept"]})
+        T._cache = {}
+
+        original_write = T._write_cache_to_disk
+        with mock.patch.object(
+            T, "_write_cache_to_disk", wraps=original_write
+        ) as write_cache:
+            with T.deferred_translation_cache_writes():
+                self.assertIsNone(
+                    T.get_cached_translation(first_payload, "English")
+                )
+                T.cache_translation(first_payload, ["One"], "English")
+                T.cache_translation(second_payload, ["Two"], "English")
+                self.assertEqual(
+                    T.get_cached_translation(first_payload, "English"), ["One"]
+                )
+                self.assertEqual(
+                    T._read_cache_from_disk(), {"existing": ["kept"]}
+                )
+
+            self.assertEqual(write_cache.call_count, 1)
+
+        on_disk = T._read_cache_from_disk()
+        self.assertEqual(on_disk["existing"], ["kept"])
+        self.assertEqual(
+            T.peek_cached_translation(first_payload, "English"), ["One"]
+        )
+        self.assertEqual(
+            T.peek_cached_translation(second_payload, "English"), ["Two"]
+        )
+
     def test_save_preserves_entries_from_other_workers(self):
         # Simulate another worker having written an entry to disk.
         T._write_cache_to_disk({"other": ["kept"]})

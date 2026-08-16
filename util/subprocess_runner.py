@@ -10,6 +10,7 @@ from pathlib import Path
 import io
 import json
 import threading
+from contextlib import nullcontext
 
 # Set UTF-8 encoding for stdout to handle Unicode characters
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
@@ -152,8 +153,18 @@ def run_handler(project_root, module_name, filename, estimate_only):
                 json.loads(runtime_profile_json),
             )
 
+        # A consume pass only applies already-fetched results. Buffer translation
+        # cache mutations for this file and commit them once when the handler
+        # exits instead of rewriting the complete cache for every result.
+        cache_scope = nullcontext()
+        if os.getenv("BATCH_PHASE", "").strip().lower() == "consume":
+            from util.translation import deferred_translation_cache_writes
+
+            cache_scope = deferred_translation_cache_writes()
+
         # Run the handler
-        handler_result = handler(filename, estimate_only)
+        with cache_scope:
+            handler_result = handler(filename, estimate_only)
         
         # Stop progress monitoring
         progress_active = False

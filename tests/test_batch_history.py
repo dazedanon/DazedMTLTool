@@ -64,6 +64,30 @@ class BatchRunStateTests(BatchHistoryTestBase):
     def test_none_when_empty(self):
         self.assertIsNone(T.batchRunState())
 
+    def test_consume_missing_result_is_not_retried(self):
+        """A deterministic missing key must fail once without retry backoff."""
+        config = T.TranslationConfig(
+            model="gpt-test",
+            language="English",
+            prompt="Translate Japanese to English.",
+            vocab="",
+            batchSize=10,
+        )
+        missing = T.BatchResultUnavailableError("missing fetched result")
+
+        with (
+            mock.patch.object(T, "get_batch_phase", return_value="consume"),
+            mock.patch.object(T, "getBatchProvider", return_value="openai"),
+            mock.patch.object(T, "get_cached_translation", return_value=None),
+            mock.patch.object(
+                T, "require_batch_result", side_effect=missing
+            ) as require_result,
+        ):
+            with self.assertRaises(T.BatchResultUnavailableError):
+                T.translateAI(["日本語"], [], config)
+
+        require_result.assert_called_once()
+
     def test_queued_when_only_queue(self):
         T._write_batch_file(T.BATCH_QUEUE_FILE, {"k1": {"payload": "x", "language": "English", "params": {}}})
         self.assertEqual(T.batchRunState(), "queued")
