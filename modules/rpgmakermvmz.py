@@ -177,7 +177,7 @@ def refreshRuntimeConfig():
 # FIRSTLINESPEAKERS: Guess speaker from first line.
 FIRSTLINESPEAKERS = False
 # INLINE401SPEAKERS: Extract speaker from "Name「dialogue」" inline format on 401 lines.
-INLINE401SPEAKERS = False
+INLINE401SPEAKERS = True
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
 # Face name -> speaker mapping for FACENAME101.
@@ -238,7 +238,7 @@ CODE405 = True
 CODE102 = True
 
 # Optional
-CODE408 = False
+CODE408 = True
 # Code 408 continues an RPG Maker comment started by code 108. Only known
 # player-facing comment blocks should be sent for translation.
 

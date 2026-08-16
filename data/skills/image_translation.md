@@ -24,11 +24,18 @@ capitalization, and style consistently. If it is missing or does not cover a ter
 gap and follow the remaining translation precedence below.
 
 The user approves deterministic edits to the PNGs already present under the editable image
-folder and creation or update of the single work log required below. Do not modify runtime game
-images or any other project files; the Image Manager will patch validated edits later. Store
-backups and temporary candidates outside the editable image folder so they cannot be mistaken for
-patchable assets. Work through all editable PNGs without asking for confirmation unless a hard
-safety rule below requires review.
+folder, creation or update of the single work log required below, and maintenance of reusable
+image-editing resources under this project-local directory:
+
+`{{GAME_ROOT}}/.dazedtl/image_translation_resources`
+
+Do not modify runtime game images or unrelated project files; the Image Manager will patch
+validated edits later. Keep verified originals under `.dazedtl/image_backups`, user-supplied clean
+art under `.dazedtl/clean_images`, reusable resources under the directory above, and disposable
+candidates under that resource directory's `work/` subtree or in an isolated temporary directory.
+None of these may be placed inside the editable image folder where the Image Manager could mistake
+them for patchable assets. Work through all editable PNGs without asking for confirmation unless a
+hard safety rule below requires review.
 
 Runtime assets may be read or decoded in memory or into an isolated temporary directory when
 needed to reconstruct an editable image, when permitted by the engine-profile guidance. This does
@@ -57,6 +64,7 @@ Produce localized images that:
 - Preserve meaningful background illustrations, including faint watermarks and art visible only
   through a translucent reading surface.
 - Retain recoverable originals.
+- Preserve the reusable inputs and exact rendering decisions needed for consistent future edits.
 - Maintain one concise Markdown work log covering every image and text region reviewed.
 - Include a concise validation report.
 
@@ -76,8 +84,27 @@ Recursively enumerate the PNGs in the editable image folder. Identify:
 Build a family inventory before rendering.
 Record which labels and art states are valid in each variant explicitly instead of inferring presence from loose pixel counts or filename numbering.
 
-The task context grants editing authority only for existing PNGs inside the editable image folder
-and its single required `image_translation_log.md` file.
+The task context grants editing authority only for existing PNGs inside the editable image folder,
+its single required `image_translation_log.md` file, verified backups under
+`.dazedtl/image_backups`, and reusable support files under
+`.dazedtl/image_translation_resources`. Treat `.dazedtl/clean_images` as read-only supplied input
+unless the user explicitly asks to change it.
+
+### 1a. Load reusable project resources
+
+Before designing or rendering anything, inspect:
+
+`{{GAME_ROOT}}/.dazedtl/image_translation_resources`
+
+If it exists, read its manifest or index first and reuse its accepted renderer, layouts, clean-art
+mappings, exact fonts, masks, approved isolated wordmarks, runtime keepouts, and diagnostics. Run
+any bundled resource validator before relying on hashes or paths. A resource package records prior
+decisions; it does not override the current glossary, the verified original, or visible evidence.
+Report and repair stale paths, missing licensed fonts, hash drift, or contradictory layout data
+instead of silently falling back or starting an inconsistent second workflow.
+
+If the directory does not exist, create it when the task produces non-trivial reusable decisions
+or assets. Do not create empty placeholder subdirectories.
 
 ### 2. Preserve originals
 
@@ -436,6 +463,47 @@ instead of duplicating them. Preserve still-relevant rows for images outside the
 Escape Markdown table separators and represent intentional line breaks with `<br>` so the table
 remains readable.
 
+### 15a. Preserve reusable editing resources
+
+Use this canonical project-local root:
+
+`{{GAME_ROOT}}/.dazedtl/image_translation_resources`
+
+Keep a concise `manifest.json` or equivalent index with project-relative paths and cryptographic
+hashes. Store only the subdirectories the project needs:
+
+- `scripts/` for deterministic renderers, validators, mask builders, and contact-sheet tools.
+- `layouts/` for machine-readable text, coordinates, bounds, font sizes, effect stacks, clean-layer
+  mappings, runtime keepouts, and variant overrides when these are not already the renderer's
+  source of truth.
+- `fonts/` for the exact font binaries required to reproduce accepted output, together with their
+  licenses. Reference an existing stable project font in place when duplication is unnecessary.
+- `assets/` for reusable isolated layers such as approved wordmarks, repaired clean patches, masks,
+  or overlays that cannot be reproduced cheaply from the documented inputs.
+- `diagnostics/` for the accepted contact sheets, alpha views, runtime composites, and other small
+  visual references that materially help later comparison.
+- `work/` for regenerable candidates. Treat this subtree as disposable and never as the only copy
+  of an accepted source or reusable asset.
+
+Keep user-supplied clean artwork in `{{GAME_ROOT}}/.dazedtl/clean_images` and verified originals in
+`.dazedtl/image_backups`; reference and hash them from the resource manifest rather than
+duplicating them without need. Record every clean input's target mapping and semantic role.
+
+Preserve enough information to reproduce the accepted result exactly: translated strings,
+coordinates and anchors, font files and hashes, sizes, colors, strokes, gradients, shadows, alpha
+and compositing behavior, source/back-up hashes, runtime scale and opacity, dependencies, and the
+accepted output hashes. Prefer executable deterministic renderers plus a small manifest over a
+prose-only recipe.
+
+Do not copy an unlicensed or ambiguously licensed system font into the project. When copying is
+permitted, save its license beside it. Otherwise record the exact family, source path, version or
+hash, and a tested fallback, and report that exact reproduction depends on the original font being
+available. Never allow an unreported font substitution.
+
+After an accepted revision, update the renderer or layout data, manifest hashes, useful
+diagnostics, and work log together. Actually run saved scripts and the resource validator. Do not
+store secrets, model credentials, unrelated game data, package caches, or large disposable output.
+
 ### 16. Report concisely
 
 Report:
@@ -445,6 +513,7 @@ Report:
 - Representative `before -> after` examples.
 - Preserved dynamic or ambiguous elements.
 - Backup location.
+- Reusable-resource location and what was saved or updated there.
 - Validation performed.
 - Work-log location.
 
@@ -501,9 +570,11 @@ Do not paste full image files, large encoded data, or unrelated source code.
   rectangle is verified native component geometry and its complete boundary is validated.
 - Never accept a transparent candidate with seams, matte halos, square corners, or color fringes
   on any diagnostic or available runtime background, even if its standalone preview looks clean.
-- Never modify files outside the editable image folder except for isolated backup and temporary
-  validation artifacts. Inside the editable image folder, create no new non-image artifact except
-  the single required `image_translation_log.md` work log.
+- Never modify files outside the editable image folder except for verified originals under
+  `.dazedtl/image_backups`, reusable support files under `.dazedtl/image_translation_resources`,
+  and isolated temporary validation artifacts. Treat `.dazedtl/clean_images` as read-only unless
+  the user explicitly authorizes changes. Inside the editable image folder, create no new
+  non-image artifact except the single required `image_translation_log.md` work log.
 
 ## Decision rules
 
@@ -547,6 +618,9 @@ Consider the task complete only when:
 - Every non-opaque installed asset has a reviewed alpha diff and composites cleanly over diagnostic
   and available runtime backgrounds at the intended scale and opacity.
 - Originals remain recoverable.
+- The reusable-resource manifest, renderer or layouts, font references, input mappings,
+  diagnostics, and accepted hashes reflect the installed revision whenever those artifacts exist
+  or the current task produced reusable work.
 - `image_translation_log.md` accounts for every reviewed image and text region without duplicate
   current-run entries.
 - When any disposition is `skipped` or `review`, the user-facing response ends with the complete
