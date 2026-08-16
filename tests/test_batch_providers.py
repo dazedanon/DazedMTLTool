@@ -79,6 +79,13 @@ class BatchProviderDetectionTests(unittest.TestCase):
             )
         self.assertEqual(params["reasoning_effort"], "none")
         self.assertEqual(params["response_format"]["type"], "json_schema")
+        payload_tokens = len(
+            T.tiktoken.encoding_for_model("gpt-4").encode('{"Line1":"猫"}')
+        )
+        self.assertEqual(
+            params["max_completion_tokens"],
+            min(T.MAX_TRANSLATION_OUTPUT_TOKENS, payload_tokens * 2),
+        )
         system_content = params["messages"][0]["content"]
         self.assertTrue(any(
             "猫 (Cat)" in str(block.get("text"))
@@ -93,6 +100,10 @@ class BatchProviderDetectionTests(unittest.TestCase):
         self.assertEqual(
             batch_body["prompt_cache_options"], {"mode": "explicit"}
         )
+        self.assertEqual(
+            batch_body["max_completion_tokens"],
+            params["max_completion_tokens"],
+        )
         self.assertTrue(any(
             "Preceding Japanese Source Context" in str(m.get("content"))
             and "prior" in str(m.get("content"))
@@ -103,9 +114,56 @@ class BatchProviderDetectionTests(unittest.TestCase):
             for m in params["messages"]
         ))
 
-    def test_only_openai_api_uses_positional_array_schema(self):
+    def test_every_provider_route_has_a_payload_sized_hard_output_cap(self):
+        payload = '{"Line1":"猫"}'
+        expected = len(
+            T.tiktoken.encoding_for_model("gpt-4").encode(payload)
+        ) * 2
         cases = (
-            ("openai", "https://api.openai.com/v1", ["translations"]),
+            ("openai", "https://api.openai.com/v1", "gpt-5.6-terra",
+             "max_completion_tokens"),
+            ("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/",
+             "gemini-2.5-flash", "max_tokens"),
+            ("mistral", "https://api.mistral.ai/v1/",
+             "mistral-medium-3.5", "max_tokens"),
+            ("openai", "https://api.deepseek.com/v1/",
+             "deepseek-chat", "max_tokens"),
+            ("openai", "https://openrouter.ai/api/v1",
+             "provider/model", "max_tokens"),
+        )
+        for provider, endpoint, model, field in cases:
+            with self.subTest(provider=provider, endpoint=endpoint):
+                with mock.patch.dict(
+                    "os.environ",
+                    {"API_PROVIDER": provider, "api": endpoint},
+                ):
+                    params = T.buildOpenAIRequest(
+                        "system", payload, [], 0, "json", model, 1,
+                        api_provider=provider, api_url=endpoint,
+                    )
+                self.assertEqual(params[field], expected)
+                other_field = (
+                    "max_tokens"
+                    if field == "max_completion_tokens"
+                    else "max_completion_tokens"
+                )
+                self.assertNotIn(other_field, params)
+
+        claude = T.buildClaudeRequest(
+            "system", payload, [], "json", "claude-sonnet-4-6", 1
+        )
+        self.assertEqual(claude["max_tokens"], expected)
+
+        oversized = T.buildClaudeRequest(
+            "system", "猫" * 10000, [], "json", "claude-sonnet-4-6", 1
+        )
+        self.assertEqual(
+            oversized["max_tokens"], T.MAX_TRANSLATION_OUTPUT_TOKENS
+        )
+
+    def test_all_api_routes_use_stable_line_key_schema(self):
+        cases = (
+            ("openai", "https://api.openai.com/v1", ["Line1", "Line2"]),
             ("openai", "http://127.0.0.1:8000/v1", ["Line1", "Line2"]),
             (
                 "gemini",
@@ -165,6 +223,7 @@ class BatchProviderDetectionTests(unittest.TestCase):
         )
         body = BP._openai_batch_body("gemini", params)
         self.assertNotIn("google", body)
+        self.assertEqual(body["max_tokens"], params["max_tokens"])
         self.assertEqual(
             body["extra_body"]["google"]["thinking_config"]["thinking_budget"],
             0,

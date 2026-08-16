@@ -32,7 +32,9 @@ def _mock_live_translation_response(_provider, params, **_kwargs):
         schema = params["output_config"]["format"]["schema"]
     count = _extract_schema_line_count(schema)
     return {
-        "text": json.dumps({"translations": ["English text"] * count}),
+        "text": json.dumps({
+            f"Line{i}": "English text" for i in range(1, count + 1)
+        }),
         "prompt_tokens": 100,
         "completion_tokens": 20,
         "cache_read_input_tokens": 0,

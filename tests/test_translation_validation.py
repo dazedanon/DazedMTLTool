@@ -259,13 +259,18 @@ class TranslationContentValidationTests(unittest.TestCase):
 
 
 class TranslationResponseSchemaTests(unittest.TestCase):
-    def test_schema_pins_positional_translations_array(self):
+    def test_schema_matches_input_line_keys(self):
         schema = tr.createTranslationSchema(3)
-        translations = schema["properties"]["translations"]
-        self.assertEqual(schema["required"], ["translations"])
-        self.assertEqual(translations["minItems"], 3)
-        self.assertEqual(translations["maxItems"], 3)
-        self.assertEqual(translations["items"], {"type": "string"})
+        self.assertEqual(schema["required"], ["Line1", "Line2", "Line3"])
+        self.assertEqual(
+            schema["properties"],
+            {
+                "Line1": {"type": "string"},
+                "Line2": {"type": "string"},
+                "Line3": {"type": "string"},
+            },
+        )
+        self.assertFalse(schema["additionalProperties"])
 
     def test_extract_and_log_keep_numeric_line_order(self):
         # Provider may emit LineN keys lexically (Line1, Line10, Line2).

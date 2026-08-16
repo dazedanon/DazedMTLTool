@@ -93,6 +93,11 @@ DEBUG = False
 DEBUG_LOG_MAX_BYTES = 5 * 1024 * 1024
 DEBUG_LOG_BACKUP_COUNT = 2
 
+# Translation output should scale with its source payload, but a malformed
+# structured response must never be able to consume a model's full output
+# window. This limit is shared by every live and batch provider route.
+MAX_TRANSLATION_OUTPUT_TOKENS = 8192
+
 # Set to True to disable Claude prompt caching for baseline cost comparison.
 DISABLE_CACHE = False
 
@@ -3634,35 +3639,12 @@ def createContext(config, subbedText, formatType, history=None):
 
 
 def createTranslationSchema(numLines):
-    """Create a JSON schema for translation response based on number of lines.
+    """Create the stable historical ``LineN`` translation schema.
 
-    Use a positional ``translations`` array rather than ``Line1``/``Line2``/
-    ``Line10`` object keys. OpenAI often emits those object keys in lexical
-    order, which is hard to read and invites off-by-one confusion. ``minItems``
-    / ``maxItems`` pin the exact line count for strict providers.
-    """
-    count = max(1, int(numLines or 1))
-    return {
-        "type": "object",
-        "properties": {
-            "translations": {
-                "type": "array",
-                "items": {"type": "string"},
-                "minItems": count,
-                "maxItems": count,
-            }
-        },
-        "required": ["translations"],
-        "additionalProperties": False,
-    }
-
-
-def createLegacyTranslationSchema(numLines):
-    """Create the historical ``LineN`` object schema.
-
-    Non-OpenAI providers may not accept the newer ``minItems``/``maxItems``
-    array contract, so this compatibility schema keeps explicit ``Line1`` ...
-    ``LineN`` required fields.
+    Keeping the response shape aligned with the input avoids model-side
+    rewrites between a keyed object and a positional array. Extraction and
+    logging sort these keys numerically, so providers may serialize them in
+    any object-key order without changing translation order.
     """
     count = max(1, int(numLines or 1))
     properties = {}
@@ -3679,8 +3661,13 @@ def createLegacyTranslationSchema(numLines):
     }
 
 
-def _uses_openai_translation_schema(api_provider=None, api_url=None):
-    """Return whether this request targets OpenAI's own API."""
+def createLegacyTranslationSchema(numLines):
+    """Backward-compatible name for the canonical ``LineN`` schema."""
+    return createTranslationSchema(numLines)
+
+
+def _is_official_openai_api(api_provider=None, api_url=None):
+    """Return whether a request targets OpenAI's own API."""
     provider = (
         api_provider or os.getenv("API_PROVIDER", "openai")
     ).strip().lower()
@@ -3690,6 +3677,13 @@ def _uses_openai_translation_schema(api_provider=None, api_url=None):
     if provider != "openai" or not endpoint:
         return provider == "openai" and not endpoint
     return (urlparse(endpoint).hostname or "").lower() == "api.openai.com"
+
+
+def _translation_completion_limit(user):
+    """Bound output by both translation payload size and a hard safety cap."""
+    enc = tiktoken.encoding_for_model("gpt-4")
+    payload_tokens = len(enc.encode(str(user or "")))
+    return min(MAX_TRANSLATION_OUTPUT_TOKENS, max(1, payload_tokens * 2))
 
 
 def format_translation_response_for_log(raw_text) -> str:
@@ -3857,7 +3851,7 @@ def buildClaudeRequest(system, user, history, formatType, model, numLines=None,
 
     ant_kwargs = dict(
         model=model,
-        max_tokens=16384,
+        max_tokens=_translation_completion_limit(user),
         system=ant_system,
         messages=native_msgs,
     )
@@ -3929,12 +3923,13 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
                 ).hexdigest()[:32]
             )
         params["extra_body"] = cache_fields
+    completion_limit = _translation_completion_limit(user)
+    if _is_official_openai_api(provider, api_url):
+        params["max_completion_tokens"] = completion_limit
+    else:
+        params["max_tokens"] = completion_limit
+
     if formatType == "json" and numLines is not None:
-        schema_factory = (
-            createTranslationSchema
-            if _uses_openai_translation_schema(provider, api_url)
-            else createLegacyTranslationSchema
-        )
         params["response_format"] = (
             {"type": "json_object"}
             if is_deepseek else {
@@ -3942,11 +3937,10 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
                 "json_schema": {
                     "name": "translation_response",
                     "strict": True,
-                    "schema": schema_factory(numLines),
+                    "schema": createTranslationSchema(numLines),
                 },
             }
         )
-
     if provider == "gemini":
         params["temperature"] = 0
         thinking_budget_str = os.getenv("GEMINI_THINKING_BUDGET")
@@ -3965,9 +3959,6 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
                 pass
     elif is_mistral:
         params["temperature"] = 0
-        params["max_tokens"] = min(
-            16000, max(1500, int(len(str(user)) * 1.2) + 40 * (numLines or 1))
-        )
     elif "gpt-5" in model_l:
         params["reasoning_effort"] = "none" if "gpt-5.6" in model_l else "minimal"
     else:
@@ -4104,10 +4095,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         # cache_control is set on the system message content block above.
     elif _is_mistral:
         params["temperature"] = 0
-        # max_tokens caps the response AND feeds the limiter's token estimate
-        # (input+output count against the per-minute budget). Sized from the
-        # payload: JP ~1 token/char, output echoes the JSON scaffold + EN.
-        params["max_tokens"] = min(16000, max(1500, int(len(str(user)) * 1.2) + 40 * (numLines or 1)))
+        params["max_tokens"] = _translation_completion_limit(user)
     else:  # Default to OpenAI behavior
         if "gpt-5" in model:
             params["reasoning_effort"] = "none" if "gpt-5.6" in model else "minimal"
