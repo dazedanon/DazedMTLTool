@@ -384,7 +384,7 @@ class CheckToolUpdateTests(unittest.TestCase):
                 ):
                     self.assertIsNone(check_tool_update())
 
-    def test_unexpanded_archive_sha_is_ignored(self):
+    def test_unexpanded_archive_sha_falls_back_to_git_checkout(self):
         latest_sha = "b" * 40
         with tempfile.TemporaryDirectory() as raw:
             base = Path(raw)
@@ -401,6 +401,64 @@ class CheckToolUpdateTests(unittest.TestCase):
                     UpdateThread, "fetch_latest_sha", return_value=latest_sha
                 ):
                     self.assertEqual(check_tool_update(), latest_sha)
+
+            # A source checkout has an unexpanded archive marker but can still
+            # identify its installed build from the local commit.
+            subprocess.run(
+                ["git", "init", "-q", str(base)],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(base), "config", "user.name", "Updater Test"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(base),
+                    "config",
+                    "user.email",
+                    "updater@example.invalid",
+                ],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(base), "add", ".git_archival.txt"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(base), "commit", "-qm", "initial"],
+                check=True,
+                capture_output=True,
+            )
+            installed_sha = subprocess.run(
+                ["git", "-C", str(base), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+
+            from gui.main import UpdateDialog
+
+            with patch.multiple(
+                UpdateThread,
+                SHA_FILE=str(base / "missing-last-update-sha.txt"),
+                ARCHIVE_SHA_FILE=str(archive_file),
+            ):
+                with patch.object(
+                    UpdateThread,
+                    "fetch_latest_sha",
+                    return_value=installed_sha,
+                ):
+                    self.assertIsNone(check_tool_update())
+                self.assertEqual(
+                    UpdateDialog._installed_sha_display(), installed_sha[:8]
+                )
 
     def test_fetch_failure_is_not_reported_as_up_to_date(self):
         from gui.main import UpdateThread, check_tool_update

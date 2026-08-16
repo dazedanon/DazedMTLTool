@@ -11,6 +11,7 @@ import json
 import urllib.request
 import zipfile
 import shutil
+import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -312,9 +313,34 @@ class UpdateThread(QThread):
             pass
         return ""
 
+    @staticmethod
+    def _read_git_sha(root: Path) -> str:
+        """Read HEAD from a live checkout, or return an empty string."""
+        # Do not let Git discover an unrelated repository above an extracted
+        # DazedTL folder. Worktrees use a .git file, so ``exists`` covers both.
+        if not (root / ".git").exists():
+            return ""
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", "--verify", "HEAD"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        candidate = result.stdout.strip()
+        if result.returncode == 0 and re.fullmatch(
+            r"[0-9a-fA-F]{40,64}", candidate
+        ):
+            return candidate.lower()
+        return ""
+
     @classmethod
     def read_installed_sha(cls) -> str:
-        """Return the updated SHA, falling back to source-archive metadata."""
+        """Return the installed SHA from runtime, archive, or Git metadata."""
         runtime_path = Path(cls.SHA_FILE)
         if runtime_path.is_file():
             try:
@@ -323,7 +349,11 @@ class UpdateThread(QThread):
                     return runtime_sha
             except OSError:
                 pass
-        return cls._read_archive_sha(Path(cls.ARCHIVE_SHA_FILE))
+        archive_path = Path(cls.ARCHIVE_SHA_FILE)
+        archive_sha = cls._read_archive_sha(archive_path)
+        if archive_sha:
+            return archive_sha
+        return cls._read_git_sha(archive_path.parent)
 
     # ------------------------------------------------------------------ #
 
