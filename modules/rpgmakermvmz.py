@@ -3439,10 +3439,18 @@ def searchCodes(page, pbar, jobList, filename):
                     if k in ENABLED_PLUGINS_357
                 }
 
+                translated_plugin_args = set()
                 for key, (argVars, font) in headerMappings.items():
                     if key in headerString:
                         for argVar in argVars:
+                            # Plugin identifiers can overlap (for example,
+                            # ``TextPicture`` is contained in ``DTextPicture``).
+                            # Translate each argument once even when multiple
+                            # enabled mappings match the same command header.
+                            if argVar in translated_plugin_args:
+                                continue
                             translatePlugins(argVar, font)
+                            translated_plugin_args.add(argVar)
 
                 # KN_StillManager: translate parameters[2] (the display label, e.g. "ギャラリーを開く")
                 # Only OPEN_GALLERY has a player-visible label in parameters[2].

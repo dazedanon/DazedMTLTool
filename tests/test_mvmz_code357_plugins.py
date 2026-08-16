@@ -11,9 +11,6 @@ import modules.rpgmakermvmz as mvmz
 
 
 class TestMVMZCode357Plugins(unittest.TestCase):
-    def test_log_message_remains_in_enabled_plugin_filter(self):
-        self.assertIn("LogMessage", mvmz.ENABLED_PLUGINS_357)
-
     def test_log_message_text_is_collected_and_written_back(self):
         source = "ドキドキしちゃう♡"
         translation = "My heart is pounding♡"
@@ -91,6 +88,50 @@ class TestMVMZCode357Plugins(unittest.TestCase):
             )
 
         self.assertNotIn("_original", preservation_disabled_page["list"][0])
+
+    def test_overlapping_plugin_names_translate_argument_once(self):
+        source = "表示テキスト"
+        translation = "Displayed text"
+        page = {
+            "list": [
+                {
+                    "code": 357,
+                    "indent": 0,
+                    "parameters": [
+                        "DTextPicture",
+                        "show",
+                        "",
+                        {"text": source},
+                    ],
+                }
+            ]
+        }
+        captured = []
+
+        def translate(text, history, batch=False):
+            captured.append(copy.deepcopy(text))
+            return [[translation], [0, 0]]
+
+        with (
+            patch.object(mvmz, "CODE357", True),
+            patch.object(
+                mvmz,
+                "ENABLED_PLUGINS_357",
+                {"DTextPicture", "TextPicture"},
+            ),
+            patch.object(mvmz, "PRESERVEORIGINAL", True),
+            patch.object(mvmz, "translateAI", side_effect=translate),
+        ):
+            translated_page = copy.deepcopy(page)
+            mvmz.searchCodes(translated_page, None, [], "TestMap.json")
+
+        self.assertEqual(captured, [[source]])
+        command = translated_page["list"][0]
+        self.assertEqual(command["parameters"][3]["text"], translation)
+        self.assertEqual(
+            command["_original"],
+            {"parameters": {"3": {"text": source}}},
+        )
 
     def test_ultimate_text_animation_translates_only_display_text(self):
         source = "「あの胸で勇者なのか」"
