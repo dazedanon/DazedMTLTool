@@ -29,6 +29,20 @@ _CONFIG_FILENAME_RE = re.compile(r"`forge-config\.json`")
 _CONFIG_PATH_EXPRESSION = (
     "window.__dazedForgeConfigPath || `.dazedtl/forge-config.json`"
 )
+_STORAGE_FS_ACCESS = (
+    "let e=window.require;if(typeof e!=`function`)return;"
+    "let t=e(`fs`);if(!t)return;"
+)
+_KEYS_TAB_KEYDOWN_GUARD = (
+    "!$._isFocusedOnInput()&&!$._hasSelection()"
+    "&&!(Q.visible&&Q.activeTab===ml.Shortcuts)"
+)
+_KEYS_TAB_KEYUP_GUARD = (
+    "$._isFocusedOnInput()||Q.visible&&Q.activeTab===ml.Shortcuts||"
+)
+_SHORTCUT_TRANSITION_FILTER = (
+    "for(let e of $.shortcuts)if(!(!e.enabled||!e.keyStr))try{"
+)
 
 
 def forge_key_str(hotkey: str) -> str:
@@ -62,27 +76,75 @@ def _bootstrap_js(hotkey: str, ui_scale: str) -> str:
   // game rather than process.cwd(), which depends on how the executable was
   // launched. Keep it with DazedTL's other ignored per-game metadata.
   window.__dazedForgeConfigPath = ".dazedtl/forge-config.json";
+  var forgeNativeFs = null;
   try {{
-    var forgeRequire = window.require;
+    var forgeNw =
+      typeof nw !== "undefined" ? nw : window.nw || null;
+    var forgeRequire =
+      typeof window.require === "function"
+        ? window.require
+        : typeof require === "function"
+        ? require
+        : forgeNw && typeof forgeNw.require === "function"
+        ? forgeNw.require.bind(forgeNw)
+        : null;
     var forgeFs = forgeRequire && forgeRequire("fs");
     var forgePath = forgeRequire && forgeRequire("path");
-    var forgeProcess = forgeRequire && forgeRequire("process");
+    var forgeProcess =
+      (forgeRequire && forgeRequire("process")) ||
+      (typeof process !== "undefined" ? process : null);
+    forgeNativeFs = forgeFs || null;
     if (forgeFs && forgePath) {{
-      var pagePath = decodeURIComponent(
-        (window.location && window.location.pathname) || ""
-      );
-      if (/^\\/[A-Za-z]:\\//.test(pagePath)) pagePath = pagePath.slice(1);
-      var pageDir = pagePath ? forgePath.dirname(pagePath) : "";
-      var gameRoot = pageDir;
-      // Deployed MV games load www/index.html; MZ loads index.html at the root.
-      if (gameRoot && String(forgePath.basename(gameRoot)).toLowerCase() === "www") {{
-        gameRoot = forgePath.dirname(gameRoot);
+      var pageDir = "";
+      if (
+        window.location &&
+        String(window.location.protocol || "").toLowerCase() === "file:"
+      ) {{
+        var pagePath = decodeURIComponent(window.location.pathname || "");
+        if (/^\\/[A-Za-z]:\\//.test(pagePath)) pagePath = pagePath.slice(1);
+        pageDir = pagePath ? forgePath.dirname(pagePath) : "";
       }}
-      if (!gameRoot || gameRoot === ".") {{
-        gameRoot = forgeProcess && forgeProcess.cwd
-          ? forgeProcess.cwd()
-          : ".";
+
+      // Packaged NW.js games use a chrome-extension:// URL, whose pathname is
+      // merely /index.html. Resolve those games from NW/Node process paths and
+      // select the first candidate that actually contains an RPG Maker entry.
+      var forgeRootCandidates = [];
+      function addForgeRoot(candidate) {{
+        if (!candidate) return;
+        try {{
+          var resolved = forgePath.resolve(String(candidate));
+          if (forgeRootCandidates.indexOf(resolved) < 0) {{
+            forgeRootCandidates.push(resolved);
+          }}
+        }} catch (e) {{}}
       }}
+      addForgeRoot(pageDir);
+      addForgeRoot(forgeNw && forgeNw.App && forgeNw.App.startPath);
+      if (forgeProcess) {{
+        if (forgeProcess.mainModule && forgeProcess.mainModule.filename) {{
+          addForgeRoot(forgePath.dirname(forgeProcess.mainModule.filename));
+        }}
+        if (forgeProcess.execPath) {{
+          addForgeRoot(forgePath.dirname(forgeProcess.execPath));
+        }}
+        if (forgeProcess.cwd) addForgeRoot(forgeProcess.cwd());
+      }}
+
+      var gameRoot = "";
+      for (var forgeRootIndex = 0; forgeRootIndex < forgeRootCandidates.length; forgeRootIndex++) {{
+        var rootCandidate = forgeRootCandidates[forgeRootIndex];
+        if (String(forgePath.basename(rootCandidate)).toLowerCase() === "www") {{
+          rootCandidate = forgePath.dirname(rootCandidate);
+        }}
+        if (
+          forgeFs.existsSync(forgePath.join(rootCandidate, "index.html")) ||
+          forgeFs.existsSync(forgePath.join(rootCandidate, "www", "index.html"))
+        ) {{
+          gameRoot = rootCandidate;
+          break;
+        }}
+      }}
+      if (!gameRoot) gameRoot = forgeRootCandidates[0] || ".";
       var forgeDir = forgePath.join(gameRoot, ".dazedtl");
       var forgeConfig = forgePath.join(forgeDir, "forge-config.json");
       window.__dazedForgeConfigPath = forgeConfig;
@@ -111,6 +173,130 @@ def _bootstrap_js(hotkey: str, ui_scale: str) -> str:
       }}
     }}
   }} catch (e) {{}}
+  // Some NW.js builds do not expose Node as window.require, and games can also
+  // live in read-only folders. Prefer the per-game JSON, but retain settings in
+  // a path-scoped browser fallback whenever that file cannot be used.
+  var forgeFallbackKey =
+    "dazedtl:forge-config:" +
+    String((window.location && window.location.pathname) || "game") +
+    ":" +
+    String(window.__dazedForgeConfigPath);
+  function forgeFallbackRead() {{
+    try {{
+      return localStorage.getItem(forgeFallbackKey);
+    }} catch (e) {{
+      return null;
+    }}
+  }}
+  function forgeNativeExists(file) {{
+    try {{
+      return !!(forgeNativeFs && forgeNativeFs.existsSync(file));
+    }} catch (e) {{
+      return false;
+    }}
+  }}
+  window.__dazedForgeFs = {{
+    existsSync: function (file) {{
+      return forgeFallbackRead() !== null || forgeNativeExists(file);
+    }},
+    readFileSync: function (file, encoding) {{
+      var fallback = forgeFallbackRead();
+      if (fallback !== null) return fallback;
+      if (forgeNativeFs) return forgeNativeFs.readFileSync(file, encoding);
+      throw new Error("Forge settings storage is unavailable");
+    }},
+    writeFileSync: function (file, data, encoding) {{
+      var nativeError = null;
+      if (forgeNativeFs) {{
+        try {{
+          forgeNativeFs.writeFileSync(file, data, encoding);
+          try {{
+            localStorage.removeItem(forgeFallbackKey);
+          }} catch (e) {{}}
+          return;
+        }} catch (e) {{
+          nativeError = e;
+        }}
+      }}
+      try {{
+        localStorage.setItem(forgeFallbackKey, String(data));
+        return;
+      }} catch (fallbackError) {{
+        throw nativeError || fallbackError;
+      }}
+    }}
+  }};
+  // Seed the consolidated store on boot and migrate every legacy forge:* key.
+  // This also guarantees that a writable packaged game gets its JSON before
+  // the first settings interaction.
+  try {{
+    var forgeInitialConfig = {{}};
+    if (window.__dazedForgeFs.existsSync(window.__dazedForgeConfigPath)) {{
+      try {{
+        forgeInitialConfig = JSON.parse(
+          window.__dazedForgeFs.readFileSync(
+            window.__dazedForgeConfigPath,
+            "utf8"
+          )
+        );
+      }} catch (e) {{
+        forgeInitialConfig = {{}};
+      }}
+    }}
+    function forgeDecodeSetting(value) {{
+      if (typeof value !== "string") return value;
+      try {{
+        return JSON.parse(value);
+      }} catch (e) {{
+        return value;
+      }}
+    }}
+    function forgeSettingObject(value) {{
+      value = forgeDecodeSetting(value);
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? value
+        : {{}};
+    }}
+    for (var forgeConfigKey of Object.keys(forgeInitialConfig)) {{
+      if (forgeConfigKey.indexOf("forge:") === 0) {{
+        var normalizedForgeKey = forgeConfigKey.slice(6);
+        if (!(normalizedForgeKey in forgeInitialConfig)) {{
+          forgeInitialConfig[normalizedForgeKey] = forgeDecodeSetting(
+            forgeInitialConfig[forgeConfigKey]
+          );
+        }}
+        delete forgeInitialConfig[forgeConfigKey];
+      }}
+    }}
+    try {{
+      for (var forgeStorageIndex = 0; forgeStorageIndex < localStorage.length; forgeStorageIndex++) {{
+        var legacyForgeKey = localStorage.key(forgeStorageIndex);
+        if (legacyForgeKey && legacyForgeKey.indexOf("forge:") === 0) {{
+          var migratedForgeKey = legacyForgeKey.slice(6);
+          if (!(migratedForgeKey in forgeInitialConfig)) {{
+            forgeInitialConfig[migratedForgeKey] = forgeDecodeSetting(
+              localStorage.getItem(legacyForgeKey)
+            );
+          }}
+        }}
+      }}
+    }} catch (e) {{}}
+    var forgeShortcuts = forgeSettingObject(forgeInitialConfig.shortcuts);
+    forgeShortcuts.toggle_ui = Object.assign(
+      {{}},
+      forgeShortcuts.toggle_ui,
+      {{ keyStr: toggleKey, enabled: true }}
+    );
+    forgeInitialConfig.shortcuts = forgeShortcuts;
+    var forgeSettings = forgeSettingObject(forgeInitialConfig.config);
+    forgeSettings.showLauncher = false;
+    forgeInitialConfig.config = forgeSettings;
+    window.__dazedForgeFs.writeFileSync(
+      window.__dazedForgeConfigPath,
+      JSON.stringify(forgeInitialConfig, null, 2),
+      "utf8"
+    );
+  }} catch (e) {{}}
   // Forge's shortcut matcher uses legacy keyCode. Some NW.js/Wine builds deliver
   // keydown with keyCode=0 while still setting key/code - map those back.
   window.__dazedKeyCode = function (e) {{
@@ -135,18 +321,6 @@ def _bootstrap_js(hotkey: str, ui_scale: str) -> str:
     if (dm) return 48 + parseInt(dm[1], 10);
     return 0;
   }};
-  try {{
-    var saved = JSON.parse(localStorage.getItem("forge:shortcuts") || "{{}}");
-    saved.toggle_ui = Object.assign({{}}, saved.toggle_ui, {{ keyStr: toggleKey, enabled: true }});
-    localStorage.setItem("forge:shortcuts", JSON.stringify(saved));
-  }} catch (e) {{}}
-  // The keyboard shortcut is always available, so keep the floating launcher
-  // hidden even when an older Forge install saved it as enabled.
-  try {{
-    var config = JSON.parse(localStorage.getItem("forge:config") || "{{}}");
-    config.showLauncher = false;
-    localStorage.setItem("forge:config", JSON.stringify(config));
-  }} catch (e) {{}}
   function resolveUiScale(v) {{
     if (v !== "auto" && v != null && String(v).trim() !== "") {{
       var n = parseFloat(v);
@@ -218,6 +392,38 @@ def _relocate_config_file(text: str) -> str:
     return text
 
 
+def _patch_storage_adapter(text: str) -> str:
+    """Route Forge persistence through the filesystem/localStorage adapter."""
+    if text.count(_STORAGE_FS_ACCESS) != 1:
+        raise ValueError("Could not patch modern Forge settings storage")
+    return text.replace(
+        _STORAGE_FS_ACCESS,
+        "let t=window.__dazedForgeFs;if(!t)return;",
+        1,
+    )
+
+
+def _keep_toggle_ui_active_on_keys_tab(text: str) -> str:
+    """Keep the required panel toggle active while other keys are disabled."""
+    replacements = (
+        (
+            _KEYS_TAB_KEYDOWN_GUARD,
+            "!$._isFocusedOnInput()&&!$._hasSelection()",
+        ),
+        (_KEYS_TAB_KEYUP_GUARD, "$._isFocusedOnInput()||"),
+        (
+            _SHORTCUT_TRANSITION_FILTER,
+            "for(let e of $.shortcuts)if(!(!e.enabled||!e.keyStr||"
+            "Q.visible&&Q.activeTab===ml.Shortcuts&&e.id!==`toggle_ui`))try{",
+        ),
+    )
+    for old, new in replacements:
+        if text.count(old) != 1:
+            raise ValueError("Could not keep Forge's UI toggle active on Keys tab")
+        text = text.replace(old, new, 1)
+    return text
+
+
 def _patch_keycode_reads(text: str) -> str:
     """Route Forge shortcut key reads through the keyCode polyfill."""
     replacements = [
@@ -268,6 +474,8 @@ def apply_modern_forge_patches(text: str, hotkey: str, ui_scale: str) -> str:
     text = _patch_toggle_ui_default(text, hotkey)
     text = _disable_launcher_default(text)
     text = _relocate_config_file(text)
+    text = _patch_storage_adapter(text)
+    text = _keep_toggle_ui_active_on_keys_tab(text)
     text = _patch_keycode_reads(text)
     bootstrap = _bootstrap_js(hotkey, ui_scale)
     match = re.search(r"\*/\s*\n", text)
