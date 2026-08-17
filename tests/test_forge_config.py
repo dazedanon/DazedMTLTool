@@ -28,7 +28,14 @@ class ForgeConfigTests(unittest.TestCase):
         self.assertIn("config.showLauncher = false;", output)
         self.assertIn("keyStr:`f9`", output)
         self.assertIn("saved.toggle_ui", output)
-        self.assertIn("`.dazedtl/forge-config.json`", output)
+        self.assertIn(
+            "window.__dazedForgeConfigPath || `.dazedtl/forge-config.json`",
+            output,
+        )
+        self.assertIn(
+            'forgePath.basename(gameRoot)).toLowerCase() === "www"', output
+        )
+        self.assertIn("forgePath.join(gameRoot, \".dazedtl\")", output)
         self.assertNotIn("bl=`forge-config.json`", output)
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -50,7 +57,10 @@ class ForgeConfigTests(unittest.TestCase):
             installed = game.joinpath("js", "plugins", "Forge_MZ.js").read_text(
                 encoding="utf-8"
             )
-            self.assertIn("`.dazedtl/forge-config.json`", installed)
+            self.assertIn(
+                "window.__dazedForgeConfigPath || `.dazedtl/forge-config.json`",
+                installed,
+            )
 
     def test_mv_uses_modern_bundle_and_keeps_legacy_fallback_available(self):
         self.assertEqual(bundled_plugin_path("MV"), bundled_plugin_path("MZ"))

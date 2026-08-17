@@ -26,6 +26,9 @@ _SHOW_LAUNCHER_DEFAULT_RE = re.compile(
     r"(favorites:\{\},showLauncher:)![01](,quickSaveSlot:1)"
 )
 _CONFIG_FILENAME_RE = re.compile(r"`forge-config\.json`")
+_CONFIG_PATH_EXPRESSION = (
+    "window.__dazedForgeConfigPath || `.dazedtl/forge-config.json`"
+)
 
 
 def forge_key_str(hotkey: str) -> str:
@@ -55,18 +58,56 @@ def _bootstrap_js(hotkey: str, ui_scale: str) -> str:
 (function () {{
   var toggleKey = {key_str};
   var uiScale = {scale};
-  // Forge persists settings through NW.js. Keep that runtime-only file with
-  // DazedTL's other ignored per-game metadata, and preserve settings written
-  // by older installs at the game root.
+  // Forge persists settings through NW.js. Resolve the file from the loaded
+  // game rather than process.cwd(), which depends on how the executable was
+  // launched. Keep it with DazedTL's other ignored per-game metadata.
+  window.__dazedForgeConfigPath = ".dazedtl/forge-config.json";
   try {{
-    var forgeFs = window.require && window.require("fs");
-    if (forgeFs) {{
-      var forgeDir = ".dazedtl";
-      var forgeConfig = forgeDir + "/forge-config.json";
-      var legacyForgeConfig = "forge-config.json";
+    var forgeRequire = window.require;
+    var forgeFs = forgeRequire && forgeRequire("fs");
+    var forgePath = forgeRequire && forgeRequire("path");
+    var forgeProcess = forgeRequire && forgeRequire("process");
+    if (forgeFs && forgePath) {{
+      var pagePath = decodeURIComponent(
+        (window.location && window.location.pathname) || ""
+      );
+      if (/^\\/[A-Za-z]:\\//.test(pagePath)) pagePath = pagePath.slice(1);
+      var pageDir = pagePath ? forgePath.dirname(pagePath) : "";
+      var gameRoot = pageDir;
+      // Deployed MV games load www/index.html; MZ loads index.html at the root.
+      if (gameRoot && String(forgePath.basename(gameRoot)).toLowerCase() === "www") {{
+        gameRoot = forgePath.dirname(gameRoot);
+      }}
+      if (!gameRoot || gameRoot === ".") {{
+        gameRoot = forgeProcess && forgeProcess.cwd
+          ? forgeProcess.cwd()
+          : ".";
+      }}
+      var forgeDir = forgePath.join(gameRoot, ".dazedtl");
+      var forgeConfig = forgePath.join(forgeDir, "forge-config.json");
+      window.__dazedForgeConfigPath = forgeConfig;
       if (!forgeFs.existsSync(forgeDir)) forgeFs.mkdirSync(forgeDir);
-      if (forgeFs.existsSync(legacyForgeConfig) && !forgeFs.existsSync(forgeConfig)) {{
-        forgeFs.renameSync(legacyForgeConfig, forgeConfig);
+
+      // Preserve settings from both the upstream root-level location and the
+      // old relative-path patch (which could land under www for MV games).
+      var legacyForgeConfigs = [
+        forgePath.join(gameRoot, "forge-config.json"),
+        forgePath.resolve("forge-config.json")
+      ];
+      if (pageDir) {{
+        legacyForgeConfigs.push(
+          forgePath.join(pageDir, ".dazedtl", "forge-config.json")
+        );
+      }}
+      for (var forgeIndex = 0; forgeIndex < legacyForgeConfigs.length; forgeIndex++) {{
+        var legacyForgeConfig = legacyForgeConfigs[forgeIndex];
+        if (
+          forgePath.resolve(legacyForgeConfig) !== forgePath.resolve(forgeConfig) &&
+          forgeFs.existsSync(legacyForgeConfig) &&
+          !forgeFs.existsSync(forgeConfig)
+        ) {{
+          forgeFs.renameSync(legacyForgeConfig, forgeConfig);
+        }}
       }}
     }}
   }} catch (e) {{}}
@@ -170,7 +211,7 @@ def _disable_launcher_default(text: str) -> str:
 def _relocate_config_file(text: str) -> str:
     """Store Forge's runtime settings under the ignored game metadata folder."""
     text, count = _CONFIG_FILENAME_RE.subn(
-        "`.dazedtl/forge-config.json`", text, count=1
+        _CONFIG_PATH_EXPRESSION, text, count=1
     )
     if count != 1:
         raise ValueError("Could not relocate modern Forge config file")
