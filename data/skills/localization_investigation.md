@@ -8,6 +8,47 @@ This standalone skill reruns the same hypothesis-led editorial phase used inside
 Use it when new questions arise after setup, when translated English already exists, or when one
 family needs deeper follow-up without repeating speaker, layout, and game-frame analysis.
 
+## Establish request context
+
+Before beginning a standalone run, resolve the game root and RPG Maker version from the open
+project, then derive a short game synopsis yourself (roughly 2–5 sentences covering the premise,
+setting, main cast or roles, and tone). Do not ask the user to write it.
+
+Start with `.dazedtl/skills/game.md`, the title in `System.json`, the main `Actors.json` records,
+`MapInfos.json`, and a bounded sample of opening or early-map and common-event story text. When web
+access is available, use a matching official DLsite product page as a shortcut or cross-check for
+the creator's high-level premise. Verify that page by Japanese title, developer/circle, and product
+ID when available, and retain its URL in the starting packet. If the page is inaccessible or cannot
+be matched confidently, use game-local evidence only; do not block the investigation or guess.
+Treat the resulting synopsis as orientation for search terms and candidate hypotheses, not as
+evidence, and do not expand this step into a full plot reconstruction.
+
+## RPG Maker corpus map
+
+Use this known layout before doing any open-ended discovery:
+
+- For MV/MZ, locate JSON under `<game>/data/` or `<game>/www/data/`. For VX Ace, use DazedTL's
+  normalized `<game>/ace_json/` output (or legacy `<game>/JSON/`) rather than reverse-engineering
+  `Data/*.rvdata2` when normalized JSON is available.
+- Prefer the current translated or exported JSON tree that retains DazedTL `_original` values.
+  In database records, `_original` usually mirrors the translated fields; in event command lists,
+  a command-level `_original` preserves the Japanese source for the translated parameter. Compare
+  the live sibling value with `_original`, and never modify or remove the source field.
+- Read the small databases first: `Actors.json`, `Classes.json`, `Enemies.json`, `Skills.json`,
+  `Items.json`, `Weapons.json`, `Armors.json`, `States.json`, and `System.json`. Use `MapInfos.json`
+  to resolve map IDs and names.
+- Search the full event corpus in `MapNNN.json`, `CommonEvents.json`, and `Troops.json`. Map events
+  are normally under `events -> pages -> list`; common events have their own `list`, and troop
+  pages have `pages -> list`. Commands use `code` plus `parameters`: code `101` establishes a
+  message window/name, `401` carries its dialogue lines, `102` carries choices, and `405` carries
+  scrolling text. Inspect complete local command-list context around a hit rather than treating an
+  isolated parameter as a scene.
+- Consult `.dazedtl/glossary.txt`, `.dazedtl/skills/quirks.md`, and `.dazedtl/skills/game.md` before
+  proposing a family. Check `js/plugins.js` and the enabled source under `js/plugins/` only when a
+  concrete candidate depends on custom commands, terminology, or runtime data; do not inventory
+  every plugin speculatively. For Ace script-dependent candidates, inspect the extracted Ruby under
+  `ace_json/scripts/` only as needed.
+
 <!-- investigation-phase -->
 
 ## Phase 2 — Global localization investigation
@@ -28,8 +69,11 @@ families into preventive guidance before translation or bounded correction work 
 
 ## Three-pass discovery
 
-1. Freeze one starting packet containing the game paths, engine, unchanged guidance, user-supplied
-   hypotheses, and any raw Phase 1 candidates. Do not add conclusions from the coordinator.
+1. Freeze one starting packet containing the game paths, engine/version, applicable corpus map,
+   short source-derived synopsis with its game-local and optional DLsite provenance, unchanged
+   guidance, user-supplied hypotheses, and any raw Phase 1 candidates. Label the synopsis and
+   starting guidance as orientation rather than corpus evidence. Do not add conclusions from the
+   coordinator.
 2. Launch exactly three fresh subagents concurrently with no forked conversation context; set
    `fork_turns="none"` when that control is available. Never show a worker either of the other
    reports.
