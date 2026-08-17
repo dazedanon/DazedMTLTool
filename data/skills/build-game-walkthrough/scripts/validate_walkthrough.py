@@ -19,7 +19,7 @@ if _SCRIPT_DIR not in sys.path:
 from index_rpgmaker_dependencies import build_index
 
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 MILESTONE = "complete-four-view-walkthrough"
 PROJECT_CONTEXT_FILES = {
     "glossary": ".dazedtl/glossary.txt",
@@ -97,6 +97,28 @@ SCENE_KINDS = {
 SCENE_ACQUISITION_MODES = {"normal-play", "gallery-only"}
 ROUTE_ANCHOR_POSITIONS = {"before", "after"}
 ROUTE_STRUCTURE_MODES = {"chapters-and-sections", "sections"}
+WALKTHROUGH_STEP_ROLES = {
+    "battle",
+    "choice",
+    "completion",
+    "confirmation",
+    "interact",
+    "obtain",
+    "prepare",
+    "requirement",
+    "return",
+    "start",
+    "travel",
+}
+WALKTHROUGH_ACTION_ROLES = {
+    "battle",
+    "choice",
+    "interact",
+    "obtain",
+    "prepare",
+    "return",
+    "travel",
+}
 SOURCE_TYPES = {"event-command", "database-record", "file-excerpt", "file-hash"}
 ID_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\Z")
 CLAIM_MARKER_RE = re.compile(
@@ -216,6 +238,86 @@ def _validate_recruitment_contract(
 
 def _normalize(value: str) -> str:
     return " ".join(value.split()).strip()
+
+
+def _validate_walkthrough_steps(
+    record: dict[str, Any],
+    phrases: list[str],
+    markdown: str,
+    local_source_ids: set[str],
+    *,
+    terminal_role: str,
+) -> list[str]:
+    failures: list[str] = []
+    raw_steps = record.get("walkthrough_steps")
+    if not isinstance(raw_steps, list) or len(raw_steps) < 3:
+        return [
+            "walkthrough_steps must contain at least three source-bound rows: "
+            f"start, action, and {terminal_role}"
+        ]
+
+    roles: list[str] = []
+    texts: list[str] = []
+    normalized_markdown = _normalize(markdown)
+    for step_index, raw_step in enumerate(raw_steps):
+        step = raw_step if isinstance(raw_step, dict) else {}
+        role = str(step.get("role", "")).strip()
+        text = str(step.get("text", "")).strip()
+        source_ids = step.get("source_ids")
+        roles.append(role)
+        texts.append(text)
+        if role not in WALKTHROUGH_STEP_ROLES:
+            failures.append(
+                f"walkthrough_steps[{step_index}].role must be one of "
+                f"{sorted(WALKTHROUGH_STEP_ROLES)}"
+            )
+        if not text:
+            failures.append(f"walkthrough_steps[{step_index}].text must be nonempty")
+        else:
+            if text not in phrases:
+                failures.append(
+                    f"walkthrough_steps[{step_index}].text must also appear in guide_phrases"
+                )
+            if _normalize(text) not in normalized_markdown:
+                failures.append(
+                    f"walkthrough_steps[{step_index}].text is missing from Markdown"
+                )
+        if not isinstance(source_ids, list) or not source_ids or any(
+            not isinstance(source_id, str) or not source_id.strip()
+            for source_id in source_ids
+        ):
+            failures.append(
+                f"walkthrough_steps[{step_index}].source_ids must be a nonempty list"
+            )
+        else:
+            unknown_sources = sorted(set(source_ids) - local_source_ids)
+            if unknown_sources:
+                failures.append(
+                    f"walkthrough_steps[{step_index}] references unknown local source "
+                    f"{unknown_sources[0]!r}"
+                )
+
+    if roles[0] != "start":
+        failures.append("walkthrough_steps must begin with a start row")
+    if roles[-1] != terminal_role:
+        failures.append(f"walkthrough_steps must end with a {terminal_role} row")
+    if terminal_role in roles[:-1]:
+        failures.append(f"only the final walkthrough_steps row may use role {terminal_role!r}")
+    other_terminal_role = "completion" if terminal_role == "confirmation" else "confirmation"
+    if other_terminal_role in roles:
+        failures.append(
+            f"walkthrough_steps for this record cannot use role {other_terminal_role!r}"
+        )
+    if not any(role in WALKTHROUGH_ACTION_ROLES for role in roles[1:-1]):
+        failures.append(
+            "walkthrough_steps must contain an actionable middle row such as travel, "
+            "interact, battle, obtain, or return"
+        )
+
+    phrase_positions = [phrases.index(text) for text in texts if text in phrases]
+    if len(phrase_positions) == len(texts) and phrase_positions != sorted(phrase_positions):
+        failures.append("guide_phrases must preserve walkthrough_steps order")
+    return failures
 
 
 def _issue(
@@ -707,6 +809,16 @@ def _validate_route_claims(
             source_failures = _validate_source(game_root, source)
             failures.extend(f"source {source_id or '<unnamed>'}: {failure}" for failure in source_failures)
             source_results.append({"id": source_id, "failures": source_failures})
+
+        failures.extend(
+            _validate_walkthrough_steps(
+                claim,
+                phrases,
+                markdown,
+                local_source_ids,
+                terminal_role="confirmation",
+            )
+        )
 
         if failures:
             _issue(
@@ -1316,6 +1428,16 @@ def _validate_optional_content(
             source_failures = _validate_source(game_root, source)
             failures.extend(f"source {source_id or '<unnamed>'}: {failure}" for failure in source_failures)
             source_results.append({"id": source_id, "failures": source_failures})
+
+        failures.extend(
+            _validate_walkthrough_steps(
+                entry,
+                phrases,
+                markdown,
+                local_ids,
+                terminal_role="completion",
+            )
+        )
 
         failures.extend(
             _validate_recruitment_contract(entry, kind, phrases, markdown, local_ids)
@@ -2486,6 +2608,11 @@ class WalkthroughHTMLParser(HTMLParser):
         self.optional_tasks: Counter[str] = Counter()
         self.optional_task_entry_contexts: dict[str, set[str | None]] = defaultdict(set)
         self.optional_task_views: dict[str, set[str | None]] = defaultdict(set)
+        self.walkthrough_lists: Counter[str] = Counter()
+        self.walkthrough_list_claim_contexts: dict[str, set[str | None]] = defaultdict(set)
+        self.walkthrough_list_optional_contexts: dict[str, set[str | None]] = defaultdict(set)
+        self.walkthrough_step_roles: dict[str, list[str]] = defaultdict(list)
+        self.walkthrough_step_text_parts: dict[str, list[list[str]]] = defaultdict(list)
         self.boss_groups: Counter[str] = Counter()
         self.boss_group_labels: dict[str, Counter[str]] = defaultdict(Counter)
         self.boss_group_heading_ids: dict[str, Counter[str]] = defaultdict(Counter)
@@ -2557,6 +2684,7 @@ class WalkthroughHTMLParser(HTMLParser):
         self._scene_system = False
         self._evidence: str | None = None
         self._source: str | None = None
+        self._walkthrough_step: tuple[str, int] | None = None
         self._ignored_depth = 0
         self._stack: list[
             tuple[
@@ -2573,9 +2701,10 @@ class WalkthroughHTMLParser(HTMLParser):
                 str | None,
                 str | None,
                 str | None,
-                str | None,
-                str | None,
                 bool,
+                str | None,
+                str | None,
+                tuple[str, int] | None,
                 int,
             ]
         ] = []
@@ -2600,6 +2729,7 @@ class WalkthroughHTMLParser(HTMLParser):
             self._scene_system,
             self._evidence,
             self._source,
+            self._walkthrough_step,
             self._ignored_depth,
         )
 
@@ -2667,6 +2797,26 @@ class WalkthroughHTMLParser(HTMLParser):
             self.optional_entries[entry_id] += 1
             self.optional_entry_views[entry_id].add(self._view)
             self.optional_entry_group_contexts[entry_id].add(self._optional_group)
+        if tag == "ol" and "walkthrough-steps" in classes:
+            walkthrough_id = attrs.get("data-walkthrough-id", "")
+            self.walkthrough_lists[walkthrough_id] += 1
+            self.walkthrough_list_claim_contexts[walkthrough_id].add(self._claim)
+            self.walkthrough_list_optional_contexts[walkthrough_id].add(self._optional_entry)
+            if self._claim is not None:
+                # Ordered walkthrough rows are the route prose in schema v18.
+                # A link before the list is a before-callout; once the list has
+                # started, subsequent guide links belong after the instructions.
+                self.route_lead_started.add(self._claim)
+                self.route_outcome_started.add(self._claim)
+        if tag == "li" and attrs.get("data-step-role"):
+            walkthrough_id = self._claim or self._optional_entry
+            if walkthrough_id is not None:
+                self.walkthrough_step_roles[walkthrough_id].append(attrs["data-step-role"])
+                self.walkthrough_step_text_parts[walkthrough_id].append([])
+                self._walkthrough_step = (
+                    walkthrough_id,
+                    len(self.walkthrough_step_text_parts[walkthrough_id]) - 1,
+                )
         if tag == "h2" and self._optional_group is not None and self._optional_entry is None:
             self.optional_group_heading_ids[self._optional_group][attrs.get("id", "")] += 1
         if tag == "h3" and self._optional_entry is not None:
@@ -2800,6 +2950,7 @@ class WalkthroughHTMLParser(HTMLParser):
                 previous_scene_system,
                 previous_evidence,
                 previous_source,
+                previous_walkthrough_step,
                 previous_ignored,
             ) = self._stack[index]
             del self._stack[index:]
@@ -2818,6 +2969,7 @@ class WalkthroughHTMLParser(HTMLParser):
             self._scene_system = previous_scene_system
             self._evidence = previous_evidence
             self._source = previous_source
+            self._walkthrough_step = previous_walkthrough_step
             self._ignored_depth = previous_ignored
             return
 
@@ -2841,6 +2993,9 @@ class WalkthroughHTMLParser(HTMLParser):
             self.scene_entry_text_parts[self._scene_entry].append(data)
         elif self._scene_system:
             self.scene_system_text_parts.append(data)
+        if self._walkthrough_step is not None and self._evidence is None:
+            walkthrough_id, step_index = self._walkthrough_step
+            self.walkthrough_step_text_parts[walkthrough_id][step_index].append(data)
         if self._chapter is not None:
             self.route_chapter_text_parts[self._chapter].append(data)
         if self._section is not None:
@@ -3624,6 +3779,57 @@ def _validate_publication(
                 expected=dict(expected_sources),
                 observed=dict(parser.evidence_sources[claim_id]),
             )
+        expected_step_roles = [
+            str(row.get("role", ""))
+            for row in claims[claim_id].get("walkthrough_steps") or []
+            if isinstance(row, dict)
+        ]
+        expected_step_texts = [
+            _normalize(str(row.get("text", "")))
+            for row in claims[claim_id].get("walkthrough_steps") or []
+            if isinstance(row, dict)
+        ]
+        observed_step_texts = [
+            _normalize(" ".join(parts))
+            for parts in parser.walkthrough_step_text_parts.get(claim_id, [])
+        ]
+        if parser.walkthrough_lists[claim_id] != 1:
+            _issue(
+                issues,
+                "error",
+                "route-walkthrough-list-invalid",
+                f"Route step {claim_id!r} must render one ordered .walkthrough-steps list.",
+                claim_id=claim_id,
+                observed=parser.walkthrough_lists[claim_id],
+            )
+        if parser.walkthrough_list_claim_contexts.get(claim_id, set()) != {claim_id}:
+            _issue(
+                issues,
+                "error",
+                "route-walkthrough-list-context-invalid",
+                f"Route step {claim_id!r} must contain its matching walkthrough list.",
+                claim_id=claim_id,
+            )
+        if parser.walkthrough_step_roles.get(claim_id, []) != expected_step_roles:
+            _issue(
+                issues,
+                "error",
+                "route-walkthrough-steps-mismatch",
+                f"Route step {claim_id!r} must render every walkthrough step in declared order.",
+                claim_id=claim_id,
+                expected=expected_step_roles,
+                observed=parser.walkthrough_step_roles.get(claim_id, []),
+            )
+        if observed_step_texts != expected_step_texts:
+            _issue(
+                issues,
+                "error",
+                "route-walkthrough-step-text-mismatch",
+                f"Route step {claim_id!r} must render each source-bound instruction verbatim.",
+                claim_id=claim_id,
+                expected=expected_step_texts,
+                observed=observed_step_texts,
+            )
         step_text = _normalize(" ".join(parser.route_step_text_parts[claim_id]))
         for phrase in claims[claim_id].get("guide_phrases") or []:
             if _normalize(str(phrase)) not in step_text:
@@ -3860,6 +4066,57 @@ def _validate_publication(
                     f"Optional entry {entry_id!r} is missing its guide phrase: {phrase!r}",
                     entry_id=entry_id,
                 )
+        expected_step_roles = [
+            str(row.get("role", ""))
+            for row in entry.get("walkthrough_steps") or []
+            if isinstance(row, dict)
+        ]
+        expected_step_texts = [
+            _normalize(str(row.get("text", "")))
+            for row in entry.get("walkthrough_steps") or []
+            if isinstance(row, dict)
+        ]
+        observed_step_texts = [
+            _normalize(" ".join(parts))
+            for parts in parser.walkthrough_step_text_parts.get(entry_id, [])
+        ]
+        if parser.walkthrough_lists[entry_id] != 1:
+            _issue(
+                issues,
+                "error",
+                "optional-walkthrough-list-invalid",
+                f"Optional entry {entry_id!r} must render one ordered .walkthrough-steps list.",
+                entry_id=entry_id,
+                observed=parser.walkthrough_lists[entry_id],
+            )
+        if parser.walkthrough_list_optional_contexts.get(entry_id, set()) != {entry_id}:
+            _issue(
+                issues,
+                "error",
+                "optional-walkthrough-list-context-invalid",
+                f"Optional entry {entry_id!r} must contain its matching walkthrough list.",
+                entry_id=entry_id,
+            )
+        if parser.walkthrough_step_roles.get(entry_id, []) != expected_step_roles:
+            _issue(
+                issues,
+                "error",
+                "optional-walkthrough-steps-mismatch",
+                f"Optional entry {entry_id!r} must render every walkthrough step in declared order.",
+                entry_id=entry_id,
+                expected=expected_step_roles,
+                observed=parser.walkthrough_step_roles.get(entry_id, []),
+            )
+        if observed_step_texts != expected_step_texts:
+            _issue(
+                issues,
+                "error",
+                "optional-walkthrough-step-text-mismatch",
+                f"Optional entry {entry_id!r} must render each source-bound instruction verbatim.",
+                entry_id=entry_id,
+                expected=expected_step_texts,
+                observed=observed_step_texts,
+            )
         for source in entry.get("sources") or []:
             if not isinstance(source, dict):
                 continue

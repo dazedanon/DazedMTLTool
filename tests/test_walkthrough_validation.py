@@ -76,8 +76,11 @@ class WalkthroughValidationTests(unittest.TestCase):
             <header><p>In-game objective</p><h3 id="objective-reach-town">Reach Town</h3></header>
             <article class="route-step" id="step-reach-town" data-claim-id="reach-town">
               <h4 id="reach-town">Leave through the front door</h4>
-            <p class="route-lead">Speak to Mina beside the front door, then leave through that door.</p>
-            <p class="route-outcome">You arrive in Town.</p>
+            <ol class="walkthrough-steps" data-walkthrough-id="reach-town">
+              <li data-step-role="start">Start at the front door in Home.</li>
+              <li data-step-role="travel">Use the front door to leave Home.</li>
+              <li data-step-role="confirmation">You arrive in Town.</li>
+            </ol>
             <aside><a data-guide-link data-guide-kind="optional" data-guide-link-position="after" href="#town-errand">Town Errand</a> is now available.</aside>
             <aside><a data-guide-link data-guide-kind="scene" data-guide-link-position="after" href="#scene-group-mina">Mina scenes</a> are now available. <a data-guide-link data-guide-kind="scene" data-guide-link-position="after" href="#scene-town-memory">Town Memory</a></aside>
             <p><a data-guide-link data-guide-kind="boss" href="#boss-door-warden">Door Warden</a> boss dossier.</p>
@@ -86,6 +89,7 @@ class WalkthroughValidationTests(unittest.TestCase):
               <summary>Evidence</summary>
               <p data-evidence-status="verified">Verified from game data</p>
               <ul>
+                <li data-source-id="home-map-name">The route begins on the map named Home.</li>
                 <li data-source-id="{source_id}">The front door transfers the party to the town map.</li>
                 <li data-source-id="town-map-name">The destination map is named Town.</li>
               </ul>
@@ -100,12 +104,21 @@ class WalkthroughValidationTests(unittest.TestCase):
           <h2 id="optional-prologue">Prologue Detours</h2>
           <article class="optional-entry" id="optional-entry-town-errand" data-optional-id="town-errand">
             <h3 id="town-errand">Town Errand</h3>
-            <p>After reaching Town, speak to Mina again to hear her optional request.</p>
+            <ol class="walkthrough-steps" data-walkthrough-id="town-errand">
+              <li data-step-role="start">After reaching Town, speak to Mina in the town square.</li>
+              <li data-step-role="obtain">Recover the parcel from the riverside storehouse, then bring it back to Mina.</li>
+              <li data-step-role="completion">Mina accepts the parcel and Town Errand is complete.</li>
+            </ol>
             <label><input class="task-checkbox" type="checkbox" data-task-id="town-errand"> Done</label>
             <details class="evidence" data-evidence-id="town-errand">
               <summary>Evidence</summary>
               <p data-evidence-status="verified">Verified from game data</p>
-              <ul><li data-source-id="town-errand-journal">The journal names this optional event Town Errand.</li></ul>
+              <ul>
+                <li data-source-id="town-errand-journal">The journal names this optional event Town Errand.</li>
+                <li data-source-id="town-errand-start">Mina in the town square starts Town Errand.</li>
+                <li data-source-id="town-errand-parcel">The event requires the parcel from the riverside storehouse.</li>
+                <li data-source-id="town-errand-complete">Returning the parcel to Mina completes Town Errand.</li>
+              </ul>
             </details>
           </article>
         </section>
@@ -312,7 +325,11 @@ class WalkthroughValidationTests(unittest.TestCase):
         scripts = root / "js"
         scripts.mkdir()
         (scripts / "plugins.js").write_text(
-            'DestinationText":"Reach Town"\nOptionalTitle":"Town Errand"\n',
+            'DestinationText":"Reach Town"\n'
+            'OptionalTitle":"Town Errand"\n'
+            'OptionalStart":"Mina in Town square"\n'
+            'OptionalItem":"Parcel from riverside storehouse"\n'
+            'OptionalComplete":"Return parcel to Mina"\n',
             encoding="utf-8",
         )
         pictures = root / "img" / "pictures"
@@ -344,13 +361,17 @@ class WalkthroughValidationTests(unittest.TestCase):
             "### Reach Town\n\n"
             "<!-- route-claim:reach-town -->\n"
             "#### Leave through the front door\n\n"
-            "Speak to Mina beside the front door, then leave through that door.\n\n"
+            "1. Start at the front door in Home.\n"
+            "2. Use the front door to leave Home.\n"
+            "3. You arrive in Town.\n\n"
             "# Optional Content\n\n"
             "<!-- optional-group:optional-prologue -->\n"
             "## Prologue Detours\n\n"
             "<!-- optional-entry:town-errand -->\n"
             "### Town Errand\n\n"
-            "After reaching Town, speak to Mina again to hear her optional request.\n"
+            "1. After reaching Town, speak to Mina in the town square.\n"
+            "2. Recover the parcel from the riverside storehouse, then bring it back to Mina.\n"
+            "3. Mina accepts the parcel and Town Errand is complete.\n"
             "# Bosses\n\n"
             "<!-- boss-group:boss-story -->\n"
             "## Story Bosses\n\n"
@@ -379,7 +400,7 @@ class WalkthroughValidationTests(unittest.TestCase):
         self._write_json(
             evidence,
             {
-                "schema_version": 17,
+                "schema_version": 18,
                 "milestone": "complete-four-view-walkthrough",
                 "dependency_closure": {
                     "artifact": "dependency-closure.json",
@@ -466,9 +487,36 @@ class WalkthroughValidationTests(unittest.TestCase):
                         "kind": "navigation",
                         "status": "verified",
                         "guide_phrases": [
-                            "Speak to Mina beside the front door, then leave through that door."
+                            "Start at the front door in Home.",
+                            "Use the front door to leave Home.",
+                            "You arrive in Town.",
+                        ],
+                        "walkthrough_steps": [
+                            {
+                                "role": "start",
+                                "text": "Start at the front door in Home.",
+                                "source_ids": ["home-map-name"],
+                            },
+                            {
+                                "role": "travel",
+                                "text": "Use the front door to leave Home.",
+                                "source_ids": ["front-door-transfer"],
+                            },
+                            {
+                                "role": "confirmation",
+                                "text": "You arrive in Town.",
+                                "source_ids": ["front-door-transfer", "town-map-name"],
+                            },
                         ],
                         "sources": [
+                            {
+                                "id": "home-map-name",
+                                "type": "database-record",
+                                "file": "data/MapInfos.json",
+                                "record_id": 1,
+                                "expected": {"name": "Home"},
+                                "supports": "The route begins on the map named Home.",
+                            },
                             {
                                 "id": "front-door-transfer",
                                 "type": "event-command",
@@ -510,7 +558,26 @@ class WalkthroughValidationTests(unittest.TestCase):
                             "route_anchor_position": "after",
                             "prerequisite_entry_ids": [],
                             "guide_phrases": [
-                                "After reaching Town, speak to Mina again to hear her optional request."
+                                "After reaching Town, speak to Mina in the town square.",
+                                "Recover the parcel from the riverside storehouse, then bring it back to Mina.",
+                                "Mina accepts the parcel and Town Errand is complete.",
+                            ],
+                            "walkthrough_steps": [
+                                {
+                                    "role": "start",
+                                    "text": "After reaching Town, speak to Mina in the town square.",
+                                    "source_ids": ["town-errand-start"],
+                                },
+                                {
+                                    "role": "obtain",
+                                    "text": "Recover the parcel from the riverside storehouse, then bring it back to Mina.",
+                                    "source_ids": ["town-errand-parcel"],
+                                },
+                                {
+                                    "role": "completion",
+                                    "text": "Mina accepts the parcel and Town Errand is complete.",
+                                    "source_ids": ["town-errand-complete"],
+                                },
                             ],
                             "sources": [
                                 {
@@ -519,7 +586,28 @@ class WalkthroughValidationTests(unittest.TestCase):
                                     "file": "js/plugins.js",
                                     "contains": 'OptionalTitle":"Town Errand"',
                                     "supports": "The journal names this optional event Town Errand.",
-                                }
+                                },
+                                {
+                                    "id": "town-errand-start",
+                                    "type": "file-excerpt",
+                                    "file": "js/plugins.js",
+                                    "contains": 'OptionalStart":"Mina in Town square"',
+                                    "supports": "Mina in the town square starts Town Errand.",
+                                },
+                                {
+                                    "id": "town-errand-parcel",
+                                    "type": "file-excerpt",
+                                    "file": "js/plugins.js",
+                                    "contains": 'OptionalItem":"Parcel from riverside storehouse"',
+                                    "supports": "The event requires the parcel from the riverside storehouse.",
+                                },
+                                {
+                                    "id": "town-errand-complete",
+                                    "type": "file-excerpt",
+                                    "file": "js/plugins.js",
+                                    "contains": 'OptionalComplete":"Return parcel to Mina"',
+                                    "supports": "Returning the parcel to Mina completes Town Errand.",
+                                },
                             ],
                         }
                     ],
@@ -899,6 +987,56 @@ class WalkthroughValidationTests(unittest.TestCase):
             self.assertEqual(report["summary"]["scene_verified"], 1)
             self.assertEqual(report["summary"]["scene_cg_images"], 1)
             self.assertEqual(set(report["publication"]["views"]), set(walkthrough_validator.REQUIRED_VIEWS))
+
+    def test_route_and_optional_records_reject_vague_one_row_summaries(self):
+        """Protect player routes from collapsing back into endpoint-only summaries."""
+        cases = (
+            (("route_claims", 0), "confirmation", "route-claim-invalid"),
+            (("optional_content", "entries", 0), "completion", "optional-entry-invalid"),
+        )
+        for path, terminal_role, issue_code in cases:
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                walkthrough, evidence, publication = self._build_project(root)
+                manifest = json.loads(evidence.read_text(encoding="utf-8"))
+                record = manifest
+                for key in path:
+                    record = record[key]
+                record["walkthrough_steps"] = [
+                    {
+                        "role": terminal_role,
+                        "text": record["guide_phrases"][-1],
+                        "source_ids": [record["sources"][-1]["id"]],
+                    }
+                ]
+                self._write_json(evidence, manifest)
+
+                report = self._validate(root, walkthrough, evidence, publication)
+
+                self.assertEqual(report["status"], "failed")
+                issue = next(row for row in report["issues"] if row["code"] == issue_code)
+                self.assertIn("at least three source-bound rows", " ".join(issue["failures"]))
+
+    def test_publication_requires_ordered_walkthrough_lists(self):
+        """Protect the visible step-by-step presentation, not only its evidence manifest."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            walkthrough, evidence, publication = self._build_project(root)
+            publication.write_text(
+                publication.read_text(encoding="utf-8").replace(
+                    'class="walkthrough-steps" data-walkthrough-id="town-errand"',
+                    'class="walkthrough-summary" data-walkthrough-id="town-errand"',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+
+            report = self._validate(root, walkthrough, evidence, publication)
+
+            self.assertEqual(report["status"], "failed")
+            self.assertTrue(
+                any(row["code"] == "optional-walkthrough-list-invalid" for row in report["issues"])
+            )
 
     def test_changed_boss_enemy_snapshot_blocks_publication(self):
         """Protect published boss stats from silently surviving changed enemy data."""
@@ -1475,8 +1613,8 @@ class WalkthroughValidationTests(unittest.TestCase):
             ),
             "wrong document order": (
                 lambda source: source.replace(link_line, "").replace(
-                    '            <p class="route-lead">',
-                    link_line + '            <p class="route-lead">',
+                    '            <ol class="walkthrough-steps" data-walkthrough-id="reach-town">',
+                    link_line + '            <ol class="walkthrough-steps" data-walkthrough-id="reach-town">',
                 ),
                 "optional-main-route-link-order-invalid",
             ),
@@ -1499,7 +1637,12 @@ class WalkthroughValidationTests(unittest.TestCase):
             root = Path(raw)
             walkthrough, evidence, publication = self._build_project(root)
             manifest = json.loads(evidence.read_text(encoding="utf-8"))
-            manifest["route_claims"][0]["sources"][0]["expected"]["parameters"][1] = 99
+            transfer_source = next(
+                source
+                for source in manifest["route_claims"][0]["sources"]
+                if source["id"] == "front-door-transfer"
+            )
+            transfer_source["expected"]["parameters"][1] = 99
             self._write_json(evidence, manifest)
 
             report = self._validate(root, walkthrough, evidence, publication)

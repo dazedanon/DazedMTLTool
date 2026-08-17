@@ -23,7 +23,7 @@ Create `<game>/.dazedtl/walkthrough/evidence.json`:
 
 ```json
 {
-  "schema_version": 17,
+  "schema_version": 18,
   "milestone": "complete-four-view-walkthrough",
   "system_reconnaissance": {
     "inventory_artifact": "systems-inventory.json",
@@ -261,6 +261,7 @@ Each claim has:
 - `kind`: one of `navigation`, `objective`, `pickup`, `equipment`, `boss`, `choice`, or `gate`.
 - `status`: `verified`.
 - `guide_phrases`: one or more exact, short player-facing phrases that must occur in both Markdown and published HTML.
+- `walkthrough_steps`: at least three ordered, source-bound rows beginning with `start` and ending with `confirmation`.
 - `sources`: one or more source snapshots.
 
 Example:
@@ -271,9 +272,36 @@ Example:
   "kind": "navigation",
   "status": "verified",
   "guide_phrases": [
-    "Speak to Mina beside the front door, then leave through that door."
+    "Start beside Mina at the front door.",
+    "Speak to Mina, then use the front door to leave.",
+    "You arrive in Town with Mina beside you."
+  ],
+  "walkthrough_steps": [
+    {
+      "role": "start",
+      "text": "Start beside Mina at the front door.",
+      "source_ids": ["opening-room-name", "opening-choice"]
+    },
+    {
+      "role": "interact",
+      "text": "Speak to Mina, then use the front door to leave.",
+      "source_ids": ["opening-choice"]
+    },
+    {
+      "role": "confirmation",
+      "text": "You arrive in Town with Mina beside you.",
+      "source_ids": ["opening-choice", "town-name"]
+    }
   ],
   "sources": [
+    {
+      "id": "opening-room-name",
+      "type": "database-record",
+      "file": "data/MapInfos.json",
+      "record_id": 1,
+      "expected": {"name": "Opening Room"},
+      "supports": "The route begins in the map named Opening Room."
+    },
     {
       "id": "opening-choice",
       "type": "event-command",
@@ -286,12 +314,27 @@ Example:
         "parameters": [0, 2, 8, 11, 2, 0]
       },
       "supports": "Using the front-door event transfers the party to the named town map."
+    },
+    {
+      "id": "town-name",
+      "type": "database-record",
+      "file": "data/MapInfos.json",
+      "record_id": 2,
+      "expected": {"name": "Town"},
+      "supports": "The destination map is named Town."
     }
   ]
 }
 ```
 
 Keep `guide_phrases` narrowly tied to what the cited sources prove. Split a step when one sentence combines unrelated claims that require different evidence or confidence.
+
+Every route claim also has `walkthrough_steps`, an ordered list of at least three source-bound rows.
+The first row uses role `start`, the final row uses `confirmation`, and at least one middle row uses an actionable role.
+Allowed roles are `start`, `prepare`, `requirement`, `travel`, `interact`, `choice`, `battle`, `obtain`, `return`, `confirmation`, and `completion`; `completion` is reserved for the final row of Optional Content entries.
+Every row has exact player-facing `text` and one or more local `source_ids` proving that action or visible result.
+The exact row text must also appear in `guide_phrases`, Markdown, and the published ordered list in the same order.
+Do not combine different maps, gates, encounters, item acquisitions, return trips, or turn-ins into one catch-all row.
 
 ## Optional Content groups and entries
 
@@ -327,9 +370,63 @@ Group entries by the Main Route chapter in which they first become available, or
         "route_anchor_position": "after",
         "prerequisite_entry_ids": [],
         "guide_phrases": [
-          "Speak to Mina in the town square, recover the parcel from the riverside storehouse, then bring it back to her."
+          "After reaching Town, speak to Mina in the town square.",
+          "Enter the riverside storehouse and recover the parcel.",
+          "Return the parcel to Mina.",
+          "Mina accepts the parcel and Lost Delivery is complete."
         ],
-        "sources": []
+        "walkthrough_steps": [
+          {
+            "role": "start",
+            "text": "After reaching Town, speak to Mina in the town square.",
+            "source_ids": ["lost-delivery-start"]
+          },
+          {
+            "role": "obtain",
+            "text": "Enter the riverside storehouse and recover the parcel.",
+            "source_ids": ["lost-delivery-parcel"]
+          },
+          {
+            "role": "return",
+            "text": "Return the parcel to Mina.",
+            "source_ids": ["lost-delivery-return"]
+          },
+          {
+            "role": "completion",
+            "text": "Mina accepts the parcel and Lost Delivery is complete.",
+            "source_ids": ["lost-delivery-complete"]
+          }
+        ],
+        "sources": [
+          {
+            "id": "lost-delivery-start",
+            "type": "file-excerpt",
+            "file": "data/SideEvents.json",
+            "contains": "Mina in the town square",
+            "supports": "Mina in the town square starts Lost Delivery."
+          },
+          {
+            "id": "lost-delivery-parcel",
+            "type": "file-excerpt",
+            "file": "data/SideEvents.json",
+            "contains": "Parcel in the riverside storehouse",
+            "supports": "The parcel is obtained from the riverside storehouse."
+          },
+          {
+            "id": "lost-delivery-return",
+            "type": "file-excerpt",
+            "file": "data/SideEvents.json",
+            "contains": "Return the parcel to Mina",
+            "supports": "The route returns the player to Mina with the parcel."
+          },
+          {
+            "id": "lost-delivery-complete",
+            "type": "file-excerpt",
+            "file": "data/SideEvents.json",
+            "contains": "Lost Delivery complete",
+            "supports": "Mina's turn-in completes Lost Delivery."
+          }
+        ]
       }
     ]
   }
@@ -353,11 +450,15 @@ Each entry has:
 - `route_anchor_position`: `before` when the notice must appear before the player undertakes the anchor step, or `after` when completing that step creates the availability state.
 - `prerequisite_entry_ids`: the complete direct dependency list, or an empty list.
 - `guide_phrases`: one or more exact actionable phrases present in both Markdown and HTML.
+- `walkthrough_steps`: at least three ordered, source-bound rows beginning with `start` and ending with `completion`. Use separate intermediate rows for every verified preparation, gate, named-area transition, interaction, choice, battle, obtained item, return trip, and turn-in that the player must perform.
 - `sources`: globally unique source snapshots proving the major lifecycle.
 
 A `companion-recruitment` entry also has a `recruitment` object with nonempty `success_steps` and `failure_modes`. Every row has player-facing `text` and local `source_ids`; failure rows also use `kind` `retryable`, `missable`, `permanent-lockout`, or `point-of-no-return`. The successful route must bind the actual recruit/support outcome, not merely a personal-quest completion. Failure analysis distinguishes a harmless “not now” branch from a real lockout and identifies the last opportunity when timing can close the route. Include every row's text in `guide_phrases` and render it in the entry.
 
-The source set must establish the entry's real start, important intermediate updates or branch convergence, requirements, completion, and meaningful fixed outcomes. Cite database records as well as event commands when an item or reward is identified only by ID. For a long chain, prefer several focused sources to one incidental match. If the game exposes a journal title but no reachable start or completion, investigate and classify it in private research instead of publishing it as a complete player route.
+The source set must establish the entry's real start, every player-actionable intermediate stage, requirements, completion, and meaningful fixed outcomes.
+Cite database records as well as event commands when an item or reward is identified only by ID.
+For a long chain, prefer several focused sources to one incidental match.
+If the game exposes a journal title but no reachable start or completion, investigate and classify it in private research instead of publishing it as a complete player route.
 
 Dependencies describe other Optional Content entries. Story, party, region, and postgame gates stay in player prose and evidence, while `route_anchor_id` and `route_anchor_position` establish the first Main Route cross-link. A prerequisite does not replace the anchor: both must be correct. Prove earliest availability by tracing every start predicate, then check the previous Main Route claim and identify the still-unsatisfied gate. The first time the recommended route happens to visit an area is not proof that content was unavailable earlier.
 
@@ -646,6 +747,8 @@ Pair a title-card hash with the event command that displays it so the ledger pro
 ### Map layout observations
 
 Coordinates and event positions may be cited inside Evidence to establish adjacency or relative placement, but they do not establish what a player sees or how obstacles affect movement. When visibility, direction, passability, elevation, or an exact walking path cannot be proven, omit that precision. Keep the instruction at the verified named area, connected exit, interaction, gate, or outcome.
+Omitting unproved tile-level precision does not permit omitting verified transitions.
+Trace inbound and outbound transfers, map display names, page conditions, required actors or items, encounters, rewards, and return events, then preserve every player-actionable stage as its own `walkthrough_steps` row.
 
 ## Markdown and HTML binding
 
@@ -662,6 +765,10 @@ Immediately precede every source-backed chapter, route section, and Main Route s
 
 <!-- route-claim:leave-opening-room -->
 #### Leave the house
+
+1. Start beside Mina at the front door.
+2. Speak to Mina, then use the front door to leave.
+3. You arrive in Town with Mina beside you.
 ```
 
 Render the chapter, section, step, and disclosure as:
@@ -673,7 +780,11 @@ Render the chapter, section, step, and disclosure as:
     <header><p>In-game objective</p><h3 id="objective-reach-town">Reach Town</h3></header>
     <article class="route-step" id="step-leave-opening-room" data-claim-id="leave-opening-room">
       <h4>Leave the house</h4>
-      <p>Speak to Mina beside the front door, then leave through that door.</p>
+      <ol class="walkthrough-steps" data-walkthrough-id="leave-opening-room">
+        <li data-step-role="start">Start beside Mina at the front door.</li>
+        <li data-step-role="interact">Speak to Mina, then use the front door to leave.</li>
+        <li data-step-role="confirmation">You arrive in Town with Mina beside you.</li>
+      </ol>
       <details class="evidence" data-evidence-id="leave-opening-room">
         <summary>Evidence</summary>
         <p class="evidence-status" data-evidence-status="verified">Verified from game data</p>
@@ -706,7 +817,10 @@ Immediately precede every optional group and entry in `WALKTHROUGH.md` with matc
 <!-- optional-entry:lost-delivery -->
 ### Lost Delivery
 
-Speak to Mina in the town square, recover the parcel from the riverside storehouse, then bring it back to her.
+1. After reaching Town, speak to Mina in the town square.
+2. Enter the riverside storehouse and recover the parcel.
+3. Return the parcel to Mina.
+4. Mina accepts the parcel and Lost Delivery is complete.
 ```
 
 Render them inside the completed Optional Content view:
@@ -717,7 +831,12 @@ Render them inside the completed Optional Content view:
   <article class="optional-entry" id="optional-lost-delivery" data-optional-id="lost-delivery">
     <p class="optional-meta">Side event</p>
     <h3>Lost Delivery</h3>
-    <p>Speak to Mina in the town square, recover the parcel from the riverside storehouse, then bring it back to her.</p>
+    <ol class="walkthrough-steps" data-walkthrough-id="lost-delivery">
+      <li data-step-role="start">After reaching Town, speak to Mina in the town square.</li>
+      <li data-step-role="obtain">Enter the riverside storehouse and recover the parcel.</li>
+      <li data-step-role="return">Return the parcel to Mina.</li>
+      <li data-step-role="completion">Mina accepts the parcel and Lost Delivery is complete.</li>
+    </ol>
     <p class="optional-reward"><strong>Reward:</strong> Traveler's Brooch</p>
     <label class="task-row"><input class="task-checkbox" type="checkbox" data-task-id="lost-delivery"> Mark Lost Delivery complete</label>
     <details class="evidence" data-evidence-id="lost-delivery">
@@ -729,7 +848,11 @@ Render them inside the completed Optional Content view:
 </section>
 ```
 
-The group heading ID and entry article ID are the durable deep-link destinations. Every Optional Content entry gets exactly one saved checklist input and exactly one Evidence disclosure. The Main Route step named by `route_anchor_id` must contain exactly one working link whose placement matches the ledger, such as `<a data-guide-link data-guide-kind="optional" data-guide-link-position="after" href="#optional-lost-delivery">`. Put a `before` callout above the route prose and an `after` callout below its outcome. Do not link from an earlier chapter merely because the quest is configured there, do not delay a link until a recommended regional visit when its gates open earlier, and do not emit a link to an unfinished Scenes & CG destination.
+The group heading ID and entry article ID are the durable deep-link destinations.
+Every Optional Content entry gets exactly one ordered `.walkthrough-steps` list, one saved checklist input, and one Evidence disclosure.
+The Main Route step named by `route_anchor_id` must contain exactly one working link whose placement matches the ledger, such as `<a data-guide-link data-guide-kind="optional" data-guide-link-position="after" href="#optional-lost-delivery">`.
+Put a `before` callout above the route prose and an `after` callout below its outcome.
+Do not link from an earlier chapter merely because the quest is configured there, do not delay a link until a recommended regional visit when its gates open earlier, and do not emit a link to an unfinished Scenes & CG destination.
 
 ### Bosses
 
@@ -809,10 +932,12 @@ The catalog overview has exactly one verified Evidence disclosure and contains e
 ## Verification boundary
 
 - `verified` means every material part of the published player-facing phrase is supported by source snapshots and the relevant branch trace.
+- For Main Route and Optional Content, `verified` also means the ordered `walkthrough_steps` chain begins at a recognizable player state, preserves every verified actionable transition and gate, and ends at a visible confirmation or completion cue.
 - For Optional Content, `verified` also means the major lifecycle, direct dependencies, availability anchor, completion interaction, and stated fixed outcomes have been traced.
 - For Bosses, `verified` also means every displayed phase, stat, action, elemental read, drop, fixed reward, transformation, special outcome, and route/optional binding has been traced.
 - For Scenes & CG, `verified` also means the catalog boundary, exact catalog title, source-backed guide title, acquisition classification, displayed requirements, earliest route availability and its preceding blocker, prerequisite scene order, story gates, normal acquisition/live trigger/live completion for `normal-play` and any separate persistent unlock write the game actually uses (or a reconciled lack of a standalone event for `gallery-only`), replay/viewer dispatch, illustrated-set count, and group/route binding have been traced. A `combat-scene` additionally requires the complete combatant/action-or-state/troop-or-encounter chain and player-visible location.
-- Exact walking lines, visual prominence, and route efficiency are not required publication claims. Do not add them unless the data proves them.
+- Exact walking lines, visual prominence, and route efficiency are not required publication claims.
+  Do not add them unless the data proves them, but still publish every verified named area, connected exit, gate, interaction, encounter, acquisition, return, and turn-in in order.
 - Research notes about omitted precision may stay in private working files or a non-rendered `navigation_note`; they are not claim statuses and must not appear in HTML Evidence.
 
 Never use `assumed`, `likely`, `requires-playtest`, or an untracked confidence state. A plausible claim is either strengthened to `verified`, narrowed to what is provable, or omitted.

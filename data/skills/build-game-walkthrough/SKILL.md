@@ -1,6 +1,6 @@
 ---
 name: build-game-walkthrough
-description: "Build a detailed, source-traceable game walkthrough as one offline HTML application with four complete top-level views: Main Route, Optional Content, Bosses, and Scenes & CG. Use when Codex must audit local game events and databases, write player-usable routes and catalogs without guessing from coordinates or filenames, and expose expandable evidence for every entry."
+description: "Build a detailed, source-traceable game walkthrough as one offline HTML application with four complete top-level views: Main Route, Optional Content, Bosses, and Scenes & CG. Use when Codex must audit local game events and databases, write verified step-by-step player routes instead of destination summaries, and expose expandable evidence for every entry."
 ---
 
 # Build a Game Walkthrough
@@ -47,7 +47,9 @@ Do not inherit the structure, scope, claims, chapter boundaries, or completion a
 3. Build a route graph before drafting prose. At each branch, follow every path far enough to distinguish mandatory progression, alternate valid progression, optional content, a temporary dead end, and a return-later gate.
 4. Reverse-check important outcomes. For a required item, gate, choice, or boss result, locate every relevant acquisition, condition, branch, and state write rather than trusting the first matching string.
 5. Record each player-facing route step in `evidence.json` before presenting it as fact. Read [`references/validation-evidence.md`](references/validation-evidence.md) completely and use its schema.
-6. If static analysis cannot establish an exact walking line or visual landmark, omit that precision and keep the instruction at the verified destination, interaction, gate, or outcome. Never turn a coordinate, event name, or likely intent into a confident direction, and never publish an internal live-play caveat as player guidance.
+6. If static analysis cannot establish an exact walking line or visual landmark, omit only that unproved precision.
+   Still enumerate every verified named area transition, required companion or item, entrance interaction, encounter, acquired proof, return trip, turn-in, and visible completion cue in order.
+   Never turn a coordinate, event name, or likely intent into a confident direction, and never publish an internal live-play caveat as player guidance.
 
 ## Inventory active game systems before deep research
 
@@ -91,7 +93,10 @@ Start with a broad category checklist: named side quests and quest chains; optio
 
 For every companion recruitment or finale-support entry, publish a compact failure analysis alongside the successful route and bind the entry to its complete dependency closure. Distinguish choices that only postpone acceptance from permanent lockouts, distinguish completing a personal quest from setting the actual recruit/support flag, and name the last player-visible opportunity before the route closes. Include scripted captures, deliberate losses, escape branches, conversations while captive, prerequisite rescues, required item custody, and later re-entry only when the current game's closure exposes them; do not assume a universal recruitment pattern. If the game has no failure path, say so only after proving that the route remains retryable or automatic. Record this as the entry's source-bound `recruitment` object instead of hiding it in research notes.
 
-Aim to capture all major actionable content through static analysis. A player may still need to adjust their local movement inside a map when exact geometry is not provable, but they should not have to discover the quest chain, prerequisite, destination, required item, completion interaction, or meaningful reward on their own.
+Aim to capture all major actionable content through static analysis.
+A player may still need to adjust local movement inside a map when exact geometry is not provable, but they should not have to discover any named area in the route, prerequisite, entrance, required party member, target interaction, encounter, obtained item, return destination, turn-in, completion cue, or meaningful reward on their own.
+For every Optional Content entry, write a source-bound `walkthrough_steps` chain before drafting prose.
+Split distinct actions into distinct rows instead of putting the entire quest in one sentence.
 
 ## Inventory Bosses before writing them
 
@@ -157,7 +162,27 @@ Use the following as an internal completeness check for every route step:
 - **Useful pickups:** weapons, armor, key items, healing resources, or other meaningful fixed pickups directly along or immediately beside the route.
 - **Exit:** where the step leaves the player and what the next step begins from.
 
-Do not publish those five labels as a form. Turn the research into one or two connected paragraphs that read like a human-written guide. Begin from the situation created by the previous step, tell the player what to do, and end on a visible cue that naturally leads into the next step. Use a small `Worth grabbing` callout only when a pickup would interrupt the paragraph.
+Record the result as source-bound `walkthrough_steps` before drafting the entry.
+Render those rows as one ordered player-facing list, with a short connective sentence only when it improves flow.
+Do not publish the research labels `Start`, `Action`, `Confirmation`, `Useful pickups`, or `Exit` as a repeated five-field form.
+Use a small `Worth grabbing` callout only when a pickup would interrupt the route list.
+
+### Step-by-step action-chain rules
+
+Every Main Route claim and every Optional Content entry must contain at least three source-bound `walkthrough_steps` rows.
+The first row uses `start`, the final Main Route row uses `confirmation`, and the final Optional Content row uses `completion`.
+Use intermediate roles from `prepare`, `requirement`, `travel`, `interact`, `choice`, `battle`, `obtain`, and `return` as the current route requires.
+
+- Name the player-visible starting place and the situation created by the preceding step.
+- Preserve every distinct named map, floor, room, connected exit, transport interaction, or return destination that the executable transfer chain proves.
+- Put a required companion, traversal ability, key item, quest state, or party setup before the action it gates.
+- Give every boss, mandatory encounter, pickup, proof item, hand-in, and visible completion result its own row when it is a distinct action or outcome.
+- End with the exact visible cue that tells the player the task succeeded and where they are left.
+
+Do not compress a route such as `accept request -> cross two named areas -> reveal a gated entrance -> defeat target -> obtain proof -> return to requester -> turn in proof` into `find the target and return`.
+Do not merge actions that occur on different maps or on opposite sides of a battle, item acquisition, or return trip.
+Each row must cite the local evidence sources that prove it, must appear verbatim in `guide_phrases`, and must be rendered in the same order as the HTML list.
+A short quest summary may precede the list, but it never substitutes for the list.
 
 Keep authoring language separate from evidence language:
 
@@ -168,7 +193,7 @@ Keep authoring language separate from evidence language:
 - Vary sentence length and transitions. Let consecutive steps feel like a continuous journey rather than isolated database entries.
 - Read each finished route section aloud. If it sounds like a checklist generated from fields, rewrite it before publication.
 
-Do not omit information a player needs to recover their position; preserve it through prose rather than visible metadata labels.
+Do not omit information a player needs to recover their position; preserve it through player-facing instructions rather than visible metadata labels.
 
 ### Navigation rules
 
@@ -176,6 +201,8 @@ Do not omit information a player needs to recover their position; preserve it th
 - Prefer visible names, connected-room relationships, doors, stairs, bridges, intersections, NPC names, signs, and scene outcomes actually supported by data.
 - Coordinates prove relative placement only. They do not prove north/south/east/west, visibility, passability, elevation, or the route around obstacles.
 - Use compass language only when the game itself establishes orientation or the complete map/passability trace proves it. Otherwise stay at the verified room, destination, connected exit, interaction, or outcome level.
+- Before reducing a route to its endpoint, inspect every inbound and outbound transfer, destination map name, event page condition, actor/item gate, choice, encounter, reward command, and return event along the chain.
+- Missing tile-perfect geometry does not justify an endpoint-only summary. Preserve the verified named-area and interaction sequence while omitting only the unproved turn-by-turn movement.
 - Never invent landmarks, colors, room appearance, puzzle feedback, exact walking lines, level targets, or strategy.
 - Use exact translated player-facing names. Keep technical identifiers inside the collapsed Evidence disclosure only.
 
@@ -196,7 +223,7 @@ Keep in their dedicated views:
 
 ## Keep every step traceable
 
-Give every Main Route step one stable kebab-case claim ID. Put this marker immediately before the step in `WALKTHROUGH.md`:
+Give every Main Route step one stable kebab-case claim ID and a source-bound `walkthrough_steps` list. Put this marker immediately before the step in `WALKTHROUGH.md`:
 
 ```markdown
 <!-- route-claim:leave-opening-room -->
@@ -213,7 +240,7 @@ Give the matching HTML step `.route-step[data-claim-id="leave-opening-room"]`. E
 
 Evidence disclosures are for auditability, not player directions. Explain what each source proves in plain language, then show its technical locator. Do not paste dialogue dumps, scripts, or large event records.
 
-Give every Optional Content group and entry globally unique stable IDs. Bind them in `WALKTHROUGH.md` with `optional-group` and `optional-entry` markers, and render matching `.optional-group[data-optional-group-id]` and `.optional-entry[data-optional-id]` elements. Every optional entry must name its first Main Route anchor and declare `route_anchor_position` as `before` when the player should see the detour before undertaking that step or `after` when completing the step causes the unlock. List prerequisite entry IDs, preserve the complete actionable chain in natural prose, show meaningful fixed rewards or unlocks, include one saved checklist control, and end with an expandable Evidence disclosure. Never place every optional callout mechanically at the bottom of its anchor step. Follow [`references/validation-evidence.md`](references/validation-evidence.md) for the exact schema and HTML bindings.
+Give every Optional Content group and entry globally unique stable IDs. Bind them in `WALKTHROUGH.md` with `optional-group` and `optional-entry` markers, and render matching `.optional-group[data-optional-group-id]` and `.optional-entry[data-optional-id]` elements. Every optional entry must name its first Main Route anchor and declare `route_anchor_position` as `before` when the player should see the detour before undertaking that step or `after` when completing the step causes the unlock. List prerequisite entry IDs, preserve the complete actionable chain as an ordered `.walkthrough-steps` list, show meaningful fixed rewards or unlocks, include one saved checklist control, and end with an expandable Evidence disclosure. Never place every optional callout mechanically at the bottom of its anchor step. Follow [`references/validation-evidence.md`](references/validation-evidence.md) for the exact schema and HTML bindings.
 
 Give every Bosses group and dossier globally unique stable IDs. Bind them in `WALKTHROUGH.md` with `boss-group` and `boss-entry` markers, and render matching `.boss-group[data-boss-group-id]` and `.boss-entry[data-boss-id]` elements. Each dossier must declare all `route_claim_ids` and `optional_entry_ids` that reach it, contain at least one verified phase, display one saved checklist control, and end with an Evidence disclosure. The route/optional sources link to `#boss-<boss-id>` and the dossier links back to each source entry. Follow the evidence contract for exact stat, action, source, and HTML bindings.
 
@@ -264,7 +291,8 @@ Treat validation errors as blockers. Publish only verified route claims and cata
 
 Also verify manually:
 
-- Starting from each step's stated Start, a player can identify the next action without technical data.
+- Starting from each ordered route or optional-content list, a player can identify every next action through the visible completion cue without technical data.
+- Every Main Route claim and Optional Content entry renders its complete source-bound `walkthrough_steps` sequence in order, and no multi-map, gated, battle, acquisition, return, or turn-in chain has been collapsed into an endpoint summary.
 - Every configured major optional entry has been classified, and every published optional entry has a verified start, lifecycle, completion, dependency set, Main Route anchor, and meaningful fixed outcome.
 - Main Route headings mirror the game's complete chapter/objective hierarchy; no story phase is flattened away and no editorial section is mislabeled as an official chapter.
 - Every character name, pronoun, relationship, location name, and fixed term agrees with the snapshotted glossary and quirks.

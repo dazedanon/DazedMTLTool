@@ -118,9 +118,13 @@ When chapters exist, render the source-backed hierarchy from `evidence.json.rout
 
 For a game without a chapter layer, omit `.route-chapter`, render each `.route-section` label as a directly linkable `h2`, and keep route-step headings at `h3`. Never present an invented chapter number or title.
 
-A route step should read like a natural passage from a player guide, not a database report or five-field form.
+A route step should read like a precise player guide, not a database report, endpoint summary, or five-field form.
 
-Start/Action/Confirmation/Pickup/Exit is a research checklist, not published UI. Blend Start, Action, Confirmation, and Exit into one or two connected paragraphs. Put an immediately useful pickup in a restrained `Worth grabbing` callout. Do not render labels such as `Start:`, `Action:`, `Confirmation:`, or `Exit:` on every step.
+Start/Action/Confirmation/Pickup/Exit is a research checklist, not published UI.
+Render the claim's source-bound `walkthrough_steps` as one `<ol class="walkthrough-steps" data-walkthrough-id="claim-id">` in declared order.
+Put each row in one `<li data-step-role="role">`, and keep the exact source-bound row text visible.
+Use a short lead or transition paragraph when it helps connect adjacent lists, and put an immediately useful pickup in a restrained `Worth grabbing` callout.
+Do not render labels such as `Start:`, `Action:`, `Confirmation:`, or `Exit:` on every step.
 
 Keep source mechanics inside Evidence. Public prose should say what the player sees—for example, “The scene ends with Weeu joining the party”—instead of “the event advances the objective and enables the party-member state.” Use transitions between steps so a chapter reads continuously when the headings are ignored.
 
@@ -129,7 +133,8 @@ Each `.route-step` must contain:
 - A stable `id` for direct links.
 - One `data-claim-id` matching `evidence.json`.
 - A short action-oriented heading.
-- Natural player-facing route prose with a visible outcome woven into the passage.
+- One ordered `.walkthrough-steps[data-walkthrough-id]` list containing every declared start, action, gate, transition, and confirmation row in order.
+- Enough player-visible detail to follow every verified named-area transition, interaction, encounter, pickup, return, and completion cue without reconstructing the route from a summary.
 - An optional compact callout for a mandatory encounter, choice, or useful detour.
 - Exactly one checklist input inside a label: `<input class="task-checkbox" type="checkbox" data-task-id="claim-id">`. Its `data-task-id` must equal the route step's `data-claim-id`; use `.task-row` on the label for the shell styling.
 - One final collapsed `.evidence` disclosure.
@@ -158,7 +163,8 @@ Render each catalog record as `.optional-entry[data-optional-id]` with:
 
 - A globally unique `id` used by its exact Main Route cross-link.
 - A small type/status line and canonical title.
-- Natural player-facing prose that covers how to begin, what materially advances the chain, where to finish, and how the player knows it is done.
+- One `<ol class="walkthrough-steps" data-walkthrough-id="entry-id">` that renders every declared `walkthrough_steps` row as `<li data-step-role="role">` in order.
+- A complete player-facing chain that names where to begin, every verified intermediate area and gate, what materially advances the chain, any encounter and obtained proof, the return or turn-in, and the visible completion cue when those stages exist.
 - A visible dependency note when another optional entry must be completed first.
 - A restrained outcome block for fixed rewards, services, follow-on unlocks, or durable choices; never show a guessed reward.
 - Exactly one checklist input whose `data-task-id` matches the optional entry ID.
@@ -168,7 +174,10 @@ For a `companion-recruitment` entry, put the successful route first, then show a
 
 The private dependency closure controls whether a long route is publishable, but do not render its graph, carrier inventory, or coverage terminology as player UI. Translate the complete node sequence into natural chronological prose. Preserve every meaningful choice, capture, battle outcome, item-custody warning, retry point, and permanent failure condition while hiding switches, variables, command indices, and graph mechanics inside Evidence.
 
-Optional entries may use bordered editorial cards because each is a self-contained detour. Keep the typography and spacing calm; do not turn the view into a dashboard of tiny statistics. Put spoilers required to follow the event in the entry itself and keep implementation details in Evidence.
+Optional entries may use bordered editorial cards because each is a self-contained detour.
+Keep numbered instructions visually compact, with the marker column aligned and enough spacing to scan one action at a time.
+Do not turn the view into a dashboard of tiny statistics.
+Put spoilers required to follow the event in the entry itself and keep implementation details in Evidence.
 
 At the `route_anchor_id` step, add one concise callout with a working link to the entry. Render `route_anchor_position: before` above the route prose as `Optional detours before continuing`; render `after` below the outcome as `New optional content`. When several entries open at the same point, group the links in one restrained callout. The link should answer “what can I do now?” without forcing the player to finish the surrounding regional objective first.
 
@@ -270,9 +279,9 @@ Before publishing:
 0. If skill behavior or guide-generation logic changed, regenerate the entire single-file publication and all affected private artifacts from source. Re-audit every already-completed affected view; a hand-edited example is not evidence that the behavior propagated.
 1. Confirm all required shell hooks, exact tabs, exact panels, unique IDs, and absence of placeholder views.
 2. Confirm Main Route is the initial view and each tab/deep link/Back/Forward transition updates selected state and content correctly.
-3. Confirm every `.route-step` has exactly one matching evidence claim and disclosure.
+3. Confirm every `.route-step` has exactly one matching evidence claim, ordered `.walkthrough-steps` list, checklist, and disclosure, and that every declared step role and phrase appears in order.
 4. Confirm every rendered evidence source matches the manifest and every working `data-guide-link` resolves. Main Route cross-tab links use `data-guide-kind="boss"`, `optional`, or `scene` so the shared shell renders them as distinct red, orange, or purple/pink destinations.
-5. Confirm every Optional Content group and entry matches the evidence ledger, has one checklist and disclosure, and receives exactly one link from its declared Main Route anchor.
+5. Confirm every Optional Content group and entry matches the evidence ledger, has one complete ordered `.walkthrough-steps` list, one checklist and disclosure, and receives exactly one link from its declared Main Route anchor.
 6. Confirm every Bosses group and dossier matches the evidence ledger, has one checklist and disclosure, and has exact two-way links to every declared Main Route or Optional Content source.
 7. Confirm the Scenes & CG overview, groups, specific guide titles, exact catalog titles, acquisition modes, normal acquisition steps, requirements, aliases, viewer modes, illustrated-set totals, checklists, and disclosures match the evidence ledger. Confirm any catalog-wide completion shortcut appears once in the overview, every `normal-play` entry leads with its live path outside the catalog interface, every differing catalog title appears once beneath its guide heading, every `combat-scene` heading names all sourced combatants while the card names its encounter area and explains the trigger sequence, `gallery-only` is backed by a completed reverse search, umbrella summaries were expanded wherever the executable chain provides a more actionable step, every entry has one exact Main Route availability link, every group binds to its earliest member and links back, prerequisite scenes and story gates never occur later than the published notice, and every counted set has a viewer source.
 8. Confirm the page makes no external request, public prose contains no leaked engine control codes, and ordinary anchors/all content work without JavaScript.
