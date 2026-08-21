@@ -13,6 +13,17 @@ import html
 import os
 
 
+def _parse_mismatch_log_line(message, in_block):
+    """Return display text, whether this starts an issue, and next block state."""
+    body = message.split("[MISMATCH]", 1)[1].lstrip()
+    if body == "End mismatch":
+        return body, False, False
+    starts_block = body.startswith(
+        ("Validation mismatch:", "Failed after retries:")
+    ) or not in_block
+    return body, starts_block, True
+
+
 class LogViewer(QWidget):
     """Widget for viewing translation logs and monitoring progress."""
     
@@ -25,6 +36,8 @@ class LogViewer(QWidget):
         # translation worker via signals so we don't poll files or provide
         # controls here. This keeps the UI responsive.
         self._error_count = 0
+        self._mismatch_count = 0
+        self._in_mismatch_block = False
         self._show_header = show_header
         self.init_ui()
         
@@ -54,7 +67,7 @@ class LogViewer(QWidget):
         # content lines up visually.
         layout.setSpacing(8)
 
-        # Tab widget for All / Errors views
+        # Tab widget for All / Issues views
         self._tab_widget = QTabWidget()
         self._tab_widget.setStyleSheet("""
             QTabWidget::pane {
@@ -96,14 +109,14 @@ class LogViewer(QWidget):
         self.log_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._tab_widget.addTab(self.log_display, "All")
 
-        # --- Errors tab (MISMATCH + API_ERROR only) ---
+        # --- Issues tab (validation mismatches + hard errors) ---
         self.error_display = QTextEdit()
         self.error_display.setReadOnly(True)
         self.error_display.setFont(_log_font)
         self.error_display.setStyleSheet(_text_edit_style)
         self.error_display.document().setDocumentMargin(8.0)
         self.error_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self._tab_widget.addTab(self.error_display, "Errors")
+        self._tab_widget.addTab(self.error_display, "Issues")
 
         layout.addWidget(self._tab_widget, 1)
 
@@ -170,7 +183,9 @@ class LogViewer(QWidget):
         self.error_display.clear()
         self.error_display.setCurrentCharFormat(QTextCharFormat())
         self._error_count = 0
-        self._tab_widget.setTabText(1, "Errors")
+        self._mismatch_count = 0
+        self._in_mismatch_block = False
+        self._update_issue_tab_text()
         self.status_label.setText("Log cleared")
         # Reset tail file pointer and buffer if active
         self._tail_buffer = ""
@@ -299,36 +314,93 @@ class LogViewer(QWidget):
         except Exception:
             # If anything goes wrong, stop the tail to avoid repeated errors
             self.stop_tail()
-        
+
+    @staticmethod
+    def _plural(count, singular):
+        if count == 1:
+            return singular
+        if singular.endswith(("ch", "sh", "s", "x", "z")):
+            return f"{singular}es"
+        return f"{singular}s"
+
+    def _update_issue_tab_text(self):
+        parts = []
+        if self._mismatch_count:
+            parts.append(
+                f"{self._mismatch_count} "
+                f"{self._plural(self._mismatch_count, 'mismatch')}"
+            )
+        if self._error_count:
+            parts.append(
+                f"{self._error_count} {self._plural(self._error_count, 'error')}"
+            )
+        suffix = f" ({', '.join(parts)})" if parts else ""
+        self._tab_widget.setTabText(1, f"Issues{suffix}")
+
+    def _append_mismatch_message(self, message):
+        body, starts_block, self._in_mismatch_block = _parse_mismatch_log_line(
+            message, self._in_mismatch_block
+        )
+        if starts_block:
+            self._mismatch_count += 1
+            filename = body.split(":", 1)[1].strip() if ":" in body else body
+            rendered = (
+                '<p style="color: #e5b84b; margin-top: 10px; margin-bottom: 2px;">'
+                f'<b>⚠ Validation mismatch #{self._mismatch_count}</b>'
+                f' — {html.escape(filename)}</p>'
+            )
+        elif body == "End mismatch":
+            self._in_mismatch_block = False
+            rendered = '<p style="margin: 3px 0px;"></p>'
+        elif body in ("Input:", "Final Output:", "Provider output:"):
+            label = "Provider output:" if body == "Final Output:" else body
+            rendered = (
+                '<p style="color: #9cdcfe; margin: 5px 0px 1px 14px;">'
+                f'<b>{html.escape(label)}</b></p>'
+            )
+        elif body.startswith("Original text kept"):
+            rendered = (
+                '<p style="color: #d7ba7d; margin: 1px 0px 3px 14px;">'
+                f'{html.escape(body)}</p>'
+            )
+        else:
+            rendered = (
+                '<p style="color: #dddddd; margin: 0px 0px 0px 28px;">'
+                f'{html.escape(body)}</p>'
+            )
+
+        self.log_display.append(rendered)
+        self.error_display.append(rendered)
+        self._update_issue_tab_text()
+
     def append_log_message(self, message):
         """Append a message to the log display.
         
         Lines containing '[MISMATCH]' or '[API_ERROR]' are also routed to the
-        Errors filter tab so they are never lost in a fast-scrolling log.
+        Issues filter tab so they are never lost in a fast-scrolling log.
         """
-        escaped = html.escape(message)
         if "[MISMATCH]" in message:
-            html_msg = f'<span style="color: #ff4444;">{escaped}</span>'
-            self.log_display.append(html_msg)
-            self.error_display.append(html_msg)
-            self._error_count += 1
-            self._tab_widget.setTabText(1, f"Errors ({self._error_count})")
-            # Counting is handled via stdout MISMATCH_EVENT markers in
-            # TranslationTab.append_log — the log viewer only handles display.
+            self._append_mismatch_message(message)
         elif "[API_ERROR]" in message:
+            self._in_mismatch_block = False
+            escaped = html.escape(message)
             html_msg = f'<span style="color: #ffaa00;">{escaped}</span>'
             self.log_display.append(html_msg)
             self.error_display.append(html_msg)
             self._error_count += 1
-            self._tab_widget.setTabText(1, f"Errors ({self._error_count})")
+            self._update_issue_tab_text()
         elif '\u274c' in message:
+            self._in_mismatch_block = False
+            escaped = html.escape(message)
             # Worker-level error (❌ prefix) — show in both All and Errors tabs.
             html_msg = f'<span style="color: #ff6666;">{escaped}</span>'
             self.log_display.append(html_msg)
             self.error_display.append(html_msg)
             self._error_count += 1
-            self._tab_widget.setTabText(1, f"Errors ({self._error_count})")
+            self._update_issue_tab_text()
         else:
+            self._in_mismatch_block = False
+            escaped = html.escape(message)
             # Explicitly wrap in a white span so Qt doesn't inherit red from
             # a preceding [MISMATCH] HTML append.
             self.log_display.append(f'<span style="color: #ffffff;">{escaped}</span>')

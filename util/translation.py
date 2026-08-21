@@ -5576,9 +5576,13 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                 with lock:
                     pbar.update(len(tItem) if isinstance(tItem, list) else 1)
 
-        else: # Failure case after all retries
+        else: # Validation fallback after all retries
             _thread_local.last_translation_had_mismatch = True
-            if pbar: pbar.write(f"Translation failed after {max_retries + 1} attempts. Check mismatch log.")
+            if pbar:
+                pbar.write(
+                    f"Validation mismatch after {max_retries + 1} attempts; "
+                    "original text kept. Check mismatch log."
+                )
 
             # Emit a machine-readable marker on stdout so the GUI worker
             # thread can detect the mismatch reliably (stdout is captured
@@ -5596,21 +5600,31 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             except Exception:
                 pass
             with open(config.mismatchLogPath, "a+", encoding="utf-8") as mismatchFile:
-                mismatchFile.write(f"Failed after retries: {filename}\n")
+                mismatchFile.write(f"Validation mismatch: {filename}\n")
+                mismatchFile.write(
+                    f"Original text kept after {max_retries + 1} attempts.\n"
+                )
                 mismatchFile.write(f"Input:\n{subbedT}\n")
-                mismatchFile.write(f"Final Output:\n{formatted_mismatch_output}\n")
+                mismatchFile.write(
+                    f"Provider output:\n{formatted_mismatch_output}\n\n"
+                )
                 mismatchFile.flush()  # Ensure data is written to disk immediately
 
             # Also write to the main translation log so the GUI log viewer can display it
             try:
                 with open(config.logFilePath, "a", encoding="utf-8") as logFile:
-                    logFile.write(f"[MISMATCH] Failed after retries: {filename}\n")
-                    logFile.write(f"[MISMATCH] Input:\n")
+                    logFile.write(f"[MISMATCH] Validation mismatch: {filename}\n")
+                    logFile.write(
+                        f"[MISMATCH] Original text kept after "
+                        f"{max_retries + 1} attempts.\n"
+                    )
+                    logFile.write("[MISMATCH] Input:\n")
                     for mline in subbedT.splitlines():
                         logFile.write(f"[MISMATCH] {mline}\n")
-                    logFile.write(f"[MISMATCH] Final Output:\n")
+                    logFile.write("[MISMATCH] Provider output:\n")
                     for mline in formatted_mismatch_output.splitlines():
                         logFile.write(f"[MISMATCH] {mline}\n")
+                    logFile.write("[MISMATCH] End mismatch\n")
                     logFile.flush()
             except Exception:
                 pass  # Don't fail if logging fails

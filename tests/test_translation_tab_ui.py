@@ -13,6 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
+from gui.log_viewer import LogViewer, _parse_mismatch_log_line
 from gui.translation_tab import (
     TranslationTab,
     TranslationWorker,
@@ -139,9 +140,100 @@ class TranslationWorkerTests(unittest.TestCase):
 
         self.assertEqual(result, "TOTAL: success")
         self.assertTrue(worker._run_had_mismatch)
+        self.assertEqual(worker._run_mismatch_count, 1)
         self.assertEqual(len(mismatches), 1)
         self.assertEqual(mismatches[0][0], "bad.json")
         self.assertEqual(errors, [])
+
+    def test_completed_batch_with_mismatches_clears_active_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project_root = Path(temporary)
+            project_root.joinpath("files").mkdir()
+            project_root.joinpath("files", "Map001.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            worker = TranslationWorker(
+                project_root,
+                ("JSON", (".json",), None),
+                selected_files=["Map001.json"],
+                batch_mode=True,
+                batch_resume_state="fetched",
+            )
+            phases = []
+            finished = []
+            worker.batch_phase_signal.connect(
+                lambda phase, payload: phases.append((phase, payload))
+            )
+            worker.finished_signal.connect(
+                lambda success, message: finished.append((success, message))
+            )
+
+            def finish_files(*_args, **_kwargs):
+                worker._run_had_mismatch = True
+                worker._run_mismatch_count = 5
+                return "TOTAL: success"
+
+            worker._run_files = finish_files
+            required_env = {
+                "api": "OpenAI",
+                "key": "test-key",
+                "model": "test-model",
+                "language": "English",
+                "timeout": "30",
+                "fileThreads": "1",
+                "threads": "1",
+                "width": "40",
+                "listWidth": "40",
+                "TRANSLATION_RUN_LOG": "",
+            }
+            with (
+                mock.patch.dict(os.environ, required_env, clear=False),
+                mock.patch("gui.translation_tab.load_dotenv"),
+                mock.patch("util.translation.clear_cache"),
+                mock.patch("util.translation.batchRunMetadata", return_value={}),
+                mock.patch("util.translation.clearBatchFiles") as clear_batch_files,
+                mock.patch("util.batch_history.missing_result_count", return_value=(1, 1)),
+                mock.patch(
+                    "util.vocab.restore_batch_glossary_freeze_from_state",
+                    return_value=False,
+                ),
+            ):
+                worker.run()
+
+        clear_batch_files.assert_called_once_with(strict=True)
+        self.assertEqual(finished, [(True, "TOTAL: success")])
+        self.assertIn(("done", {"mismatches": 5}), phases)
+
+
+class TranslationLogFormattingTests(unittest.TestCase):
+    def test_mismatch_blocks_count_once_instead_of_once_per_line(self) -> None:
+        lines = (
+            "[MISMATCH] Validation mismatch: Troops.json",
+            "[MISMATCH] Original text kept after 5 attempts.",
+            "[MISMATCH] Input:",
+            '[MISMATCH] {"Line1": "Japanese"}',
+            "[MISMATCH] Provider output:",
+            '[MISMATCH] {"Line1": "English"}',
+            "[MISMATCH] End mismatch",
+            "[MISMATCH] Validation mismatch: Map001.json",
+            "[MISMATCH] Original text kept after 5 attempts.",
+            "[MISMATCH] End mismatch",
+        )
+        in_block = False
+        mismatch_count = 0
+        bodies = []
+
+        for line in lines:
+            body, starts_block, in_block = _parse_mismatch_log_line(
+                line, in_block
+            )
+            bodies.append(body)
+            mismatch_count += int(starts_block)
+
+        self.assertEqual(mismatch_count, 2)
+        self.assertEqual(LogViewer._plural(mismatch_count, "mismatch"), "mismatches")
+        self.assertEqual(bodies[0], "Validation mismatch: Troops.json")
+        self.assertNotIn("[MISMATCH]", "\n".join(bodies))
 
 
 class TranslationCostFormattingTests(unittest.TestCase):
@@ -394,6 +486,29 @@ class TranslationTabUITests(unittest.TestCase):
         activate_manual_glossary.assert_not_called()
         start.assert_called_once_with()
 
+        self.tab.mode_combo.setCurrentText("Batch Translate")
+        self.tab.select_files_by_name(["Actors.json"])
+        with (
+            mock.patch("gui.translation_tab.load_dotenv"),
+            mock.patch("util.translation.batchRunState", return_value="fetched"),
+            mock.patch("util.translation.isBatchSupported", return_value=True),
+            mock.patch(
+                "gui.translation_tab.QMessageBox.question",
+                return_value=QMessageBox.No,
+            ) as question,
+            mock.patch(
+                "gui.translation_tab._activate_configured_game_context",
+                return_value=("", {}),
+            ),
+            mock.patch("gui.translation_tab._activate_manual_glossary"),
+            mock.patch.object(TranslationWorker, "start"),
+        ):
+            self.tab.start_translation(skip_confirm=True)
+
+        prompt = question.call_args.args[2]
+        self.assertIn("has finished", prompt)
+        self.assertNotIn("already in progress", prompt)
+
     def test_noncompletion_batch_outcomes_are_not_rendered_as_complete(self) -> None:
         self.tab._batch_active = True
         self.tab._on_batch_phase("no_work", {"files": 1})
@@ -435,6 +550,20 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(self.tab.batch_overall_bar.format(), "%p%")
         self.assertIn("Processing", self.tab.batch_phase_title.text())
         self.assertIn("in_progress", self.tab.batch_poll_status.text())
+
+        self.tab._batch_active = True
+        self.tab.translation_worker = SimpleNamespace(_run_mismatch_count=5)
+        self.tab._on_batch_phase("consume", None)
+
+        self.tab._apply_finish_ui(True, "TOTAL: success")
+
+        self.assertEqual(self.tab._batch_ui_phase, "done")
+        self.assertIn("Complete with warnings", self.tab.batch_phase_title.text())
+        self.assertEqual(
+            self.tab.batch_overall_bar.format(), "Completed with warnings"
+        )
+        self.assertIn("5 validation mismatches", self.tab.batch_consume_status.text())
+        self.assertNotIn("Failed", self.tab.translating_label.text())
 
     def test_gemini_submit_estimate_uses_precision_and_thinking_warning(self) -> None:
         self.tab._batch_active = True

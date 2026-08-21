@@ -62,6 +62,12 @@ def _strip_ansi(text):
     return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
 
 
+def _mismatch_summary(count):
+    count = max(0, int(count or 0))
+    noun = "mismatch" if count == 1 else "mismatches"
+    return f"{count} validation {noun}"
+
+
 def create_section_header(title):
     """Create a clean section header without boxes."""
     return qt_icons.make_section_header(
@@ -626,6 +632,8 @@ class TranslationWorker(QThread):
         batch/status lines (those never go through translateAI's Input/Output writer).
         """
         self.log_signal.emit(message)
+        if isinstance(message, str) and message.startswith("MISMATCH_EVENT:"):
+            return
         try:
             run_log = os.getenv("TRANSLATION_RUN_LOG")
             if not run_log or not message:
@@ -758,7 +766,7 @@ class TranslationWorker(QThread):
                 return "Stopped"
             
             stdout_lines_clean = stdout.strip().split('\n')
-            mismatch_detected = any(
+            mismatch_count = sum(
                 line.startswith("MISMATCH_EVENT:")
                 for line in stdout_lines_clean
             )
@@ -778,7 +786,7 @@ class TranslationWorker(QThread):
                         except UnicodeError:
                             result_text = parsed.encode('ascii', 'ignore').decode('ascii')
                         break
-                if mismatch_detected:
+                if mismatch_count:
                     # Soft failure: bad chunks keep source text, valid chunks are
                     # written. Do not fail the whole multi-file run for this.
                     return (
@@ -786,6 +794,7 @@ class TranslationWorker(QThread):
                         "Translation validation failed after all retries; "
                         "original text was preserved for failed chunks",
                         result_text,
+                        mismatch_count,
                     )
                 return result_text
             else:
@@ -1049,6 +1058,7 @@ class TranslationWorker(QThread):
         completed_count = 0
         total_files = len(matching_files)
         self._run_had_mismatch = False
+        self._run_mismatch_count = 0
 
         def _handle_file_result(filename, result):
             nonlocal total_cost, had_failure, completed_count
@@ -1061,10 +1071,14 @@ class TranslationWorker(QThread):
                 ):
                     message = result[1]
                     cost = result[2] if len(result) > 2 else None
+                    mismatch_count = max(
+                        1, int(result[3] if len(result) > 3 else 1)
+                    )
                     self._run_had_mismatch = True
+                    self._run_mismatch_count += mismatch_count
                     self.emit_log(
-                        f"⚠ {filename}: validation mismatch - original text kept "
-                        "for failed chunks; continuing."
+                        f"⚠ {filename}: {_mismatch_summary(mismatch_count)}; "
+                        "original text kept for those chunks."
                     )
                     self.file_mismatch_signal.emit(filename, message)
                     if cost and cost not in ("Fail", "Stopped"):
@@ -1441,8 +1455,6 @@ class TranslationWorker(QThread):
                         except Exception:
                             pass
                         total_cost = self._run_files(matching_files, False, batch_phase="consume")
-                        if not self.should_stop:
-                            self._emit_batch_phase("done")
                 else:
                     total_cost = self._run_files(matching_files, self.estimate_only)
             finally:
@@ -1474,9 +1486,21 @@ class TranslationWorker(QThread):
                 if self.batch_mode:
                     try:
                         from util.translation import clearBatchFiles
-                        clearBatchFiles()
-                    except Exception:
-                        pass
+                        clearBatchFiles(strict=True)
+                    except Exception as exc:
+                        self.emit_log(
+                            "⚠ Batch output was written, but completed-batch recovery "
+                            f"files could not be cleared: {exc}"
+                        )
+                    if not batch_no_work:
+                        self._emit_batch_phase(
+                            "done",
+                            {
+                                "mismatches": getattr(
+                                    self, "_run_mismatch_count", 0
+                                )
+                            },
+                        )
                 self.emit_log("")
                 self.emit_log(f"💰 {total_cost}")
                 if self.batch_mode and batch_no_work:
@@ -1494,8 +1518,9 @@ class TranslationWorker(QThread):
                         pass
                 if getattr(self, "_run_had_mismatch", False):
                     self.emit_log(
-                        "⚠ Some chunks failed validation; original text was kept "
-                        "for those lines. Review the mismatch log."
+                        f"⚠ Completed with {_mismatch_summary(getattr(self, '_run_mismatch_count', 0))}; "
+                        "original text was kept for those chunks. Review Issues in "
+                        "the translation log."
                     )
                 self.finished_signal.emit(True, str(total_cost))
             else:
@@ -2146,7 +2171,7 @@ class TranslationTab(QWidget):
         metrics_row.addStretch()
         totals_layout.addLayout(metrics_row)
         self.totals_mismatch_label = QLabel("")
-        self.totals_mismatch_label.setStyleSheet("color: #ff4444; font-weight: bold;")
+        self.totals_mismatch_label.setStyleSheet("color: #d4a017; font-weight: bold;")
         self.totals_mismatch_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.totals_mismatch_label.setWordWrap(True)
         self.totals_mismatch_label.setVisible(False)
@@ -3054,15 +3079,34 @@ class TranslationTab(QWidget):
             if self.progress_tab_row.isVisible():
                 self._switch_progress_tab(0)
         elif phase == "done":
-            self.batch_overall_bar.setFormat("%p%")
+            info = payload or {}
+            mismatch_count = max(0, int(info.get("mismatches") or 0))
+            self._batch_mismatch_count = mismatch_count
             self._set_batch_steps(4)
             self.batch_overall_bar.setValue(100)
-            self.batch_phase_title.setText("Batch Translate - Complete")
             self.batch_pipeline_stack.setCurrentIndex(3)
-            self.batch_consume_status.setText(
-                "Pass 2/2 finished. Translations written - use the back arrow to return to the file list."
-            )
-            self.batch_live_status.setText("Batch complete")
+            if mismatch_count:
+                summary = _mismatch_summary(mismatch_count)
+                self.batch_overall_bar.setFormat("Completed with warnings")
+                self.batch_phase_title.setText(
+                    "Batch Translate - Complete with warnings"
+                )
+                self.batch_consume_status.setText(
+                    f"Pass 2/2 finished with {summary}. Translations were written; "
+                    "original text was kept for those chunks. Review Issues in the "
+                    "translation log."
+                )
+                self.batch_live_status.setText(
+                    f"Batch complete - {summary} to review"
+                )
+            else:
+                self.batch_overall_bar.setFormat("%p%")
+                self.batch_phase_title.setText("Batch Translate - Complete")
+                self.batch_consume_status.setText(
+                    "Pass 2/2 finished. Translations written - use the back arrow "
+                    "to return to the file list."
+                )
+                self.batch_live_status.setText("Batch complete")
         elif phase == "failed":
             info = payload or {}
             message = str(info.get("message") or "Batch run failed")
@@ -4038,6 +4082,12 @@ class TranslationTab(QWidget):
                             "A saved batch is ready. Resume it?\n\n"
                             "Choose No to discard it and start over."
                         )
+                    elif batch_resume_state == "fetched":
+                        prompt = (
+                            "A provider batch has finished and its results are ready "
+                            "to write. Resume the write pass?\n\n"
+                            "Choose No to discard those results and start over."
+                        )
                     else:
                         prompt = (
                             "A batch is already in progress. Resume it?\n\n"
@@ -4383,14 +4433,6 @@ class TranslationTab(QWidget):
         if isinstance(message, str) and message.startswith("MISMATCH_EVENT:"):
             self.on_mismatch_detected()
             return  # marker is internal, not displayed
-        # Forward error messages to the log viewer directly. These worker-level
-        # errors are not written to the log file so the tail won't capture them.
-        if isinstance(message, str) and '\u274c' in message:
-            try:
-                if hasattr(self, 'translation_log_viewer') and self.translation_log_viewer:
-                    self.translation_log_viewer.append_log_message(message)
-            except Exception:
-                pass
         # During batch collect/poll/submit, per-file cost lines are not final translations.
         # Accept costs once consume has started (and after done) - resume→consume is fast
         # enough that log lines from the pool thread can arrive before/after the phase
@@ -4663,7 +4705,11 @@ class TranslationTab(QWidget):
                 self.totals_mismatch_count = 0
             self.totals_mismatch_count += 1
             if hasattr(self, 'totals_mismatch_label'):
-                self.totals_mismatch_label.setText(f"Mismatches: {self.totals_mismatch_count}")
+                self.totals_mismatch_label.setText(
+                    f"Validation warnings: {self.totals_mismatch_count} "
+                    f"{'chunk' if self.totals_mismatch_count == 1 else 'chunks'} "
+                    "kept original text"
+                )
                 self.totals_mismatch_label.setVisible(True)
         except Exception:
             pass
@@ -4707,6 +4753,17 @@ class TranslationTab(QWidget):
             self.file_card.title_label.setText("Translation results")
         if getattr(self, "_batch_active", False):
             phase = getattr(self, "_batch_ui_phase", None)
+            mismatch_count = max(
+                0,
+                int(
+                    getattr(
+                        getattr(self, "translation_worker", None),
+                        "_run_mismatch_count",
+                        getattr(self, "_batch_mismatch_count", 0),
+                    )
+                    or 0
+                ),
+            )
             if success and phase == "canceled":
                 self.reset_to_file_view()
                 try:
@@ -4716,7 +4773,7 @@ class TranslationTab(QWidget):
                     pass
                 return
             if success and phase not in ("no_work", "canceled"):
-                self._on_batch_phase("done", None)
+                self._on_batch_phase("done", {"mismatches": mismatch_count})
             elif not success and message != "Batch polling stopped":
                 self._on_batch_phase("failed", {"message": message})
         # Parse Speakers: promote Scanned rows to Done only after vocab write finishes,
@@ -4768,8 +4825,22 @@ class TranslationTab(QWidget):
                 self.translating_label.setText("No eligible text found")
                 self.translate_button.setText("Nothing to submit")
             elif success:
-                self.translating_label.setText("Completed!")
-                self.translate_button.setText("Run complete")
+                mismatch_count = max(
+                    0,
+                    int(
+                        getattr(
+                            getattr(self, "translation_worker", None),
+                            "_run_mismatch_count",
+                            getattr(self, "_batch_mismatch_count", 0),
+                        ) or 0
+                    ),
+                )
+                if mismatch_count:
+                    self.translating_label.setText("Completed with warnings")
+                    self.translate_button.setText("Completed with warnings")
+                else:
+                    self.translating_label.setText("Completed!")
+                    self.translate_button.setText("Run complete")
             else:
                 self.translating_label.setText(f"Failed: {message}")
                 self.translate_button.setText("Run failed")
