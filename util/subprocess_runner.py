@@ -153,23 +153,73 @@ def run_handler(project_root, module_name, filename, estimate_only):
                 json.loads(runtime_profile_json),
             )
 
-        # Batch file subprocesses can avoid repeated cross-process reads/writes:
-        # collect snapshots its read-only cache/state inputs, while consume
-        # buffers cache mutations and commits them once when the handler exits.
+        filenames = list(filename) if isinstance(filename, (list, tuple)) else [filename]
+        multi_file = isinstance(filename, (list, tuple))
+
+        # A persistent RPG Maker batch worker holds these scopes across every
+        # file in the phase. Consume loads fetched results/cache once; collect
+        # snapshots cache reads and coalesces durable queue fragments.
         cache_scope = nullcontext()
+        queue_scope = nullcontext()
         batch_phase = os.getenv("BATCH_PHASE", "").strip().lower()
         if batch_phase == "consume":
             from util.translation import deferred_translation_cache_writes
 
             cache_scope = deferred_translation_cache_writes()
         elif batch_phase == "collect":
-            from util.translation import batch_collect_snapshot_reads
+            from util.translation import (
+                batch_collect_snapshot_reads,
+                buffered_batch_queue_writes,
+            )
 
             cache_scope = batch_collect_snapshot_reads()
+            if "RPG Maker MV/MZ" in module_name:
+                queue_scope = buffered_batch_queue_writes()
 
-        # Run the handler
-        with cache_scope:
-            handler_result = handler(filename, estimate_only)
+        # Multi-file mode reports an isolated result marker after each file so
+        # the GUI retains per-file completion, mismatch, and error behavior.
+        handler_result = None
+        with cache_scope, queue_scope:
+            for current_filename in filenames:
+                try:
+                    if "RPG Maker MV/MZ" in module_name:
+                        from modules import rpgmakermvmz
+
+                        # Separate subprocesses used to provide fresh totals for
+                        # every file. Preserve that behavior in a reused worker.
+                        rpgmakermvmz.TOKENS[:] = [0, 0]
+                        rpgmakermvmz.TIMETOTAL = 0
+                    handler_result = handler(current_filename, estimate_only)
+                    if multi_file:
+                        mismatch_count = 0
+                        if "RPG Maker MV/MZ" in module_name:
+                            mismatch_count = len(rpgmakermvmz.MISMATCH)
+                        print(
+                            "FILE_RESULT:"
+                            + json.dumps(
+                                {
+                                    "filename": current_filename,
+                                    "result": handler_result or "Fail",
+                                    "mismatch_count": mismatch_count,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                except Exception as exc:
+                    if multi_file:
+                        print(
+                            "FILE_ERROR:"
+                            + json.dumps(
+                                {
+                                    "filename": current_filename,
+                                    "error": str(exc),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                    raise
         
         # Stop progress monitoring
         progress_active = False
@@ -180,7 +230,9 @@ def run_handler(project_root, module_name, filename, estimate_only):
             pass
         
         # Print the result
-        if handler_result:
+        if multi_file:
+            print("RESULT:Success", flush=True)
+        elif handler_result:
             print(f"RESULT:{handler_result}")
         else:
             print("RESULT:Fail")
@@ -207,6 +259,13 @@ if __name__ == "__main__":
     project_root = sys.argv[1]
     module_name = sys.argv[2]
     filename = sys.argv[3]
+    if filename == "--files-from-stdin":
+        filename = json.load(sys.stdin)
+        if not isinstance(filename, list) or not filename or not all(
+            isinstance(item, str) and item for item in filename
+        ):
+            print("ERROR:Invalid multi-file input")
+            sys.exit(1)
     estimate_only = sys.argv[4].lower() == 'true'
     
     run_handler(project_root, module_name, filename, estimate_only)

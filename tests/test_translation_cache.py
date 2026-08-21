@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -168,6 +169,25 @@ class CacheRoundTripTests(CacheTestBase):
         # Drop the in-memory copy; a fresh read must come from disk.
         T._cache = {}
         self.assertEqual(T.peek_cached_translation(payload, "English"), ["Save"])
+
+    def test_legacy_json_cache_is_migrated_without_losing_entries(self):
+        """Existing user caches survive the transactional storage upgrade."""
+        payload = '{"Line1": "旧形式"}'
+        key = T.get_cache_key(payload, "English")
+        T.CACHE_FILE.write_text(
+            json.dumps({key: ["Legacy"]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        T._cache = {}
+
+        self.assertEqual(
+            T.peek_cached_translation(payload, "English"),
+            ["Legacy"],
+        )
+        self.assertEqual(
+            T.CACHE_FILE.read_bytes()[:16],
+            b"SQLite format 3\x00",
+        )
 
     def test_glossary_change_does_not_reuse_cached_translation(self):
         payload = '{"Line1": "カイン"}'

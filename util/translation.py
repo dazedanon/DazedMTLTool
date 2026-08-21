@@ -6,6 +6,7 @@ Centralized translation function used across all modules.
 import os
 import re
 import json
+import sqlite3
 import time
 import random
 import unicodedata
@@ -815,26 +816,174 @@ def _translation_cache_file_lock():
             finally:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
-def _read_cache_from_disk():
-    """Read the disk cache; return an empty dict if it is unavailable."""
+_CACHE_SQLITE_HEADER = b"SQLite format 3\x00"
+_CACHE_SCHEMA = (
+    "CREATE TABLE IF NOT EXISTS translations "
+    "(cache_key TEXT PRIMARY KEY, value_json TEXT NOT NULL)"
+)
+
+
+def _initialize_cache_database(path, values=None):
+    connection = sqlite3.connect(path, timeout=30)
     try:
-        if CACHE_FILE.exists():
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data if isinstance(data, dict) else {}
+        connection.execute(_CACHE_SCHEMA)
+        if values:
+            connection.executemany(
+                "INSERT OR REPLACE INTO translations(cache_key, value_json) "
+                "VALUES (?, ?)",
+                (
+                    (
+                        str(key),
+                        json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    )
+                    for key, value in values.items()
+                ),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _ensure_cache_database():
+    """Create the transactional cache and migrate the legacy JSON snapshot."""
+    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if CACHE_FILE.exists():
+        try:
+            with open(CACHE_FILE, "rb") as cache_file:
+                is_sqlite = cache_file.read(len(_CACHE_SQLITE_HEADER)) == _CACHE_SQLITE_HEADER
+        except OSError:
+            is_sqlite = False
+        if is_sqlite:
+            try:
+                _initialize_cache_database(CACHE_FILE)
+                return
+            except sqlite3.DatabaseError:
+                # Match the old cache's fail-open behavior: a corrupt cache is
+                # replaceable and must never block translation work.
+                pass
+
+    legacy = {}
+    if CACHE_FILE.exists():
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as cache_file:
+                loaded = json.load(cache_file)
+                if isinstance(loaded, dict):
+                    legacy = loaded
+        except Exception:
+            legacy = {}
+
+    tmp_file = CACHE_FILE.with_name(
+        f"{CACHE_FILE.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+    )
+    try:
+        if tmp_file.exists():
+            tmp_file.unlink()
+        _initialize_cache_database(tmp_file, legacy)
+        os.replace(tmp_file, CACHE_FILE)
+    finally:
+        for leftover in (
+            tmp_file,
+            tmp_file.with_name(tmp_file.name + "-journal"),
+        ):
+            try:
+                if leftover.exists():
+                    leftover.unlink()
+            except OSError:
+                pass
+
+
+def _cache_connection():
+    _ensure_cache_database()
+    return sqlite3.connect(CACHE_FILE, timeout=30)
+
+
+def _read_cache_entry(key):
+    connection = _cache_connection()
+    try:
+        row = connection.execute(
+            "SELECT value_json FROM translations WHERE cache_key = ?",
+            (key,),
+        ).fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        return None
+    try:
+        return json.loads(row[0])
     except Exception:
-        pass
-    return {}
+        return None
+
+
+def _write_cache_entry(key, value):
+    connection = _cache_connection()
+    try:
+        with connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO translations(cache_key, value_json) "
+                "VALUES (?, ?)",
+                (
+                    key,
+                    json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                ),
+            )
+    finally:
+        connection.close()
+
+
+def _delete_cache_entry(key):
+    connection = _cache_connection()
+    try:
+        with connection:
+            connection.execute(
+                "DELETE FROM translations WHERE cache_key = ?",
+                (key,),
+            )
+    finally:
+        connection.close()
+
+
+def _read_cache_from_disk():
+    """Read the transactional cache; return an empty dict if unavailable."""
+    try:
+        connection = _cache_connection()
+        try:
+            rows = connection.execute(
+                "SELECT cache_key, value_json FROM translations"
+            ).fetchall()
+        finally:
+            connection.close()
+        cache = {}
+        for key, value_json in rows:
+            try:
+                cache[key] = json.loads(value_json)
+            except Exception:
+                continue
+        return cache
+    except Exception:
+        return {}
+
 
 def _write_cache_to_disk(cache):
-    """Atomically write the cache using a process/thread-unique temp file."""
+    """Atomically replace the transactional cache with a complete snapshot."""
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp_file = CACHE_FILE.with_name(
         f"{CACHE_FILE.name}.{os.getpid()}.{threading.get_ident()}.tmp"
     )
-    with open(tmp_file, "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False, indent=2)
-    tmp_file.replace(CACHE_FILE)
+    try:
+        if tmp_file.exists():
+            tmp_file.unlink()
+        _initialize_cache_database(tmp_file, cache)
+        os.replace(tmp_file, CACHE_FILE)
+    finally:
+        for leftover in (
+            tmp_file,
+            tmp_file.with_name(tmp_file.name + "-journal"),
+        ):
+            try:
+                if leftover.exists():
+                    leftover.unlink()
+            except OSError:
+                pass
 
 def _is_pending_cache_entry(value):
     return isinstance(value, dict) and value.get(CACHE_PENDING_MARKER) is True
@@ -876,17 +1025,12 @@ def _release_cache_reservation_key(key):
     try:
         with CACHE_LOCK:
             with _translation_cache_file_lock():
-                cache = _read_cache_from_disk()
-                changed = False
-                if _is_own_pending_cache_entry(cache.get(key)):
-                    cache.pop(key, None)
-                    changed = True
+                if _is_own_pending_cache_entry(_read_cache_entry(key)):
+                    _delete_cache_entry(key)
                 if isinstance(_cache, dict) and _is_own_pending_cache_entry(
                     _cache.get(key)
                 ):
                     _cache.pop(key, None)
-                if changed:
-                    _write_cache_to_disk(cache)
     except Exception:
         # Reservation cleanup is best effort. A stale marker remains bounded by
         # CACHE_PENDING_TTL and must never replace the translation exception.
@@ -928,11 +1072,17 @@ def clear_cache():
     with CACHE_LOCK:
         _cache = {}
         with _translation_cache_file_lock():
-            try:
-                if CACHE_FILE.exists():
-                    CACHE_FILE.unlink()
-            except Exception:
-                pass
+            for path in (
+                CACHE_FILE,
+                CACHE_FILE.with_name(CACHE_FILE.name + "-journal"),
+                CACHE_FILE.with_name(CACHE_FILE.name + "-wal"),
+                CACHE_FILE.with_name(CACHE_FILE.name + "-shm"),
+            ):
+                try:
+                    if path.exists():
+                        path.unlink()
+                except Exception:
+                    pass
 
 def load_cache():
     """Load the translation cache from disk."""
@@ -1254,24 +1404,24 @@ def get_cached_translation(
     while True:
         with CACHE_LOCK:
             with _translation_cache_file_lock():
-                cache = _read_cache_from_disk()
-                if _cache:
-                    cache = _merge_translation_caches(cache, _cache)
-
-                entry = cache.get(key)
+                entry = _read_cache_entry(key)
                 if (
                     entry is None
                     or _is_stale_pending_cache_entry(entry)
                     or _is_own_pending_cache_entry(entry)
                 ):
-                    cache[key] = _pending_cache_entry()
+                    pending = _pending_cache_entry()
+                    _write_cache_entry(key, pending)
                     _track_cache_reservation(key)
-                    _cache = cache
-                    _write_cache_to_disk(cache)
+                    if _cache is None:
+                        _cache = {}
+                    _cache[key] = pending
                     return None
 
-                _cache = cache
                 if not _is_pending_cache_entry(entry):
+                    if _cache is None:
+                        _cache = {}
+                    _cache[key] = entry
                     return entry
 
         time.sleep(CACHE_WAIT_INTERVAL)
@@ -1293,12 +1443,10 @@ def cache_translation(
     
     with CACHE_LOCK:
         with _translation_cache_file_lock():
-            cache = _read_cache_from_disk()
-            if _cache:
-                cache = _merge_translation_caches(cache, _cache)
-            cache[key] = translation
-            _cache = cache
-            _write_cache_to_disk(cache)
+            _write_cache_entry(key, translation)
+            if _cache is None:
+                _cache = {}
+            _cache[key] = translation
 
 
 # Variable translation map (code 122 <-> code 111 consistency)
@@ -1407,6 +1555,8 @@ BATCH_LOCK = threading.RLock()
 # stricter provider-specific limits from util.batch_providers.
 BATCH_MAX_REQUESTS = 100_000
 BATCH_MAX_BYTES    = 200 * 1024 * 1024
+BATCH_QUEUE_BUFFER_MAX_ENTRIES = 64
+BATCH_QUEUE_BUFFER_MAX_SECONDS = 15.0
 
 _batch_phase = None
 _batch_results = None      # in-memory copy of BATCH_RESULTS_FILE (read-only during consume)
@@ -1680,6 +1830,7 @@ def peek_cached_translation(
     The collect pass uses this instead of get_cached_translation so abandoned
     pending markers can't stall the consume pass for CACHE_PENDING_TTL."""
     key = get_cache_key(payload, language, cache_context, request_context)
+    global _cache
     if getattr(_thread_local, "batch_collect_cache_snapshot", False):
         with CACHE_LOCK:
             entry = (_cache or {}).get(key)
@@ -1688,10 +1839,11 @@ def peek_cached_translation(
         return entry
     with CACHE_LOCK:
         with _translation_cache_file_lock():
-            cache = _read_cache_from_disk()
-            if _cache:
-                cache = _merge_translation_caches(cache, _cache)
-    entry = cache.get(key)
+            entry = _read_cache_entry(key)
+            if entry is not None:
+                if _cache is None:
+                    _cache = {}
+                _cache[key] = entry
     if entry is None or _is_pending_cache_entry(entry):
         return None
     return entry
@@ -1732,12 +1884,59 @@ def queue_batch_request(
     return key
 
 
-def flush_batch_queue():
-    """Persist this process's pending entries as one atomic queue fragment."""
+def _batch_queue_writes_buffered():
+    return bool(getattr(_thread_local, "buffer_batch_queue_writes", 0))
+
+
+@contextmanager
+def buffered_batch_queue_writes():
+    """Coalesce collect writes while retaining periodic durable fragments.
+
+    RPG Maker collection can discover thousands of requests in one process.
+    Writing one tiny file after every parser call makes filesystem metadata the
+    dominant cost. The buffer is flushed at a bounded entry/time interval and
+    unconditionally when the scope exits, including exceptional exits.
+    """
+    depth = int(getattr(_thread_local, "buffer_batch_queue_writes", 0))
+    outermost = depth == 0
+    if outermost:
+        _thread_local.batch_queue_last_flush = time.monotonic()
+    _thread_local.buffer_batch_queue_writes = depth + 1
+    try:
+        yield
+    finally:
+        _thread_local.buffer_batch_queue_writes = depth
+        if outermost:
+            try:
+                flush_batch_queue(force=True)
+            finally:
+                try:
+                    del _thread_local.batch_queue_last_flush
+                except AttributeError:
+                    pass
+
+
+def flush_batch_queue(*, force=False):
+    """Persist pending entries as one atomic queue fragment.
+
+    Outside a buffered collect scope this remains an immediate durability
+    boundary. Inside one, entry/time limits prevent unbounded recovery loss
+    without producing a fragment for every parser call.
+    """
     global _batch_queue_pending
     with BATCH_LOCK:
         if not _batch_queue_pending:
-            return
+            return False
+        if _batch_queue_writes_buffered() and not force:
+            last_flush = float(
+                getattr(_thread_local, "batch_queue_last_flush", 0.0) or 0.0
+            )
+            if (
+                len(_batch_queue_pending) < BATCH_QUEUE_BUFFER_MAX_ENTRIES
+                and time.monotonic() - last_flush
+                < BATCH_QUEUE_BUFFER_MAX_SECONDS
+            ):
+                return False
         pending, _batch_queue_pending = _batch_queue_pending, {}
         try:
             with _batch_file_lock():
@@ -1750,6 +1949,8 @@ def flush_batch_queue():
                     f"{threading.get_ident()}-{uuid.uuid4().hex}.json"
                 )
                 _write_batch_file(parts_dir / part_name, pending)
+            _thread_local.batch_queue_last_flush = time.monotonic()
+            return True
         except BatchFileCorruptionError:
             _batch_queue_pending.update(pending)
             raise
@@ -5638,9 +5839,6 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
     if tList and isinstance(tList[0], list):
         tList = [t for sublist in tList for t in sublist]
     
-    # Save cache after processing (for both estimate and translation modes)
-    save_cache()
-
     # Batch collect pass: merge this call's queued requests into the disk queue.
     if batch_phase == "collect":
         flush_batch_queue()

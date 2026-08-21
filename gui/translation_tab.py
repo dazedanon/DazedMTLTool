@@ -653,7 +653,13 @@ class TranslationWorker(QThread):
         """Thread-safe progress emission."""
         self.progress_signal.emit(current, total, filename)
         
-    def run_module_in_process(self, filename, estimate_only, batch_phase=None):
+    def run_module_in_process(
+        self,
+        filename,
+        estimate_only,
+        batch_phase=None,
+        file_result_callback=None,
+    ):
         """Run a module handler in a separate process for better control."""
         try:
             # Use the external subprocess runner script
@@ -679,15 +685,19 @@ class TranslationWorker(QThread):
                 env.pop("BATCH_PHASE", None)
                 env.pop("DAZED_BATCH_RUNTIME_PROFILE", None)
             
+            multi_file = isinstance(filename, (list, tuple))
+            filenames = list(filename) if multi_file else None
+            filename_arg = "--files-from-stdin" if multi_file else filename
             process = subprocess.Popen(
                 [
                     sys.executable,
                     str(runner_script),
                     str(self.project_root),
                     self.module_info[0],  # module name
-                    filename,
+                    filename_arg,
                     str(estimate_only)
                 ],
+                stdin=subprocess.PIPE if multi_file else None,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -697,6 +707,10 @@ class TranslationWorker(QThread):
                 env=env,
                 bufsize=1  # Line buffered
             )
+
+            if multi_file:
+                json.dump(filenames, process.stdin, ensure_ascii=False)
+                process.stdin.close()
             
             # Track the process for potential termination
             self.running_processes.append(process)
@@ -721,6 +735,43 @@ class TranslationWorker(QThread):
                                 self.item_progress_signal.emit(desc, int(current), int(total))
                         except Exception:
                             pass  # Ignore malformed progress lines
+                    elif line.startswith("FILE_RESULT:"):
+                        try:
+                            payload = json.loads(line[len("FILE_RESULT:"):])
+                            if file_result_callback is not None:
+                                result = payload.get("result") or "Fail"
+                                mismatch_count = int(
+                                    payload.get("mismatch_count") or 0
+                                )
+                                if mismatch_count:
+                                    result = (
+                                        "VALIDATION_MISMATCH",
+                                        "Translation validation failed after all "
+                                        "retries; original text was preserved for "
+                                        "failed chunks",
+                                        result,
+                                        mismatch_count,
+                                    )
+                                file_result_callback(payload["filename"], result)
+                        except Exception as exc:
+                            stderr_lines.append(
+                                f"Invalid multi-file result marker: {exc}"
+                            )
+                    elif line.startswith("FILE_ERROR:"):
+                        try:
+                            payload = json.loads(line[len("FILE_ERROR:"):])
+                            if file_result_callback is not None:
+                                file_result_callback(
+                                    payload["filename"],
+                                    (
+                                        "SUBPROCESS_ERROR",
+                                        payload.get("error") or "Unknown error",
+                                    ),
+                                )
+                        except Exception as exc:
+                            stderr_lines.append(
+                                f"Invalid multi-file error marker: {exc}"
+                            )
                     else:
                         stdout_lines.append(line)
                         # Forward each line to the log as it is read, rather than
@@ -1105,6 +1156,35 @@ class TranslationWorker(QThread):
             self.emit_progress(completed_count, total_files, filename)
             return stopped
 
+        # Batch collection and consumption are local, CPU/file-heavy phases.
+        # Reuse one imported RPG Maker process for the whole phase instead of
+        # paying heavyweight SDK/module startup once per file. Consume remains
+        # strictly ordered, preserving glossary harvest semantics.
+        if is_mvmz and batch_phase in ("collect", "consume"):
+            observed = set()
+
+            def _handle_persistent_result(filename, result):
+                observed.add(filename)
+                _handle_file_result(filename, result)
+
+            worker_result = self.run_module_in_process(
+                list(matching_files),
+                estimate_only,
+                batch_phase,
+                file_result_callback=_handle_persistent_result,
+            )
+            if self.should_stop:
+                return "Stopped"
+            if (
+                isinstance(worker_result, tuple)
+                and worker_result
+                and worker_result[0] == "SUBPROCESS_ERROR"
+            ):
+                for filename in matching_files:
+                    if filename not in observed:
+                        _handle_file_result(filename, worker_result)
+            return "Fail" if had_failure else total_cost
+
         # Pass 2 is always sequential: each file may harvest names into
         # glossary.txt, and later files need those entries on disk. Paid batch
         # keys still use the collect-time freeze, so these writes are safe.
@@ -1327,6 +1407,13 @@ class TranslationWorker(QThread):
                         total_cost = self._run_files(matching_files, False, batch_phase="collect")
                         if self.should_stop:
                             self.finished_signal.emit(False, "Translation stopped")
+                            return
+                        if total_cost == "Fail":
+                            self.emit_log(
+                                "[BATCH] Collection failed; submission was blocked so "
+                                "no incomplete paid batch can be created."
+                            )
+                            self.finished_signal.emit(False, "Batch collection failed")
                             return
 
                         if pendingBatchRequests() == 0:

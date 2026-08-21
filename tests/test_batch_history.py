@@ -143,6 +143,38 @@ class BatchRunStateTests(BatchHistoryTestBase):
         self.assertEqual(len(T._read_batch_file(T.BATCH_QUEUE_FILE)), 2)
         self.assertFalse(T._batch_queue_parts_dir().exists())
 
+    def test_buffered_collect_coalesces_writes_and_flushes_on_exit(self):
+        """Large collects keep recovery durable without one file per parser call."""
+        with T.buffered_batch_queue_writes():
+            for payload in ('{"Line1":"猫"}', '{"Line1":"犬"}'):
+                T.queue_batch_request(
+                    payload,
+                    "English",
+                    {"model": "gpt-test"},
+                    provider="openai",
+                )
+                self.assertFalse(T.flush_batch_queue())
+            self.assertFalse(T._batch_queue_parts_dir().exists())
+
+        fragments = list(T._batch_queue_parts_dir().glob("*.json"))
+        self.assertEqual(len(fragments), 1)
+        self.assertEqual(len(T._read_batch_queue(strict=True)), 2)
+
+    def test_buffered_collect_flushes_during_exception_unwind(self):
+        """A failed worker must retain requests collected before the failure."""
+        with self.assertRaisesRegex(RuntimeError, "collect failed"):
+            with T.buffered_batch_queue_writes():
+                T.queue_batch_request(
+                    '{"Line1":"保全"}',
+                    "English",
+                    {"model": "gpt-test"},
+                    provider="openai",
+                )
+                T.flush_batch_queue()
+                raise RuntimeError("collect failed")
+
+        self.assertEqual(len(T._read_batch_queue(strict=True)), 1)
+
     def test_corrupt_collect_fragment_blocks_resume_and_submission(self):
         T.queue_batch_request(
             '{"Line1":"猫"}',

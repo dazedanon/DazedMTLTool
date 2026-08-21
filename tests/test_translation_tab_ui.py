@@ -75,6 +75,89 @@ class TranslationWorkerTests(unittest.TestCase):
         self.assertEqual(started, ["a.json", "b.json", "c.json"])
         self.assertEqual(active["max"], 1)
 
+    def test_mvmz_batch_phase_reuses_one_process_for_all_files(self) -> None:
+        """RPG Maker batch I/O must not pay one interpreter import per file."""
+        worker = TranslationWorker(
+            Path.cwd(), ("RPG Maker MV/MZ", (".json",), None)
+        )
+        calls = []
+
+        def run_many(
+            filenames,
+            estimate_only,
+            batch_phase,
+            file_result_callback=None,
+        ):
+            calls.append((filenames, estimate_only, batch_phase))
+            for filename in filenames:
+                file_result_callback(filename, "TOTAL: success")
+            return "Success"
+
+        worker.run_module_in_process = run_many
+        result = worker._run_files(
+            ["Map001.json", "Map002.json", "Actors.json"],
+            False,
+            batch_phase="consume",
+        )
+
+        self.assertEqual(result, "TOTAL: success")
+        self.assertEqual(
+            calls,
+            [(
+                ["Map001.json", "Map002.json", "Actors.json"],
+                False,
+                "consume",
+            )],
+        )
+
+    def test_multi_file_runner_streams_input_and_per_file_results(self) -> None:
+        """The persistent protocol retains per-file mismatch reporting."""
+        worker = TranslationWorker(
+            Path.cwd(), ("RPG Maker MV/MZ", (".json",), None)
+        )
+
+        class CapturingInput(io.StringIO):
+            def close(self):
+                self.was_closed = True
+
+        stdin = CapturingInput()
+        process = SimpleNamespace(
+            stdin=stdin,
+            stdout=io.StringIO(
+                'FILE_RESULT:{"filename":"Map001.json","result":"TOTAL: one",'
+                '"mismatch_count":0}\n'
+                'FILE_RESULT:{"filename":"Map002.json","result":"TOTAL: two",'
+                '"mismatch_count":2}\n'
+                "RESULT:Success\n"
+            ),
+            stderr=io.StringIO(""),
+            returncode=0,
+            wait=lambda: None,
+        )
+        results = []
+
+        with mock.patch(
+            "gui.translation_tab.subprocess.Popen", return_value=process
+        ):
+            overall = worker.run_module_in_process(
+                ["Map001.json", "Map002.json"],
+                False,
+                batch_phase="consume",
+                file_result_callback=lambda filename, result: results.append(
+                    (filename, result)
+                ),
+            )
+
+        self.assertEqual(
+            json.loads(stdin.getvalue()),
+            ["Map001.json", "Map002.json"],
+        )
+        self.assertEqual(overall, "Success")
+        self.assertEqual(results[0], ("Map001.json", "TOTAL: one"))
+        self.assertEqual(results[1][0], "Map002.json")
+        self.assertEqual(results[1][1][0], "VALIDATION_MISMATCH")
+        self.assertEqual(results[1][1][3], 2)
+
     def test_validation_marker_is_a_soft_mismatch(self) -> None:
         """Paid/validated chunks stay written; mismatch does not hard-fail the file."""
         worker = TranslationWorker(
