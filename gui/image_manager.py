@@ -7,6 +7,7 @@ import hashlib
 
 from PyQt5.QtCore import (
     QEvent,
+    QItemSelectionModel,
     QPoint,
     Qt,
     QSize,
@@ -16,7 +17,7 @@ from PyQt5.QtCore import (
     QTimer,
     QUrl,
 )
-from PyQt5.QtGui import QColor, QDesktopServices, QIcon, QPixmap
+from PyQt5.QtGui import QColor, QDesktopServices, QIcon, QPixmap, QStandardItem
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
@@ -162,6 +163,156 @@ class _BoundedComboBox(QComboBox):
                 self.model().index(self.currentIndex(), self.modelColumn()),
                 QAbstractItemView.PositionAtCenter,
             )
+
+
+class _MultiFolderComboBox(_BoundedComboBox):
+    """Checkable folder filter with standard plain/Ctrl/Shift selection."""
+
+    foldersChanged = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._selection_anchor_row = -1
+        self.setEditable(True)
+        self.lineEdit().setReadOnly(True)
+        self.lineEdit().installEventFilter(self)
+        self.view().setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.view().viewport().installEventFilter(self)
+        self.setAccessibleName("Image folders")
+        self.set_folders(())
+
+    def selected_folders(self) -> set[str]:
+        selected: set[str] = set()
+        model = self.model()
+        for row in range(1, model.rowCount()):
+            item = model.item(row)
+            if item is not None and item.checkState() == Qt.Checked:
+                selected.add(str(item.data(Qt.UserRole)))
+        return selected
+
+    def set_folders(
+        self, folders, selected: set[str] | None = None
+    ) -> None:
+        selected = set(selected or ())
+        self.clear()
+        all_item = QStandardItem("All folders")
+        all_item.setCheckable(True)
+        all_item.setEditable(False)
+        all_item.setData("", Qt.UserRole)
+        self.model().appendRow(all_item)
+        for folder in folders:
+            item = QStandardItem(folder)
+            item.setCheckable(True)
+            item.setEditable(False)
+            item.setData(folder, Qt.UserRole)
+            self.model().appendRow(item)
+        available = {
+            str(self.model().item(row).data(Qt.UserRole))
+            for row in range(1, self.model().rowCount())
+        }
+        self._selection_anchor_row = -1
+        self.set_selected_folders(selected & available, emit=False)
+
+    def set_selected_folders(
+        self, folders: set[str], *, emit: bool = True
+    ) -> None:
+        selected = set(folders)
+        model = self.model()
+        for row in range(model.rowCount()):
+            item = model.item(row)
+            if item is None:
+                continue
+            checked = row == 0 and not selected
+            if row > 0:
+                checked = str(item.data(Qt.UserRole)) in selected
+            item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+        self._sync_view_selection()
+        self._update_summary()
+        if emit:
+            self.foldersChanged.emit()
+
+    def _sync_view_selection(self) -> None:
+        selection = self.view().selectionModel()
+        selection.clearSelection()
+        model = self.model()
+        for row in range(model.rowCount()):
+            item = model.item(row)
+            if item is None or item.checkState() != Qt.Checked:
+                continue
+            selection.select(
+                model.index(row, 0),
+                QItemSelectionModel.Select | QItemSelectionModel.Rows,
+            )
+
+    def _update_summary(self) -> None:
+        selected = sorted(self.selected_folders(), key=str.casefold)
+        if not selected:
+            summary = "All folders"
+        elif len(selected) == 1:
+            summary = selected[0]
+        else:
+            summary = f"{len(selected):,} folders selected"
+        super().setCurrentIndex(0)
+        self.lineEdit().setText(summary)
+        self.lineEdit().setCursorPosition(0)
+        self.setToolTip(
+            "Click selects one folder; Ctrl-click toggles folders; "
+            "Shift-click selects a range.\n\n"
+            + ("\n".join(selected) if selected else "All folders")
+        )
+
+    def showPopup(self) -> None:
+        super().showPopup()
+        self._sync_view_selection()
+
+    def _select_row(self, row: int, modifiers) -> None:
+        model = self.model()
+        if not 0 <= row < model.rowCount():
+            return
+        if row == 0:
+            self._selection_anchor_row = -1
+            self.set_selected_folders(set())
+            return
+
+        folder = str(model.item(row).data(Qt.UserRole))
+        selected = self.selected_folders()
+        shift = bool(modifiers & Qt.ShiftModifier)
+        control = bool(modifiers & Qt.ControlModifier)
+        if shift:
+            anchor = self._selection_anchor_row
+            if not 1 <= anchor < model.rowCount():
+                anchor = row
+            if not control:
+                selected.clear()
+            first, last = sorted((anchor, row))
+            selected.update(
+                str(model.item(index).data(Qt.UserRole))
+                for index in range(first, last + 1)
+            )
+        elif control:
+            if folder in selected:
+                selected.remove(folder)
+            else:
+                selected.add(folder)
+            self._selection_anchor_row = row
+        else:
+            selected = {folder}
+            self._selection_anchor_row = row
+        self.set_selected_folders(selected)
+
+    def eventFilter(self, watched, event) -> bool:
+        if watched is self.lineEdit() and event.type() == QEvent.MouseButtonPress:
+            self.showPopup()
+            return True
+        if watched is self.view().viewport():
+            if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+                index = self.view().indexAt(event.pos())
+                if index.isValid():
+                    self._select_row(index.row(), event.modifiers())
+                return True
+            if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+                return True
+        return super().eventFilter(watched, event)
 
 
 class _UserSelectionList(QListWidget):
@@ -444,11 +595,10 @@ class ImageManager(QWidget):
         self.search_edit.setPlaceholderText("Filter by any part of the folder or filename…")
         self.search_edit.textChanged.connect(self._apply_filters)
         filters.addWidget(self.search_edit, 2)
-        self.folder_combo = _BoundedComboBox()
+        self.folder_combo = _MultiFolderComboBox()
         self.folder_combo.setMinimumWidth(220)
         self.folder_combo.setMaximumWidth(360)
-        self.folder_combo.addItem("All folders", "")
-        self.folder_combo.currentIndexChanged.connect(self._apply_filters)
+        self.folder_combo.foldersChanged.connect(self._apply_filters)
         filters.addWidget(self.folder_combo, 1)
         self.state_combo = QComboBox()
         self.state_combo.setMinimumWidth(150)
@@ -487,8 +637,16 @@ class ImageManager(QWidget):
         self.image_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.image_list.setIconSize(QSize(112, 112))
         thumbnail_text_height = self.image_list.fontMetrics().height()
-        self.image_list.setGridSize(
-            QSize(168, max(160, 112 + thumbnail_text_height + Spacing.XL))
+        thumbnail_grid_size = QSize(
+            168, max(160, 112 + thumbnail_text_height + Spacing.XL)
+        )
+        self.image_list.setGridSize(thumbnail_grid_size)
+        # QListView otherwise derives the item rectangle from each loaded
+        # pixmap's aspect ratio. Wide, short images can then leave no painted
+        # text row even though the surrounding layout grid is tall enough.
+        self._thumbnail_item_size = QSize(
+            thumbnail_grid_size.width() - Spacing.SM,
+            thumbnail_grid_size.height() - Spacing.SM,
         )
         self.image_list.setUniformItemSizes(True)
         self.image_list.setWordWrap(False)
@@ -937,16 +1095,11 @@ class ImageManager(QWidget):
         self._set_actions_enabled(True)
         self.selected_ids.intersection_update(self.assets_by_id)
         self.folder_combo.blockSignals(True)
-        current_folder = self.folder_combo.currentData() or ""
-        self.folder_combo.clear()
-        self.folder_combo.addItem("All folders", "")
+        current_folders = self.folder_combo.selected_folders()
         folders = sorted(
             {asset.relative_png.parent.as_posix() for asset in assets}, key=str.casefold
         )
-        for folder in folders:
-            self.folder_combo.addItem(folder, folder)
-        index = self.folder_combo.findData(current_folder)
-        self.folder_combo.setCurrentIndex(max(0, index))
+        self.folder_combo.set_folders(folders, current_folders)
         self.folder_combo.blockSignals(False)
         encrypted = sum(asset.has_encrypted for asset in assets)
         editable = sum(asset.has_plain for asset in assets)
@@ -970,13 +1123,13 @@ class ImageManager(QWidget):
     def _apply_filters(self) -> None:
         self.selected_ids.clear()
         query = self.search_edit.text().strip().casefold()
-        folder = self.folder_combo.currentData() or ""
+        folders = self.folder_combo.selected_folders()
         state = self.state_combo.currentData()
         filtered: list[ImageAsset] = []
         for asset in self.assets:
             if query and query not in asset.asset_id.casefold():
                 continue
-            if folder and asset.relative_png.parent.as_posix() != folder:
+            if folders and asset.relative_png.parent.as_posix() not in folders:
                 continue
             if state == "editable" and not asset.has_plain:
                 continue
@@ -1004,16 +1157,9 @@ class ImageManager(QWidget):
         for asset in page_assets:
             label = asset.relative_png.name
             item = QListWidgetItem(placeholder_icon, label)
+            item.setSizeHint(self._thumbnail_item_size)
             item.setData(_ASSET_ID_ROLE, asset.asset_id)
-            if asset.has_encrypted and asset.has_plain:
-                kind = "encrypted + editable"
-            elif asset.has_encrypted:
-                kind = "encrypted"
-            elif asset.has_runtime_plain:
-                kind = "runtime PNG"
-            else:
-                kind = "editable PNG"
-            item.setToolTip(f"{asset.asset_id}\n{kind}")
+            self._update_asset_item(item, asset)
             self.image_list.addItem(item)
             item.setSelected(asset.asset_id in self.selected_ids)
         self.image_list.blockSignals(False)
@@ -1035,6 +1181,23 @@ class ImageManager(QWidget):
         self._thumbnail_workers.append(worker)
         self._thumbnail_worker = worker
         worker.start()
+
+    @staticmethod
+    def _update_asset_item(item: QListWidgetItem, asset: ImageAsset) -> None:
+        if asset.has_plain:
+            if asset.has_encrypted:
+                kind = "encrypted + editable"
+            elif asset.has_runtime_plain:
+                kind = "runtime PNG + editable"
+            else:
+                kind = "editable PNG"
+        elif asset.has_encrypted:
+            kind = "encrypted"
+        elif asset.has_runtime_plain:
+            kind = "runtime PNG"
+        else:
+            kind = "editable PNG"
+        item.setToolTip(f"{asset.asset_id}\n{kind}")
 
     def _forget_thumbnail_worker(self, worker: _ThumbnailWorker) -> None:
         if worker in self._thumbnail_workers:
@@ -1286,19 +1449,28 @@ class ImageManager(QWidget):
                 target = highlighted_parents.pop()
             else:
                 root = Path(self.game_root).expanduser().resolve()
+                filtered_folders = self.folder_combo.selected_folders()
                 if self.engine_id == PROFILE_GENERIC:
                     source_root = normalize_generic_image_root(
                         root, self.generic_image_root
                     )
                     source_relative = source_root.relative_to(root)
-                    folder = self.folder_combo.currentData() or source_relative.as_posix()
+                    folder = (
+                        next(iter(filtered_folders))
+                        if len(filtered_folders) == 1
+                        else source_relative.as_posix()
+                    )
                     relative_folder = Path(folder)
                     if relative_folder.is_absolute() or ".." in relative_folder.parts:
                         raise ValueError(f"Invalid editable image folder: {folder}")
                     target = workspace / relative_folder
                 else:
                     content_relative = resolve_content_root(root).relative_to(root)
-                    folder = self.folder_combo.currentData() or "img"
+                    folder = (
+                        next(iter(filtered_folders))
+                        if len(filtered_folders) == 1
+                        else "img"
+                    )
                     relative_folder = Path(folder)
                     if relative_folder.is_absolute() or ".." in relative_folder.parts:
                         raise ValueError(f"Invalid editable image folder: {folder}")
@@ -1577,12 +1749,21 @@ class ImageManager(QWidget):
         worker.status.connect(
             lambda message: set_status_text(self.status_label, message, "info")
         )
-        worker.done.connect(self._action_done)
+        worker.done.connect(
+            lambda finished_action, result, affected=tuple(assets): self._action_done(
+                finished_action, result, affected
+            )
+        )
         worker.error.connect(self._action_error)
         self._action_worker = worker
         worker.start()
 
-    def _action_done(self, action: str, result) -> None:
+    def _action_done(
+        self,
+        action: str,
+        result,
+        affected_assets: tuple[ImageAsset, ...] = (),
+    ) -> None:
         if action in {"decrypt", "make_editable"}:
             workspace = editable_workspace_root(self.game_root)
             summary = (
@@ -1613,12 +1794,46 @@ class ImageManager(QWidget):
             QMessageBox.warning(self, "Image Action Completed with Errors", f"{summary}\n\n{shown}")
         else:
             QMessageBox.information(self, "Image Action Complete", summary)
+        if action in {"decrypt", "make_editable"}:
+            self._refresh_after_make_editable(affected_assets)
         set_status_text(
             self.status_label,
             summary,
             "warning" if result.errors else "success",
         )
-        self._start_scan()
+        if action not in {"decrypt", "make_editable"}:
+            self._start_scan()
+
+    def _refresh_after_make_editable(
+        self, affected_assets: tuple[ImageAsset, ...]
+    ) -> None:
+        """Expose newly editable state without rescanning the project."""
+
+        if self.state_combo.currentData() == "editable":
+            # This filter's membership changed, so rebuild only the visible
+            # page instead of rescanning every project image folder.
+            self._apply_filters()
+        else:
+            affected_ids = {asset.asset_id for asset in affected_assets}
+            current = self.image_list.currentItem()
+            current_id = (
+                current.data(_ASSET_ID_ROLE) if current is not None else None
+            )
+            for index in range(self.image_list.count()):
+                item = self.image_list.item(index)
+                asset_id = item.data(_ASSET_ID_ROLE)
+                if asset_id not in affected_ids:
+                    continue
+                asset = self.assets_by_id.get(asset_id)
+                if asset is None:
+                    continue
+                self._update_asset_item(item, asset)
+                item.setSelected(asset_id in self.selected_ids)
+            if current_id in affected_ids and current is not None:
+                self._show_preview(current)
+
+        self._set_actions_enabled(True)
+        self._update_prepare_scope()
 
     def _action_error(self, message: str) -> None:
         set_status_text(self.status_label, f"Image action failed: {message}", "error")

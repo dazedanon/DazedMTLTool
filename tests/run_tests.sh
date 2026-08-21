@@ -28,7 +28,7 @@ if [[ "$#" -eq 0 ]]; then
 fi
 
 case "$1" in
-    core|extended|full)
+    core|extended|imagetl|full)
         exec "$PYTHON" scripts/run_test_suite.py "$@"
         ;;
     *)

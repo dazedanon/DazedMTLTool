@@ -576,6 +576,44 @@ class RuntimeOrderTests(unittest.TestCase):
         )
 
 
+class TestSuitePartitionTests(unittest.TestCase):
+    """Optional ImageTL installs must not change the core/full suites."""
+
+    def test_imagetl_modules_and_skips_share_the_optional_profile(self):
+        from scripts import run_test_suite
+
+        cases = {
+            "test_imagetools.GeometryTests.test_box_coerces_numpy_integers": "imagetl",
+            "test_imagetools_render.PaintTests.test_flat_background": "imagetl",
+            "test_image_text_editor.GateTests.test_the_later_steps_start_shut": "imagetl",
+            "unittest.loader.ModuleSkipped.test_imagetools": "imagetl",
+            "unittest.loader.ModuleSkipped.test_imagetools_render": "imagetl",
+            "unittest.loader.ModuleSkipped.test_image_text_editor": "imagetl",
+            "test_workflow_ui.WorkflowShellTests.test_vertical_step_rail": "extended",
+            "test_translation_cache.CacheTests.test_round_trip": "core",
+        }
+        for test_id, expected in cases.items():
+            with self.subTest(test_id=test_id):
+                self.assertEqual(run_test_suite._test_group_for_id(test_id), expected)
+
+        with patch.object(
+            run_test_suite.unittest.defaultTestLoader,
+            "loadTestsFromNames",
+            return_value=unittest.TestSuite(),
+        ) as load:
+            run_test_suite.load_suite("full")
+            full_modules = set(load.call_args.args[0])
+            self.assertIn("test_evaluation", full_modules)
+            self.assertTrue(
+                full_modules.isdisjoint(run_test_suite.IMAGETL_TEST_MODULES)
+            )
+
+            run_test_suite.load_suite("imagetl")
+            self.assertEqual(
+                load.call_args.args[0], list(run_test_suite.IMAGETL_TEST_MODULES)
+            )
+
+
 class WiringTests(unittest.TestCase):
     """The manifest has to agree with the code that consumes it."""
 

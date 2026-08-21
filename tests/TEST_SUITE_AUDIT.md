@@ -1,8 +1,40 @@
 # Test-suite audit
 
-Audit date: 2026-08-02
+Audit dates: 2026-08-02 and 2026-08-21
 
-## Outcome
+## 2026-08-21 follow-up
+
+The default environment now selects 886 core tests and 97 extended tests. The
+`full` profile is their deterministic 983-test union regardless of whether
+optional image dependencies happen to be installed.
+
+Three ImageTL modules previously raised `SkipTest` during import when OpenCV
+was absent. Discovery counted those as three tests, but an OpenCV-enabled
+environment loaded 312 real tests instead, making the old full-suite count and
+runtime environment-dependent. Those modules now have an explicit `imagetl`
+profile with a 312-test ceiling. A missing dependency produces an actionable
+error instead of a misleading three-test success. The measured ImageTL run
+completed in 9.556 seconds.
+
+Eight overlapping batch-history method wrappers were consolidated into labeled
+`subTest` matrices for persisted run states and legacy cache-key versions. An
+empty-state method was removed because the queued-state test already verifies
+the same state after clearing. Every prior input, expected state, and
+paid-boundary safeguard remains covered. Together with one partition regression
+test and the removal of three optional-module placeholders from `full`, this
+reduced the deterministic full profile from 993 to 983 tests.
+
+Evaluation estimates now tokenize each logical request once per estimate and
+multiply by its execution repetitions. Token and cost totals are unchanged.
+The follow-up core run completed in 14.000 seconds, compared with roughly
+15–16 seconds before the change. Full completed in 31.714 seconds. Both remain
+above their ratchet targets but within the unchanged enforced ceilings.
+
+The remaining runtime is concentrated in real Git version-update integration
+tests and full workflow-shell construction. Future optimization should extract
+pure controller/planning seams while retaining focused integration smoke tests.
+
+## 2026-08-02 outcome
 
 The audited baseline contained 919 tests. The suite now contains 770 tests:
 673 core tests and 97 extended tests. The full suite is the union of those two
@@ -78,9 +110,11 @@ asset existence, update eligibility, help-index references, and git tracking.
 | --- | ---: | ---: | ---: | ---: |
 | Core | 903 | 8 s | 15 s | 2 s |
 | Extended | 97 | 12 s | 30 s | 3 s |
+| ImageTL | 312 | 12 s | 30 s | 3 s |
 | Full | 1000 | 20 s | 45 s | 3 s |
 
 The 1,000-test full ceiling is capacity, not a target. New tests must still
 protect distinct behavior and related cases must be combined or parameterized.
 New tests are core by default; full widget/workflow tests must be deliberately
-classified as extended. Raising a ceiling requires explicit user approval.
+classified as extended, while OpenCV-dependent image tests belong in ImageTL.
+Raising a ceiling requires explicit user approval.

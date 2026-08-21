@@ -999,7 +999,7 @@ class EvaluationManifestTests(unittest.TestCase):
         candidate = dict(evaluation.DEFAULT_CANDIDATES[0])
         with mock.patch.object(
             evaluation, "countTokens", return_value=(100, 100_000)
-        ):
+        ) as count_tokens:
             estimate = evaluation.estimate_candidate(self.manifest, candidate)
 
         self.assertLessEqual(
@@ -1009,6 +1009,9 @@ class EvaluationManifestTests(unittest.TestCase):
             estimate["output_tokens"],
             len(self.manifest["executions"])
             * evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST,
+        )
+        self.assertEqual(
+            count_tokens.call_count, len(self.manifest["logical_requests"])
         )
 
     def test_submit_refreshes_estimate_and_blocks_over_budget_before_provider(self):

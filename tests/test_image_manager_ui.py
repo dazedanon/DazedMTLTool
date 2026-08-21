@@ -18,7 +18,12 @@ from PyQt5.QtWidgets import (
 
 from gui.image_manager import ImageManager
 from gui.workflow_tab import _inspect_image_workflow
-from util.image_manager import PROFILE_AUTO, PROFILE_GENERIC, PROFILE_RPGMAKER_MVMZ
+from util.image_manager import (
+    ImageActionResult,
+    PROFILE_AUTO,
+    PROFILE_GENERIC,
+    PROFILE_RPGMAKER_MVMZ,
+)
 
 
 class ImageManagerSelectionTests(unittest.TestCase):
@@ -101,7 +106,7 @@ class ImageManagerSelectionTests(unittest.TestCase):
         self.assertEqual(len(self.manager.image_list.selectedItems()), 2)
         self.assertEqual(len(self.manager.selected_ids), 2)
 
-    def test_workspace_images_are_selected_after_manager_reopens(self):
+    def test_reopened_manager_clears_highlights_and_filters_multiple_folders(self):
         self._click(0)
         self._click(2, Qt.ControlModifier)
         expected = set(self.manager.selected_ids)
@@ -111,6 +116,18 @@ class ImageManagerSelectionTests(unittest.TestCase):
             asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
         manifest = self.game_root / ".dazedtl" / "image_selection.json"
         manifest.write_text("not used", encoding="utf-8")
+
+        extra_folders = [
+            "img/characters/A",
+            "img/characters/B",
+            "img/characters/C",
+        ]
+        for index, folder in enumerate(extra_folders):
+            target = self.game_root / folder
+            target.mkdir(parents=True)
+            Image.new("RGBA", (16, 16), (10, index * 50, 30, 255)).save(
+                target / "extra.png"
+            )
 
         settings = QSettings(str(self.settings_path), QSettings.IniFormat)
         reopened = ImageManager(self.game_root, settings=settings)
@@ -123,15 +140,51 @@ class ImageManagerSelectionTests(unittest.TestCase):
             self.assertEqual(reopened.image_list.selectedItems(), [])
             self.assertEqual(manifest.read_text(encoding="utf-8"), "not used")
 
-            reopened.folder_combo.setCurrentIndex(
-                reopened.folder_combo.findData("img/pictures")
-            )
+            reopened.folder_combo.set_selected_folders({"img/pictures"})
             reopened.state_combo.setCurrentIndex(
                 reopened.state_combo.findData("editable")
             )
             self.app.processEvents()
             self.assertEqual(reopened.image_list.count(), len(expected))
             self.assertEqual(reopened.image_list.selectedItems(), [])
+
+            reopened.state_combo.setCurrentIndex(
+                reopened.state_combo.findData("all")
+            )
+            combo = reopened.folder_combo
+            combo.showPopup()
+            self.app.processEvents()
+            view = combo.view()
+
+            def click_folder(folder, modifiers=Qt.NoModifier):
+                row = combo.findData(folder)
+                self.assertGreater(row, 0)
+                rect = view.visualRect(combo.model().index(row, 0))
+                QTest.mouseClick(
+                    view.viewport(),
+                    Qt.LeftButton,
+                    modifiers,
+                    rect.center(),
+                )
+                self.app.processEvents()
+
+            click_folder(extra_folders[0])
+            click_folder(extra_folders[-1], Qt.ShiftModifier)
+            self.assertEqual(combo.selected_folders(), set(extra_folders))
+            self.assertEqual(reopened.image_list.count(), len(extra_folders))
+
+            click_folder("img/pictures", Qt.ControlModifier)
+            self.assertEqual(
+                combo.selected_folders(), {*extra_folders, "img/pictures"}
+            )
+            self.assertEqual(reopened.image_list.count(), len(extra_folders) + 4)
+
+            all_rect = view.visualRect(combo.model().index(0, 0))
+            QTest.mouseClick(view.viewport(), Qt.LeftButton, pos=all_rect.center())
+            self.app.processEvents()
+            self.assertEqual(combo.selected_folders(), set())
+            self.assertEqual(reopened.image_list.count(), len(extra_folders) + 4)
+            combo.hidePopup()
         finally:
             for worker in list(reopened._thumbnail_workers):
                 worker.wait(5000)
@@ -230,17 +283,26 @@ class ImageManagerSelectionTests(unittest.TestCase):
         self.assertEqual(action, "prepare")
         self.assertEqual(assets, editable)
 
-    def test_translation_skill_is_enabled_only_for_editable_images(self):
+    def test_make_completion_enables_translation_without_rebuilding_browser(self):
         self.assertFalse(self.manager.copy_translation_button.isEnabled())
 
+        self._click(0)
         asset = self.manager.assets[0]
+        original_item = self.manager.image_list.item(0)
         asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
         asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
-        self.manager._start_scan()
-        self.manager._scan_worker.wait(5000)
-        self.app.processEvents()
+
+        with patch.object(QMessageBox, "information"):
+            self.manager._action_done(
+                "make_editable",
+                ImageActionResult(completed=1),
+                (asset,),
+            )
 
         self.assertTrue(self.manager.copy_translation_button.isEnabled())
+        self.assertIs(self.manager.image_list.item(0), original_item)
+        self.assertEqual(self.manager.selected_ids, {asset.asset_id})
+        self.assertEqual(self.manager.image_list.selectedItems(), [original_item])
 
     def test_loading_and_scanning_project_is_read_only(self):
         self.assertEqual(self.manager.engine_combo.currentData(), PROFILE_AUTO)

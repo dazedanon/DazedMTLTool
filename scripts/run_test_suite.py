@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import sys
 import time
@@ -53,6 +54,18 @@ EXTENDED_TEST_PREFIXES = (
     "test_workflow_ui.WolfWorkflowShellTests.",
 )
 
+# The semi-manual image editor downloads OpenCV and its other heavy
+# dependencies on demand. Keep those tests out of core/full even when the
+# extras happen to be installed: otherwise discovery changes a three-module
+# skip into hundreds of tests based on the developer's local environment.
+IMAGETL_TEST_MODULES = (
+    "test_image_text_editor",
+    "test_imagetools",
+    "test_imagetools_render",
+)
+IMAGETL_REQUIRED_MODULES = ("cv2", "numpy")
+PROFILE_CHOICES = ("core", "extended", "imagetl", "full")
+
 
 # Targets describe healthy local performance. Ceilings leave room for slower CI
 # hosts without preserving the old runtime debt. Count ceilings are capacity
@@ -62,21 +75,25 @@ EXTENDED_TEST_PREFIXES = (
 SUITE_TARGETS_SECONDS = {
     "core": 8.0,
     "extended": 12.0,
+    "imagetl": 12.0,
     "full": 20.0,
 }
 SUITE_BUDGETS_SECONDS = {
     "core": 15.0,
     "extended": 30.0,
+    "imagetl": 30.0,
     "full": 45.0,
 }
 PER_TEST_BUDGETS_SECONDS = {
     "core": 2.0,
     "extended": 3.0,
+    "imagetl": 3.0,
     "full": 3.0,
 }
 SUITE_TEST_COUNT_BUDGETS = {
     "core": 903,
     "extended": 97,
+    "imagetl": 312,
     "full": 1000,
 }
 
@@ -89,22 +106,62 @@ def _iter_tests(suite: unittest.TestSuite) -> Iterator[unittest.TestCase]:
             yield item
 
 
-def _is_extended(test: unittest.TestCase) -> bool:
-    test_id = test.id()
-    return any(test_id.startswith(prefix) for prefix in EXTENDED_TEST_PREFIXES)
+def _module_name_from_test_id(test_id: str) -> str:
+    # A module-level SkipTest is represented as
+    # unittest.loader.ModuleSkipped.<module>, while loaded tests start with the
+    # module name. Normalize both forms so optional modules never leak into
+    # another profile.
+    if test_id.startswith("unittest.loader.ModuleSkipped."):
+        return test_id.rsplit(".", 1)[-1]
+    return test_id.partition(".")[0]
+
+
+def _test_group_for_id(test_id: str) -> str:
+    if _module_name_from_test_id(test_id) in IMAGETL_TEST_MODULES:
+        return "imagetl"
+    if any(test_id.startswith(prefix) for prefix in EXTENDED_TEST_PREFIXES):
+        return "extended"
+    return "core"
+
+
+def _missing_imagetl_modules() -> tuple[str, ...]:
+    return tuple(
+        module
+        for module in IMAGETL_REQUIRED_MODULES
+        if importlib.util.find_spec(module) is None
+    )
 
 
 def load_suite(profile: str) -> unittest.TestSuite:
-    discovered = unittest.defaultTestLoader.discover(
-        str(REPOSITORY_ROOT / "tests"), pattern="test_*.py"
-    )
+    tests_root = REPOSITORY_ROOT / "tests"
+    if str(tests_root) not in sys.path:
+        sys.path.insert(0, str(tests_root))
+    if profile == "imagetl":
+        module_names = list(IMAGETL_TEST_MODULES)
+    else:
+        module_names = [
+            path.stem
+            for path in sorted(tests_root.glob("test_*.py"))
+            if path.stem not in IMAGETL_TEST_MODULES
+        ]
+    discovered = unittest.defaultTestLoader.loadTestsFromNames(module_names)
     tests = list(_iter_tests(discovered))
     if profile == "core":
-        selected = [test for test in tests if not _is_extended(test)]
+        selected = [test for test in tests if _test_group_for_id(test.id()) == "core"]
     elif profile == "extended":
-        selected = [test for test in tests if _is_extended(test)]
+        selected = [
+            test for test in tests if _test_group_for_id(test.id()) == "extended"
+        ]
+    elif profile == "imagetl":
+        selected = [
+            test for test in tests if _test_group_for_id(test.id()) == "imagetl"
+        ]
     else:
-        selected = tests
+        selected = [
+            test
+            for test in tests
+            if _test_group_for_id(test.id()) in {"core", "extended"}
+        ]
     return unittest.TestSuite(selected)
 
 
@@ -127,7 +184,7 @@ class TimedResult(unittest.TextTestResult):
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "profile", nargs="?", choices=("core", "extended", "full"), default="core"
+        "profile", nargs="?", choices=PROFILE_CHOICES, default="core"
     )
     parser.add_argument(
         "--durations", type=int, default=20, help="number of slow tests to print"
@@ -142,6 +199,16 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
+    if args.profile == "imagetl":
+        missing = _missing_imagetl_modules()
+        if missing:
+            print(
+                "ERROR: ImageTL test dependencies are not installed "
+                f"({', '.join(missing)} missing). Run "
+                "`python -m util.imagetools.resources --default` first.",
+                file=sys.stderr,
+            )
+            return 2
     suite = load_suite(args.profile)
     selected = list(_iter_tests(suite))
     if args.list:

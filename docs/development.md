@@ -18,6 +18,7 @@ Use the smallest relevant test while iterating, then run the repository suites:
 ```bash
 ./tests/run_tests.sh core
 ./tests/run_tests.sh extended  # Qt/workflow/navigation changes
+./tests/run_tests.sh imagetl   # OpenCV/ImageTL extras required
 ./tests/run_tests.sh full      # releases or shared test infrastructure
 ```
 

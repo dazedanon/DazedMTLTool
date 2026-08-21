@@ -251,10 +251,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = False
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE101 = True
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE408 = False
@@ -262,7 +262,7 @@ CODE408 = False
 # player-facing comment blocks should be sent for translation.
 
 # Variables
-CODE122 = True
+CODE122 = False
 # Comma-separated IDs and inclusive ranges, e.g. "35, 37-40, 402".
 # Leave blank to use the legacy minimum/maximum pair below.
 CODE122_VAR_RANGES = '26, 30, 37, 39-40, 43-49, 51-52, 59-60, 80, 85, 135'
@@ -271,14 +271,14 @@ CODE122_VAR_MAX = 10
 
 # Plugins / Scripts
 CODE355655 = False
-CODE357 = True
+CODE357 = False
 CODE657 = False
 CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE325 = False
 CODE111 = False
-CODE108 = True
+CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
 # All known code-357 headerMapping entries. Enable entries via ENABLED_PLUGINS_357.

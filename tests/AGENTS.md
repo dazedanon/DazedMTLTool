@@ -18,6 +18,7 @@ Before adding or expanding tests:
 
 - `core`: default development suite; deterministic behavior and lightweight component coverage.
 - `extended`: full Qt widgets, workflow composition, and application navigation.
+- `imagetl`: semi-manual image rendering/editor behavior; requires the on-demand OpenCV extras.
 - `full`: core plus extended; required for test-runner and suite-partition changes.
 
 ## Code Review Rules

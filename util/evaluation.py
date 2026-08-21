@@ -1406,18 +1406,21 @@ def _request_lookup(manifest: dict) -> dict[str, dict]:
 
 def estimate_candidate(manifest: dict, candidate: dict) -> dict:
     requests = _request_lookup(manifest)
+    execution_counts: dict[str, int] = defaultdict(int)
+    for execution in manifest["executions"]:
+        execution_counts[execution["logical_request_id"]] += 1
     input_tokens = 0
     output_tokens = 0
-    for execution in manifest["executions"]:
-        request = requests[execution["logical_request_id"]]
+    for request_id, repetition_count in execution_counts.items():
+        request = requests[request_id]
         dynamic_context = request["glossary"] + request.get("sfx_reference", "")
         counted_input, counted_output = countTokens(
             request["system"] + dynamic_context,
             request["user"],
             request["history"],
         )
-        input_tokens += counted_input
-        output_tokens += counted_output
+        input_tokens += counted_input * repetition_count
+        output_tokens += counted_output * repetition_count
 
     tokenizer_factor = 1.30 if candidate.get("provider") == "anthropic" else 1.10
     thinking_factor = 1.10 if candidate.get("provider") == "gemini" else 1.0
