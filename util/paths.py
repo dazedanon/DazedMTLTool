@@ -23,7 +23,6 @@ LEGACY_GAME_GLOSSARY_RELATIVE = Path(GLOSSARY_FILENAME)
 LEGACY_GLOSSARY_FILENAME = "vocab.txt"
 GLOSSARY_BASE_PATH = DATA_DIR / "glossary_base.txt"
 LEGACY_GLOSSARY_BASE_PATH = DATA_DIR / "vocab_base.txt"
-LEGACY_GLOBAL_GLOSSARY_PATH = DATA_DIR / LEGACY_GLOSSARY_FILENAME
 SKILLS_DIR = DATA_DIR / "skills"
 HELP_DIR = DATA_DIR / "help"
 # Runtime translation system skill (formerly data/prompt.txt).
@@ -488,12 +487,8 @@ def prepare_game_translation_context(
 
 def _seed_game_glossary_text(game_root: Path) -> str:
     """Build the initial glossary text without changing the selected game."""
-    for legacy in (
-        game_root / LEGACY_GLOSSARY_FILENAME,
-        LEGACY_GLOBAL_GLOSSARY_PATH,
-    ):
-        if not legacy.is_file():
-            continue
+    legacy = game_root / LEGACY_GLOSSARY_FILENAME
+    if legacy.is_file():
         try:
             legacy_text = legacy.read_text(encoding="utf-8")
         except (OSError, UnicodeError):
@@ -540,9 +535,9 @@ def ensure_game_glossary(game_root: str | Path | None) -> Path:
     if path.is_file():
         return path
 
-    # Prefer a glossary that already lived with this game. Older releases used
-    # one global data/vocab.txt instead; seed every newly selected game from
-    # that file so upgrades do not silently lose the user's custom terms.
+    # Prefer a glossary that already lived with this game. A legacy global
+    # data/vocab.txt is not a safe seed because its terms belong to some other
+    # game; keep that file as a backup rather than copying it into new games.
     game_metadata_dir(root, create=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=".glossary-", suffix=".tmp", dir=path.parent, text=True

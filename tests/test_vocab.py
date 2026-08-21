@@ -13,19 +13,6 @@ from util.skills import game_skill_path_for_game, load_system_prompt
 
 
 class TestGameGlossaryPaths(unittest.TestCase):
-    def setUp(self):
-        self._legacy_global = tempfile.TemporaryDirectory()
-        self._legacy_global_patch = patch.object(
-            paths,
-            "LEGACY_GLOBAL_GLOSSARY_PATH",
-            Path(self._legacy_global.name) / "missing-vocab.txt",
-        )
-        self._legacy_global_patch.start()
-
-    def tearDown(self):
-        self._legacy_global_patch.stop()
-        self._legacy_global.cleanup()
-
     def test_each_game_gets_independent_portable_translation_files(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -294,7 +281,7 @@ class TestGameGlossaryPaths(unittest.TestCase):
                 "game-owned vocabulary", glossary.read_text(encoding="utf-8")
             )
 
-    def test_global_legacy_vocab_seeds_new_game_with_current_base(self):
+    def test_global_legacy_vocab_does_not_seed_new_game(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             game = root / "Game"
@@ -310,14 +297,14 @@ class TestGameGlossaryPaths(unittest.TestCase):
             current_base = root / "glossary_base.txt"
             current_base.write_text("さん (san)\n", encoding="utf-8")
 
-            with (
-                patch.object(paths, "LEGACY_GLOBAL_GLOSSARY_PATH", legacy),
-                patch.object(paths, "glossary_base_path", return_value=current_base),
+            with patch.object(
+                paths, "glossary_base_path", return_value=current_base
             ):
                 glossary = paths.ensure_game_glossary(game)
 
             text = glossary.read_text(encoding="utf-8")
-            self.assertIn("勇者 (Hero)", text)
+            self.assertNotIn("勇者 (Hero)", text)
+            self.assertIn("Add character glossary entries here", text)
             self.assertIn("さん (san)", text)
             self.assertNotIn("outdated base", text)
             self.assertTrue(legacy.exists())
