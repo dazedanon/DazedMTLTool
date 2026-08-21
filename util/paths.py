@@ -20,9 +20,7 @@ GLOSSARY_BASE_ENABLED_ENV = "DAZED_INCLUDE_GLOSSARY_BASE"
 GAME_METADATA_RELATIVE = Path(".dazedtl")
 GAME_GLOSSARY_RELATIVE = GAME_METADATA_RELATIVE / GLOSSARY_FILENAME
 LEGACY_GAME_GLOSSARY_RELATIVE = Path(GLOSSARY_FILENAME)
-LEGACY_GLOSSARY_FILENAME = "vocab.txt"
 GLOSSARY_BASE_PATH = DATA_DIR / "glossary_base.txt"
-LEGACY_GLOSSARY_BASE_PATH = DATA_DIR / "vocab_base.txt"
 SKILLS_DIR = DATA_DIR / "skills"
 HELP_DIR = DATA_DIR / "help"
 # Runtime translation system skill (formerly data/prompt.txt).
@@ -63,17 +61,12 @@ GAME_TOOL_GITIGNORE_BLOCK = "\n".join(
 ) + "\n"
 
 _ROOT_DATA_FILES = (
-    "vocab.txt",
-    "vocab_base.txt",
     "prompt.txt",
     "last_update_sha.txt",
 )
 
 GLOSSARY_BASE_SEPARATOR = (
     "# ── Base Glossary (auto-appended from glossary_base.txt — do not edit below) ──\n"
-)
-LEGACY_GLOSSARY_BASE_SEPARATOR = (
-    "# ── Base Vocabulary (auto-appended from vocab_base.txt — do not edit below) ──\n"
 )
 _EMPTY_GLOSSARY_PLACEHOLDER = "# Add character glossary entries here\n"
 
@@ -286,10 +279,8 @@ migrate_prompt_to_skills()
 
 
 def glossary_base_path() -> Path:
-    """Return the shipped base glossary, including the legacy upgrade path."""
-    if GLOSSARY_BASE_PATH.is_file():
-        return GLOSSARY_BASE_PATH
-    return LEGACY_GLOSSARY_BASE_PATH
+    """Return the shipped base glossary."""
+    return GLOSSARY_BASE_PATH
 
 
 def _game_glossary_paths(
@@ -485,47 +476,15 @@ def prepare_game_translation_context(
         ) from exc
 
 
-def _seed_game_glossary_text(game_root: Path) -> str:
-    """Build the initial glossary text without changing the selected game."""
-    legacy = game_root / LEGACY_GLOSSARY_FILENAME
-    if legacy.is_file():
-        try:
-            legacy_text = legacy.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            legacy_text = ""
-        if (
-            LEGACY_GLOSSARY_BASE_SEPARATOR in legacy_text
-            or GLOSSARY_BASE_SEPARATOR in legacy_text
-        ):
-            separator_indexes = [
-                legacy_text.find(separator)
-                for separator in (
-                    LEGACY_GLOSSARY_BASE_SEPARATOR,
-                    GLOSSARY_BASE_SEPARATOR,
-                )
-                if legacy_text.find(separator) >= 0
-            ]
-            custom_text = legacy_text[:min(separator_indexes)].rstrip("\n")
-            base_path = glossary_base_path()
-            base = (
-                base_path.read_text(encoding="utf-8")
-                if base_path.is_file()
-                else ""
-            )
-            return custom_text + "\n\n" + GLOSSARY_BASE_SEPARATOR + base
-
+def _seed_game_glossary_text() -> str:
+    """Build an empty game glossary with the current shipped base."""
     base_path = glossary_base_path()
     base = base_path.read_text(encoding="utf-8") if base_path.is_file() else ""
     return _EMPTY_GLOSSARY_PLACEHOLDER + "\n" + GLOSSARY_BASE_SEPARATOR + base
 
 
 def ensure_game_glossary(game_root: str | Path | None) -> Path:
-    """Create or safely copy the selected game's glossary and return its path.
-
-    Older DazedTL versions copied ``vocab.txt`` into the game root. Copy that
-    file only when its DazedTL base marker proves its provenance. Keep the legacy
-    file as a backup; an unrelated game-owned ``vocab.txt`` must never be moved.
-    """
+    """Create the selected game's glossary and return its path."""
     path = game_glossary_path(game_root)
     if path is None:
         raise ValueError("No game folder is selected.")
@@ -535,9 +494,6 @@ def ensure_game_glossary(game_root: str | Path | None) -> Path:
     if path.is_file():
         return path
 
-    # Prefer a glossary that already lived with this game. A legacy global
-    # data/vocab.txt is not a safe seed because its terms belong to some other
-    # game; keep that file as a backup rather than copying it into new games.
     game_metadata_dir(root, create=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=".glossary-", suffix=".tmp", dir=path.parent, text=True
@@ -545,7 +501,7 @@ def ensure_game_glossary(game_root: str | Path | None) -> Path:
     temporary = Path(temporary_name)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(_seed_game_glossary_text(root))
+            handle.write(_seed_game_glossary_text())
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
@@ -594,7 +550,7 @@ def read_game_glossary(game_root: str | Path, *, create: bool = True) -> str:
     root = path.parents[1]
     if not root.is_dir():
         raise FileNotFoundError(f"Game folder not found: {root}")
-    return _seed_game_glossary_text(root)
+    return _seed_game_glossary_text()
 
 
 def read_active_glossary() -> str:
@@ -603,15 +559,8 @@ def read_active_glossary() -> str:
     if path and path.is_file():
         text = path.read_text(encoding="utf-8")
         if (os.getenv(GLOSSARY_OVERRIDE_ENV) or "").strip():
-            indexes = [
-                text.find(separator)
-                for separator in (
-                    GLOSSARY_BASE_SEPARATOR,
-                    LEGACY_GLOSSARY_BASE_SEPARATOR,
-                )
-            ]
-            indexes = [index for index in indexes if index >= 0]
-            custom = text[: min(indexes)] if indexes else text
+            separator_index = text.find(GLOSSARY_BASE_SEPARATOR)
+            custom = text[:separator_index] if separator_index >= 0 else text
             custom = custom.rstrip()
             include_base = (
                 os.getenv(GLOSSARY_BASE_ENABLED_ENV, "true").strip().casefold()

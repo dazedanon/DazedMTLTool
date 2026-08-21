@@ -28,7 +28,7 @@ from util.game_settings import (
     load_game_wrap_widths,
     save_game_wrap_widths,
 )
-from util.paths import LEGACY_GLOSSARY_BASE_SEPARATOR
+from util.paths import GLOSSARY_BASE_SEPARATOR
 
 
 class ThemeContractTests(unittest.TestCase):
@@ -74,10 +74,12 @@ class WorkflowShellTests(unittest.TestCase):
         self.saved_game.joinpath("data", "System.json").write_text(
             "{}", encoding="utf-8"
         )
-        self.saved_game.joinpath("vocab.txt").write_text(
+        glossary = self.saved_game / ".dazedtl" / "glossary.txt"
+        glossary.parent.mkdir()
+        glossary.write_text(
             "# Game Characters\nユウ (Yuu)\n\n"
-            + LEGACY_GLOSSARY_BASE_SEPARATOR
-            + "old base\n",
+            + GLOSSARY_BASE_SEPARATOR
+            + "base\n",
             encoding="utf-8",
         )
         self.settings = QSettings(
@@ -106,7 +108,7 @@ class WorkflowShellTests(unittest.TestCase):
 
     def test_vertical_step_rail_drives_existing_page_stack(self):
         glossary = self.saved_game / ".dazedtl" / "glossary.txt"
-        self.assertFalse(glossary.exists())
+        self.assertTrue(glossary.exists())
         self.assertIn("ユウ (Yuu)", self.workflow.setup_editors.vocab_editor.toPlainText())
 
         self.workflow.setup_editors._save_vocab()

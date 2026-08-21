@@ -239,61 +239,20 @@ class TestGameGlossaryPaths(unittest.TestCase):
                     os.environ[paths.GLOSSARY_BASE_ENABLED_ENV], "false"
                 )
 
-    def test_legacy_game_vocab_is_copied_and_preserved_as_backup(self):
-        with tempfile.TemporaryDirectory() as raw:
-            game = Path(raw)
-            legacy = game / "vocab.txt"
-            legacy.write_text(
-                "# Game Characters\nユウ (Yuu)\n\n"
-                + paths.LEGACY_GLOSSARY_BASE_SEPARATOR
-                + "# Base\nさん (san)\n",
-                encoding="utf-8",
-            )
-
-            preview = vocab.read_game_vocab(game, create=False)
-
-            self.assertIn("ユウ (Yuu)", preview)
-            self.assertFalse(game.joinpath("glossary.txt").exists())
-
-            glossary = paths.ensure_game_glossary(game)
-
-            self.assertTrue(legacy.exists())
-            self.assertTrue(glossary.is_file())
-            self.assertIn("ユウ (Yuu)", vocab.read_game_vocab(game))
-
-    def test_unmarked_game_vocab_is_not_treated_as_dazedtl_data(self):
-        with tempfile.TemporaryDirectory() as raw:
-            game = Path(raw)
-            legacy = game / "vocab.txt"
-            legacy.write_text("game-owned vocabulary\n", encoding="utf-8")
-            base = game / "base.txt"
-            base.write_text("# Base\nさん (san)\n", encoding="utf-8")
-
-            with patch.object(paths, "glossary_base_path", return_value=base):
-                glossary = paths.ensure_game_glossary(game)
-
-            self.assertEqual(
-                legacy.read_text(encoding="utf-8"),
-                "game-owned vocabulary\n",
-            )
-            self.assertIn("さん (san)", glossary.read_text(encoding="utf-8"))
-            self.assertNotIn(
-                "game-owned vocabulary", glossary.read_text(encoding="utf-8")
-            )
-
-    def test_global_legacy_vocab_does_not_seed_new_game(self):
+    def test_vocab_files_do_not_seed_new_game(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             game = root / "Game"
             game.mkdir()
-            legacy = root / "data" / "vocab.txt"
-            legacy.parent.mkdir()
-            legacy.write_text(
-                "# Characters\n勇者 (Hero)\n\n"
-                + paths.LEGACY_GLOSSARY_BASE_SEPARATOR
-                + "outdated base\n",
+            game_vocab = game / "vocab.txt"
+            game_vocab.write_text(
+                "# Characters\nユウ (Yuu)\n\n"
+                "# ── Base Vocabulary (legacy) ──\nold base\n",
                 encoding="utf-8",
             )
+            global_vocab = root / "data" / "vocab.txt"
+            global_vocab.parent.mkdir()
+            global_vocab.write_text("勇者 (Hero)\n", encoding="utf-8")
             current_base = root / "glossary_base.txt"
             current_base.write_text("さん (san)\n", encoding="utf-8")
 
@@ -303,11 +262,32 @@ class TestGameGlossaryPaths(unittest.TestCase):
                 glossary = paths.ensure_game_glossary(game)
 
             text = glossary.read_text(encoding="utf-8")
+            self.assertNotIn("ユウ (Yuu)", text)
             self.assertNotIn("勇者 (Hero)", text)
             self.assertIn("Add character glossary entries here", text)
             self.assertIn("さん (san)", text)
-            self.assertNotIn("outdated base", text)
-            self.assertTrue(legacy.exists())
+            self.assertTrue(game_vocab.exists())
+            self.assertTrue(global_vocab.exists())
+
+    def test_root_data_migration_leaves_vocab_files_untouched(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            data = root / "data"
+            vocab = root / "vocab.txt"
+            vocab_base = root / "vocab_base.txt"
+            vocab.write_text("user glossary\n", encoding="utf-8")
+            vocab_base.write_text("old base\n", encoding="utf-8")
+
+            with (
+                patch.object(paths, "PROJECT_ROOT", root),
+                patch.object(paths, "DATA_DIR", data),
+            ):
+                paths.migrate_root_data_files()
+
+            self.assertTrue(vocab.is_file())
+            self.assertTrue(vocab_base.is_file())
+            self.assertFalse(data.joinpath("vocab.txt").exists())
+            self.assertFalse(data.joinpath("vocab_base.txt").exists())
 
 
 class TestUpdateVocabSection(unittest.TestCase):

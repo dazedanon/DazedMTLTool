@@ -10,9 +10,7 @@ The file has two parts:
 * a base glossary that is auto-appended from ``data/glossary_base.txt``.
 
 ``BASE_SEPARATOR`` marks where the auto-appended base section begins so the
-workflow editors can show and save only the game-specific portion. The legacy
-separator remains recognized so game-local ``vocab.txt`` files from
-older versions can be migrated without exposing the base section in the editor.
+workflow editors can show and save only the game-specific portion.
 """
 
 from __future__ import annotations
@@ -25,7 +23,6 @@ from pathlib import Path
 
 from util.paths import (
     GLOSSARY_BASE_SEPARATOR,
-    LEGACY_GLOSSARY_BASE_SEPARATOR,
     active_glossary_path,
     ensure_game_glossary,
     glossary_base_path,
@@ -34,7 +31,6 @@ from util.paths import (
 )
 
 BASE_SEPARATOR = GLOSSARY_BASE_SEPARATOR
-_BASE_SEPARATORS = (BASE_SEPARATOR, LEGACY_GLOSSARY_BASE_SEPARATOR)
 
 _EMPTY_PLACEHOLDER = "# Add character glossary entries here\n"
 
@@ -149,12 +145,10 @@ def read_translation_glossary() -> str:
 
 
 def _split_base(text: str) -> tuple[str, str]:
-    indexes = [(text.find(separator), separator) for separator in _BASE_SEPARATORS]
-    indexes = [(idx, separator) for idx, separator in indexes if idx != -1]
-    if not indexes:
+    index = text.find(BASE_SEPARATOR)
+    if index == -1:
         return text, ""
-    idx, _separator = min(indexes, key=lambda item: item[0])
-    return text[:idx], text[idx:]
+    return text[:index], text[index:]
 
 
 def read_game_vocab(game_root=None, *, create: bool = True) -> str:
@@ -296,12 +290,8 @@ def update_vocab_section(
         glossary_path = _path(game_root)
         existing = glossary_path.read_text(encoding="utf-8")
 
-        # Keep the auto-appended base section (separator + base vocab) intact.
+        # Keep the auto-appended base section (separator + base glossary) intact.
         game_part, base_part = _split_base(existing)
-        if base_part.startswith(LEGACY_GLOSSARY_BASE_SEPARATOR):
-            base_path = glossary_base_path()
-            base_text = base_path.read_text(encoding="utf-8") if base_path.is_file() else ""
-            base_part = BASE_SEPARATOR + base_text
 
         # Match this category's section up to the next '#' header or end of the
         # game portion. Handles '#Cat', '# Cat', '## Cat', etc.
