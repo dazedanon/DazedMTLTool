@@ -30,7 +30,11 @@ from util.translation import (
 )
 from util.speakers import SPEAKER_BRACKET_INNER, strip_speaker_prefix
 from util.skills import ctx, load_system_prompt
-from util.paths import active_glossary_path, read_active_glossary
+from util.paths import (
+    GLOSSARY_OVERRIDE_ENV,
+    active_glossary_path,
+    read_active_glossary,
+)
 from util.rpgmaker_markers import SUPPORTED_CODE408_MARKERS
 from util.id_ranges import id_in_ranges
 
@@ -192,7 +196,7 @@ def refreshRuntimeConfig():
 # FIRSTLINESPEAKERS: Guess speaker from first line.
 FIRSTLINESPEAKERS = False
 # INLINE401SPEAKERS: Extract speaker from "Name「dialogue」" inline format on 401 lines.
-INLINE401SPEAKERS = True
+INLINE401SPEAKERS = False
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
 # Face name -> speaker mapping for FACENAME101.
@@ -404,11 +408,21 @@ def _reload_vocab():
             return
     except Exception:
         pass
-    vocab_path = active_glossary_path() or VOCAB_PATH
     try:
-        VOCAB = vocab_path.read_text(encoding="utf-8") if vocab_path else read_active_glossary()
+        # The shared reader also applies the manual Translation-page choice to
+        # include or exclude the shipped base glossary.
+        if (os.getenv(GLOSSARY_OVERRIDE_ENV) or "").strip():
+            VOCAB = read_active_glossary()
+        else:
+            vocab_path = active_glossary_path() or VOCAB_PATH
+            VOCAB = (
+                vocab_path.read_text(encoding="utf-8")
+                if vocab_path
+                else read_active_glossary()
+            )
     except (FileNotFoundError, OSError):
-        VOCAB = read_active_glossary()
+        vocab_path = VOCAB_PATH
+        VOCAB = vocab_path.read_text(encoding="utf-8") if vocab_path else ""
     TRANSLATION_CONFIG.vocab = VOCAB
 
 

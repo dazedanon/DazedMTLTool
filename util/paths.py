@@ -15,6 +15,8 @@ LEGACY_APP_NAME = "DazedMTLTool"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 GLOSSARY_FILENAME = "glossary.txt"
+GLOSSARY_OVERRIDE_ENV = "DAZED_GLOSSARY_PATH"
+GLOSSARY_BASE_ENABLED_ENV = "DAZED_INCLUDE_GLOSSARY_BASE"
 GAME_METADATA_RELATIVE = Path(".dazedtl")
 GAME_GLOSSARY_RELATIVE = GAME_METADATA_RELATIVE / GLOSSARY_FILENAME
 LEGACY_GAME_GLOSSARY_RELATIVE = Path(GLOSSARY_FILENAME)
@@ -558,8 +560,13 @@ def ensure_game_glossary(game_root: str | Path | None) -> Path:
 
 
 def active_glossary_path(*, create: bool = True) -> Path | None:
-    """Resolve the glossary for the game active in the translation process."""
-    import os
+    """Resolve the explicitly selected or active-game translation glossary."""
+
+    override = (os.getenv(GLOSSARY_OVERRIDE_ENV) or "").strip()
+    if override:
+        # A manual selection is always an existing user-owned file. Never seed
+        # or migrate its parent as though it were a Workflow game directory.
+        return Path(override).expanduser().resolve()
 
     root = (os.getenv("DAZED_GAME_ROOT") or "").strip()
     if not root:
@@ -599,6 +606,35 @@ def read_active_glossary() -> str:
     """Read the active game's glossary, falling back to shipped base terms."""
     path = active_glossary_path()
     if path and path.is_file():
-        return path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
+        if (os.getenv(GLOSSARY_OVERRIDE_ENV) or "").strip():
+            indexes = [
+                text.find(separator)
+                for separator in (
+                    GLOSSARY_BASE_SEPARATOR,
+                    LEGACY_GLOSSARY_BASE_SEPARATOR,
+                )
+            ]
+            indexes = [index for index in indexes if index >= 0]
+            custom = text[: min(indexes)] if indexes else text
+            custom = custom.rstrip()
+            include_base = (
+                os.getenv(GLOSSARY_BASE_ENABLED_ENV, "true").strip().casefold()
+                not in {"0", "false", "no", "off"}
+            )
+            if not include_base:
+                return custom + ("\n" if custom else "")
+
+            base_path = glossary_base_path()
+            base = (
+                base_path.read_text(encoding="utf-8")
+                if base_path.is_file()
+                else ""
+            )
+            if not base:
+                return custom + ("\n" if custom else "")
+            prefix = custom + "\n\n" if custom else ""
+            return prefix + GLOSSARY_BASE_SEPARATOR + base
+        return text
     base_path = glossary_base_path()
     return base_path.read_text(encoding="utf-8") if base_path.is_file() else ""

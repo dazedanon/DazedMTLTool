@@ -67,6 +67,38 @@ class TestGameGlossaryPaths(unittest.TestCase):
             self.assertIn("さん (san)", path_b.read_text(encoding="utf-8"))
             self.assertNotIn("Alice", path_b.read_text(encoding="utf-8"))
 
+            manual_glossary = root / "manual-glossary.txt"
+            manual_glossary.write_text(
+                "Manual (Selected)\n\n"
+                + paths.GLOSSARY_BASE_SEPARATOR
+                + "Outdated (Base)\n",
+                encoding="utf-8",
+            )
+            with (
+                patch.object(paths, "glossary_base_path", return_value=base),
+                patch.dict(
+                    os.environ,
+                    {
+                        "DAZED_GAME_ROOT": str(game_a),
+                        paths.GLOSSARY_OVERRIDE_ENV: str(manual_glossary),
+                    },
+                    clear=False,
+                ),
+            ):
+                self.assertEqual(
+                    paths.active_glossary_path(), manual_glossary.resolve()
+                )
+                selected = paths.read_active_glossary()
+                self.assertIn("Manual (Selected)", selected)
+                self.assertIn("さん (san)", selected)
+                self.assertNotIn("Outdated (Base)", selected)
+                self.assertEqual(selected.count(paths.GLOSSARY_BASE_SEPARATOR), 1)
+
+                os.environ[paths.GLOSSARY_BASE_ENABLED_ENV] = "false"
+                self.assertEqual(
+                    paths.read_active_glossary(), "Manual (Selected)\n"
+                )
+
             conflict = root / "Conflict"
             conflict.joinpath(".dazedtl").mkdir(parents=True)
             conflict.joinpath("glossary.txt").write_text("old\n", encoding="utf-8")
@@ -183,13 +215,21 @@ class TestGameGlossaryPaths(unittest.TestCase):
             env_file = root / "global.env"
             env_file.write_text(
                 "DAZED_GAME_ROOT=/stale/dotenv/game\n"
+                "DAZED_GLOSSARY_PATH=/stale/dotenv/glossary.txt\n"
+                "DAZED_INCLUDE_GLOSSARY_BASE=true\n"
                 "width=44\nfaceWidth=40\nlistWidth=70\nnoteWidth=65\n",
                 encoding="utf-8",
             )
+            manual_glossary = root / "manual-glossary.txt"
+            manual_glossary.write_text("Manual (Selected)\n", encoding="utf-8")
 
             with patch.dict(
                 os.environ,
-                {"DAZED_GAME_ROOT": str(game)},
+                {
+                    "DAZED_GAME_ROOT": str(game),
+                    paths.GLOSSARY_OVERRIDE_ENV: str(manual_glossary),
+                    paths.GLOSSARY_BASE_ENABLED_ENV: "false",
+                },
                 clear=False,
             ):
                 loaded = load_translation_runtime_environment(env_file)
@@ -205,6 +245,12 @@ class TestGameGlossaryPaths(unittest.TestCase):
                 self.assertEqual(os.environ["width"], "81")
                 self.assertEqual(os.environ["faceWidth"], "67")
                 self.assertEqual(os.environ["DAZED_GAME_ROOT"], str(game))
+                self.assertEqual(
+                    os.environ[paths.GLOSSARY_OVERRIDE_ENV], str(manual_glossary)
+                )
+                self.assertEqual(
+                    os.environ[paths.GLOSSARY_BASE_ENABLED_ENV], "false"
+                )
 
     def test_legacy_game_vocab_is_copied_and_preserved_as_backup(self):
         with tempfile.TemporaryDirectory() as raw:

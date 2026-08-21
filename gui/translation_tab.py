@@ -26,7 +26,7 @@ from tqdm import tqdm
 from dotenv import dotenv_values, load_dotenv
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QGroupBox,
-    QTextEdit, QMessageBox, QListWidget, QListWidgetItem,
+    QTextEdit, QMessageBox, QListWidget, QListWidgetItem, QLineEdit,
     QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout, QStackedWidget,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QScrollArea, QMenu,
@@ -39,6 +39,8 @@ from gui import qt_icons
 from util.game_settings import load_game_wrap_widths, normalize_wrap_widths
 from util.paths import (
     APP_NAME,
+    GLOSSARY_BASE_ENABLED_ENV,
+    GLOSSARY_OVERRIDE_ENV,
     ORG_NAME,
     PROJECT_ROOT,
     prepare_game_translation_context,
@@ -145,6 +147,8 @@ def _activate_configured_game_context(
     # Invalidate the prior project before attempting a switch. A failed switch
     # must never leave another game's root or widths active in this process.
     os.environ.pop("DAZED_GAME_ROOT", None)
+    os.environ.pop(GLOSSARY_OVERRIDE_ENV, None)
+    os.environ.pop(GLOSSARY_BASE_ENABLED_ENV, None)
     for key, value in widths.items():
         os.environ[key] = str(value)
 
@@ -164,6 +168,27 @@ def _activate_configured_game_context(
     for key, value in widths.items():
         os.environ[key] = str(value)
     return game_root, widths
+
+
+def _activate_manual_glossary(
+    glossary_path: str | Path | None, *, include_base: bool = True
+) -> str:
+    """Activate one user-selected glossary without treating it as a game root."""
+    os.environ.pop(GLOSSARY_OVERRIDE_ENV, None)
+    os.environ.pop(GLOSSARY_BASE_ENABLED_ENV, None)
+    value = str(glossary_path or "").strip()
+    if not value:
+        return ""
+
+    path = Path(value).expanduser()
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"The selected glossary file no longer exists: {path}"
+        )
+    resolved = path.resolve(strict=True)
+    os.environ[GLOSSARY_OVERRIDE_ENV] = str(resolved)
+    os.environ[GLOSSARY_BASE_ENABLED_ENV] = "true" if include_base else "false"
+    return str(resolved)
 
 
 BATCH_MODE_BENEFIT_NOTE = (
@@ -2230,6 +2255,57 @@ class TranslationTab(QWidget):
         settings_grid.addWidget(mode_label, 1, 0)
         settings_grid.addWidget(self.mode_combo, 1, 1)
 
+        self.manual_glossary_label = QLabel("Glossary (optional)")
+        self.manual_glossary_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.manual_glossary_edit = QLineEdit()
+        self.manual_glossary_edit.setReadOnly(True)
+        self.manual_glossary_edit.setPlaceholderText("Use the default glossary context")
+        self.manual_glossary_edit.setToolTip(
+            "Optional glossary used only for runs started directly from the Translation page"
+        )
+        self.manual_glossary_browse_button = QPushButton("Choose…")
+        configure_action_button(
+            self.manual_glossary_browse_button,
+            variant="secondary",
+            tooltip="Choose an existing glossary text file for this manual run",
+        )
+        self.manual_glossary_browse_button.clicked.connect(
+            self._choose_manual_glossary
+        )
+        self.manual_glossary_clear_button = QPushButton("Clear")
+        configure_action_button(
+            self.manual_glossary_clear_button,
+            variant="quiet",
+            tooltip="Stop using the selected manual glossary",
+        )
+        self.manual_glossary_clear_button.clicked.connect(
+            self._clear_manual_glossary
+        )
+        self.manual_glossary_base_checkbox = QCheckBox("Include base glossary")
+        self.manual_glossary_base_checkbox.setChecked(True)
+        self.manual_glossary_base_checkbox.setToolTip(
+            "Append the current shipped base glossary without duplicating a base section already in the selected file"
+        )
+        manual_glossary_host = QWidget()
+        manual_glossary_host.setObjectName("manualGlossaryPicker")
+        manual_glossary_host.setStyleSheet(
+            "QWidget#manualGlossaryPicker { background: transparent; border: none; }"
+        )
+        manual_glossary_layout = QVBoxLayout(manual_glossary_host)
+        manual_glossary_layout.setContentsMargins(0, 0, 0, 0)
+        manual_glossary_layout.setSpacing(Spacing.SM)
+        manual_glossary_picker_row = QHBoxLayout()
+        manual_glossary_picker_row.setContentsMargins(0, 0, 0, 0)
+        manual_glossary_picker_row.setSpacing(Spacing.SM)
+        manual_glossary_picker_row.addWidget(self.manual_glossary_edit, 1)
+        manual_glossary_picker_row.addWidget(self.manual_glossary_browse_button)
+        manual_glossary_picker_row.addWidget(self.manual_glossary_clear_button)
+        manual_glossary_layout.addLayout(manual_glossary_picker_row)
+        manual_glossary_layout.addWidget(self.manual_glossary_base_checkbox)
+        self.manual_glossary_host = manual_glossary_host
+        settings_grid.addWidget(self.manual_glossary_label, 2, 0)
+        settings_grid.addWidget(self.manual_glossary_host, 2, 1)
+
         self.batch_mode_note = QLabel(
             BATCH_MODE_BENEFIT_NOTE + "\n" + BATCH_COLLECT_LIVE_CHARGE_NOTE
         )
@@ -2241,7 +2317,7 @@ class TranslationTab(QWidget):
             f"padding:{Spacing.SM}px {Spacing.MD}px;font-size:12px;"
         )
         self.batch_mode_note.setVisible(False)
-        settings_grid.addWidget(self.batch_mode_note, 2, 0, 1, 2)
+        settings_grid.addWidget(self.batch_mode_note, 3, 0, 1, 2)
 
         action_host = QWidget()
         action_host.setObjectName("translationSettingsActions")
@@ -2260,7 +2336,7 @@ class TranslationTab(QWidget):
         self.translate_button.setEnabled(False)
         action_row.addWidget(self.translate_button)
         self.settings_action_host = action_host
-        settings_grid.addWidget(action_host, 3, 0, 1, 2)
+        settings_grid.addWidget(action_host, 4, 0, 1, 2)
         settings_grid.setColumnStretch(1, 1)
         setup_card.add_widget(settings_host)
         self._settings_layout_is_wide = None
@@ -2474,6 +2550,8 @@ class TranslationTab(QWidget):
                 "module_combo",
                 "mode_label",
                 "mode_combo",
+                "manual_glossary_label",
+                "manual_glossary_host",
                 "batch_mode_note",
                 "settings_action_host",
             )
@@ -2491,6 +2569,8 @@ class TranslationTab(QWidget):
             self.module_combo,
             self.mode_label,
             self.mode_combo,
+            self.manual_glossary_label,
+            self.manual_glossary_host,
             self.batch_mode_note,
             self.settings_action_host,
         )
@@ -2502,23 +2582,30 @@ class TranslationTab(QWidget):
         if wide:
             self.engine_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             self.mode_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.manual_glossary_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             grid.addWidget(self.engine_label, 0, 0)
             grid.addWidget(self.mode_label, 0, 1)
+            grid.addWidget(self.manual_glossary_label, 0, 2)
             grid.addWidget(self.module_combo, 1, 0)
             grid.addWidget(self.mode_combo, 1, 1)
-            grid.addWidget(self.settings_action_host, 1, 2)
-            grid.addWidget(self.batch_mode_note, 2, 0, 1, 3)
+            grid.addWidget(self.manual_glossary_host, 1, 2)
+            grid.addWidget(self.settings_action_host, 1, 3)
+            grid.addWidget(self.batch_mode_note, 2, 0, 1, 4)
             grid.setColumnStretch(0, 3)
             grid.setColumnStretch(1, 2)
+            grid.setColumnStretch(2, 4)
         else:
             self.engine_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.mode_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.manual_glossary_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             grid.addWidget(self.engine_label, 0, 0)
             grid.addWidget(self.module_combo, 0, 1)
             grid.addWidget(self.mode_label, 1, 0)
             grid.addWidget(self.mode_combo, 1, 1)
-            grid.addWidget(self.batch_mode_note, 2, 0, 1, 2)
-            grid.addWidget(self.settings_action_host, 3, 0, 1, 2)
+            grid.addWidget(self.manual_glossary_label, 2, 0)
+            grid.addWidget(self.manual_glossary_host, 2, 1)
+            grid.addWidget(self.batch_mode_note, 3, 0, 1, 2)
+            grid.addWidget(self.settings_action_host, 4, 0, 1, 2)
             grid.setColumnStretch(1, 1)
 
     def setup_module_list(self):
@@ -2590,6 +2677,44 @@ class TranslationTab(QWidget):
         elif mode_text == "Parse Speakers":
             self.translate_button.setText("Parse Speakers")
 
+    def _choose_manual_glossary(self) -> None:
+        """Choose an existing glossary for direct Translation-page runs."""
+        current = self.manual_glossary_edit.text().strip()
+        start = str(Path(current).parent) if current else ""
+        if not start:
+            try:
+                start = str(self.settings.value("last_open_dir", "") or "")
+            except Exception:
+                start = ""
+        selected, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select glossary file",
+            start,
+            "Glossary files (*.txt);;All files (*)",
+        )
+        if not selected:
+            return
+        self.manual_glossary_edit.setText(str(Path(selected).expanduser().resolve()))
+        try:
+            if self.settings:
+                self.settings.setValue("last_open_dir", str(Path(selected).parent))
+        except Exception:
+            pass
+
+    def _clear_manual_glossary(self) -> None:
+        self.manual_glossary_edit.clear()
+
+    def _set_manual_glossary_controls_visible(self, visible: bool) -> None:
+        self.manual_glossary_label.setVisible(visible)
+        self.manual_glossary_host.setVisible(visible)
+
+    def prepare_manual_translation(self) -> None:
+        """Expose standalone controls when the sidebar opens Translation directly."""
+        if self.file_stack.currentIndex() != 0 or self._active_workflow_return:
+            return
+        self._pending_workflow_return = None
+        self._set_manual_glossary_controls_visible(True)
+
     def _set_activity_visible(self, visible: bool) -> None:
         """Keep the Translation Log visible; it is core run feedback."""
         if not hasattr(self, "translation_log_viewer"):
@@ -2601,6 +2726,7 @@ class TranslationTab(QWidget):
         for widget in (
             getattr(self, "module_combo", None),
             getattr(self, "mode_combo", None),
+            getattr(self, "manual_glossary_host", None),
         ):
             if widget is not None:
                 widget.setEnabled(enabled)
@@ -3777,6 +3903,9 @@ class TranslationTab(QWidget):
         self.refresh_file_lists()
         self._on_mode_changed(self.mode_combo.currentText())
         self._set_run_controls_enabled(True)
+        self._set_manual_glossary_controls_visible(
+            self._pending_workflow_return is None
+        )
 
     def set_workflow_return_target(self, workflow_tab):
         """Remember the workflow step that owns the next translation run."""
@@ -3786,6 +3915,7 @@ class TranslationTab(QWidget):
         except Exception:
             pass
         self._pending_workflow_return = (workflow_tab, step_index)
+        self._set_manual_glossary_controls_visible(False)
 
     def _return_to_workflow(self):
         """Return to the exact workflow and step that launched this run."""
@@ -4032,15 +4162,21 @@ class TranslationTab(QWidget):
                 return
 
         # Translation can be started without ever opening the lazily-created
-        # Workflow page. Activate the selected game's persisted widths here so
-        # every subprocess inherits the correct project context.
+        # Workflow page. Activate persisted game context when applicable, then
+        # layer an explicitly chosen glossary onto standalone runs only.
+        workflow_launch = self._pending_workflow_return is not None
         try:
             _activate_configured_game_context(self.settings, selected_module[0])
+            if not workflow_launch:
+                _activate_manual_glossary(
+                    self.manual_glossary_edit.text(),
+                    include_base=self.manual_glossary_base_checkbox.isChecked(),
+                )
         except Exception as exc:
             QMessageBox.warning(
                 self,
                 "Game Translation Settings",
-                f"Could not load the selected game's translation settings:\n\n{exc}",
+                f"Could not load the selected translation settings:\n\n{exc}",
             )
             return
 

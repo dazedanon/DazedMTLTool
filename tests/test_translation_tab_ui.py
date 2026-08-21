@@ -289,6 +289,19 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertFalse(self.tab._batch_active)
         self.assertEqual(self.tab.file_card.title_label.text(), "Files to translate")
 
+        manual_glossary = Path(self.temporary.name) / "manual-glossary.txt"
+        manual_glossary.write_text("Manual (Selected)\n", encoding="utf-8")
+        self.assertFalse(self.tab.manual_glossary_host.isHidden())
+        self.assertTrue(self.tab.manual_glossary_base_checkbox.isChecked())
+        with mock.patch(
+            "gui.translation_tab.QFileDialog.getOpenFileName",
+            return_value=(str(manual_glossary), "Glossary files (*.txt)"),
+        ):
+            self.tab._choose_manual_glossary()
+        self.assertEqual(
+            self.tab.manual_glossary_edit.text(), str(manual_glossary.resolve())
+        )
+
         self.tab.mode_combo.setCurrentText("Batch Translate")
         self.tab.select_files_by_name(["Actors.json"])
         with (
@@ -304,6 +317,9 @@ class TranslationTabUITests(unittest.TestCase):
                 "gui.translation_tab._activate_configured_game_context",
                 return_value=("", {}),
             ) as activate_game_context,
+            mock.patch(
+                "gui.translation_tab._activate_manual_glossary"
+            ) as activate_manual_glossary,
             mock.patch.object(TranslationWorker, "start") as start,
         ):
             self.tab.start_translation(skip_confirm=True)
@@ -314,6 +330,9 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertIsNone(self.tab.translation_worker.batch_resume_state)
         activate_game_context.assert_called_once_with(
             self.tab.settings, "RPG Maker MV/MZ"
+        )
+        activate_manual_glossary.assert_called_once_with(
+            str(manual_glossary.resolve()), include_base=True
         )
         start.assert_called_once_with()
 
@@ -335,6 +354,11 @@ class TranslationTabUITests(unittest.TestCase):
             **metadata_without_profile,
             "runtime_profile": profile,
         }
+        workflow = SimpleNamespace(
+            _step_tabs=SimpleNamespace(currentIndex=lambda: 4)
+        )
+        self.tab.set_workflow_return_target(workflow)
+        self.assertTrue(self.tab.manual_glossary_host.isHidden())
 
         with (
             mock.patch("util.translation.isBatchSupported", return_value=True),
@@ -355,6 +379,9 @@ class TranslationTabUITests(unittest.TestCase):
                 "gui.translation_tab._activate_configured_game_context",
                 return_value=("", {}),
             ),
+            mock.patch(
+                "gui.translation_tab._activate_manual_glossary"
+            ) as activate_manual_glossary,
             mock.patch.object(TranslationWorker, "start") as start,
         ):
             self.tab.start_translation(forced_resume_state="fetched")
@@ -364,6 +391,7 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(
             self.tab.translation_worker.batch_resume_state, "fetched"
         )
+        activate_manual_glossary.assert_not_called()
         start.assert_called_once_with()
 
     def test_noncompletion_batch_outcomes_are_not_rendered_as_complete(self) -> None:

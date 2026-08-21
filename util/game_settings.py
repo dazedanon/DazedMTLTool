@@ -10,7 +10,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from util.paths import ensure_game_tool_gitignore, game_metadata_dir
+from util.paths import (
+    GLOSSARY_BASE_ENABLED_ENV,
+    GLOSSARY_OVERRIDE_ENV,
+    ensure_game_tool_gitignore,
+    game_metadata_dir,
+)
 
 GAME_SETTINGS_RELATIVE = Path(".dazedtl") / "settings.json"
 WRAP_WIDTH_KEYS = ("width", "faceWidth", "listWidth", "noteWidth")
@@ -102,15 +107,27 @@ def load_translation_runtime_environment(
     engine. Per-game values must be applied afterwards or the refresh silently
     replaces them with the last global widths.
     """
-    # DAZED_GAME_ROOT is selected by the GUI for this run. It is runtime state,
-    # not global dotenv configuration, so preserve it across override loading
-    # and ignore an accidental/stale copy in .env.
+    # These paths are selected by the GUI for this run. They are runtime state,
+    # not global dotenv configuration, so preserve them across override loading
+    # and ignore accidental/stale copies in .env.
     root = (os.getenv("DAZED_GAME_ROOT") or "").strip()
+    glossary = (os.getenv(GLOSSARY_OVERRIDE_ENV) or "").strip()
+    include_glossary_base = (
+        os.getenv(GLOSSARY_BASE_ENABLED_ENV) or ""
+    ).strip()
     load_dotenv(dotenv_path=dotenv_path, override=True)
     if root:
         os.environ["DAZED_GAME_ROOT"] = root
     else:
         os.environ.pop("DAZED_GAME_ROOT", None)
+    if glossary:
+        os.environ[GLOSSARY_OVERRIDE_ENV] = glossary
+    else:
+        os.environ.pop(GLOSSARY_OVERRIDE_ENV, None)
+    if glossary and include_glossary_base:
+        os.environ[GLOSSARY_BASE_ENABLED_ENV] = include_glossary_base
+    else:
+        os.environ.pop(GLOSSARY_BASE_ENABLED_ENV, None)
     if not root:
         return None
     saved = load_game_wrap_widths(root)

@@ -1213,7 +1213,7 @@ class DazedMTLGUI(QMainWindow):
 
         # Translation
         btn_translation = self.create_nav_button("🌐", "Translation")
-        btn_translation.clicked.connect(lambda: self.switch_page(self.PAGE_TRANSLATION))
+        btn_translation.clicked.connect(self._open_manual_translation_page)
         sidebar_layout.addWidget(btn_translation)
         self.nav_buttons.append(btn_translation)
 
@@ -1303,6 +1303,12 @@ class DazedMTLGUI(QMainWindow):
         # Update button checked states
         for i, btn in enumerate(self.nav_buttons):
             btn.setChecked(i == index)
+
+    def _open_manual_translation_page(self) -> None:
+        """Open Translation as a standalone page rather than a Workflow phase."""
+        if hasattr(self, "translation_tab"):
+            self.translation_tab.prepare_manual_translation()
+        self.switch_page(self.PAGE_TRANSLATION)
         
     def setup_tabs(self):
         """Set up all the tabs in the interface."""

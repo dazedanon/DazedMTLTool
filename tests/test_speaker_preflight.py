@@ -300,7 +300,12 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                 ) as prepare_generic,
                 patch.dict(
                     os.environ,
-                    {"DAZED_GAME_ROOT": "/previous/game", "width": "299"},
+                    {
+                        "DAZED_GAME_ROOT": "/previous/game",
+                        "DAZED_GLOSSARY_PATH": "/previous/glossary.txt",
+                        "DAZED_INCLUDE_GLOSSARY_BASE": "false",
+                        "width": "299",
+                    },
                     clear=False,
                 ),
             ):
@@ -309,6 +314,8 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                 )
                 self.assertEqual(active_root, "")
                 self.assertNotIn("DAZED_GAME_ROOT", os.environ)
+                self.assertNotIn("DAZED_GLOSSARY_PATH", os.environ)
+                self.assertNotIn("DAZED_INCLUDE_GLOSSARY_BASE", os.environ)
             load_generic.assert_not_called()
             prepare_generic.assert_not_called()
 
