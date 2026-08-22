@@ -524,16 +524,32 @@ class TranslationTabUITests(unittest.TestCase):
             "enabled_patterns_355655": [],
         }
         self.tab.select_files_by_name(["Map001.json"])
-        metadata_without_profile = {"file_set": ["Map001.json"]}
+        metadata_without_profile = {
+            "file_set": ["Map001.json"],
+            "workflow_return": {
+                "engine": "rpgmakermvmz",
+                "step_index": 4,
+            },
+        }
         metadata_with_profile = {
             **metadata_without_profile,
             "runtime_profile": profile,
         }
         workflow = SimpleNamespace(
-            _step_tabs=SimpleNamespace(currentIndex=lambda: 4)
+            _goto_step=mock.Mock(),
+            _step_tabs=SimpleNamespace(currentIndex=lambda: 4),
         )
-        self.tab.set_workflow_return_target(workflow)
-        self.assertTrue(self.tab.manual_glossary_host.isHidden())
+        parent = SimpleNamespace(
+            workflow_tab=workflow,
+            wolf_workflow_tab=None,
+            evaluation_tab=None,
+            workflow_stack=None,
+            workflow_engine_combo=None,
+            _ensure_workflow_container=mock.Mock(),
+            PAGE_WORKFLOW=1,
+            switch_page=mock.Mock(),
+        )
+        self.tab.parent_window = parent
 
         with (
             mock.patch("util.translation.isBatchSupported", return_value=True),
@@ -566,8 +582,20 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(
             self.tab.translation_worker.batch_resume_state, "fetched"
         )
+        self.assertEqual(
+            self.tab.translation_worker.batch_workflow_return,
+            {"engine": "rpgmakermvmz", "step_index": 4},
+        )
         activate_manual_glossary.assert_not_called()
+        self.assertTrue(self.tab.manual_glossary_host.isHidden())
         start.assert_called_once_with()
+        self.tab._apply_finish_ui(True, "Success")
+
+        self.assertFalse(self.tab.return_to_workflow_button.isHidden())
+        self.assertTrue(self.tab.reset_view_button.isHidden())
+        self.tab.return_to_workflow_button.click()
+        workflow._goto_step.assert_called_once_with(4)
+        parent.switch_page.assert_called_once_with(parent.PAGE_WORKFLOW)
 
         self.tab.mode_combo.setCurrentText("Batch Translate")
         self.tab.select_files_by_name(["Actors.json"])

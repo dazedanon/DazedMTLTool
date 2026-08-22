@@ -395,7 +395,8 @@ class TranslationWorker(QThread):
     speaker_confirmation_signal = pyqtSignal(object)  # names plus local token/cost estimate
     
     def __init__(self, project_root, module_info, estimate_only=False, selected_files=None,
-                 parse_speakers=False, batch_mode=False, batch_resume_state=None):
+                 parse_speakers=False, batch_mode=False, batch_resume_state=None,
+                 batch_workflow_return=None):
         super().__init__()
         self.project_root = project_root
         self.module_info = module_info  # [name, extensions, handler_function]
@@ -405,6 +406,11 @@ class TranslationWorker(QThread):
         self.parse_speakers = parse_speakers
         self.batch_mode = batch_mode
         self.batch_resume_state = batch_resume_state
+        self.batch_workflow_return = (
+            dict(batch_workflow_return)
+            if isinstance(batch_workflow_return, dict)
+            else None
+        )
         self.batch_runtime_profile = None
         self._batch_submit_event = threading.Event()
         self._batch_submit_approved = False
@@ -1439,6 +1445,7 @@ class TranslationWorker(QThread):
                             saveQueuedBatchMetadata(
                                 matching_files,
                                 runtime_profile=self.batch_runtime_profile,
+                                workflow_return=self.batch_workflow_return,
                             )
                             if not self._wait_batch_submit(est):
                                 self._emit_batch_phase("canceled", est)
@@ -4048,6 +4055,48 @@ class TranslationTab(QWidget):
         self._pending_workflow_return = (workflow_tab, step_index)
         self._set_manual_glossary_controls_visible(False)
 
+    def _workflow_return_metadata(self):
+        """Return a durable descriptor for the workflow that owns this run."""
+        target = self._active_workflow_return or self._pending_workflow_return
+        if target is None:
+            return None
+        workflow_tab, step_index = target
+        parent = self.parent_window or self.window()
+        wolf_tab = getattr(parent, "wolf_workflow_tab", None)
+        engine = "wolfdawn" if workflow_tab is wolf_tab else "rpgmakermvmz"
+        return {"engine": engine, "step_index": step_index}
+
+    def _restore_batch_workflow_return(self, batch_metadata):
+        """Restore a workflow return target saved with resumable batch state."""
+        if self._active_workflow_return or self._pending_workflow_return:
+            return
+        descriptor = (batch_metadata or {}).get("workflow_return")
+        if not isinstance(descriptor, dict):
+            return
+        engine = str(descriptor.get("engine") or "").strip().lower()
+        if engine not in {"rpgmakermvmz", "wolfdawn"}:
+            return
+        step_index = descriptor.get("step_index")
+        if step_index is not None and (
+            not isinstance(step_index, int)
+            or isinstance(step_index, bool)
+            or step_index < 0
+        ):
+            return
+
+        parent = self.parent_window or self.window()
+        try:
+            ensure_workflows = getattr(parent, "_ensure_workflow_container", None)
+            if callable(ensure_workflows):
+                ensure_workflows()
+            attr = "wolf_workflow_tab" if engine == "wolfdawn" else "workflow_tab"
+            workflow_tab = getattr(parent, attr, None)
+            if workflow_tab is not None:
+                self._pending_workflow_return = (workflow_tab, step_index)
+                self._set_manual_glossary_controls_visible(False)
+        except Exception:
+            pass
+
     def _return_to_workflow(self):
         """Return to the exact workflow and step that launched this run."""
         target = self._active_workflow_return or self._pending_workflow_return
@@ -4125,6 +4174,7 @@ class TranslationTab(QWidget):
         batch_mode = (mode == BATCH_MODE_LABEL)
         batch_resume_state = None
         batch_choice_confirmed = False
+        batch_metadata = {}
 
         if batch_mode:
             load_dotenv()
@@ -4298,6 +4348,8 @@ class TranslationTab(QWidget):
             if reply != QMessageBox.Yes:
                 return
 
+        if batch_resume_state:
+            self._restore_batch_workflow_return(batch_metadata)
         # Translation can be started without ever opening the lazily-created
         # Workflow page. Activate persisted game context when applicable, then
         # layer an explicitly chosen glossary onto standalone runs only.
@@ -4427,6 +4479,7 @@ class TranslationTab(QWidget):
                 parse_speakers=parse_speakers,
                 batch_mode=batch_mode,
                 batch_resume_state=batch_resume_state,
+                batch_workflow_return=self._workflow_return_metadata(),
             )
             
             # Connect signals

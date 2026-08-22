@@ -16,6 +16,7 @@ from tqdm import tqdm
 from util.translation import (
     BatchResultUnavailableError,
     TranslationConfig,
+    begin_file_cost_tracking,
     calculateCost,
     convert_corner_brackets,
     getPricingConfig,
@@ -441,6 +442,7 @@ def handleMVMZ(filename, estimate):
     # Refresh settings and per-game context even when this module is cached in
     # the long-lived GUI process.
     refreshRuntimeConfig()
+    begin_file_cost_tracking(MODEL)
 
     # Translate
     start = time.time()

@@ -2113,7 +2113,11 @@ def batchRunMetadata():
         return dict(_read_batch_file(BATCH_STATE_FILE))
 
 
-def saveQueuedBatchMetadata(file_set=None, runtime_profile=None):
+def saveQueuedBatchMetadata(
+    file_set=None,
+    runtime_profile=None,
+    workflow_return=None,
+):
     """Persist the file scope of an unsubmitted queue for safe resume."""
     from util.runtime_profile import copy_batch_runtime_profile
 
@@ -2131,6 +2135,21 @@ def saveQueuedBatchMetadata(file_set=None, runtime_profile=None):
             })
             if saved_profile is not None:
                 state["runtime_profile"] = saved_profile
+            if isinstance(workflow_return, dict):
+                engine = str(workflow_return.get("engine") or "").strip().lower()
+                step_index = workflow_return.get("step_index")
+                if engine in {"rpgmakermvmz", "wolfdawn"} and (
+                    step_index is None
+                    or (
+                        isinstance(step_index, int)
+                        and not isinstance(step_index, bool)
+                        and step_index >= 0
+                    )
+                ):
+                    state["workflow_return"] = {
+                        "engine": engine,
+                        "step_index": step_index,
+                    }
             _write_batch_file(BATCH_STATE_FILE, state)
 
 
@@ -4805,28 +4824,62 @@ def extractTranslation(translatedTextList, isList, pbar=None):
             return None
 
 
+_FILE_COST_COUNTERS = (
+    "file_cache_read",
+    "file_cache_write",
+    "file_regular",
+    "file_output",
+    "file_batch_read",
+    "file_batch_write",
+    "file_batch_regular",
+    "file_batch_output",
+)
+
+
+def begin_file_cost_tracking(model=None):
+    """Start an isolated per-file accurate-cost window.
+
+    Persistent RPG Maker batch workers reuse one process for many files, so the
+    cross-file accurate total cannot identify the cost of the current file.
+    Reset the per-file counters explicitly, including for files that are fully
+    satisfied by the translation cache and therefore record zero new usage.
+    """
+    for name in _FILE_COST_COUNTERS:
+        setattr(_thread_local, name, 0)
+    _thread_local.file_cost_window_active = bool(
+        isClaudeModel(model) or get_batch_phase() == "consume"
+    )
+    _thread_local.file_cost_ready = bool(
+        isClaudeModel(model) or get_batch_phase() == "consume"
+    )
+
+
 def calculateCost(inputTokens, outputTokens, model):
     """
     Calculate the cost of translation based on token usage and model pricing.
 
-    For Claude models the cost is derived from the actual cache token breakdown
-    recorded by translateAI, so cache discounts are reflected accurately:
+    For Claude models and asynchronous batch consume, cost is derived from the
+    actual cache/token breakdown recorded by translateAI:
       - Cache reads:  10 % of the base input rate
       - Cache writes: 125 % of the base input rate
       - Regular input: 100 % of the base input rate
 
-    Call pattern (no module changes required):
-      Per-file call: file_cost_ready flag is True → read thread-local per-file
-                     accumulators (which span all translateAI calls for the file),
-                     compute cost, reset accumulators, clear flag, return cost.
-      TOTAL call:    file_cost_ready is False (already cleared) → return the
-                     cross-thread _global_accurate_cost running sum.
+    Call pattern:
+      Per-file call: an explicit file window (or the legacy Claude ready flag)
+                     reads thread-local accumulators spanning every translateAI
+                     call for the file, then resets and closes the window.
+      TOTAL call:    the file window and ready flag are both closed, so return
+                     the cross-thread _global_accurate_cost running sum.
 
-    Falls back to naive token × rate calculation for non-Claude models.
+    Falls back to naive token × rate calculation for non-Claude live models.
     """
     _is_claude = model and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
-    if _is_claude:
-        if getattr(_thread_local, 'file_cost_ready', False):
+    _uses_accurate_file_cost = _is_claude or get_batch_phase() == "consume"
+    if _uses_accurate_file_cost:
+        if (
+            getattr(_thread_local, 'file_cost_window_active', False)
+            or getattr(_thread_local, 'file_cost_ready', False)
+        ):
             # Per-file call: compute from accumulators (may be 0 for disk-cached files),
             # reset everything, return the file cost.
             cr  = getattr(_thread_local, 'file_cache_read',  0)
@@ -4843,11 +4896,16 @@ def calculateCost(inputTokens, outputTokens, model):
             live_write_multiplier = cache_write_multiplier(
                 "anthropic", model, "5m"
             )
+            batch_write_multiplier = cache_write_multiplier(
+                getBatchProvider(model) or "anthropic", model
+            )
             cost = (cr * br * 0.10
                     + cw * br * live_write_multiplier
                     + reg * br + out * orr
                     # Batch API tokens: same rates, then the 50% batch discount.
-                    + (bcr * br * 0.10 + bcw * br * 2.00 + breg * br + bout * orr) * 0.50)
+                    + (bcr * br * 0.10
+                       + bcw * br * batch_write_multiplier
+                       + breg * br + bout * orr) * 0.50)
             _thread_local.file_cache_read  = 0
             _thread_local.file_cache_write = 0
             _thread_local.file_regular     = 0
@@ -4856,6 +4914,7 @@ def calculateCost(inputTokens, outputTokens, model):
             _thread_local.file_batch_write   = 0
             _thread_local.file_batch_regular = 0
             _thread_local.file_batch_output  = 0
+            _thread_local.file_cost_window_active = False
             _thread_local.file_cost_ready  = False
             return cost
     # TOTAL call: cache-aware Claude and all async providers accumulate here.

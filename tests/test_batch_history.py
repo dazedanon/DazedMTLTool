@@ -482,6 +482,10 @@ class BatchRunStateTests(BatchHistoryTestBase):
         T.saveQueuedBatchMetadata(
             ["Map001.json", "Map002.json"],
             runtime_profile=runtime_profile,
+            workflow_return={
+                "engine": "rpgmakermvmz",
+                "step_index": 4,
+            },
         )
 
         self.assertEqual(T.batchRunMetadata()["status"], "queued")
@@ -491,6 +495,10 @@ class BatchRunStateTests(BatchHistoryTestBase):
         )
         self.assertEqual(
             T.batchRunMetadata()["runtime_profile"], runtime_profile
+        )
+        self.assertEqual(
+            T.batchRunMetadata()["workflow_return"],
+            {"engine": "rpgmakermvmz", "step_index": 4},
         )
         confirmed_legacy_profile = {
             **runtime_profile,
@@ -502,6 +510,55 @@ class BatchRunStateTests(BatchHistoryTestBase):
             confirmed_legacy_profile,
         )
 
+    def test_persistent_consume_reports_per_file_cost_not_running_total(self):
+        original_accurate = T._global_accurate_cost
+        names = (
+            *T._FILE_COST_COUNTERS,
+            "file_cost_ready",
+            "file_cost_window_active",
+        )
+        originals = {
+            name: getattr(T._thread_local, name)
+            for name in names
+            if hasattr(T._thread_local, name)
+        }
+        try:
+            with (
+                mock.patch.object(T, "get_batch_phase", return_value="consume"),
+                mock.patch.object(T, "getBatchProvider", return_value="openai"),
+                mock.patch.object(
+                    T,
+                    "getPricingConfig",
+                    return_value={
+                        "inputAPICost": 2.0,
+                        "outputAPICost": 10.0,
+                    },
+                ),
+            ):
+                T._global_accurate_cost = 0.15
+                T.begin_file_cost_tracking("gpt-test")
+                T._thread_local.file_batch_regular = 100_000
+                T._thread_local.file_batch_output = 10_000
+                first_file = T.calculateCost(100_000, 10_000, "gpt-test")
+
+                # A cache-only file must not inherit the prior running total.
+                T.begin_file_cost_tracking("gpt-test")
+                # translateAI clears the legacy signal before checking its caches.
+                # The explicit file window must survive a zero-usage final chunk.
+                T._thread_local.file_cost_ready = False
+                cached_file = T.calculateCost(0, 0, "gpt-test")
+                total = T.calculateCost(100_000, 10_000, "gpt-test")
+
+            self.assertAlmostEqual(first_file, 0.15)
+            self.assertEqual(cached_file, 0.0)
+            self.assertAlmostEqual(total, 0.15)
+        finally:
+            T._global_accurate_cost = original_accurate
+            for name in names:
+                if name in originals:
+                    setattr(T._thread_local, name, originals[name])
+                elif hasattr(T._thread_local, name):
+                    delattr(T._thread_local, name)
 
 class HistorySurvivalTests(BatchHistoryTestBase):
     def test_history_survives_fetch_marker_and_clear(self):
