@@ -104,8 +104,7 @@ DEBUG_LOG_BACKUP_COUNT = 2
 # requests still need room for JSON scaffolding and provider reasoning tokens.
 # Official providers with known larger limits may use the full safety ceiling;
 # unknown OpenAI-compatible routes retain the conservative compatibility cap.
-MIN_TRANSLATION_OUTPUT_TOKENS = 1024
-REASONING_TRANSLATION_OUTPUT_TOKENS = 4096
+MIN_TRANSLATION_OUTPUT_TOKENS = 8192
 COMPAT_TRANSLATION_OUTPUT_TOKENS = 8192
 MISTRAL_TRANSLATION_OUTPUT_TOKENS = 16000
 MAX_TRANSLATION_OUTPUT_TOKENS = 16384
@@ -4451,15 +4450,9 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
         completion_ceiling = MISTRAL_TRANSLATION_OUTPUT_TOKENS
     else:
         completion_ceiling = COMPAT_TRANSLATION_OUTPUT_TOKENS
-    completion_floor = (
-        REASONING_TRANSLATION_OUTPUT_TOKENS
-        if "gpt-5" in model_l
-        else MIN_TRANSLATION_OUTPUT_TOKENS
-    )
     completion_limit = _translation_completion_limit(
         user,
         completion_ceiling,
-        completion_floor,
     )
     if _is_official_openai_api(provider, api_url):
         params["max_completion_tokens"] = completion_limit
