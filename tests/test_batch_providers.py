@@ -84,7 +84,10 @@ class BatchProviderDetectionTests(unittest.TestCase):
         )
         self.assertEqual(
             params["max_completion_tokens"],
-            min(T.MAX_TRANSLATION_OUTPUT_TOKENS, payload_tokens * 2),
+            min(
+                T.MAX_TRANSLATION_OUTPUT_TOKENS,
+                max(T.MIN_TRANSLATION_OUTPUT_TOKENS, payload_tokens * 2),
+            ),
         )
         system_content = params["messages"][0]["content"]
         self.assertTrue(any(
@@ -114,11 +117,9 @@ class BatchProviderDetectionTests(unittest.TestCase):
             for m in params["messages"]
         ))
 
-    def test_every_provider_route_has_a_payload_sized_hard_output_cap(self):
+    def test_every_provider_route_has_safe_output_bounds(self):
         payload = '{"Line1":"猫"}'
-        expected = len(
-            T.tiktoken.encoding_for_model("gpt-4").encode(payload)
-        ) * 2
+        expected = T.MIN_TRANSLATION_OUTPUT_TOKENS
         cases = (
             ("openai", "https://api.openai.com/v1", "gpt-5.6-terra",
              "max_completion_tokens"),
@@ -159,6 +160,26 @@ class BatchProviderDetectionTests(unittest.TestCase):
         )
         self.assertEqual(
             oversized["max_tokens"], T.MAX_TRANSLATION_OUTPUT_TOKENS
+        )
+
+        with mock.patch.dict("os.environ", {"API_PROVIDER": "openai"}):
+            openai_oversized = T.buildOpenAIRequest(
+                "system", "猫" * 10000, [], 0, "json", "gpt-5", 1,
+                api_provider="openai", api_url="https://api.openai.com/v1",
+            )
+        self.assertEqual(
+            openai_oversized["max_completion_tokens"],
+            T.MAX_TRANSLATION_OUTPUT_TOKENS,
+        )
+
+        with mock.patch.dict("os.environ", {"API_PROVIDER": "openai"}):
+            compat_oversized = T.buildOpenAIRequest(
+                "system", "猫" * 10000, [], 0, "json", "deepseek-chat", 1,
+                api_provider="openai", api_url="https://api.deepseek.com/v1",
+            )
+        self.assertEqual(
+            compat_oversized["max_tokens"],
+            T.COMPAT_TRANSLATION_OUTPUT_TOKENS,
         )
 
     def test_all_api_routes_use_stable_line_key_schema(self):

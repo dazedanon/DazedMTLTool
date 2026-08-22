@@ -100,10 +100,14 @@ DEBUG = False
 DEBUG_LOG_MAX_BYTES = 5 * 1024 * 1024
 DEBUG_LOG_BACKUP_COUNT = 2
 
-# Translation output should scale with its source payload, but a malformed
-# structured response must never be able to consume a model's full output
-# window. This limit is shared by every live and batch provider route.
-MAX_TRANSLATION_OUTPUT_TOKENS = 8192
+# Translation output should scale with its source payload, but short structured
+# requests still need room for JSON scaffolding and provider reasoning tokens.
+# Official providers with known larger limits may use the full safety ceiling;
+# unknown OpenAI-compatible routes retain the conservative compatibility cap.
+MIN_TRANSLATION_OUTPUT_TOKENS = 1024
+COMPAT_TRANSLATION_OUTPUT_TOKENS = 8192
+MISTRAL_TRANSLATION_OUTPUT_TOKENS = 16000
+MAX_TRANSLATION_OUTPUT_TOKENS = 16384
 
 # Set to True to disable Claude prompt caching for baseline cost comparison.
 DISABLE_CACHE = False
@@ -4169,11 +4173,14 @@ def _is_official_openai_api(api_provider=None, api_url=None):
     return (urlparse(endpoint).hostname or "").lower() == "api.openai.com"
 
 
-def _translation_completion_limit(user):
-    """Bound output by both translation payload size and a hard safety cap."""
+def _translation_completion_limit(user, ceiling=MAX_TRANSLATION_OUTPUT_TOKENS):
+    """Size output from the payload while retaining safe minimum and maximum bounds."""
     enc = tiktoken.encoding_for_model("gpt-4")
     payload_tokens = len(enc.encode(str(user or "")))
-    return min(MAX_TRANSLATION_OUTPUT_TOKENS, max(1, payload_tokens * 2))
+    return min(
+        max(MIN_TRANSLATION_OUTPUT_TOKENS, int(ceiling)),
+        max(MIN_TRANSLATION_OUTPUT_TOKENS, payload_tokens * 2),
+    )
 
 
 def format_translation_response_for_log(raw_text) -> str:
@@ -4413,7 +4420,15 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
                 ).hexdigest()[:32]
             )
         params["extra_body"] = cache_fields
-    completion_limit = _translation_completion_limit(user)
+    if is_deepseek:
+        completion_ceiling = COMPAT_TRANSLATION_OUTPUT_TOKENS
+    elif _is_official_openai_api(provider, api_url) or provider == "gemini":
+        completion_ceiling = MAX_TRANSLATION_OUTPUT_TOKENS
+    elif is_mistral:
+        completion_ceiling = MISTRAL_TRANSLATION_OUTPUT_TOKENS
+    else:
+        completion_ceiling = COMPAT_TRANSLATION_OUTPUT_TOKENS
+    completion_limit = _translation_completion_limit(user, completion_ceiling)
     if _is_official_openai_api(provider, api_url):
         params["max_completion_tokens"] = completion_limit
     else:
