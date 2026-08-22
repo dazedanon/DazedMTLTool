@@ -514,6 +514,32 @@ class WorkflowShellTests(unittest.TestCase):
                     tuple(saved["rpgmaker"]["wrapWidths"].values()), widths
                 )
 
+            rewrap_widths = (63, 57, 88, 77)
+            self.assertTrue(self.workflow.setup_editors.reload_all())
+            for spin, value in zip(
+                (
+                    self.workflow.rewrap_dialogue_width,
+                    self.workflow.rewrap_face_width,
+                    self.workflow.rewrap_list_width,
+                    self.workflow.rewrap_note_width,
+                ),
+                rewrap_widths,
+            ):
+                spin.setValue(value)
+            self.workflow._save_rewrap_widths()
+            self.assertEqual(
+                (
+                    self.workflow.wrap_width_spin.value(),
+                    self.workflow.wrap_face_spin.value(),
+                    self.workflow.wrap_list_spin.value(),
+                    self.workflow.wrap_note_spin.value(),
+                ),
+                rewrap_widths,
+            )
+            self.assertEqual(
+                tuple(load_game_wrap_widths(game_b).values()), rewrap_widths
+            )
+
             linked_game = Path(self.temp.name) / "Linked Settings"
             linked_game.joinpath(".dazedtl").mkdir(parents=True)
             external = Path(self.temp.name) / "external-settings.json"

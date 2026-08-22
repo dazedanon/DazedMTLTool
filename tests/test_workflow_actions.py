@@ -84,6 +84,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (6, "select_rewrap_files", {"text": "Clear selection"}),
             (6, "refresh_rewrap_files", {"text": "Refresh files"}),
             (6, "load_rewrap_widths", {"text": "Load saved line widths"}),
+            (6, "save_rewrap_widths", {"text": "Save line widths"}),
             (6, "run_rewrap", {"text": "Preview rewrap"}),
             (6, "run_rewrap", {"text": "Apply rewrap"}),
             (7, "copy_localization_investigation_prompt", {"text": "Copy investigation skill"}),
@@ -105,7 +106,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (9, "refresh_playtest_status", {"text": "Refresh plugin status"}),
             (9, "copy_walkthrough_prompt", {"text": "Copy walkthrough skill"}),
         )
-        self.assertEqual(len(cases), 52)
+        self.assertEqual(len(cases), 53)
         for step, endpoint, locator in cases:
             with self.subTest(step=step, endpoint=endpoint, locator=locator):
                 if endpoint == "apply_var_range":

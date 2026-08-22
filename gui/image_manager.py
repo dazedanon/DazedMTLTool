@@ -177,6 +177,7 @@ class _MultiFolderComboBox(_BoundedComboBox):
         self.lineEdit().setReadOnly(True)
         self.lineEdit().installEventFilter(self)
         self.view().setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.view().installEventFilter(self)
         self.view().viewport().installEventFilter(self)
         self.setAccessibleName("Image folders")
         self.set_folders(())
@@ -300,10 +301,67 @@ class _MultiFolderComboBox(_BoundedComboBox):
             self._selection_anchor_row = row
         self.set_selected_folders(selected)
 
+    def _move_folder_selection(self, direction: int) -> None:
+        """Select the adjacent folder and immediately refresh its image filter."""
+        model = self.model()
+        if model.rowCount() <= 0:
+            return
+        checked_rows = [
+            row
+            for row in range(model.rowCount())
+            if model.item(row) is not None
+            and model.item(row).checkState() == Qt.Checked
+        ]
+        if len(checked_rows) == 1:
+            current_row = checked_rows[0]
+        else:
+            current = self.view().currentIndex()
+            current_row = current.row() if current.isValid() else 0
+        target_row = max(0, min(model.rowCount() - 1, current_row + direction))
+        if target_row != current_row:
+            self._select_row(target_row, Qt.NoModifier)
+        self.view().setCurrentIndex(model.index(target_row, 0))
+
+    def keyPressEvent(self, event) -> None:
+        blocked_modifiers = (
+            Qt.ControlModifier
+            | Qt.ShiftModifier
+            | Qt.AltModifier
+            | Qt.MetaModifier
+        )
+        if (
+            event.key() in (Qt.Key_Up, Qt.Key_Down)
+            and not event.modifiers() & blocked_modifiers
+        ):
+            self._move_folder_selection(1 if event.key() == Qt.Key_Down else -1)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     def eventFilter(self, watched, event) -> bool:
-        if watched is self.lineEdit() and event.type() == QEvent.MouseButtonPress:
+        if watched is self.lineEdit() and event.type() in (
+            QEvent.MouseButtonPress,
+            QEvent.MouseButtonRelease,
+        ):
+            if event.button() != Qt.LeftButton:
+                return super().eventFilter(watched, event)
+            if event.type() == QEvent.MouseButtonPress:
+                return True
             self.showPopup()
             return True
+        if watched is self.view() and event.type() == QEvent.KeyPress:
+            if event.key() in (Qt.Key_Up, Qt.Key_Down):
+                blocked_modifiers = (
+                    Qt.ControlModifier
+                    | Qt.ShiftModifier
+                    | Qt.AltModifier
+                    | Qt.MetaModifier
+                )
+                if not event.modifiers() & blocked_modifiers:
+                    self._move_folder_selection(
+                        1 if event.key() == Qt.Key_Down else -1
+                    )
+                    return True
         if watched is self.view().viewport():
             if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
                 index = self.view().indexAt(event.pos())

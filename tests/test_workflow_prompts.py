@@ -530,6 +530,39 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("Use generative AI", prompt)
         self.assertIn("Manual artist review", prompt)
 
+    def test_image_translation_prompt_recommends_three_gate_plaque_workflow(self):
+        prompt = " ".join(load_clipboard_skill("image_translation.md").split())
+
+        self.assertIn("Clean only the source text", prompt)
+        self.assertIn("Choose typography and effects independently", prompt)
+        self.assertIn("Place and validate the final effected wordmark", prompt)
+        self.assertIn("Measure its alpha bounds *after* outline, shadow,", prompt)
+        self.assertIn("Measure the plaque's relevant edge slope", prompt)
+        self.assertIn("rectangular margin and fit inside the native plaque as separate checks", prompt)
+        self.assertIn("inset safe polygon", prompt)
+        self.assertIn("Do not use a backing rectangle", prompt)
+        self.assertIn("Apply the gates separately to layout variants", prompt)
+        self.assertIn("Do not claim clipping is fixed from font metrics or canvas bounds alone", prompt)
+
+    def test_image_translation_prompt_supports_safe_authorized_hybrid_repainting(self):
+        prompt = " ".join(load_clipboard_skill("image_translation.md").split())
+
+        self.assertIn("Generative editing requires explicit user authorization", prompt)
+        self.assertIn("use a hybrid workflow by default", prompt)
+        self.assertIn("complete component or asset surface", prompt)
+        self.assertIn("Generated candidates are never self-approving", prompt)
+        self.assertIn("Never interpret a baked checkerboard as transparency", prompt)
+        self.assertIn("Keep final target typography deterministic", prompt)
+        self.assertIn("Never use a rejected or merely convenient localized candidate", prompt)
+        self.assertIn("canvas view that may hide the conversation", prompt)
+        self.assertNotIn("Do not use generative editing or inpainting on a complete asset", prompt)
+        self.assertIn("Do not use filename tokens such as `Dummy`", prompt)
+        self.assertIn("translate visible source text in an editable asset", prompt)
+        self.assertIn("review the complete parent image as its own asset", prompt)
+        self.assertIn("Localizing a known child component does not prove the parent is clean", prompt)
+        self.assertIn("Reopen every flattened composite or authoring mockup at native scale", prompt)
+        self.assertIn("untranslated sibling labels or footer controls", prompt)
+
     def test_wolf_precheck_repair_skill_is_scoped_and_actionable(self):
         prompt = load_clipboard_skill("wolf_precheck_repair.md")
 

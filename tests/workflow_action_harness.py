@@ -163,6 +163,7 @@ for _method_name in (
     "_select_rewrap_files",
     "_refresh_rewrap_files",
     "_load_rewrap_widths",
+    "_save_rewrap_widths",
     "_run_rewrap",
     "_copy_localization_investigation_prompt",
     "_reload_investigation_guidance",

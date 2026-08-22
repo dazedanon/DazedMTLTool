@@ -2306,13 +2306,22 @@ class WorkflowTab(QWidget):
         rules_grid.setColumnStretch(0, 1)
         rules_stage.add_layout(rules_grid)
 
+        width_actions = QHBoxLayout()
+        width_actions.setSpacing(Spacing.SM)
         load_widths_btn = _make_text_btn(
             "Load saved line widths",
             "Load width / faceWidth / listWidth / noteWidth saved with this game",
             min_width=160,
         )
         load_widths_btn.clicked.connect(self._load_rewrap_widths)
-        rules_stage.add_widget(load_widths_btn, 0)
+        save_widths_btn = _make_btn("✔  Save line widths", "#0e639c")
+        save_widths_btn.setToolTip(
+            "Save these rewrap widths with the selected game"
+        )
+        save_widths_btn.clicked.connect(self._save_rewrap_widths)
+        width_actions.addWidget(load_widths_btn, 1)
+        width_actions.addWidget(save_widths_btn, 1)
+        rules_stage.add_layout(width_actions)
 
         self.rewrap_only_over_limit_cb = QCheckBox(
             "Only rewrap text over its line-width limit"
@@ -4801,6 +4810,26 @@ class WorkflowTab(QWidget):
         except Exception as exc:
             self.rewrap_status_label.setText(f"Could not load game widths: {exc}")
 
+    def _save_rewrap_widths(self):
+        """Save the widths shown on the Rewrap page with the selected game."""
+        updates = {
+            "width": self.rewrap_dialogue_width.value(),
+            "faceWidth": min(
+                self.rewrap_dialogue_width.value(),
+                self.rewrap_face_width.value(),
+            ),
+            "listWidth": self.rewrap_list_width.value(),
+            "noteWidth": self.rewrap_note_width.value(),
+        }
+        if not self._save_game_wrap_widths(updates):
+            return
+
+        self.wrap_width_spin.setValue(updates["width"])
+        self.wrap_face_spin.setValue(updates["faceWidth"])
+        self.wrap_list_spin.setValue(updates["listWidth"])
+        self.wrap_note_spin.setValue(updates["noteWidth"])
+        self.rewrap_status_label.setText("Saved line widths with this game.")
+
     def _legacy_env_wrap_widths(self) -> dict[str, int]:
         """Read global widths as defaults for games without saved settings."""
         values = dotenv_values(Path(".env")) if Path(".env").is_file() else {}
@@ -5112,15 +5141,19 @@ class WorkflowTab(QWidget):
             "listWidth": self.wrap_list_spin.value(),
             "noteWidth": self.wrap_note_spin.value(),
         }
+        self._save_game_wrap_widths(updates)
+
+    def _save_game_wrap_widths(self, updates: dict[str, int]) -> bool:
+        """Persist and activate a complete set of selected-game wrap widths."""
         game_root = self.folder_edit.text().strip()
         if not game_root:
             self._log("❌ Select a game folder before saving line widths.")
-            return
+            return False
         if not self.setup_editors.is_prepared_for(game_root):
             self._log(
                 "❌ Scan this game folder successfully before saving its line widths."
             )
-            return
+            return False
         try:
             path = save_game_wrap_widths(game_root, updates)
             self._activate_wrap_widths(updates)
@@ -5128,8 +5161,10 @@ class WorkflowTab(QWidget):
                 f"✅ Line widths saved with {Path(game_root).name} ({path}) — "
                 + ", ".join(f"{k}={v}" for k, v in updates.items())
             )
+            return True
         except Exception as exc:
             self._log(f"❌ Could not save this game's line widths: {exc}")
+            return False
 
     def _populate_speaker_flags(self):
         """Read current module config and pre-tick speaker flag checkboxes."""
