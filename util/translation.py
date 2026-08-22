@@ -557,6 +557,44 @@ def validate_placeholders(original_text, translated_text, replacements):
     is_valid = len(missing) == 0 and len(extra) == 0
     return is_valid, missing, extra
 
+_PRESERVED_KAOMOJI_RE = re.compile(
+    r"(?P<open>[（(])"
+    r"(?P<face>[^（）()\r\n\s]{1,32})"
+    r"(?P<close>[）)])"
+    r"(?P<flourish>[ゝゞヽヾ])?"
+)
+
+
+def _strip_source_preserved_kaomoji_flourishes(
+    source_text, translated_text, lang_regex
+):
+    """Ignore an exact decorative suffix on a source-preserved kaomoji.
+
+    Japanese iteration marks can be decorative flourishes outside a kaomoji,
+    as in ``(｀・ω・´)ゞ``. They are also legitimate Japanese characters, so
+    ignore only the suffix when the complete symbol-heavy emoticon was preserved
+    byte-for-byte and its interior contains no source-language text.
+    """
+    residue = str(translated_text)
+    for match in _PRESERVED_KAOMOJI_RE.finditer(str(source_text)):
+        flourish = match.group("flourish")
+        if not flourish:
+            continue
+        face = match.group("face")
+        symbol_count = sum(
+            unicodedata.category(char)[:1] in {"P", "S"} for char in face
+        )
+        if symbol_count < 2 or re.search(lang_regex, face):
+            continue
+        token = match.group(0)
+        index = residue.find(token)
+        if index >= 0:
+            suffix_index = index + len(token) - len(flourish)
+            residue = (
+                residue[:suffix_index] + residue[suffix_index + len(flourish):]
+            )
+    return residue
+
 
 def validate_translation_content(
     original_items, translated_items, langRegex, target_language=None
@@ -655,8 +693,11 @@ def validate_translation_content(
             # Also ignore CJK quotation marks: engines whose langRegex includes
             # the U+300C-U+303F block would otherwise reject English that keeps
             # stylistic wrappers such as 〝loanword〟 or leftover 「」.
+            residue_text = _strip_source_preserved_kaomoji_flourishes(
+                orig_str, trans_str, langRegex
+            )
             residue_text = (
-                trans_str.replace("\u3000", "")
+                residue_text.replace("\u3000", "")
                 .replace("「", "")
                 .replace("」", "")
                 .replace("『", "")

@@ -160,6 +160,15 @@ class TranslationContentValidationTests(unittest.TestCase):
                 None,
             ),
             (
+                "source-preserved kaomoji",
+                "ではでは私はこれにて！！(｀・ω・´)ゞ",
+                "Well then, I'll be signing off!! (｀・ω・´)ゞ",
+                None,
+                cjk_punct_regex,
+                True,
+                None,
+            ),
+            (
                 "source-language residue",
                 "そのとおり",
                 "Exactly(そのとおり)!!",
