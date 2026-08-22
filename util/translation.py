@@ -105,6 +105,7 @@ DEBUG_LOG_BACKUP_COUNT = 2
 # Official providers with known larger limits may use the full safety ceiling;
 # unknown OpenAI-compatible routes retain the conservative compatibility cap.
 MIN_TRANSLATION_OUTPUT_TOKENS = 1024
+REASONING_TRANSLATION_OUTPUT_TOKENS = 4096
 COMPAT_TRANSLATION_OUTPUT_TOKENS = 8192
 MISTRAL_TRANSLATION_OUTPUT_TOKENS = 16000
 MAX_TRANSLATION_OUTPUT_TOKENS = 16384
@@ -4173,14 +4174,36 @@ def _is_official_openai_api(api_provider=None, api_url=None):
     return (urlparse(endpoint).hostname or "").lower() == "api.openai.com"
 
 
-def _translation_completion_limit(user, ceiling=MAX_TRANSLATION_OUTPUT_TOKENS):
-    """Size output from the payload while retaining safe minimum and maximum bounds."""
+def _translation_completion_limit(
+    user,
+    ceiling=MAX_TRANSLATION_OUTPUT_TOKENS,
+    floor=MIN_TRANSLATION_OUTPUT_TOKENS,
+):
+    """Size output while retaining safe minimum and maximum bounds."""
     enc = tiktoken.encoding_for_model("gpt-4")
     payload_tokens = len(enc.encode(str(user or "")))
+    ceiling = max(1, int(ceiling))
+    floor = min(ceiling, max(1, int(floor)))
     return min(
-        max(MIN_TRANSLATION_OUTPUT_TOKENS, int(ceiling)),
-        max(MIN_TRANSLATION_OUTPUT_TOKENS, payload_tokens * 2),
+        ceiling,
+        max(floor, payload_tokens * 2),
     )
+
+
+def _choice_failure_diagnostic(choice):
+    """Summarize non-success response metadata without assuming SDK fields."""
+    finish_reason = getattr(choice, "finish_reason", None)
+    message = getattr(choice, "message", None)
+    refusal = getattr(message, "refusal", None)
+    details = []
+    if finish_reason and str(finish_reason).casefold() != "stop":
+        details.append(f"finish_reason={finish_reason}")
+    if refusal:
+        refusal_text = re.sub(r"\s+", " ", str(refusal)).strip()
+        if len(refusal_text) > 500:
+            refusal_text = refusal_text[:497] + "..."
+        details.append(f"refusal={refusal_text}")
+    return "; ".join(details)
 
 
 def format_translation_response_for_log(raw_text) -> str:
@@ -4428,7 +4451,16 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
         completion_ceiling = MISTRAL_TRANSLATION_OUTPUT_TOKENS
     else:
         completion_ceiling = COMPAT_TRANSLATION_OUTPUT_TOKENS
-    completion_limit = _translation_completion_limit(user, completion_ceiling)
+    completion_floor = (
+        REASONING_TRANSLATION_OUTPUT_TOKENS
+        if "gpt-5" in model_l
+        else MIN_TRANSLATION_OUTPUT_TOKENS
+    )
+    completion_limit = _translation_completion_limit(
+        user,
+        completion_ceiling,
+        completion_floor,
+    )
     if _is_official_openai_api(provider, api_url):
         params["max_completion_tokens"] = completion_limit
     else:
@@ -5580,8 +5612,19 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                     except Exception:
                         pass
                     raise  # Let retry decorator handle it
-            translatedText = response.choices[0].message.content
-            last_raw_translation = translatedText
+            choice = response.choices[0]
+            message = getattr(choice, "message", None)
+            translatedText = getattr(message, "content", None)
+            response_diagnostic = _choice_failure_diagnostic(choice)
+            if isinstance(translatedText, str) and translatedText:
+                last_raw_translation = translatedText
+            else:
+                diagnostic_suffix = (
+                    f"; {response_diagnostic}" if response_diagnostic else ""
+                )
+                last_raw_translation = (
+                    f"[No translation content returned{diagnostic_suffix}]"
+                )
 
             # Update token count for this attempt
             totalTokens[0] += response.usage.prompt_tokens
@@ -5633,7 +5676,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                     pass
 
             # Clean the translation first for consistency
-            cleaned_text = cleanTranslatedText(translatedText, config.language)
+            cleaned_text = (
+                cleanTranslatedText(translatedText, config.language)
+                if isinstance(translatedText, str)
+                else ""
+            )
 
             # Process and validate translation result
             if cleaned_text:
@@ -5812,7 +5859,18 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             else:
                 is_valid = False
                 if pbar:
-                    pbar.write(f"AI Refused: {tItem}\n")
+                    detail = (
+                        f" ({response_diagnostic})" if response_diagnostic else ""
+                    )
+                    pbar.write(f"AI returned no translation content{detail}")
+
+            if (
+                not is_valid
+                and cleaned_text
+                and response_diagnostic
+                and pbar
+            ):
+                pbar.write(f"Provider response metadata: {response_diagnostic}")
 
             # If translation is valid, break the retry loop
             if is_valid:

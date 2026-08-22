@@ -3,7 +3,11 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from util import translation as tr
 
@@ -308,6 +312,69 @@ class TranslationResponseSchemaTests(unittest.TestCase):
         )
         self.assertIn('"Line1": "A"', array_logged)
         self.assertIn('"Line3": "C"', array_logged)
+
+
+class EmptyProviderContentTests(unittest.TestCase):
+    def test_empty_refusal_retries_then_keeps_original_with_usage(self):
+        source = ["成人向けの称号"]
+        progress_messages = []
+        progress = SimpleNamespace(
+            write=progress_messages.append,
+            update=lambda _amount: None,
+        )
+
+        def refused_response(*_args, **_kwargs):
+            message = SimpleNamespace(
+                content=None,
+                refusal="Provider declined this translation batch.",
+            )
+            choice = SimpleNamespace(message=message, finish_reason="content_filter")
+            usage = SimpleNamespace(prompt_tokens=10, completion_tokens=20)
+            return SimpleNamespace(choices=[choice], usage=usage)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = tr.TranslationConfig(
+                model="gpt-5",
+                language="English",
+                prompt="Translate Japanese to English.",
+                vocab="",
+                batchSize=30,
+                logFilePath=str(root / "translation.log"),
+                mismatchLogPath=str(root / "mismatch.log"),
+                useSfxReference=False,
+            )
+            mismatches = []
+            with (
+                mock.patch.object(tr, "get_batch_phase", return_value=None),
+                mock.patch.object(tr, "getBatchProvider", return_value=None),
+                mock.patch.object(tr, "get_cached_translation", return_value=None),
+                mock.patch.object(
+                    tr, "translateText", side_effect=refused_response
+                ) as translate,
+                mock.patch.object(tr, "cache_translation"),
+                mock.patch("builtins.print"),
+            ):
+                result = tr.translateAI(
+                    source,
+                    [],
+                    config,
+                    filename="Armors.json",
+                    pbar=progress,
+                    mismatchList=mismatches,
+                )
+
+            self.assertEqual(result, [source, [30, 60]])
+            self.assertEqual(translate.call_count, 3)
+            self.assertEqual(mismatches, ["Armors.json"])
+            self.assertTrue(any(
+                "finish_reason=content_filter" in message
+                and "Provider declined" in message
+                for message in progress_messages
+            ))
+            mismatch_log = (root / "mismatch.log").read_text(encoding="utf-8")
+            self.assertIn("No translation content returned", mismatch_log)
+            self.assertIn("finish_reason=content_filter", mismatch_log)
 
 
 if __name__ == "__main__":

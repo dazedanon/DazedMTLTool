@@ -86,7 +86,7 @@ class BatchProviderDetectionTests(unittest.TestCase):
             params["max_completion_tokens"],
             min(
                 T.MAX_TRANSLATION_OUTPUT_TOKENS,
-                max(T.MIN_TRANSLATION_OUTPUT_TOKENS, payload_tokens * 2),
+                max(T.REASONING_TRANSLATION_OUTPUT_TOKENS, payload_tokens * 2),
             ),
         )
         system_content = params["messages"][0]["content"]
@@ -122,17 +122,17 @@ class BatchProviderDetectionTests(unittest.TestCase):
         expected = T.MIN_TRANSLATION_OUTPUT_TOKENS
         cases = (
             ("openai", "https://api.openai.com/v1", "gpt-5.6-terra",
-             "max_completion_tokens"),
+             "max_completion_tokens", T.REASONING_TRANSLATION_OUTPUT_TOKENS),
             ("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/",
-             "gemini-2.5-flash", "max_tokens"),
+             "gemini-2.5-flash", "max_tokens", expected),
             ("mistral", "https://api.mistral.ai/v1/",
-             "mistral-medium-3.5", "max_tokens"),
+             "mistral-medium-3.5", "max_tokens", expected),
             ("openai", "https://api.deepseek.com/v1/",
-             "deepseek-chat", "max_tokens"),
+             "deepseek-chat", "max_tokens", expected),
             ("openai", "https://openrouter.ai/api/v1",
-             "provider/model", "max_tokens"),
+             "provider/model", "max_tokens", expected),
         )
-        for provider, endpoint, model, field in cases:
+        for provider, endpoint, model, field, route_expected in cases:
             with self.subTest(provider=provider, endpoint=endpoint):
                 with mock.patch.dict(
                     "os.environ",
@@ -142,7 +142,7 @@ class BatchProviderDetectionTests(unittest.TestCase):
                         "system", payload, [], 0, "json", model, 1,
                         api_provider=provider, api_url=endpoint,
                     )
-                self.assertEqual(params[field], expected)
+                self.assertEqual(params[field], route_expected)
                 other_field = (
                     "max_tokens"
                     if field == "max_completion_tokens"
