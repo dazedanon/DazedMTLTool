@@ -9,6 +9,7 @@ from PIL import Image
 from util.image_manager import (
     PROFILE_GENERIC,
     PROFILE_RPGMAKER_MVMZ,
+    asset_source_conflict,
     copy_plain_assets_to_workspace,
     detect_image_engine,
     make_profile_assets_editable,
@@ -254,6 +255,47 @@ class RPGMakerImageProfileTests(unittest.TestCase):
             self.assertEqual(patched.completed, 1)
             self.assertEqual(patched.errors, [])
             self.assertEqual(decrypt_image_bytes(runtime.read_bytes(), key), translated)
+
+    def test_profile_patch_repairs_stale_baseline_for_already_published_png(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            image_root = root / "img" / "pictures" / "Tutorial" / "T_010"
+            data_root = root / "data"
+            image_root.mkdir(parents=True)
+            data_root.mkdir()
+            data_root.joinpath("System.json").write_text("{}", encoding="utf-8")
+            runtime = image_root / "01.png"
+            runtime.write_bytes(png_bytes("red"))
+            asset = scan_profile_assets(PROFILE_RPGMAKER_MVMZ, root)[0]
+            make_profile_assets_editable(
+                PROFILE_RPGMAKER_MVMZ, root, [asset], None
+            )
+
+            translated = png_bytes("green")
+            asset.plain_path.write_bytes(translated)
+            runtime.write_bytes(translated)
+            self.assertTrue(asset_source_conflict(root, asset))
+
+            repaired = prepare_profile_assets_for_patch(
+                PROFILE_RPGMAKER_MVMZ, root, [asset], None
+            )
+
+            self.assertEqual(repaired.completed, 0)
+            self.assertEqual(repaired.skipped, 1)
+            self.assertEqual(repaired.errors, [])
+            self.assertFalse(asset_source_conflict(root, asset))
+            self.assertIn(
+                "!/img/pictures/Tutorial/T_010/01.png",
+                root.joinpath(".gitignore").read_text(encoding="utf-8"),
+            )
+
+            asset.plain_path.write_bytes(png_bytes("blue"))
+            second = prepare_profile_assets_for_patch(
+                PROFILE_RPGMAKER_MVMZ, root, [asset], None
+            )
+            self.assertEqual(second.completed, 1)
+            self.assertEqual(second.errors, [])
+            self.assertEqual(runtime.read_bytes(), png_bytes("blue"))
 
 
 if __name__ == "__main__":

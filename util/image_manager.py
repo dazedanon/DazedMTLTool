@@ -418,6 +418,7 @@ def _prepare_assets_transaction(
     root = _resolved_root(game_root)
     result = ImageActionResult()
     candidates: list[tuple[ImageAsset, Path, Path, bytes]] = []
+    reconciled: list[tuple[ImageAsset, Path]] = []
     transaction_root = (
         root / ".dazedtl" / "image_patch_stage" / uuid.uuid4().hex
     )
@@ -430,11 +431,6 @@ def _prepare_assets_transaction(
             if runtime is None or not runtime.is_file():
                 raise FileNotFoundError("runtime image no longer exists")
             relative = _inside(root, runtime)
-            if asset_source_conflict(root, asset):
-                raise RuntimeError(
-                    "runtime image changed after the editable copy was created; "
-                    "remove/recreate the editable copy or resolve the conflict manually"
-                )
             editable = asset.plain_path.read_bytes()
             _validate_png_bytes(editable, asset.asset_id)
             current = runtime.read_bytes()
@@ -443,15 +439,29 @@ def _prepare_assets_transaction(
                     raise ValueError("the active engine profile cannot encode this image")
                 if key is None:
                     raise ValueError("the RPG Maker encryption key is required")
-                if decrypt_image_bytes(current, key) == editable:
-                    result.skipped += 1
-                    continue
+                already_published = decrypt_image_bytes(current, key) == editable
                 output = encrypt_image_bytes(editable, key)
             else:
-                if current == editable:
-                    result.skipped += 1
-                    continue
+                already_published = current == editable
                 output = editable
+
+            if asset_source_conflict(root, asset):
+                if already_published:
+                    # A prior patch may have published the file before its
+                    # manifest baseline was saved (or it may predate baseline
+                    # refresh support). Adopt this exact, unambiguous state and
+                    # make sure its patch allow-rule exists.
+                    result.skipped += 1
+                    reconciled.append((asset, runtime))
+                    continue
+                raise RuntimeError(
+                    "runtime image changed after the editable copy was created; "
+                    "remove/recreate the editable copy or resolve the conflict manually"
+                )
+
+            if already_published:
+                result.skipped += 1
+                continue
             staged_new = transaction_root / "new" / relative
             staged_old = transaction_root / "old" / relative
             _atomic_write(staged_new, output)
@@ -466,13 +476,14 @@ def _prepare_assets_transaction(
         if transaction_root.exists():
             shutil.rmtree(transaction_root)
         return result
-    if not candidates:
+    if not candidates and not reconciled:
         if transaction_root.exists():
             shutil.rmtree(transaction_root)
         return result
 
     published: list[tuple[Path, Path]] = []
     targets = [runtime for _asset, runtime, _relative, _output in candidates]
+    targets.extend(runtime for _asset, runtime in reconciled)
     try:
         for asset, runtime, relative, output in candidates:
             backup = root / ".dazedtl" / "image_backups" / relative
@@ -489,7 +500,9 @@ def _prepare_assets_transaction(
             progress("Updating .gitignore image allow-rules")
         result.gitignore_files = add_patch_exceptions(root, targets)
         record_asset_baselines(
-            root, (asset for asset, _runtime, _relative, _output in candidates)
+            root,
+            [asset for asset, _runtime, _relative, _output in candidates]
+            + [asset for asset, _runtime in reconciled],
         )
     except Exception as exc:
         rollback_errors: list[str] = []
