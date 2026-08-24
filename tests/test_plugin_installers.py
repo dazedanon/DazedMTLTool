@@ -25,9 +25,10 @@ from util.tl_inspector.installer import uninstall as uninstall_inspector  # noqa
 
 
 class PluginInstallerRegistryTests(unittest.TestCase):
-    def _game(self, root: Path, registry: str) -> Path:
-        root.joinpath("js", "plugins").mkdir(parents=True)
-        root.joinpath("js", "plugins.js").write_text(registry, encoding="utf-8")
+    def _game(self, root: Path, registry: str, engine: str = "MZ") -> Path:
+        js = root.joinpath("www", "js") if engine == "MV" else root / "js"
+        js.joinpath("plugins").mkdir(parents=True)
+        js.joinpath("plugins.js").write_text(registry, encoding="utf-8")
         return root
 
     def test_both_plugins_install_into_empty_registry_and_uninstall_cleanly(self):
@@ -78,6 +79,39 @@ class PluginInstallerRegistryTests(unittest.TestCase):
                 )
                 self.assertEqual(plugin_names(registry), ("Existing", plugin_name))
                 self.assertTrue(game.joinpath("js", "plugins", filename).is_file())
+
+    def test_mv_installers_preserve_legacy_javascript_parameter_escapes(self):
+        legacy_value = "Value: \\V[1] / \\N[2] / \\C[3]"
+        existing_entry = (
+            '{"name":"Existing","status":true,"description":"kept",'
+            f'"parameters":{{"Text":"{legacy_value}"}}}}'
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            game = self._game(
+                Path(temporary),
+                f"var $plugins = [\n{existing_entry}\n];\n",
+                engine="MV",
+            )
+            registry_path = game / "www" / "js" / "plugins.js"
+
+            ok, message = install_inspector(game, cfg={"hotkey": "F9"})
+            self.assertTrue(ok, message)
+            ok, message = install_forge(game, cfg={"forgeHotkey": "F10"})
+            self.assertTrue(ok, message)
+            registry = registry_path.read_text(encoding="utf-8")
+            self.assertEqual(
+                plugin_names(registry),
+                ("Existing", "TLInspector", "Forge_MV"),
+            )
+            self.assertIn(legacy_value, registry)
+
+            ok, message = uninstall_forge(game)
+            self.assertTrue(ok, message)
+            ok, message = uninstall_inspector(game)
+            self.assertTrue(ok, message)
+            registry = registry_path.read_text(encoding="utf-8")
+            self.assertEqual(plugin_names(registry), ("Existing",))
+            self.assertIn(legacy_value, registry)
 
     def test_invalid_registry_is_unchanged_and_no_plugin_is_written(self):
         installers = (

@@ -50,11 +50,46 @@ def _indent_before(content: str, position: int) -> str:
     return indent if not indent.strip() else ""
 
 
+def _json_compatible_string_escapes(content: str, start: int) -> str:
+    r"""Return an equal-length JSON parse view of legacy JavaScript strings.
+
+    RPG Maker registries are JavaScript, and some games contain parameters with
+    identity escapes such as ``\V`` or ``\N``. JavaScript accepts those escapes,
+    while JSON does not. Replace the escaped character in the parse-only view
+    so the JSON decoder can still validate the surrounding registry structure.
+    Keeping the length unchanged lets parsed entry spans refer to the untouched
+    source text.
+    """
+    compatible = list(content)
+    in_string = False
+    position = start
+    valid_json_escapes = {'"', "\\", "/", "b", "f", "n", "r", "t", "u"}
+    while position < len(content):
+        character = content[position]
+        if not in_string:
+            if character == '"':
+                in_string = True
+            position += 1
+            continue
+        if character == '"':
+            in_string = False
+            position += 1
+            continue
+        if character == "\\" and position + 1 < len(content):
+            if content[position + 1] not in valid_json_escapes:
+                compatible[position + 1] = "\\"
+            position += 2
+            continue
+        position += 1
+    return "".join(compatible)
+
+
 def _parse_registry(content: str) -> _Registry:
     array_start = _assignment_array_start(content)
+    parse_content = _json_compatible_string_escapes(content, array_start)
     decoder = json.JSONDecoder()
     try:
-        values, array_end = decoder.raw_decode(content, array_start)
+        values, array_end = decoder.raw_decode(parse_content, array_start)
     except json.JSONDecodeError as exc:
         raise PluginRegistryError(
             f"invalid $plugins array at line {exc.lineno}, column {exc.colno}: {exc.msg}"
@@ -74,7 +109,7 @@ def _parse_registry(content: str) -> _Registry:
         if position >= array_end or content[position] == "]":
             break
         try:
-            value, entry_end = decoder.raw_decode(content, position)
+            value, entry_end = decoder.raw_decode(parse_content, position)
         except json.JSONDecodeError as exc:
             raise PluginRegistryError(
                 f"invalid plugin entry at line {exc.lineno}, column {exc.colno}: {exc.msg}"
