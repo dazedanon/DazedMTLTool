@@ -65,6 +65,8 @@ CODE357_TEXT_ARGUMENTS = {
     "DarkPlasma_CharacterText": ("text",),
     "DTextPicture": ("text",),
     "MM_UltimateTextAnimation": ("text",),
+    "TextButtonPicture": ("text",),
+    "TextPlacer": ("text",),
     "TextPicture": ("text",),
     "TRP_SkitMZ": ("name",),
     "LogMessage": ("text",),

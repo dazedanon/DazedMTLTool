@@ -296,6 +296,8 @@ HEADER_MAPPINGS_357 = {
     "DarkPlasma_CharacterText": (["text"], None),
     "DTextPicture": (["text"], None),
     "MM_UltimateTextAnimation": (["text"], None),
+    "TextButtonPicture": (["text"], None),
+    "TextPlacer": (["text"], None),
     "TextPicture": (["text"], None),
     "TRP_SkitMZ": (["name"], None),
     "LogMessage": (["text"], None),
@@ -312,7 +314,14 @@ HEADER_MAPPINGS_357 = {
     "SceneGlossary": (["category"], None),
 }
 # Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
-ENABLED_PLUGINS_357: set = {"DTextPicture", "MM_UltimateTextAnimation", "TextPicture", "TorigoyaMZ_NotifyMessage"}
+ENABLED_PLUGINS_357: set = {
+    "DTextPicture",
+    "MM_UltimateTextAnimation",
+    "TextButtonPicture",
+    "TextPicture",
+    "TextPlacer",
+    "TorigoyaMZ_NotifyMessage",
+}
 
 # All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
 PATTERNS_355655 = {

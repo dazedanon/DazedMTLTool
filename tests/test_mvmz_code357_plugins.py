@@ -11,6 +11,81 @@ import modules.rpgmakermvmz as mvmz
 
 
 class TestMVMZCode357Plugins(unittest.TestCase):
+    def test_text_placer_and_button_translate_only_display_text(self):
+        sources = ["マスター音量", "抜く"]
+        translations = ["Master Volume", "Pull Out"]
+        commands = [
+            {
+                "code": 357,
+                "indent": 0,
+                "parameters": [
+                    "TextPlacer",
+                    "PLACE_TEXT",
+                    "テキスト配置",
+                    {
+                        "textId": "1",
+                        "text": sources[0],
+                        "fontSize": "35",
+                        "fontColor": "#ffffff",
+                        "fontBold": "false",
+                        "outlineWidth": "1",
+                        "outlineColor": "rgba(0,0,0,0.5)",
+                        "position": "310,160",
+                        "dragMode": "false",
+                    },
+                ],
+            },
+            {
+                "code": 357,
+                "indent": 0,
+                "parameters": [
+                    "TextButtonPicture",
+                    "SHOW_TEXT_BUTTON",
+                    "テキストボタン表示",
+                    {
+                        "pictureId": "101",
+                        "buttonType": "short",
+                        "text": sources[1],
+                        "fontSize": "20",
+                        "fontColor": "#ffffff",
+                        "position": "210,810",
+                        "dragMode": "false",
+                    },
+                ],
+            },
+        ]
+        page = {"list": commands}
+        captured = []
+
+        def translate(text, history, batch=False):
+            captured.append(copy.deepcopy(text))
+            return [translations, [0, 0]]
+
+        with (
+            patch.object(mvmz, "CODE357", True),
+            patch.object(
+                mvmz,
+                "ENABLED_PLUGINS_357",
+                {"TextButtonPicture", "TextPlacer"},
+            ),
+            patch.object(mvmz, "PRESERVEORIGINAL", True),
+            patch.object(mvmz, "translateAI", side_effect=translate),
+        ):
+            translated_page = copy.deepcopy(page)
+            mvmz.searchCodes(translated_page, None, [], "TestMap.json")
+
+        self.assertEqual(captured, [sources])
+        for index, translation in enumerate(translations):
+            with self.subTest(plugin=commands[index]["parameters"][0]):
+                command = translated_page["list"][index]
+                expected_parameters = copy.deepcopy(commands[index]["parameters"])
+                expected_parameters[3]["text"] = translation
+                self.assertEqual(command["parameters"], expected_parameters)
+                self.assertEqual(
+                    command["_original"],
+                    {"parameters": {"3": {"text": sources[index]}}},
+                )
+
     def test_log_message_text_is_collected_and_written_back(self):
         source = "ドキドキしちゃう♡"
         translation = "My heart is pounding♡"
