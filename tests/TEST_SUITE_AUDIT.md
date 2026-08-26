@@ -1,6 +1,45 @@
 # Test-suite audit
 
-Audit dates: 2026-08-02 and 2026-08-21
+Audit dates: 2026-08-02, 2026-08-21, and 2026-08-25
+
+## 2026-08-25 scalable tiering follow-up
+
+The 900-test core profile had grown to 16.0–16.9 seconds despite every test
+remaining below one second. Cumulative module timing showed that two modules
+accounted for 13 seconds: real Git repository/update workflows used 9.832
+seconds and persisted end-to-end evaluation workflows used 3.162 seconds. All
+other core modules combined used about 2.7 seconds.
+
+Those workflows now have an explicit `integration` profile. Full remains the
+deterministic union of core, integration, and extended, while ImageTL remains
+dependency-isolated. The resulting partitions contain 770 core tests, 128
+integration tests, 99 extended tests, and 997 full tests. The final post-change
+core run completed in 4.621 seconds including discovery (2.774 seconds of test
+execution); integration completed in 16.106 seconds including discovery; and
+full completed in 38.421 seconds including discovery.
+
+Runtime enforcement now has three levels: whole-suite ceilings, per-test
+targets/ceilings, and cumulative module ceilings. Core has a strict 0.5-second
+per-test ceiling. Other profiles surface one-second target debt and enforce a
+1.5-second ceiling; this preserves the desired limit without making real-Git
+tests fail when the same scenario fluctuates from 0.96 to 1.13 seconds. Existing
+integration and UI module debt has named overrides rather than granting every
+future module the same allowance. Core's enforced suite ceiling was tightened
+from 15 seconds to 8 seconds. Whole-suite timing now includes test discovery
+and imports, which the previous runner left outside its clock.
+
+Discovery-inclusive healthy targets are 5 seconds for core, 18 for integration,
+20 for extended, 15 for ImageTL, and 40 for full. Enforced ceilings remain 8,
+20, 30, 30, and 45 seconds respectively.
+
+The repository guidance no longer requires the whole core suite for isolated
+data, registry, documentation, or configuration changes that add no behavior.
+It also explicitly rejects new declarative-entry tests when the processing path
+and schema consistency are already covered.
+
+The runner also sets an explicit test-offline mode before importing application
+modules. Pricing fallback tests therefore cannot perform a live catalog lookup
+because a local cache is stale or absent.
 
 ## 2026-08-21 follow-up
 

@@ -4,6 +4,7 @@ Before adding or expanding tests:
 
 - State the concrete regression, user-visible behavior, safety invariant, or external contract being protected.
 - Search existing tests and extend the closest case when possible.
+- Do not add coverage for a declarative registry/configuration entry when existing tests already exercise its processing path and schema consistency.
 - Use the cheapest level that detects the regression: pure function, component, workflow, then full application.
 - Do not add tests solely for coverage, implementation details, production-source substrings, exact prose, pixel geometry, widget ancestry, or constant values.
 - Full `QWidget`, workflow, or application construction belongs in the extended suite. Add its test ID prefix to `EXTENDED_TEST_PREFIXES` only when necessary and explain why in the handoff.
@@ -11,15 +12,16 @@ Before adding or expanding tests:
 - Prefer small generated or committed fixtures inside a disposable directory.
 - Treat test-count headroom as capacity for distinct regressions, not permission
   to split related input/output cases that should remain parameterized.
-- Do not increase `SUITE_TARGETS_SECONDS`, `SUITE_BUDGETS_SECONDS`, or `PER_TEST_BUDGETS_SECONDS` without explicit user approval.
+- Do not increase suite, per-test, module, or test-count targets or budgets without explicit user approval.
 - When changing tests, report the protected regression, overlapping coverage considered, suite tier, commands run, and before/after timing when the change materially affects runtime.
 
 ## Suite intent
 
 - `core`: default development suite; deterministic behavior and lightweight component coverage.
+- `integration`: Git/subprocess workflows, persisted multi-step jobs, and provider orchestration with external calls faked.
 - `extended`: full Qt widgets, workflow composition, and application navigation.
 - `imagetl`: semi-manual image rendering/editor behavior; requires the on-demand OpenCV extras.
-- `full`: core plus extended; required for test-runner and suite-partition changes.
+- `full`: core plus integration plus extended; required for test-runner and suite-partition changes.
 
 ## Code Review Rules
 

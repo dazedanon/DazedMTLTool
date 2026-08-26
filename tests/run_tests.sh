@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT"
+export DAZEDTL_TEST_OFFLINE=1
 
 PYTHON=""
 if [[ -x "$ROOT/.venv/bin/python" ]]; then
@@ -28,7 +29,7 @@ if [[ "$#" -eq 0 ]]; then
 fi
 
 case "$1" in
-    core|extended|imagetl|full)
+    core|integration|extended|imagetl|full)
         exec "$PYTHON" scripts/run_test_suite.py "$@"
         ;;
     *)

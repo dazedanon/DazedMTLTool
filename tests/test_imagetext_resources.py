@@ -589,6 +589,9 @@ class TestSuitePartitionTests(unittest.TestCase):
             "unittest.loader.ModuleSkipped.test_imagetools": "imagetl",
             "unittest.loader.ModuleSkipped.test_imagetools_render": "imagetl",
             "unittest.loader.ModuleSkipped.test_image_text_editor": "imagetl",
+            "test_evaluation.EvaluationManifestTests.test_default_corpus": "integration",
+            "test_version_update.GitVersionUpdateTests.test_bootstrap": "integration",
+            "test_version_update.VersionUpdateUITests.test_prepare_card": "extended",
             "test_workflow_ui.WorkflowShellTests.test_vertical_step_rail": "extended",
             "test_translation_cache.CacheTests.test_round_trip": "core",
         }
@@ -612,6 +615,95 @@ class TestSuitePartitionTests(unittest.TestCase):
             self.assertEqual(
                 load.call_args.args[0], list(run_test_suite.IMAGETL_TEST_MODULES)
             )
+
+        tests_root = Path(__file__).resolve().parent
+        core_modules = set(
+            run_test_suite._module_names_for_profile(tests_root, "core")
+        )
+        integration_modules = set(
+            run_test_suite._module_names_for_profile(tests_root, "integration")
+        )
+        self.assertTrue(
+            core_modules.isdisjoint({"test_evaluation", "test_version_update"})
+        )
+        self.assertEqual(
+            integration_modules,
+            {"test_evaluation", "test_version_update"},
+        )
+
+        class NamedTest(unittest.TestCase):
+            def __init__(self, test_id):
+                super().__init__()
+                self._test_id = test_id
+
+            def id(self):
+                return self._test_id
+
+        grouped_ids = {
+            "test_translation_cache.CacheTests.test_round_trip": "core",
+            "test_evaluation.EvaluationManifestTests.test_default_corpus": "integration",
+            "test_version_update.VersionUpdateUITests.test_prepare_card": "extended",
+            "test_imagetools.GeometryTests.test_box": "imagetl",
+        }
+
+        def selected_ids(profile):
+            discovered = unittest.TestSuite(
+                NamedTest(test_id) for test_id in grouped_ids
+            )
+            with patch.object(
+                run_test_suite.unittest.defaultTestLoader,
+                "loadTestsFromNames",
+                return_value=discovered,
+            ):
+                return {
+                    test.id()
+                    for test in run_test_suite._iter_tests(
+                        run_test_suite.load_suite(profile)
+                    )
+                }
+
+        for profile in ("core", "integration", "extended", "imagetl"):
+            with self.subTest(profile=profile):
+                self.assertEqual(
+                    selected_ids(profile),
+                    {
+                        test_id
+                        for test_id, group in grouped_ids.items()
+                        if group == profile
+                    },
+                )
+        self.assertEqual(
+            selected_ids("full"),
+            {
+                test_id
+                for test_id, group in grouped_ids.items()
+                if group != "imagetl"
+            },
+        )
+
+        timings = run_test_suite._module_timings(
+            [
+                (0.2, "test_example.Case.test_one"),
+                (0.3, "test_example.Case.test_two"),
+                (0.1, "test_other.Case.test_one"),
+            ]
+        )
+        self.assertEqual(
+            [(module_name, count) for _elapsed, module_name, count in timings],
+            [("test_example", 2), ("test_other", 1)],
+        )
+        self.assertAlmostEqual(timings[0][0], 0.5)
+        self.assertAlmostEqual(timings[1][0], 0.1)
+        self.assertEqual(
+            run_test_suite._module_budget_seconds("core", "test_other"),
+            run_test_suite.DEFAULT_MODULE_BUDGETS_SECONDS["core"],
+        )
+        self.assertEqual(
+            run_test_suite._module_budget_seconds(
+                "integration", "test_version_update"
+            ),
+            15.0,
+        )
 
 
 class WiringTests(unittest.TestCase):

@@ -2,10 +2,21 @@ import os
 import unittest
 from unittest.mock import patch
 
+import util.translation as translation
 from util.translation import _lookup_model_price, getPricingConfig
 
 
 class PricingBatchSizeOverrideTests(unittest.TestCase):
+    def test_test_offline_mode_never_fetches_live_pricing(self):
+        with (
+            patch.dict(os.environ, {"DAZEDTL_TEST_OFFLINE": "1"}),
+            patch.object(translation, "_pricing_db", None),
+            patch.object(translation.urllib.request, "urlopen") as urlopen,
+        ):
+            self.assertIsNone(translation._load_litellm_pricing())
+
+        urlopen.assert_not_called()
+
     def test_batch_size_environment_cases(self):
         without_batchsize = {k: v for k, v in os.environ.items() if k != "batchsize"}
         cases = (

@@ -3242,6 +3242,12 @@ def _load_litellm_pricing() -> dict | None:
     with _pricing_db_lock:
         now = time.time()
 
+        # Test discovery and execution must be hermetic. The suite runner sets
+        # this before importing application modules so a stale/missing local
+        # cache can never turn a test run into a live network request.
+        if os.getenv("DAZEDTL_TEST_OFFLINE") == "1":
+            return _pricing_db
+
         # In-memory cache still fresh
         if _pricing_db is not None and (now - _pricing_db_fetched_at) < _PRICING_CACHE_TTL:
             return _pricing_db

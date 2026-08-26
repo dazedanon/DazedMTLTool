@@ -5,7 +5,9 @@
 - Preserve user changes already present in the worktree. Keep unrelated edits out of the task.
 - Prefer small, behavior-focused changes over broad rewrites.
 - Use `rg` or `rg --files` for repository searches.
-- Run the smallest relevant test target while iterating, then run `./tests/run_tests.sh core` before handing off a code change.
+- Run the smallest relevant test target while iterating.
+- Run `./tests/run_tests.sh core` before handing off changes to shared production logic or multiple components. A focused test or static check is sufficient for isolated data, registry, documentation, or configuration changes that do not add a behavioral branch.
+- Run `./tests/run_tests.sh integration` when a change affects Git/subprocess workflows, persisted multi-step jobs, or provider orchestration.
 - Run `./tests/run_tests.sh extended` when a change affects Qt widgets, workflow composition, application navigation, or other UI behavior.
 - Run `./tests/run_tests.sh full` before a release or when changing shared test infrastructure.
 - Report the tests run and any runtime-budget result in the final handoff.
@@ -13,6 +15,7 @@
 ## Test-suite growth
 
 - Every new test must protect a concrete regression, user-visible behavior, destructive-action safeguard, or external contract.
+- Do not add a test when existing coverage already exercises the same behavior and the change only registers data or configuration. Prefer extending an existing case when a distinct input contract must be recorded.
 - Search for overlapping coverage before adding a test. Extend or parameterize the closest existing case when that remains readable.
 - Test at the cheapest useful level: pure function, component, workflow, then full application.
 - Do not add tests solely for line coverage, source-code substrings, exact prose, pixel geometry, or constant values.
