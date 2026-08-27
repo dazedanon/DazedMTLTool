@@ -2575,22 +2575,6 @@ class TranslationTab(QWidget):
         self.manual_context_host = manual_context_host
         settings_layout.addWidget(manual_context_host)
 
-        self.batch_mode_note = QLabel(
-            "<b>Batch API</b> · typically 50% lower provider cost.<br>"
-            "Fresh RPG Maker and WolfDawn batches resolve untranslated speaker names "
-            "before submission; approving those names may use live API calls."
-        )
-        self.batch_mode_note.setTextFormat(Qt.RichText)
-        self.batch_mode_note.setWordWrap(True)
-        self.batch_mode_note.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        self.batch_mode_note.setStyleSheet(
-            f"color:{COLORS.text_secondary};background-color:{COLORS.surface_2};"
-            f"border:1px solid {COLORS.border};border-radius:{Geometry.RADIUS_CONTROL}px;"
-            f"padding:{Spacing.SM}px {Spacing.MD}px;font-size:12px;"
-        )
-        self.batch_mode_note.setVisible(False)
-        settings_layout.addWidget(self.batch_mode_note)
-
         action_host = QWidget()
         action_host.setObjectName("translationSettingsActions")
         action_host.setAttribute(Qt.WA_TranslucentBackground, True)
@@ -2600,7 +2584,60 @@ class TranslationTab(QWidget):
         action_row = QHBoxLayout(action_host)
         action_row.setContentsMargins(0, 0, 0, 0)
         action_row.setSpacing(Spacing.SM)
-        action_row.addStretch()
+
+        # Batch details support the action, so keep them in the action footer
+        # instead of giving explanatory copy a full-width card of its own.
+        self.batch_mode_note = QWidget()
+        self.batch_mode_note.setObjectName("translationBatchNote")
+        self.batch_mode_note.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.batch_mode_note.setStyleSheet(
+            "QWidget#translationBatchNote { background: transparent; border: none; }"
+        )
+        self.batch_mode_note.setSizePolicy(
+            QSizePolicy.MinimumExpanding, QSizePolicy.Preferred
+        )
+        self.batch_mode_note.setToolTip(
+            "Provider Batch API requests are typically 50% cheaper than live "
+            "translation. Fresh RPG Maker and WolfDawn batches check unresolved "
+            "speaker names before submission; approving them may use live API calls."
+        )
+        batch_note_layout = QHBoxLayout(self.batch_mode_note)
+        batch_note_layout.setContentsMargins(0, 0, 0, 0)
+        batch_note_layout.setSpacing(Spacing.SM)
+
+        batch_badge = QLabel("BATCH API")
+        batch_badge.setAlignment(Qt.AlignCenter)
+        batch_badge.setStyleSheet(
+            f"color:{COLORS.success};background-color:{COLORS.surface_2};"
+            f"border:1px solid {COLORS.border_strong};"
+            f"border-radius:{Geometry.RADIUS_CONTROL}px;padding:3px 7px;"
+            "font-size:10px;font-weight:700;"
+        )
+        batch_note_layout.addWidget(batch_badge, 0, Qt.AlignVCenter)
+
+        batch_copy_layout = QVBoxLayout()
+        batch_copy_layout.setContentsMargins(0, 0, 0, 0)
+        batch_copy_layout.setSpacing(1)
+        batch_summary = QLabel("Typically 50% lower provider cost")
+        batch_summary.setStyleSheet(
+            f"color:{COLORS.text_primary};font-size:12px;font-weight:600;"
+        )
+        batch_copy_layout.addWidget(batch_summary)
+        self.batch_mode_detail = QLabel(
+            "RPG Maker and WolfDawn speaker names are checked before submission "
+            "· approvals may use live API"
+        )
+        self.batch_mode_detail.setStyleSheet(
+            f"color:{COLORS.text_muted};font-size:11px;"
+        )
+        self.batch_mode_detail.setSizePolicy(
+            QSizePolicy.Ignored, QSizePolicy.Preferred
+        )
+        batch_copy_layout.addWidget(self.batch_mode_detail)
+        batch_note_layout.addLayout(batch_copy_layout, 1)
+        self.batch_mode_note.setVisible(False)
+        action_row.addWidget(self.batch_mode_note, 1)
+        action_row.addStretch(1)
 
         self.translate_button = QPushButton("Translate selected files")
         self.translate_button.clicked.connect(self.start_translation)
@@ -2816,7 +2853,10 @@ class TranslationTab(QWidget):
         """Keep supporting copy out of the way in the narrow split view."""
         if not hasattr(self, "context_description"):
             return
-        self.context_description.setVisible(self.setup_card.width() >= 620)
+        available_width = self.setup_card.width()
+        self.context_description.setVisible(available_width >= 620)
+        if hasattr(self, "batch_mode_detail"):
+            self.batch_mode_detail.setVisible(available_width >= 880)
 
     def setup_module_list(self):
         """Set up the module selection list."""
