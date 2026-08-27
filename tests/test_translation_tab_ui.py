@@ -455,7 +455,7 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(self.tab.file_stack.currentIndex(), 0)
         self.assertIsNone(self.tab._active_workflow_return)
 
-    def test_cancel_and_legacy_resume_preserve_safe_workflow(self) -> None:
+    def test_generic_context_and_legacy_resume_preserve_safe_workflow(self) -> None:
         self.tab._batch_active = True
         self.tab._on_batch_phase("canceled", {"requests": 3})
         self.tab._apply_finish_ui(True, "Batch canceled")
@@ -464,18 +464,57 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertFalse(self.tab._batch_active)
         self.assertEqual(self.tab.file_card.title_label.text(), "Files to translate")
 
-        manual_glossary = Path(self.temporary.name) / "manual-glossary.txt"
-        manual_glossary.write_text("Manual (Selected)\n", encoding="utf-8")
-        self.assertFalse(self.tab.manual_glossary_host.isHidden())
-        self.assertTrue(self.tab.manual_glossary_base_checkbox.isChecked())
-        with mock.patch(
-            "gui.translation_tab.QFileDialog.getOpenFileName",
-            return_value=(str(manual_glossary), "Glossary files (*.txt)"),
-        ):
-            self.tab._choose_manual_glossary()
-        self.assertEqual(
-            self.tab.manual_glossary_edit.text(), str(manual_glossary.resolve())
+        context_root = Path(self.temporary.name) / "context-game"
+        context_root.joinpath("data").mkdir(parents=True)
+        context_root.joinpath("data", "System.json").write_text(
+            "{}", encoding="utf-8"
         )
+        context_root.joinpath(".dazedtl", "skills").mkdir(parents=True)
+        context_root.joinpath(".dazedtl", "glossary.txt").write_text(
+            "Hero (Hero)\n", encoding="utf-8"
+        )
+        context_root.joinpath(".dazedtl", "skills", "game.md").write_text(
+            "# Translation Frame\n", encoding="utf-8"
+        )
+        context_root.joinpath(".dazedtl", "skills", "quirks.md").write_text(
+            "- Keep the narrator terse.\n", encoding="utf-8"
+        )
+        context_root.joinpath(".dazedtl", "skills", "battle.md").write_text(
+            "- Keep battle labels short.\n", encoding="utf-8"
+        )
+        self.assertFalse(self.tab.manual_context_host.isHidden())
+        with mock.patch(
+            "gui.translation_tab.QFileDialog.getExistingDirectory",
+            return_value=str(context_root),
+        ):
+            self.tab._choose_manual_context_root()
+        self.assertEqual(self.tab.manual_context_root_edit.text(), str(context_root))
+        self.assertTrue(
+            all(
+                label.property("available")
+                for label in self.tab.context_asset_labels.values()
+            )
+        )
+        self.assertIn("4 context files", self.tab.context_status_label.text())
+
+        QApplication.clipboard().clear()
+        self.assertTrue(self.tab._copy_generic_project_setup())
+        copied_setup = QApplication.clipboard().text()
+        self.assertIn(str(context_root), copied_setup)
+        self.assertNotIn("{{GAME_ROOT}}", copied_setup)
+
+        self.tab._open_context_editor()
+        self.app.processEvents()
+        self.assertTrue(self.tab._context_dialog.isVisible())
+        self.assertIn(
+            "Hero (Hero)",
+            self.tab._context_dialog.editors.vocab_editor.toPlainText(),
+        )
+        self.assertIn(
+            "Translation Frame",
+            self.tab._context_dialog.editors.game_skill_editor.toPlainText(),
+        )
+        self.tab._context_dialog.close()
 
         self.tab.mode_combo.setCurrentText("Batch Translate")
         self.tab.select_files_by_name(["Actors.json"])
@@ -493,8 +532,9 @@ class TranslationTabUITests(unittest.TestCase):
                 return_value=("", {}),
             ) as activate_game_context,
             mock.patch(
-                "gui.translation_tab._activate_manual_glossary"
-            ) as activate_manual_glossary,
+                "gui.translation_tab._activate_game_context_root",
+                return_value=(str(context_root), {}),
+            ) as activate_selected_context,
             mock.patch.object(TranslationWorker, "start") as start,
         ):
             self.tab.start_translation(skip_confirm=True)
@@ -503,11 +543,9 @@ class TranslationTabUITests(unittest.TestCase):
         question.assert_called_once()
         self.assertLess(len(question.call_args.args[2]), 120)
         self.assertIsNone(self.tab.translation_worker.batch_resume_state)
-        activate_game_context.assert_called_once_with(
-            self.tab.settings, "RPG Maker MV/MZ"
-        )
-        activate_manual_glossary.assert_called_once_with(
-            str(manual_glossary.resolve()), include_base=True
+        activate_game_context.assert_not_called()
+        activate_selected_context.assert_called_once_with(
+            str(context_root), "RPG Maker MV/MZ", validate_engine=False
         )
         start.assert_called_once_with()
 
@@ -570,9 +608,6 @@ class TranslationTabUITests(unittest.TestCase):
                 "gui.translation_tab._activate_configured_game_context",
                 return_value=("", {}),
             ),
-            mock.patch(
-                "gui.translation_tab._activate_manual_glossary"
-            ) as activate_manual_glossary,
             mock.patch.object(TranslationWorker, "start") as start,
         ):
             self.tab.start_translation(forced_resume_state="fetched")
@@ -586,8 +621,7 @@ class TranslationTabUITests(unittest.TestCase):
             self.tab.translation_worker.batch_workflow_return,
             {"engine": "rpgmakermvmz", "step_index": 4},
         )
-        activate_manual_glossary.assert_not_called()
-        self.assertTrue(self.tab.manual_glossary_host.isHidden())
+        self.assertTrue(self.tab.manual_context_host.isHidden())
         start.assert_called_once_with()
         self.tab._apply_finish_ui(True, "Success")
 
@@ -611,7 +645,7 @@ class TranslationTabUITests(unittest.TestCase):
                 "gui.translation_tab._activate_configured_game_context",
                 return_value=("", {}),
             ),
-            mock.patch("gui.translation_tab._activate_manual_glossary"),
+            mock.patch("gui.translation_tab._activate_game_context_root"),
             mock.patch.object(TranslationWorker, "start"),
         ):
             self.tab.start_translation(skip_confirm=True)

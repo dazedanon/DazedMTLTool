@@ -21,6 +21,7 @@ from util.skills import (
     build_known_speakers_context,
     ctx,
     load_clipboard_skill,
+    load_generic_project_setup,
     load_project_setup,
     load_rpgmaker_qa_skill,
     load_walkthrough_skill,
@@ -594,6 +595,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             game_root = Path(raw) / "Game With Spaces"
             game_root.mkdir()
             prompt = load_walkthrough_skill(game_root, "RPG Maker MZ")
+            generic_setup = load_generic_project_setup(game_root)
 
         self.assertIn(str(game_root.resolve()), prompt)
         self.assertIn("RPG Maker MZ", prompt)
@@ -602,6 +604,14 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("<game>/WALKTHROUGH.html", prompt)
         self.assertIn("self-contained responsive HTML", prompt)
         self.assertIn("AI-generated guide", prompt)
+        self.assertIn(str(game_root.resolve()), generic_setup)
+        self.assertNotIn("{{GAME_ROOT}}", generic_setup)
+        for relative in (
+            ".dazedtl/glossary.txt",
+            ".dazedtl/skills/game.md",
+            ".dazedtl/skills/quirks.md",
+        ):
+            self.assertIn(relative, generic_setup)
 
 
 if __name__ == "__main__":

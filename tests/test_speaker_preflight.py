@@ -18,6 +18,7 @@ from gui.translation_tab import (
     TranslationTab,
     TranslationWorker,
     _activate_configured_game_context,
+    _activate_game_context_root,
     _configured_game_root,
     _should_prepare_speakers_automatically,
 )
@@ -318,6 +319,26 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                 self.assertNotIn("DAZED_INCLUDE_GLOSSARY_BASE", os.environ)
             load_generic.assert_not_called()
             prepare_generic.assert_not_called()
+
+            unknown_root = root / "Unknown Project"
+            unknown_root.mkdir()
+            with (
+                patch(
+                    "gui.translation_tab.load_game_wrap_widths",
+                    return_value=None,
+                ),
+                patch(
+                    "gui.translation_tab.prepare_game_translation_context"
+                ) as prepare_unknown,
+                patch.dict(os.environ, {}, clear=False),
+            ):
+                active_root, _ = _activate_game_context_root(
+                    unknown_root,
+                    "RPG Maker MV/MZ",
+                    validate_engine=False,
+                )
+            self.assertEqual(active_root, str(unknown_root))
+            prepare_unknown.assert_called_once_with(str(unknown_root))
 
             invalid_root = root / "Existing But Invalid"
             invalid_root.joinpath("skills").mkdir(parents=True)

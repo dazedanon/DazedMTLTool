@@ -34,6 +34,7 @@ _SHIPPED_DATA_FILES = (
     "data/skills/wolf_speakers.md",
     "data/skills/wolf_precheck_repair.md",
     "data/skills/post_update_translation.md",
+    "data/skills/setup-generic-game/SKILL.md",
     "data/skills/build-game-walkthrough/SKILL.md",
     "data/skills/build-game-walkthrough/agents/openai.yaml",
     "data/skills/build-game-walkthrough/assets/walkthrough-shell.html",

@@ -22,6 +22,7 @@ RPGMAKER_QA_FOCUSES = (
 
 _RPGMAKER_QA_FILENAME = "rpgmaker_translation_qa.md"
 _WALKTHROUGH_SKILL_RELATIVE = Path("build-game-walkthrough") / "SKILL.md"
+_GENERIC_SETUP_SKILL_RELATIVE = Path("setup-generic-game") / "SKILL.md"
 _LOCALIZATION_INVESTIGATION_FILENAME = "localization_investigation.md"
 _INVESTIGATION_PHASE_MARKERS = (
     "<!-- investigation-phase -->",
@@ -181,6 +182,26 @@ def load_walkthrough_skill(game_root: str | Path, engine: str) -> str:
             )
         prompt = prompt.replace(placeholder, value)
     return prompt.strip() + "\n"
+
+
+def load_generic_project_setup(game_root: str | Path) -> str:
+    """Load the generic project-context skill for one exact game folder."""
+    root = str(game_root).strip()
+    if not root:
+        raise ValueError("A project root is required for generic setup")
+
+    path = SKILLS_DIR / _GENERIC_SETUP_SKILL_RELATIVE
+    if not path.is_file():
+        raise FileNotFoundError(f"Skill file missing: {path}")
+    prompt = path.read_text(encoding="utf-8")
+    placeholder = "{{GAME_ROOT}}"
+    if prompt.count(placeholder) != 1:
+        raise ValueError(
+            f"Generic setup skill must contain exactly one {placeholder} placeholder"
+        )
+    return prompt.replace(
+        placeholder, str(Path(root).expanduser().resolve())
+    ).strip() + "\n"
 
 
 def load_rpgmaker_qa_skill(focus: str) -> str:

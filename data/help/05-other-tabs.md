@@ -39,6 +39,13 @@ This is the manual translation screen. Workflow opens it for you at the correct 
 Use it directly when you want to redo one file, continue an earlier job, or translate a game type
 that does not have its own Workflow.
 
+For a game without a guided Workflow, choose its project folder under **Translation context**.
+Click **Copy setup skill** and run the copied instructions in your AI helper with that project
+accessible. The helper discovers the project's own file structure and writes its Glossary, Game
+frame, and Quirks directly under `.dazedtl`. Click **Review files** to reload and edit those files
+in one tabbed window before translating. The selected project context is then applied automatically;
+there is no separate glossary override.
+
 ## Images
 
 Use this for Japanese words that are part of a picture, such as a title, button, or sign.

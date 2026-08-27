@@ -25,7 +25,7 @@ from colorama import Fore
 from tqdm import tqdm
 from dotenv import dotenv_values, load_dotenv
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QGroupBox,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QGroupBox,
     QTextEdit, QMessageBox, QListWidget, QListWidgetItem, QLineEdit,
     QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout, QStackedWidget,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
@@ -36,11 +36,20 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QSet
 from PyQt5.QtGui import QFont, QColor, QBrush
 from gui.log_viewer import LogViewer
 from gui import qt_icons
+from gui.translation_context_dialog import TranslationContextDialog
+from util.skills import load_generic_project_setup
 from util.game_settings import load_game_wrap_widths, normalize_wrap_widths
 from util.paths import (
     APP_NAME,
+    GAME_GLOSSARY_RELATIVE,
+    GAME_QUIRKS_RELATIVE,
+    GAME_SKILL_RELATIVE,
+    GAME_SKILL_RESERVED_NAMES,
+    GAME_SKILLS_RELATIVE,
     GLOSSARY_BASE_ENABLED_ENV,
     GLOSSARY_OVERRIDE_ENV,
+    LEGACY_GAME_SKILLS_RELATIVE,
+    LEGACY_QUIRKS_FILENAME,
     ORG_NAME,
     PROJECT_ROOT,
     prepare_game_translation_context,
@@ -53,6 +62,7 @@ from gui.ui_components import (
     action_button_width_hint,
     configure_action_button,
     equalize_button_widths,
+    refresh_style,
 )
 
 
@@ -139,17 +149,20 @@ def _validate_configured_game_root(game_root: str, module_name: str) -> None:
             )
 
 
-def _activate_configured_game_context(
-    settings, module_name: str = ""
+def _activate_game_context_root(
+    game_root: str | Path | None,
+    module_name: str = "",
+    *,
+    validate_engine: bool = True,
 ) -> tuple[str, dict[str, int]]:
-    """Activate the selected game's glossary root and wrapping widths."""
+    """Activate one project's glossary, skill overlays, and wrapping widths."""
     defaults = (
         dotenv_values(PROJECT_ROOT / ".env")
         if (PROJECT_ROOT / ".env").is_file()
         else {}
     )
     widths = normalize_wrap_widths(defaults)
-    game_root = _configured_game_root(settings, module_name)
+    game_root = str(game_root or "").strip()
     # Invalidate the prior project before attempting a switch. A failed switch
     # must never leave another game's root or widths active in this process.
     os.environ.pop("DAZED_GAME_ROOT", None)
@@ -165,7 +178,8 @@ def _activate_configured_game_context(
             f"The configured game folder no longer exists: {game_root}"
         )
 
-    _validate_configured_game_root(game_root, module_name)
+    if validate_engine:
+        _validate_configured_game_root(game_root, module_name)
     saved = load_game_wrap_widths(game_root)
     prepare_game_translation_context(game_root)
     if saved is not None:
@@ -176,25 +190,75 @@ def _activate_configured_game_context(
     return game_root, widths
 
 
-def _activate_manual_glossary(
-    glossary_path: str | Path | None, *, include_base: bool = True
-) -> str:
-    """Activate one user-selected glossary without treating it as a game root."""
-    os.environ.pop(GLOSSARY_OVERRIDE_ENV, None)
-    os.environ.pop(GLOSSARY_BASE_ENABLED_ENV, None)
-    value = str(glossary_path or "").strip()
-    if not value:
-        return ""
+def _activate_configured_game_context(
+    settings, module_name: str = ""
+) -> tuple[str, dict[str, int]]:
+    """Activate the configured game's complete translation context."""
+    return _activate_game_context_root(
+        _configured_game_root(settings, module_name), module_name
+    )
 
-    path = Path(value).expanduser()
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"The selected glossary file no longer exists: {path}"
+
+def _translation_context_inventory(game_root: str | Path | None) -> dict[str, object]:
+    """Describe portable/legacy context files without migrating or creating them."""
+    value = str(game_root or "").strip()
+    inventory: dict[str, object] = {
+        "root": "",
+        "glossary": None,
+        "game": None,
+        "quirks": None,
+        "custom": [],
+    }
+    if not value:
+        return inventory
+
+    root = Path(value).expanduser()
+    inventory["root"] = str(root)
+    if not root.is_dir():
+        return inventory
+
+    def first_regular_file(*paths: Path) -> Path | None:
+        return next(
+            (
+                path
+                for path in paths
+                if path.is_file() and not path.is_symlink()
+            ),
+            None,
         )
-    resolved = path.resolve(strict=True)
-    os.environ[GLOSSARY_OVERRIDE_ENV] = str(resolved)
-    os.environ[GLOSSARY_BASE_ENABLED_ENV] = "true" if include_base else "false"
-    return str(resolved)
+
+    portable_skills = root / GAME_SKILLS_RELATIVE
+    legacy_skills = root / LEGACY_GAME_SKILLS_RELATIVE
+    inventory["glossary"] = first_regular_file(
+        root / GAME_GLOSSARY_RELATIVE,
+        root / "glossary.txt",
+    )
+    inventory["game"] = first_regular_file(
+        root / GAME_SKILL_RELATIVE,
+        portable_skills / "translation.md",
+        legacy_skills / "game.md",
+        legacy_skills / "translation.md",
+    )
+    inventory["quirks"] = first_regular_file(
+        root / GAME_QUIRKS_RELATIVE,
+        root / LEGACY_QUIRKS_FILENAME,
+        legacy_skills / "quirks.md",
+    )
+
+    reserved = {name.casefold() for name in GAME_SKILL_RESERVED_NAMES}
+    custom: list[Path] = []
+    for directory in (portable_skills, legacy_skills):
+        if not directory.is_dir() or directory.is_symlink():
+            continue
+        custom.extend(
+            path
+            for path in sorted(directory.glob("*.md"), key=lambda item: item.name.casefold())
+            if path.name.casefold() not in reserved
+            and path.is_file()
+            and not path.is_symlink()
+        )
+    inventory["custom"] = custom
+    return inventory
 
 
 BATCH_MODE_BENEFIT_NOTE = (
@@ -2344,7 +2408,16 @@ class TranslationTab(QWidget):
         settings_host.setStyleSheet(
             "#translationSettingsBar { background-color: transparent; }"
         )
-        settings_grid = QGridLayout(settings_host)
+        settings_layout = QVBoxLayout(settings_host)
+        settings_layout.setContentsMargins(0, 0, 0, 0)
+        settings_layout.setSpacing(Spacing.MD)
+
+        choices_host = QWidget()
+        choices_host.setObjectName("translationRunChoices")
+        choices_host.setStyleSheet(
+            "QWidget#translationRunChoices { background: transparent; border: none; }"
+        )
+        settings_grid = QGridLayout(choices_host)
         self.settings_grid = settings_grid
         settings_grid.setContentsMargins(0, 0, 0, 0)
         settings_grid.setHorizontalSpacing(Spacing.MD)
@@ -2352,17 +2425,17 @@ class TranslationTab(QWidget):
 
         engine_label = QLabel("Engine")
         self.engine_label = engine_label
-        engine_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        engine_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.module_combo = QComboBox()
         self.module_combo.currentTextChanged.connect(self._on_module_changed)
         self.module_combo.setMinimumWidth(180)
         self.module_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         settings_grid.addWidget(engine_label, 0, 0)
-        settings_grid.addWidget(self.module_combo, 0, 1)
+        settings_grid.addWidget(self.module_combo, 1, 0)
 
         mode_label = QLabel("Run mode")
         self.mode_label = mode_label
-        mode_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        mode_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.mode_combo = QComboBox()
         self.mode_combo.addItem("Translate")
         self.mode_combo.addItem("Estimate")
@@ -2371,72 +2444,152 @@ class TranslationTab(QWidget):
         self.mode_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
         self.mode_combo.activated.connect(self._mark_mode_user_selected)
-        settings_grid.addWidget(mode_label, 1, 0)
+        settings_grid.addWidget(mode_label, 0, 1)
         settings_grid.addWidget(self.mode_combo, 1, 1)
+        settings_grid.setColumnStretch(0, 1)
+        settings_grid.setColumnStretch(1, 1)
+        settings_layout.addWidget(choices_host)
 
-        self.manual_glossary_label = QLabel("Glossary (optional)")
-        self.manual_glossary_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.manual_glossary_edit = QLineEdit()
-        self.manual_glossary_edit.setReadOnly(True)
-        self.manual_glossary_edit.setPlaceholderText("Use the default glossary context")
-        self.manual_glossary_edit.setToolTip(
-            "Optional glossary used only for runs started directly from the Translation page"
+        manual_context_host = QFrame()
+        manual_context_host.setObjectName("translationContextPanel")
+        manual_context_host.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        manual_context_host.setStyleSheet(
+            f"QFrame#translationContextPanel {{ background-color:{COLORS.surface_2};"
+            f"border:1px solid {COLORS.border};border-radius:{Geometry.RADIUS_CONTROL}px; }}"
+            "QFrame#translationContextPanel QLabel { border:none; background:transparent; }"
+            f"QLabel[contextAsset=\"true\"] {{ color:{COLORS.text_muted};"
+            f"background-color:{COLORS.surface_1};border:1px solid {COLORS.border};"
+            f"border-radius:{Geometry.RADIUS_CONTROL}px;padding:4px 8px; }}"
+            f"QLabel[contextAsset=\"true\"][available=\"true\"] {{ color:{COLORS.success};"
+            f"border-color:{COLORS.border_strong}; }}"
         )
-        self.manual_glossary_browse_button = QPushButton("Choose…")
+        manual_context_layout = QVBoxLayout(manual_context_host)
+        manual_context_layout.setContentsMargins(
+            Spacing.MD, Spacing.MD, Spacing.MD, Spacing.MD
+        )
+        manual_context_layout.setSpacing(Spacing.SM)
+
+        context_heading_row = QHBoxLayout()
+        context_heading_row.setContentsMargins(0, 0, 0, 0)
+        context_heading_row.setSpacing(Spacing.SM)
+        context_title = QLabel("Translation context")
+        context_title.setStyleSheet(
+            f"font-weight:600;color:{COLORS.text_primary};font-size:12px;"
+        )
+        context_heading_row.addWidget(context_title)
+        context_description = QLabel(
+            "Keep terminology, voice, and the game's translation frame together."
+        )
+        self.context_description = context_description
+        context_description.setObjectName("appStatusText")
+        context_description.setWordWrap(True)
+        context_heading_row.addWidget(context_description, 1)
+        manual_context_layout.addLayout(context_heading_row)
+
+        self.manual_context_root_edit = QLineEdit()
+        self.manual_context_root_edit.setReadOnly(True)
+        self.manual_context_root_edit.setPlaceholderText(
+            "No project selected — use the configured project when available"
+        )
+        self.manual_context_root_edit.setToolTip(
+            "A project folder loads its glossary, game.md, quirks.md, and custom Markdown skills"
+        )
+        self.manual_context_browse_button = QPushButton("Choose…")
         configure_action_button(
-            self.manual_glossary_browse_button,
+            self.manual_context_browse_button,
             variant="secondary",
-            tooltip="Choose an existing glossary text file for this manual run",
+            tooltip="Choose a game/project folder; portable guidance is kept under .dazedtl",
         )
-        self.manual_glossary_browse_button.clicked.connect(
-            self._choose_manual_glossary
+        self.manual_context_browse_button.clicked.connect(
+            self._choose_manual_context_root
         )
-        self.manual_glossary_clear_button = QPushButton("Clear")
+        self.manual_context_clear_button = QPushButton("Reset")
         configure_action_button(
-            self.manual_glossary_clear_button,
+            self.manual_context_clear_button,
             variant="quiet",
-            tooltip="Stop using the selected manual glossary",
+            tooltip="Stop overriding the project configured by the selected engine workflow",
         )
-        self.manual_glossary_clear_button.clicked.connect(
-            self._clear_manual_glossary
+        self.manual_context_clear_button.clicked.connect(
+            self._clear_manual_context_root
         )
-        self.manual_glossary_base_checkbox = QCheckBox("Include base glossary")
-        self.manual_glossary_base_checkbox.setChecked(True)
-        self.manual_glossary_base_checkbox.setToolTip(
-            "Append the current shipped base glossary without duplicating a base section already in the selected file"
+        manual_context_picker_row = QHBoxLayout()
+        manual_context_picker_row.setContentsMargins(0, 0, 0, 0)
+        manual_context_picker_row.setSpacing(Spacing.SM)
+        manual_context_picker_row.addWidget(self.manual_context_root_edit, 1)
+        manual_context_picker_row.addWidget(self.manual_context_browse_button)
+        manual_context_picker_row.addWidget(self.manual_context_clear_button)
+        manual_context_layout.addLayout(manual_context_picker_row)
+
+        context_assets_row = QHBoxLayout()
+        context_assets_row.setContentsMargins(0, 0, 0, 0)
+        context_assets_row.setSpacing(Spacing.SM)
+        self.context_asset_labels = {}
+        for key, text in (
+            ("glossary", "Glossary"),
+            ("game", "Game frame"),
+            ("quirks", "Quirks"),
+            ("custom", "Custom skills"),
+        ):
+            label = QLabel(text)
+            label.setProperty("contextAsset", True)
+            label.setProperty("available", False)
+            context_assets_row.addWidget(label)
+            self.context_asset_labels[key] = label
+        context_assets_row.addStretch(1)
+        manual_context_layout.addLayout(context_assets_row)
+
+        self.context_status_label = QLabel()
+        self.context_status_label.setObjectName("appStatusText")
+        self.context_status_label.setWordWrap(True)
+        manual_context_layout.addWidget(self.context_status_label)
+
+        context_divider = QFrame()
+        context_divider.setFrameShape(QFrame.HLine)
+        context_divider.setStyleSheet(f"color:{COLORS.border};")
+        manual_context_layout.addWidget(context_divider)
+
+        context_actions = QHBoxLayout()
+        context_actions.setContentsMargins(0, 0, 0, 0)
+        context_actions.setSpacing(Spacing.SM)
+        self.copy_generic_setup_button = QPushButton("Copy setup skill")
+        configure_action_button(
+            self.copy_generic_setup_button,
+            variant="secondary",
+            tooltip="Copy a generic project-analysis skill that writes Glossary, Game frame, and Quirks",
         )
-        manual_glossary_host = QWidget()
-        manual_glossary_host.setObjectName("manualGlossaryPicker")
-        manual_glossary_host.setStyleSheet(
-            "QWidget#manualGlossaryPicker { background: transparent; border: none; }"
+        self.copy_generic_setup_button.clicked.connect(
+            self._copy_generic_project_setup
         )
-        manual_glossary_layout = QVBoxLayout(manual_glossary_host)
-        manual_glossary_layout.setContentsMargins(0, 0, 0, 0)
-        manual_glossary_layout.setSpacing(Spacing.SM)
-        manual_glossary_picker_row = QHBoxLayout()
-        manual_glossary_picker_row.setContentsMargins(0, 0, 0, 0)
-        manual_glossary_picker_row.setSpacing(Spacing.SM)
-        manual_glossary_picker_row.addWidget(self.manual_glossary_edit, 1)
-        manual_glossary_picker_row.addWidget(self.manual_glossary_browse_button)
-        manual_glossary_picker_row.addWidget(self.manual_glossary_clear_button)
-        manual_glossary_layout.addLayout(manual_glossary_picker_row)
-        manual_glossary_layout.addWidget(self.manual_glossary_base_checkbox)
-        self.manual_glossary_host = manual_glossary_host
-        settings_grid.addWidget(self.manual_glossary_label, 2, 0)
-        settings_grid.addWidget(self.manual_glossary_host, 2, 1)
+        context_actions.addWidget(self.copy_generic_setup_button)
+
+        self.review_context_button = QPushButton("Review files…")
+        configure_action_button(
+            self.review_context_button,
+            variant="quiet",
+            tooltip="Open tabbed editors for this project's Glossary, Game frame, Quirks, and custom skills",
+        )
+        self.review_context_button.clicked.connect(self._open_context_editor)
+        context_actions.addWidget(self.review_context_button)
+        context_actions.addStretch(1)
+        manual_context_layout.addLayout(context_actions)
+        self.manual_context_host = manual_context_host
+        settings_layout.addWidget(manual_context_host)
 
         self.batch_mode_note = QLabel(
-            BATCH_MODE_BENEFIT_NOTE + "\n" + BATCH_COLLECT_LIVE_CHARGE_NOTE
+            "<b>Batch API</b> · typically 50% lower provider cost.<br>"
+            "Fresh RPG Maker and WolfDawn batches resolve untranslated speaker names "
+            "before submission; approving those names may use live API calls."
         )
+        self.batch_mode_note.setTextFormat(Qt.RichText)
         self.batch_mode_note.setWordWrap(True)
         self.batch_mode_note.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.batch_mode_note.setStyleSheet(
-            f"color:{COLORS.success};background-color:{COLORS.surface_2};"
+            f"color:{COLORS.text_secondary};background-color:{COLORS.surface_2};"
             f"border:1px solid {COLORS.border};border-radius:{Geometry.RADIUS_CONTROL}px;"
             f"padding:{Spacing.SM}px {Spacing.MD}px;font-size:12px;"
         )
         self.batch_mode_note.setVisible(False)
-        settings_grid.addWidget(self.batch_mode_note, 3, 0, 1, 2)
+        settings_layout.addWidget(self.batch_mode_note)
 
         action_host = QWidget()
         action_host.setObjectName("translationSettingsActions")
@@ -2455,10 +2608,11 @@ class TranslationTab(QWidget):
         self.translate_button.setEnabled(False)
         action_row.addWidget(self.translate_button)
         self.settings_action_host = action_host
-        settings_grid.addWidget(action_host, 4, 0, 1, 2)
-        settings_grid.setColumnStretch(1, 1)
+        settings_layout.addWidget(action_host)
         setup_card.add_widget(settings_host)
-        self._settings_layout_is_wide = None
+        self._manual_context_root = ""
+        self._context_dialog = None
+        self._refresh_manual_context_display()
 
         self.refresh_default_translation_mode(force=True)
         
@@ -2659,73 +2813,10 @@ class TranslationTab(QWidget):
         self.file_toolbar.updateGeometry()
 
     def _arrange_translation_settings(self) -> None:
-        """Keep run choices compact without crushing them at narrow widths."""
-        if not all(
-            hasattr(self, name)
-            for name in (
-                "settings_grid",
-                "setup_card",
-                "engine_label",
-                "module_combo",
-                "mode_label",
-                "mode_combo",
-                "manual_glossary_label",
-                "manual_glossary_host",
-                "batch_mode_note",
-                "settings_action_host",
-            )
-        ):
+        """Keep supporting copy out of the way in the narrow split view."""
+        if not hasattr(self, "context_description"):
             return
-
-        wide = self.setup_card.width() >= 900
-        if self._settings_layout_is_wide is wide:
-            return
-        self._settings_layout_is_wide = wide
-
-        grid = self.settings_grid
-        widgets = (
-            self.engine_label,
-            self.module_combo,
-            self.mode_label,
-            self.mode_combo,
-            self.manual_glossary_label,
-            self.manual_glossary_host,
-            self.batch_mode_note,
-            self.settings_action_host,
-        )
-        for widget in widgets:
-            grid.removeWidget(widget)
-        for column in range(4):
-            grid.setColumnStretch(column, 0)
-
-        if wide:
-            self.engine_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            self.mode_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            self.manual_glossary_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            grid.addWidget(self.engine_label, 0, 0)
-            grid.addWidget(self.mode_label, 0, 1)
-            grid.addWidget(self.manual_glossary_label, 0, 2)
-            grid.addWidget(self.module_combo, 1, 0)
-            grid.addWidget(self.mode_combo, 1, 1)
-            grid.addWidget(self.manual_glossary_host, 1, 2)
-            grid.addWidget(self.settings_action_host, 1, 3)
-            grid.addWidget(self.batch_mode_note, 2, 0, 1, 4)
-            grid.setColumnStretch(0, 3)
-            grid.setColumnStretch(1, 2)
-            grid.setColumnStretch(2, 4)
-        else:
-            self.engine_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.mode_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.manual_glossary_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            grid.addWidget(self.engine_label, 0, 0)
-            grid.addWidget(self.module_combo, 0, 1)
-            grid.addWidget(self.mode_label, 1, 0)
-            grid.addWidget(self.mode_combo, 1, 1)
-            grid.addWidget(self.manual_glossary_label, 2, 0)
-            grid.addWidget(self.manual_glossary_host, 2, 1)
-            grid.addWidget(self.batch_mode_note, 3, 0, 1, 2)
-            grid.addWidget(self.settings_action_host, 4, 0, 1, 2)
-            grid.setColumnStretch(1, 1)
+        self.context_description.setVisible(self.setup_card.width() >= 620)
 
     def setup_module_list(self):
         """Set up the module selection list."""
@@ -2780,6 +2871,8 @@ class TranslationTab(QWidget):
         
         # Refresh file list to show only files matching the selected module's extensions
         self.refresh_file_lists()
+        self._refresh_manual_context_display()
+        self._reload_open_context_dialog()
     
     def _on_mode_changed(self, mode_text):
         """Update the translate button text based on selected mode."""
@@ -2796,43 +2889,181 @@ class TranslationTab(QWidget):
         elif mode_text == "Parse Speakers":
             self.translate_button.setText("Parse Speakers")
 
-    def _choose_manual_glossary(self) -> None:
-        """Choose an existing glossary for direct Translation-page runs."""
-        current = self.manual_glossary_edit.text().strip()
-        start = str(Path(current).parent) if current else ""
+    def _effective_manual_context_root(self) -> tuple[str, bool]:
+        """Return the direct-run project context and whether it is overridden."""
+        override = str(getattr(self, "_manual_context_root", "") or "").strip()
+        if override:
+            return override, True
+        module_name = self.module_combo.currentText().split(" (", 1)[0]
+        return _configured_game_root(self.settings, module_name), False
+
+    def _refresh_manual_context_display(self) -> None:
+        if not hasattr(self, "manual_context_root_edit"):
+            return
+        root, overridden = self._effective_manual_context_root()
+        self.manual_context_root_edit.setText(root)
+        self.manual_context_root_edit.setCursorPosition(0)
+        self.manual_context_clear_button.setVisible(overridden)
+        context_ready = bool(root and Path(root).is_dir())
+        self.copy_generic_setup_button.setEnabled(context_ready)
+        self.review_context_button.setEnabled(context_ready)
+
+        inventory = _translation_context_inventory(root)
+        for key, label in self.context_asset_labels.items():
+            value = inventory[key]
+            available = bool(value)
+            label.setProperty("available", available)
+            if key == "custom":
+                count = len(value)
+                label.setText(f"✓ Custom · {count}" if count else "— Custom")
+                label.setToolTip(
+                    "\n".join(str(path) for path in value)
+                    if count
+                    else "No custom Markdown skill overlays found"
+                )
+            else:
+                names = {
+                    "glossary": "Glossary",
+                    "game": "Game frame",
+                    "quirks": "Quirks",
+                }
+                label.setText(
+                    f"✓ {names[key]}" if available else f"— {names[key]}"
+                )
+                label.setToolTip(
+                    str(value)
+                    if available
+                    else f"No {names[key].lower()} file found in this project"
+                )
+            refresh_style(label)
+
+        if not root:
+            self.context_status_label.setText(
+                "No project context is configured. The base translation skill still applies."
+            )
+            self.context_status_label.setProperty("state", "neutral")
+        elif not Path(root).is_dir():
+            self.context_status_label.setText(
+                "The selected project folder is missing. Choose another project before running."
+            )
+            self.context_status_label.setProperty("state", "error")
+        else:
+            source = "Selected project" if overridden else "Configured project"
+            custom_count = len(inventory["custom"])
+            available_count = sum(
+                bool(inventory[key]) for key in ("glossary", "game", "quirks")
+            ) + custom_count
+            if available_count:
+                self.context_status_label.setText(
+                    f"{source} · {Path(root).name} · {available_count} context "
+                    f"{'file' if available_count == 1 else 'files'} will be merged."
+                )
+                self.context_status_label.setProperty("state", "success")
+            else:
+                self.context_status_label.setText(
+                    f"{source} · {Path(root).name} · no project guidance files found yet."
+                )
+                self.context_status_label.setProperty("state", "warning")
+        refresh_style(self.context_status_label)
+
+    def _choose_manual_context_root(self) -> None:
+        """Choose a complete project context for direct Translation-page runs."""
+        current, _overridden = self._effective_manual_context_root()
+        start = current
         if not start:
             try:
                 start = str(self.settings.value("last_open_dir", "") or "")
             except Exception:
                 start = ""
-        selected, _ = QFileDialog.getOpenFileName(
+        selected = QFileDialog.getExistingDirectory(
             self,
-            "Select glossary file",
+            "Select project context folder",
             start,
-            "Glossary files (*.txt);;All files (*)",
         )
         if not selected:
             return
-        self.manual_glossary_edit.setText(str(Path(selected).expanduser().resolve()))
+        self._manual_context_root = str(Path(selected).expanduser().resolve())
+        self._refresh_manual_context_display()
+        self._reload_open_context_dialog()
         try:
             if self.settings:
-                self.settings.setValue("last_open_dir", str(Path(selected).parent))
+                self.settings.setValue("last_open_dir", self._manual_context_root)
         except Exception:
             pass
 
-    def _clear_manual_glossary(self) -> None:
-        self.manual_glossary_edit.clear()
+    def _clear_manual_context_root(self) -> None:
+        self._manual_context_root = ""
+        self._refresh_manual_context_display()
+        self._reload_open_context_dialog()
 
-    def _set_manual_glossary_controls_visible(self, visible: bool) -> None:
-        self.manual_glossary_label.setVisible(visible)
-        self.manual_glossary_host.setVisible(visible)
+    def _copy_generic_project_setup(self) -> bool:
+        """Copy the generic context skill for the selected project folder."""
+        root, _overridden = self._effective_manual_context_root()
+        if not root or not Path(root).is_dir():
+            QMessageBox.warning(
+                self,
+                "Project context",
+                "Choose an existing project folder before copying the setup skill.",
+            )
+            return False
+        try:
+            prepare_game_translation_context(root)
+            QApplication.clipboard().setText(load_generic_project_setup(root))
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Project context",
+                f"Could not prepare the generic setup skill:\n\n{exc}",
+            )
+            return False
+
+        self._refresh_manual_context_display()
+        self.context_status_label.setText(
+            f"Setup skill copied for {Path(root).name}. Run it in your AI helper, "
+            "then review the generated files."
+        )
+        self.context_status_label.setProperty("state", "success")
+        refresh_style(self.context_status_label)
+        return True
+
+    def _open_context_editor(self) -> None:
+        root, _overridden = self._effective_manual_context_root()
+        if not root or not Path(root).is_dir():
+            QMessageBox.warning(
+                self,
+                "Project context",
+                "Choose an existing project folder before reviewing its guidance files.",
+            )
+            return
+        if self._context_dialog is None:
+            self._context_dialog = TranslationContextDialog(
+                self,
+                game_root_fn=lambda: self._effective_manual_context_root()[0],
+                copy_setup_fn=self._copy_generic_project_setup,
+            )
+            self._context_dialog.context_changed.connect(
+                self._refresh_manual_context_display
+            )
+        self._context_dialog.reload_context()
+        self._context_dialog.show()
+        self._context_dialog.raise_()
+        self._context_dialog.activateWindow()
+
+    def _reload_open_context_dialog(self) -> None:
+        dialog = getattr(self, "_context_dialog", None)
+        if dialog is not None and dialog.isVisible():
+            dialog.reload_context()
+
+    def _set_manual_context_controls_visible(self, visible: bool) -> None:
+        self.manual_context_host.setVisible(visible)
 
     def prepare_manual_translation(self) -> None:
         """Expose standalone controls when the sidebar opens Translation directly."""
         if self.file_stack.currentIndex() != 0 or self._active_workflow_return:
             return
         self._pending_workflow_return = None
-        self._set_manual_glossary_controls_visible(True)
+        self._refresh_manual_context_display()
+        self._set_manual_context_controls_visible(True)
 
     def _set_activity_visible(self, visible: bool) -> None:
         """Keep the Translation Log visible; it is core run feedback."""
@@ -2845,7 +3076,7 @@ class TranslationTab(QWidget):
         for widget in (
             getattr(self, "module_combo", None),
             getattr(self, "mode_combo", None),
-            getattr(self, "manual_glossary_host", None),
+            getattr(self, "manual_context_host", None),
         ):
             if widget is not None:
                 widget.setEnabled(enabled)
@@ -4041,7 +4272,7 @@ class TranslationTab(QWidget):
         self.refresh_file_lists()
         self._on_mode_changed(self.mode_combo.currentText())
         self._set_run_controls_enabled(True)
-        self._set_manual_glossary_controls_visible(
+        self._set_manual_context_controls_visible(
             self._pending_workflow_return is None
         )
 
@@ -4053,7 +4284,7 @@ class TranslationTab(QWidget):
         except Exception:
             pass
         self._pending_workflow_return = (workflow_tab, step_index)
-        self._set_manual_glossary_controls_visible(False)
+        self._set_manual_context_controls_visible(False)
 
     def _workflow_return_metadata(self):
         """Return a durable descriptor for the workflow that owns this run."""
@@ -4093,7 +4324,7 @@ class TranslationTab(QWidget):
             workflow_tab = getattr(parent, attr, None)
             if workflow_tab is not None:
                 self._pending_workflow_return = (workflow_tab, step_index)
-                self._set_manual_glossary_controls_visible(False)
+                self._set_manual_context_controls_visible(False)
         except Exception:
             pass
 
@@ -4350,16 +4581,18 @@ class TranslationTab(QWidget):
 
         if batch_resume_state:
             self._restore_batch_workflow_return(batch_metadata)
-        # Translation can be started without ever opening the lazily-created
-        # Workflow page. Activate persisted game context when applicable, then
-        # layer an explicitly chosen glossary onto standalone runs only.
+        # Translation can start without opening the lazily-created Workflow.
+        # Workflow roots retain engine validation; an explicitly selected
+        # generic context may use an unfamiliar project structure.
         workflow_launch = self._pending_workflow_return is not None
         try:
-            _activate_configured_game_context(self.settings, selected_module[0])
-            if not workflow_launch:
-                _activate_manual_glossary(
-                    self.manual_glossary_edit.text(),
-                    include_base=self.manual_glossary_base_checkbox.isChecked(),
+            if workflow_launch or not self._manual_context_root:
+                _activate_configured_game_context(self.settings, selected_module[0])
+            else:
+                _activate_game_context_root(
+                    self._manual_context_root,
+                    selected_module[0],
+                    validate_engine=False,
                 )
         except Exception as exc:
             QMessageBox.warning(
