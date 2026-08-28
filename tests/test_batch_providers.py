@@ -381,6 +381,31 @@ class OpenAIBatchAdapterTests(unittest.TestCase):
         self.assertEqual(usage["cache_creation_input_tokens"], 30)
         self.assertEqual(usage["input_tokens"], 30)
 
+    def test_failed_batch_preserves_provider_error_and_cannot_be_downloaded(self):
+        provider_error = SimpleNamespace(
+            code="invalid_request",
+            line=None,
+            message="Cannot find file file-input.",
+            param="file_id",
+        )
+        batch = SimpleNamespace(
+            status="failed",
+            output_file_id=None,
+            error_file_id=None,
+            request_counts=SimpleNamespace(total=0, completed=0, failed=0),
+            errors=SimpleNamespace(data=[provider_error]),
+        )
+        client = SimpleNamespace(files=_OpenAIFiles(), batches=_Batches(batch))
+
+        status = BP.retrieve_batch("openai", "batch-1", client=client)
+
+        self.assertTrue(status["terminal_failure"])
+        self.assertEqual(status["errors"][0]["param"], "file_id")
+        with self.assertRaisesRegex(BP.BatchProviderJobError, "Cannot find file"):
+            BP.download_results(
+                "openai", "batch-1", {"req-1": "cache-key"}, client=client
+            )
+
     def test_cancel_uses_provider_batch_endpoint(self):
         batches = _Batches(SimpleNamespace())
         result = BP.cancel_batch(

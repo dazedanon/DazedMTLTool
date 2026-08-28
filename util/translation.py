@@ -2737,7 +2737,8 @@ def checkTranslationBatches():
 def checkTranslationBatchStatuses(print_status=True):
     """Return (all_ended, statuses) for submitted batches.
 
-    Each status dict: id, api_status, counts{processing,succeeded,errored,canceled,expired}.
+    Provider-level terminal failures and their validation errors are retained
+    so callers cannot mistake a rejected job for a successful empty result.
     """
     with _batch_file_lock():
         state = _read_batch_file(BATCH_STATE_FILE)
@@ -2768,6 +2769,10 @@ def checkTranslationBatchStatuses(print_status=True):
             "api_status": api_status,
             "counts": counts,
             "request_count": len(info.get("custom_ids") or {}),
+            "terminal_failure": bool(normalized.get("terminal_failure")),
+            "errors": list(normalized.get("errors") or []),
+            "output_file_id": normalized.get("output_file_id"),
+            "error_file_id": normalized.get("error_file_id"),
         })
         if print_status:
             parts = [f"{k[:4]}={v}" for k, v in counts.items() if v]
@@ -2778,7 +2783,60 @@ def checkTranslationBatchStatuses(print_status=True):
             )
         if not normalized["ended"]:
             all_ended = False
+        else:
+            try:
+                from util.batch_history import (
+                    STATUS_CANCELED,
+                    STATUS_ENDED,
+                    STATUS_ERROR,
+                    upsert_history_entry,
+                )
+
+                if api_status == "cancelled":
+                    local_status = STATUS_CANCELED
+                elif normalized.get("terminal_failure"):
+                    local_status = STATUS_ERROR
+                else:
+                    local_status = STATUS_ENDED
+                provider_errors = list(normalized.get("errors") or [])
+                note = ""
+                if provider_errors:
+                    note = "; ".join(
+                        str(item.get("message") or item.get("code") or "provider error")
+                        for item in provider_errors
+                    )[:1000]
+                upsert_history_entry(
+                    bid,
+                    status=local_status,
+                    api_status=api_status,
+                    request_counts=counts,
+                    provider_errors=provider_errors,
+                    **({"notes": note} if note else {}),
+                )
+            except Exception as exc:
+                print(
+                    f"[BATCH] history status update failed for {bid}: {exc}",
+                    flush=True,
+                )
     return all_ended, statuses
+
+
+def failedTranslationBatchStatuses(statuses):
+    """Return provider jobs that ended unsuccessfully."""
+    return [status for status in statuses if status.get("terminal_failure")]
+
+
+def formatTranslationBatchFailures(statuses):
+    """Build a concise actionable provider failure message."""
+    details = []
+    for status in failedTranslationBatchStatuses(statuses):
+        messages = [
+            str(error.get("message") or error.get("code") or "provider error")
+            for error in (status.get("errors") or [])
+        ]
+        detail = "; ".join(messages) or f"provider status {status.get('api_status')}"
+        details.append(f"{status.get('id')}: {detail}")
+    return " | ".join(details)
 
 
 def fetchTranslationBatches(batches=None):
@@ -2949,7 +3007,17 @@ def runTranslationBatches(poll=60):
         if not submitTranslationBatches():
             return 0, 0
     print(f"[BATCH] polling every {poll}s (Ctrl-C is safe — resume later with fetchTranslationBatches)...", flush=True)
-    while not checkTranslationBatches():
+    while True:
+        ended, statuses = checkTranslationBatchStatuses(print_status=True)
+        if ended:
+            failures = failedTranslationBatchStatuses(statuses)
+            if failures:
+                detail = formatTranslationBatchFailures(failures)
+                raise RuntimeError(
+                    "Provider batch failed; the local queue was preserved and "
+                    f"consume was blocked. {detail}"
+                )
+            break
         time.sleep(poll)
     return fetchTranslationBatches()
 

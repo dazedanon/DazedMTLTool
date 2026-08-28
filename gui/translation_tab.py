@@ -624,10 +624,12 @@ class TranslationWorker(QThread):
         return result
 
     def _run_batch_poll_fetch(self):
-        """Submit (if needed), poll until ended, fetch results. None if stopped while polling."""
+        """Submit, poll, and fetch; return False on provider terminal failure."""
         from util.translation import (
             submitTranslationBatches,
             fetchTranslationBatches,
+            failedTranslationBatchStatuses,
+            formatTranslationBatchFailures,
             _read_batch_file,
             BATCH_STATE_FILE,
             _batch_file_lock,
@@ -664,6 +666,19 @@ class TranslationWorker(QThread):
             if statuses:
                 self._emit_batch_phase("poll_status", statuses)
             if ended:
+                failures = failedTranslationBatchStatuses(statuses)
+                if failures:
+                    detail = formatTranslationBatchFailures(failures)
+                    message = (
+                        "Provider batch failed before usable results were available. "
+                        "The local request queue was preserved and the consume/write "
+                        "pass was not started."
+                    )
+                    if detail:
+                        message = f"{message} {detail}"
+                    self.emit_log(f"❌ [BATCH] {message}")
+                    self._emit_batch_phase("failed", {"message": message})
+                    return False
                 break
             for _ in range(poll * 10):
                 if self.should_stop:
@@ -1584,6 +1599,11 @@ class TranslationWorker(QThread):
                             if poll_result is None:
                                 self.finished_signal.emit(False, "Batch polling stopped")
                                 return
+                            if poll_result is False:
+                                self.finished_signal.emit(
+                                    False, "Batch provider failed; request queue preserved"
+                                )
+                                return
                     elif self.batch_resume_state == "queued":
                         # Resume a declined/interrupted collect: estimate + submit only.
                         self.emit_log(
@@ -1621,6 +1641,11 @@ class TranslationWorker(QThread):
                             if poll_result is None:
                                 self.finished_signal.emit(False, "Batch polling stopped")
                                 return
+                            if poll_result is False:
+                                self.finished_signal.emit(
+                                    False, "Batch provider failed; request queue preserved"
+                                )
+                                return
                     elif self.batch_resume_state in {"submitted", "partially_submitted"}:
                         self._emit_batch_phase("polling")
                         self.emit_log(
@@ -1631,6 +1656,11 @@ class TranslationWorker(QThread):
                         poll_result = self._run_batch_poll_fetch()
                         if poll_result is None:
                             self.finished_signal.emit(False, "Batch polling stopped")
+                            return
+                        if poll_result is False:
+                            self.finished_signal.emit(
+                                False, "Batch provider failed; request queue preserved"
+                            )
                             return
                     else:
                         self.emit_log("[BATCH] Resuming from fetched results...")
@@ -5145,6 +5175,22 @@ class TranslationTab(QWidget):
         """Update the item-level progress (from tqdm)."""
         batch_active = getattr(self, "_batch_active", False)
         phase = getattr(self, "_batch_ui_phase", None) if batch_active else None
+
+        # The persistent RPG Maker worker's progress monitor runs beside the
+        # file-result producer. Very fast files can therefore leave a queued
+        # 0/N item event behind their definitive completion event. Completion
+        # is monotonic: never let that stale sample visually move a finished
+        # row back to Scanning/Translating. Collected is intentionally allowed
+        # to advance again only when pass 2 begins writing the file.
+        meta = self.file_progress_items.get(filename)
+        row_status = ((meta or {}).get("status_text") or "").split(" ")[0]
+        terminal_statuses = {
+            "Done", "Scanned", "Collected", "Failed", "Skipped", "Unsupported",
+        }
+        if row_status in terminal_statuses and not (
+            batch_active and phase == "consume" and row_status == "Collected"
+        ):
+            return
 
         self.item_progress_label.setText(f"{current_item}/{total_items}")
         self.item_progress_bar.setMaximum(total_items if total_items > 0 else 100)

@@ -34,6 +34,43 @@ class TranslationWorkerTests(unittest.TestCase):
         self.assertFalse(approved)
         clear_batch_files.assert_called_once_with(strict=True)
 
+    def test_failed_provider_batch_never_fetches_or_starts_consume(self) -> None:
+        worker = TranslationWorker(Path.cwd(), ("JSON", (".json",), None))
+        statuses = [{
+            "id": "batch-failed",
+            "provider": "openai",
+            "api_status": "failed",
+            "terminal_failure": True,
+            "counts": {},
+            "errors": [{
+                "code": "invalid_request",
+                "message": "Input file validation failed.",
+                "param": "input_file_id",
+            }],
+        }]
+        phases = []
+        worker.batch_phase_signal.connect(
+            lambda phase, payload: phases.append((phase, payload))
+        )
+
+        with (
+            mock.patch(
+                "util.translation._read_batch_file",
+                return_value={"status": "submitted", "batches": [{"id": "batch-failed"}]},
+            ),
+            mock.patch(
+                "util.translation.checkTranslationBatchStatuses",
+                return_value=(True, statuses),
+            ),
+            mock.patch("util.translation.fetchTranslationBatches") as fetch,
+        ):
+            result = worker._run_batch_poll_fetch()
+
+        self.assertIs(result, False)
+        fetch.assert_not_called()
+        self.assertEqual(phases[-1][0], "failed")
+        self.assertIn("queue was preserved", phases[-1][1]["message"])
+
     def test_partial_file_failure_is_an_aggregate_failure(self) -> None:
         worker = TranslationWorker(Path.cwd(), ("JSON", (".json",), None))
         worker.run_module_in_process = lambda filename, *_args: (
@@ -655,6 +692,23 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertNotIn("already in progress", prompt)
 
     def test_noncompletion_batch_outcomes_are_not_rendered_as_complete(self) -> None:
+        self.tab.create_progress_item("Classes.json")
+        self.tab._batch_active = True
+        self.tab._batch_ui_phase = "collect"
+        self.tab.mark_file_queued("Classes.json")
+
+        # A late monitor sample from a fast persistent-worker file must not
+        # regress its definitive collect result back to Scanning 0/N.
+        self.tab.update_item_progress("Classes.json", 0, 17)
+        row = self.tab.file_progress_items["Classes.json"]["row"]
+        self.assertEqual(self.tab.progress_table.item(row, 1).text(), "Collected")
+        self.assertEqual(self.tab.progress_table.item(row, 2).text(), "queued")
+
+        self.tab._batch_ui_phase = "consume"
+        self.tab.update_item_progress("Classes.json", 1, 17)
+        self.assertEqual(self.tab.progress_table.item(row, 1).text(), "Writing")
+        self.assertEqual(self.tab.progress_table.item(row, 2).text(), "1/17")
+
         self.tab._batch_active = True
         self.tab._on_batch_phase("no_work", {"files": 1})
         self.tab._apply_finish_ui(True, "Success")

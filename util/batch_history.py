@@ -304,6 +304,7 @@ def record_submit(
             model=model or (cost_estimate or {}).get("model") or "",
             provider=info.get("provider") or provider,
             endpoint=info.get("endpoint") or endpoint or "",
+            input_file_id=info.get("input_file_id") or "",
             cache_key_version=info.get("cache_key_version"),
             key_name=(
                 key_name
@@ -416,7 +417,7 @@ def refresh_batch_status(batch_id: str) -> dict:
             and (counts_dict.get("succeeded") or 0) == 0
         ):
             local_status = STATUS_CANCELED
-        elif api_status == "failed":
+        elif normalized.get("terminal_failure"):
             local_status = STATUS_ERROR
         else:
             local_status = STATUS_ENDED
@@ -424,7 +425,13 @@ def refresh_batch_status(batch_id: str) -> dict:
     fields: dict[str, Any] = {
         "api_status": api_status,
         "request_counts": counts_dict,
+        "provider_errors": list(normalized.get("errors") or []),
     }
+    if normalized.get("errors"):
+        fields["notes"] = "; ".join(
+            str(item.get("message") or item.get("code") or "provider error")
+            for item in normalized["errors"]
+        )[:1000]
     if local_status:
         fields["status"] = local_status
     updated = upsert_history_entry(batch_id, **fields)

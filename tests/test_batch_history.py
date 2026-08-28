@@ -13,6 +13,7 @@ from unittest import mock
 
 import util.translation as T
 import util.batch_history as BH
+import util.batch_providers as BP
 
 
 class BatchHistoryTestBase(unittest.TestCase):
@@ -1289,6 +1290,47 @@ class UsageTests(BatchHistoryTestBase):
 
 
 class SplitFetchAccountingTests(BatchHistoryTestBase):
+    def test_provider_job_failure_cannot_clear_queue_or_mark_results_fetched(self):
+        T.queue_batch_request(
+            '{"Line1":"猫"}',
+            "English",
+            {"model": "gpt-test", "messages": []},
+            provider="openai",
+        )
+        T.flush_batch_queue()
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "submitted",
+                "model": "gpt-test",
+                "provider": "openai",
+                "batches": [{
+                    "id": "batch-failed",
+                    "provider": "openai",
+                    "custom_ids": {"req-1": "cache-key"},
+                }],
+            },
+        )
+
+        with (
+            mock.patch.object(BH, "client_for_batch", return_value=object()),
+            mock.patch.object(
+                BH,
+                "download_batch_results",
+                side_effect=BP.BatchProviderJobError(
+                    "batch-failed",
+                    "failed",
+                    [{"message": "Cannot find file file-input."}],
+                ),
+            ),
+        ):
+            with self.assertRaises(BP.BatchProviderJobError):
+                T.fetchTranslationBatches()
+
+        self.assertEqual(T.batchRunMetadata()["status"], "submitted")
+        self.assertEqual(T.pendingBatchRequests(), 1)
+        self.assertFalse(T.BATCH_RESULTS_FILE.exists())
+
     def test_each_split_records_only_its_own_usage_and_cost(self):
         batches = [
             {"id": "batch-1", "provider": "openai", "custom_ids": {"r1": "k1"}},

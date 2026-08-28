@@ -13,7 +13,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 import anthropic
 import openai
@@ -26,6 +26,23 @@ PROVIDER_GEMINI = "gemini"
 TERMINAL_OPENAI_STATUSES = frozenset({
     "completed", "failed", "expired", "cancelled",
 })
+
+
+class BatchProviderJobError(RuntimeError):
+    """Raised when a provider batch ends without consumable output."""
+
+    def __init__(self, batch_id: str, api_status: str, errors=None) -> None:
+        self.batch_id = str(batch_id or "")
+        self.api_status = str(api_status or "unknown")
+        self.errors = list(errors or [])
+        details = "; ".join(
+            str(item.get("message") or item.get("code") or "provider error")
+            for item in self.errors
+        )
+        message = f"Batch {self.batch_id or '<unknown>'} ended with status {self.api_status}."
+        if details:
+            message = f"{message} {details}"
+        super().__init__(message)
 
 
 def detect_batch_provider(model: str = "", api_url: str | None = None,
@@ -251,6 +268,37 @@ def _request_counts(batch: Any) -> dict:
     }
 
 
+def _batch_errors(batch: Any) -> list[dict]:
+    raw_errors = getattr(batch, "errors", None)
+    if raw_errors is None and isinstance(batch, Mapping):
+        raw_errors = batch.get("errors")
+    if raw_errors is None:
+        return []
+    if isinstance(raw_errors, Mapping):
+        items = raw_errors.get("data") or []
+    else:
+        items = getattr(raw_errors, "data", None) or []
+
+    normalized = []
+    for item in items:
+        if isinstance(item, Mapping):
+            source = item
+        else:
+            source = {
+                "code": getattr(item, "code", None),
+                "line": getattr(item, "line", None),
+                "message": getattr(item, "message", None),
+                "param": getattr(item, "param", None),
+            }
+        normalized.append({
+            "code": source.get("code"),
+            "line": source.get("line"),
+            "message": source.get("message"),
+            "param": source.get("param"),
+        })
+    return normalized
+
+
 def retrieve_batch(provider: str, batch_id: str, *, client=None) -> dict:
     client = client or get_client(provider)
     if provider == PROVIDER_ANTHROPIC:
@@ -268,11 +316,16 @@ def retrieve_batch(provider: str, batch_id: str, *, client=None) -> dict:
     elif raw_status == "cancelled" and not counts["canceled"]:
         counts["canceled"] = counts["processing"]
         counts["processing"] = 0
+    terminal_failure = raw_status in {"failed", "expired", "cancelled"}
     return {
         "id": batch_id,
         "api_status": raw_status,
         "ended": ended,
+        "terminal_failure": terminal_failure,
         "counts": counts,
+        "errors": _batch_errors(batch),
+        "output_file_id": getattr(batch, "output_file_id", None),
+        "error_file_id": getattr(batch, "error_file_id", None),
         "raw": batch,
     }
 
@@ -403,8 +456,23 @@ def download_results(provider: str, batch_id: str, custom_ids: dict,
         return _download_anthropic(client, batch_id, custom_ids)
 
     batch = client.batches.retrieve(batch_id)
+    raw_status = str(getattr(batch, "status", "") or "").lower()
+    if raw_status in {"failed", "expired", "cancelled"}:
+        raise BatchProviderJobError(batch_id, raw_status, _batch_errors(batch))
     output_id = getattr(batch, "output_file_id", None)
     error_id = getattr(batch, "error_file_id", None)
+    if raw_status != "completed":
+        raise BatchProviderJobError(
+            batch_id,
+            raw_status or "unknown",
+            [{"message": "The provider batch is not complete."}],
+        )
+    if custom_ids and not output_id and not error_id:
+        raise BatchProviderJobError(
+            batch_id,
+            raw_status,
+            [{"message": "The completed provider batch has no result files."}],
+        )
     results, errors, totals = {}, [], _empty_usage()
     for line in _download_file_text(
         provider, output_id, client=client, google_client=google_client
