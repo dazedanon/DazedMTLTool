@@ -78,6 +78,14 @@ def _mismatch_summary(count):
     return f"{count} validation {noun}"
 
 
+_NON_TRANSLATABLE_MVMZ_NAMES = {"animations.json", "tilesets.json"}
+
+
+def _is_nontranslatable_mvmz_file(filename) -> bool:
+    """Return whether an MV/MZ JSON database is valid but has no TL handler."""
+    return Path(str(filename or "")).name.casefold() in _NON_TRANSLATABLE_MVMZ_NAMES
+
+
 def create_section_header(title):
     """Create a clean section header without boxes."""
     return qt_icons.make_section_header(
@@ -481,6 +489,7 @@ class TranslationWorker(QThread):
         self._batch_pending_estimate = None
         self._speaker_confirm_event = threading.Event()
         self._speaker_translation_approved = False
+        self._reported_unsupported_mvmz_files = set()
         self.should_stop = False
         self.mutex = QMutex()  # For thread safety
         self.executor = None  # Store reference to executor for proper shutdown
@@ -504,6 +513,20 @@ class TranslationWorker(QThread):
         self.speaker_confirmation_signal.emit(payload)
         self._speaker_confirm_event.wait()
         return self._speaker_translation_approved
+
+    def _report_unsupported_mvmz_file(self, filename):
+        """Report a known non-translatable MV/MZ database once per run."""
+        normalized = Path(str(filename)).name.casefold()
+        if normalized in self._reported_unsupported_mvmz_files:
+            return
+        self._reported_unsupported_mvmz_files.add(normalized)
+        self.emit_log(
+            f"⏭ Skipping {filename}: this RPG Maker data file has no "
+            "supported translatable fields."
+        )
+        # The existing UI renders "Not Supported" as an amber warning rather
+        # than a failed file. The worker still completes the overall run.
+        self.file_error_signal.emit(filename, f"{filename} Not Supported")
 
     @staticmethod
     def _estimate_grouped_speakers(speakers, history, config, model):
@@ -976,6 +999,15 @@ class TranslationWorker(QThread):
             for filename in matching_files:
                 if self.should_stop:
                     return False
+                if _is_nontranslatable_mvmz_file(filename):
+                    self._report_unsupported_mvmz_file(filename)
+                    completed += 1
+                    self.status_signal.emit(
+                        f"Scanning speakers… {completed}/{total_files}"
+                    )
+                    if emit_progress:
+                        self.emit_progress(completed, total_files, filename)
+                    continue
                 try:
                     mvmz.handleMVMZ(filename, False)
                 except Exception as exc:
@@ -999,6 +1031,14 @@ class TranslationWorker(QThread):
                 )
                 return False
 
+            skipped_count = sum(
+                _is_nontranslatable_mvmz_file(filename)
+                for filename in matching_files
+            )
+            scan_summary = f"{completed}/{total_files}"
+            if skipped_count:
+                scan_summary += f"; {skipped_count} unsupported skipped"
+
             pending = mvmz.pendingSpeakerNames()
             collected_unique = []
             seen_collected = set()
@@ -1010,7 +1050,7 @@ class TranslationWorker(QThread):
             covered_count = max(0, len(collected_unique) - len(pending))
             if not pending:
                 self.emit_log(
-                    f"🔤 Speaker scan complete ({completed}/{total_files}). "
+                    f"🔤 Speaker scan complete ({scan_summary}). "
                     f"Detected {len(collected_unique)} unique nameplate(s); "
                     f"all {covered_count} are already covered by the game glossary."
                 )
@@ -1018,7 +1058,7 @@ class TranslationWorker(QThread):
 
             self.status_signal.emit(f"Waiting to translate {len(pending)} speakers…")
             self.emit_log(
-                f"🔤 Speaker scan complete ({completed}/{total_files}). "
+                f"🔤 Speaker scan complete ({scan_summary}). "
                 f"Detected {len(collected_unique)} unique nameplate(s); "
                 f"{covered_count} already covered by the glossary; "
                 f"{len(pending)} unresolved unique speaker(s). "
@@ -1181,6 +1221,19 @@ class TranslationWorker(QThread):
         self._run_had_mismatch = False
         self._run_mismatch_count = 0
 
+        unsupported_files = []
+        if is_mvmz:
+            unsupported_files = [
+                filename
+                for filename in matching_files
+                if _is_nontranslatable_mvmz_file(filename)
+            ]
+            matching_files = [
+                filename
+                for filename in matching_files
+                if not _is_nontranslatable_mvmz_file(filename)
+            ]
+
         def _handle_file_result(filename, result):
             nonlocal total_cost, had_failure, completed_count
             stopped = False
@@ -1225,6 +1278,14 @@ class TranslationWorker(QThread):
             completed_count += 1
             self.emit_progress(completed_count, total_files, filename)
             return stopped
+
+        for filename in unsupported_files:
+            self._report_unsupported_mvmz_file(filename)
+            completed_count += 1
+            self.emit_progress(completed_count, total_files, filename)
+
+        if not matching_files:
+            return "Success"
 
         # Batch collection and consumption are local, CPU/file-heavy phases.
         # Reuse one imported RPG Maker process for the whole phase instead of
@@ -4986,7 +5047,9 @@ class TranslationTab(QWidget):
                 )
                 self.batch_live_status.setText(f"Current file: {filename}")
                 self.batch_overall_bar.setValue(15 + int(20 * current_file / max(total_files, 1)))
-                self.mark_file_queued(filename)
+                meta = self.file_progress_items.get(filename)
+                if not meta or (meta.get("status_text") or "") != "Unsupported":
+                    self.mark_file_queued(filename)
                 return
             if phase in (
                 "collect_done", "submit", "canceled", "no_work",
@@ -5020,18 +5083,19 @@ class TranslationTab(QWidget):
         if filename in self.file_progress_items:
             if parse_speakers:
                 # Harvest only - translation of nameplates happens after all files.
-                self.mark_file_queued(filename)
                 meta = self.file_progress_items[filename]
-                try:
-                    meta["label"].setText("Scanned")
-                except Exception:
-                    pass
-                self._set_progress_row(
-                    filename,
-                    status="Scanned",
-                    status_color="#d4a017",
-                    progress="names",
-                )
+                if (meta.get("status_text") or "") != "Unsupported":
+                    self.mark_file_queued(filename)
+                    try:
+                        meta["label"].setText("Scanned")
+                    except Exception:
+                        pass
+                    self._set_progress_row(
+                        filename,
+                        status="Scanned",
+                        status_color="#d4a017",
+                        progress="names",
+                    )
             else:
                 sl = self.file_progress_items[filename].get("status_label")
                 if not sl or not sl.text():

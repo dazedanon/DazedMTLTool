@@ -189,6 +189,84 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
             pending.assert_not_called()
             finalize.assert_not_called()
 
+    def test_known_nontranslatable_mvmz_files_do_not_block_speaker_scan(self):
+        """Valid Animations/Tilesets JSON must not abort scans of real TL files."""
+        with tempfile.TemporaryDirectory() as raw:
+            worker = TranslationWorker(
+                Path(raw),
+                ["RPG Maker MV/MZ", ["json"], None],
+                selected_files=[
+                    "Animations.json",
+                    "Map001.json",
+                    "Tilesets.json",
+                ],
+                parse_speakers=True,
+            )
+            logs = []
+            errors = []
+            progress = []
+            worker.log_signal.connect(logs.append)
+            worker.file_error_signal.connect(lambda *args: errors.append(args))
+            worker.progress_signal.connect(lambda *args: progress.append(args))
+
+            with (
+                patch.object(mvmz, "resetSpeakerState"),
+                patch.object(mvmz, "setSpeakerParseMode"),
+                patch.object(mvmz, "handleMVMZ") as handle,
+                patch.object(mvmz, "pendingSpeakerNames", return_value=[]),
+                patch.object(mvmz, "finalizeSpeakerParse") as finalize,
+            ):
+                self.assertTrue(
+                    worker._prepare_mvmz_speakers(
+                        worker.selected_files, emit_progress=True
+                    )
+                )
+
+            handle.assert_called_once_with("Map001.json", False)
+            finalize.assert_not_called()
+            self.assertEqual(
+                [error[0] for error in errors],
+                ["Animations.json", "Tilesets.json"],
+            )
+            self.assertEqual(
+                progress,
+                [
+                    (1, 3, "Animations.json"),
+                    (2, 3, "Map001.json"),
+                    (3, 3, "Tilesets.json"),
+                ],
+            )
+            self.assertTrue(any("2 unsupported skipped" in line for line in logs))
+            self.assertFalse(any("Speaker scan failed" in line for line in logs))
+
+    def test_known_nontranslatable_mvmz_files_do_not_fail_translation_run(self):
+        with tempfile.TemporaryDirectory() as raw:
+            worker = TranslationWorker(
+                Path(raw),
+                ["RPG Maker MV/MZ", ["json"], None],
+                selected_files=["Animations.json", "Map001.json"],
+            )
+            errors = []
+            progress = []
+            worker.file_error_signal.connect(lambda *args: errors.append(args))
+            worker.progress_signal.connect(lambda *args: progress.append(args))
+
+            with (
+                patch.dict(os.environ, {"fileThreads": "1"}),
+                patch.object(
+                    worker, "run_module_in_process", return_value="Success"
+                ) as run_file,
+            ):
+                result = worker._run_files(worker.selected_files, False)
+
+            self.assertEqual(result, "Success")
+            run_file.assert_called_once_with("Map001.json", False, None)
+            self.assertEqual([error[0] for error in errors], ["Animations.json"])
+            self.assertEqual(
+                progress,
+                [(1, 2, "Animations.json"), (2, 2, "Map001.json")],
+            )
+
     def test_wolf_scan_failure_fails_preflight_before_translation(self):
         import modules.wolfdawn as wolfdawn
 
