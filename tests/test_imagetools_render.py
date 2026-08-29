@@ -17,12 +17,15 @@ would never have been found by reading the code:
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
 import tempfile
 import importlib.util
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -44,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 os.environ.setdefault("IMGTL_FILES_DIR", tempfile.mkdtemp(prefix="imgtl-render-"))
 
+from scripts import image_inpaint  # noqa: E402
 from util.imagetools import job as jobmod  # noqa: E402
 from util.imagetools import inpaint as inpaintmod  # noqa: E402
 from util.imagetools import paint, render, style as stylemod  # noqa: E402
@@ -1784,6 +1788,8 @@ class InpaintBackendTests(unittest.TestCase):
                 filled, complaint = inpaintmod.fill(rgb, mask, method)
                 self.assertIn("fast way", complaint)
                 self.assertGreater(int(filled[20, 30].min()), 150)
+                with self.assertRaises(inpaintmod.InpaintError):
+                    inpaintmod.fill(rgb, mask, method, allow_fallback=False)
 
     def test_an_unknown_method_is_repaired_rather_than_raised_over(self):
         """A style saved by a newer build must not stop the render."""
@@ -1799,12 +1805,48 @@ class InpaintBackendTests(unittest.TestCase):
         for method in OPTIONAL:
             self.assertTrue(inpaintmod.needs_context(method))
 
-    def test_the_two_fast_methods_both_repair(self):
+    def test_the_two_fast_methods_and_strict_bridge_repair(self):
         for name in (inpaintmod.TELEA, inpaintmod.NS):
             rgb, mask = self.hole()
             filled, complaint = inpaintmod.fill(rgb, mask, name)
             self.assertEqual(complaint, "")
             self.assertGreater(int(filled[20, 30].min()), 150)
+
+            rgba = np.dstack((rgb, np.full(mask.shape, 190, dtype=np.uint8)))
+            reconstructed, complaint, changed = inpaintmod.reconstruct_rgba(
+                rgba, mask, name, allow_fallback=False
+            )
+            self.assertEqual(complaint, "")
+            self.assertGreater(changed, 0)
+            self.assertTrue(np.array_equal(reconstructed[~mask], rgba[~mask]))
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            source = root / "source.png"
+            mask_path = root / "mask.png"
+            output = root / "candidate.png"
+            Image.fromarray(rgba, mode="RGBA").save(source)
+            Image.fromarray(mask.astype(np.uint8) * 255, mode="L").save(mask_path)
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = image_inpaint.main(
+                    [
+                        "fill",
+                        "--image",
+                        str(source),
+                        "--mask",
+                        str(mask_path),
+                        "--output",
+                        str(output),
+                        "--method",
+                        inpaintmod.TELEA,
+                    ]
+                )
+            self.assertEqual(code, 0, stdout.getvalue())
+            self.assertTrue(json.loads(stdout.getvalue())["ok"])
+            with Image.open(output) as saved:
+                candidate = np.asarray(saved.convert("RGBA"))
+            self.assertTrue(np.array_equal(candidate[~mask], rgba[~mask]))
 
     def test_the_chosen_method_survives_a_save(self):
         for method in inpaintmod.METHODS:

@@ -56,6 +56,11 @@ LAMA = "lama"
 LAMA_MANGA = "lama_manga"
 AOT = "aot"
 
+
+class InpaintError(RuntimeError):
+    """A specifically requested reconstruction backend could not be used."""
+
+
 # Ordered cheapest-first, which is also least-surprising-first: this is the
 # order they appear in the "Inpainting model" list.
 METHODS = (TELEA, NS, PATCHMATCH, LAMA, LAMA_MANGA, AOT)
@@ -411,14 +416,22 @@ def fill_alpha(alpha: np.ndarray, mask: np.ndarray, radius: int = RADIUS) -> np.
 
 
 def fill(
-    rgb: np.ndarray, mask: np.ndarray, method: str = DEFAULT, radius: int = RADIUS
+    rgb: np.ndarray,
+    mask: np.ndarray,
+    method: str = DEFAULT,
+    radius: int = RADIUS,
+    *,
+    allow_fallback: bool = True,
 ) -> tuple[np.ndarray, str]:
     """Reconstruct colour under the mask. Returns ``(pixels, complaint)``.
 
     The complaint is empty when the method asked for is the method that ran. It
     is a sentence when it is not - anything that failed to load says so and the
     picture still comes back repaired, because a fallback the user is told about
-    is better than either a crash or a silent downgrade.
+    is better than either a crash or a silent downgrade. Callers comparing model
+    quality can pass ``allow_fallback=False`` so an unavailable or failed model
+    raises :class:`InpaintError` instead of contaminating that comparison with a
+    result from Telea.
     """
     solid = mask.astype(np.uint8)
     if not solid.any():
@@ -430,27 +443,71 @@ def fill(
 
     ok, detail = _probe(method)
     if not ok:
-        return (
-            _classical(rgb, solid, cv2.INPAINT_TELEA, radius),
+        complaint = (
             f"{_name(method)} is not available ({detail}), so this was "
-            "reconstructed the fast way",
+            "reconstructed the fast way"
         )
+        if not allow_fallback:
+            raise InpaintError(complaint)
+        return _classical(rgb, solid, cv2.INPAINT_TELEA, radius), complaint
     try:
         if method == PATCHMATCH:
             repaired = _patchmatch_fill(rgb, solid)
         else:
             repaired = _model_fill(method, rgb, solid)
     except Exception as exc:
-        return (
-            _classical(rgb, solid, cv2.INPAINT_TELEA, radius),
-            f"{_name(method)} failed ({exc}), so this was reconstructed the fast way",
+        complaint = (
+            f"{_name(method)} failed ({exc}), so this was reconstructed the fast way"
         )
+        if not allow_fallback:
+            raise InpaintError(complaint) from exc
+        return _classical(rgb, solid, cv2.INPAINT_TELEA, radius), complaint
     # Only the hole is taken from the repair. Everywhere else the original
     # pixels are already right, and a model asked to reproduce them comes back
     # a shade off across the whole crop - which is a visible seam along the
     # edge of every block. The LaMa exports composite internally and do not
     # need this; AOT and PatchMatch very much do.
     return np.where(mask[:, :, None] > 0, repaired, rgb), ""
+
+
+def reconstruct_rgba(
+    rgba: np.ndarray,
+    mask: np.ndarray,
+    method: str = DEFAULT,
+    *,
+    allow_fallback: bool = True,
+) -> tuple[np.ndarray, str, int]:
+    """Reconstruct masked RGBA pixels and leave everything else exact.
+
+    The caller chooses the contextual crop. Fully transparent pixels inside it
+    are not trusted as colour context, while only the requested hole is copied
+    back. Alpha is reconstructed separately because the RGB models do not know
+    about it. Returns ``(pixels, complaint, changed_mask_pixels)``.
+    """
+    if rgba.ndim != 3 or rgba.shape[2] != 4 or rgba.dtype != np.uint8:
+        raise ValueError("rgba must be an HxWx4 uint8 array")
+    if mask.shape != rgba.shape[:2]:
+        raise ValueError("mask dimensions must match the RGBA image")
+
+    hole = mask.astype(bool)
+    if not hole.any():
+        return rgba.copy(), "", 0
+
+    original = np.ascontiguousarray(rgba)
+    result = original.copy()
+    unknown = hole | (original[:, :, 3] == 0)
+    rgb = cv2.cvtColor(original, cv2.COLOR_RGBA2RGB)
+    repaired, complaint = fill(
+        rgb, unknown, method, allow_fallback=allow_fallback
+    )
+    result[:, :, :3] = np.where(hole[:, :, None], repaired, original[:, :, :3])
+    result[:, :, 3] = np.where(
+        hole,
+        fill_alpha(np.ascontiguousarray(original[:, :, 3]), hole),
+        original[:, :, 3],
+    )
+    changed = int(((result != original).any(axis=2) & hole).sum())
+    return result, complaint, changed
 
 
 def _name(method: str) -> str:

@@ -29,6 +29,15 @@ image-editing resources under this project-local directory:
 
 `{{GAME_ROOT}}/.dazedtl/image_translation_resources`
 
+The user also approves tightly masked local reconstruction with the Image Editor's already
+installed inpainting backends. This is an optional aid, not a required processing path: do not use
+it when a clean source, deterministic rebuild, or another available method produces a more
+faithful result. It does not authorize downloading models or performing broader generative edits.
+Use these exact local paths with platform-appropriate command quoting:
+
+- Image Editor Python: `{{IMAGE_TOOL_PYTHON}}`
+- Local inpainting bridge: `{{IMAGE_INPAINT_CLI}}`
+
 Do not modify runtime game images or unrelated project files; the Image Manager will patch
 validated edits later. Keep verified originals under `.dazedtl/image_backups`, user-supplied clean
 art under `.dazedtl/clean_images`, reusable resources under the directory above, and disposable
@@ -46,13 +55,14 @@ attempting to recover artwork from a flattened text-bearing PNG.
 Translate embedded bitmap text by reconstructing the smallest safe UI regions and rendering
 approved target text. Treat each bitmap as a structured interface asset, not merely an OCR
 surface. Prefer deterministic reconstruction when it can preserve the source visual language and
-produce exact target text. Generative editing requires explicit user authorization. Once it is
-authorized, use a hybrid workflow by default: generation may supply difficult clean surfaces,
-textures, panels, or isolated wordmarks, while exact typography, protected geometry, alpha, and
-final compositing remain deterministic whenever practical. A complete component or asset surface
-may be repainted when smaller reconstruction methods produce a visibly broken result, but this
-does not authorize changing portraits or meaningful scene artwork; those require separate,
-explicit approval.
+produce exact target text. Generative editing requires explicit user authorization. The narrowly
+masked local bridge authorized above is permitted reconstruction, not permission for open-ended
+generation. Once broader generation is authorized, use a hybrid workflow by default: generation
+may supply difficult clean surfaces, textures, panels, or isolated wordmarks, while exact
+typography, protected geometry, alpha, and final compositing remain deterministic whenever
+practical. A complete component or asset surface may be repainted when smaller reconstruction
+methods produce a visibly broken result, but this does not authorize changing portraits or
+meaningful scene artwork; those require separate, explicit approval.
 
 ## Required outcome
 
@@ -247,13 +257,63 @@ Choose the least destructive valid removal method.
 | Freestanding text over a regular pattern | Restore only the glyph pixels from the surrounding pattern, then redraw equivalent outlined text |
 | Bokeh/noisy field | Clone and feather a clean patch |
 | Text over cleanly sourced artwork | Rebuild from the clean art layer, then render text |
-| Text over flattened artwork only | Use a precise mask only when demonstrably safe |
+| Text over flattened artwork only | Compare tightly masked local reconstruction candidates when demonstrably safe |
 | Text crossing a character | Skip and report unless the user supplies a safe method |
 
 Prefer whole-panel reconstruction for structured UI. It avoids blurred remnants and
 source-glyph ghosts. However, an art-bearing reading surface is not a disposable flat panel.
 Whole-panel reconstruction is valid there only if every meaningful illustration and decoration
 is restored from clean sources with the correct placement, opacity, and page-specific state.
+
+### 7a. Use local inpainting as an optional quality candidate
+
+The bridge exposes the same local, free reconstruction backends as the Image Editor without
+limiting other tools or methods available to you. Run its `status` command once before relying on
+it. Use only methods reported as available; do not download resources automatically. If the bridge
+or its configured Python cannot run, continue with the strongest safe method already available and
+record the limitation only when it affects an image's disposition.
+
+Give `fill` the verified source or backup, a same-size grayscale PNG mask, a candidate output path,
+and one explicit method. Nonzero mask pixels must cover the complete source glyph face, outline,
+shadow, and antialiasing that needs removal—never the translated text and never a broad rectangle
+chosen merely for convenience. Render candidates outside the editable image folder. The bridge
+adds model context itself, reconstructs RGB and alpha appropriately, preserves every pixel outside
+the mask, and refuses to write a candidate if the requested backend is unavailable, fails, or
+changes nothing. Treat any nonzero exit or JSON response with `"ok": false` as a failed candidate;
+never reinterpret it as a successful fallback.
+
+Choose methods by the surface, not by a universal ranking:
+
+- Prefer a clean source layer, exact component rebuild, safe donor, or another demonstrably more
+  faithful capability over every inpainting model.
+- Try `lama_manga` first for illustrated game or manga artwork and `lama` first for photographic
+  artwork when those models are available.
+- Try `patchmatch` for repeating real texture, screentone, or hatching with useful nearby donors.
+- Treat `aot` as a strong fast candidate for small speech-bubble or label-sized repairs, not as an
+  automatic quality winner; reject it when it invents hatching, dulls saturated colour, retains a
+  glyph impression, or distorts larger structures.
+- Use `telea` or `ns` for flat and near-flat fields where predictable diffusion is cleaner than
+  invented detail.
+
+For a difficult background family, start with the strongest one or two applicable installed methods
+on one representative stress region. Continue to another method only when its distinct strengths
+plausibly address a visible failure or the leading candidates are too close to call. Inspect the
+text-free results at native and runtime scale; choose the candidate with no glyph residue, seam,
+repeated foreign feature, structural distortion, alpha defect, or loss of source detail. Stop when
+there is a clear winner or the remaining methods do not fit the surface. Reuse the accepted method
+and mask strategy for genuinely matching family members, while retaining per-variant art-state
+checks. The helper's own reconstruction remains eligible throughout and should win whenever it is
+more faithful.
+
+Invoke the configured Python and bridge paths above as follows, adapting quoting to the host shell:
+
+```text
+"{{IMAGE_TOOL_PYTHON}}" "{{IMAGE_INPAINT_CLI}}" status
+"{{IMAGE_TOOL_PYTHON}}" "{{IMAGE_INPAINT_CLI}}" fill --image SOURCE.png --mask MASK.png --output CANDIDATE.png --method lama_manga
+```
+
+Add exact target typography only after accepting and validating a text-free background. Record the
+chosen method in the reusable layout or renderer and the work-log notes.
 
 ### 8. Define an explicit layout
 
@@ -406,10 +466,11 @@ metrics or canvas bounds alone; inspect the final composite against the actual c
 ### 10b. Use authorized hybrid generative reconstruction
 
 Use ordinary deterministic reconstruction by default. Use generation only after the user has
-explicitly authorized generative output. After authorization, choose the narrowest generative
-scope that produces a clean result, but do not preserve a failing localized patch merely because
-it changes fewer pixels. A clean full-component or full-surface intermediate can be more faithful
-than seams, glyph-shaped debris, or an oversized cover.
+explicitly authorized generative output. The separately authorized, tightly masked local bridge in
+section 7a does not grant this broader permission. After authorization, choose the narrowest
+generative scope that produces a clean result, but do not preserve a failing localized patch merely
+because it changes fewer pixels. A clean full-component or full-surface intermediate can be more
+faithful than seams, glyph-shaped debris, or an oversized cover.
 
 1. Keep the verified original or backup canonical and render every generated experiment outside
    the editable image tree. Generated candidates are never self-approving.
@@ -678,6 +739,8 @@ Do not paste full image files, large encoded data, or unrelated source code.
 - Never accept a flattened parent composite solely because its reusable child components passed;
   inspect the rendered parent for differing antialiasing, wider target footprints, ghost text, and
   untranslated sibling controls.
+- Never treat a failed or unavailable local inpainting backend as a successful candidate, and never
+  accept a silent substitution for the explicitly requested method.
 - Never overwrite the only original.
 - Never claim pixel preservation without running a pixel comparison.
 - Never treat “has an alpha channel,” transparent-corner samples, or a checkerboard-only preview
@@ -708,6 +771,10 @@ precedence over masks, cloning, blurring, and opaque covers.
 
 Use localized patch replacement when the background is simple and panel reconstruction would
 alter too much, or a clean neighboring texture can be cloned safely.
+
+Use the local Image Editor bridge as an optional candidate when flattened text covers reconstructible
+artwork and clean-layer recomposition or a simpler exact repair is unavailable or visibly weaker.
+Its output never outranks a more faithful result merely because it came from a model.
 
 When the user has authorized generation, use hybrid generative reconstruction when it materially
 improves style fidelity or produces a clean base that deterministic removal cannot. Prefer an

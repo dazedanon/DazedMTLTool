@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -349,11 +350,21 @@ class ImageManagerSelectionTests(unittest.TestCase):
         self.assertIn(str(self.game_root / ".dazedtl" / "glossary.txt"), prompt)
         self.assertIn("RPG Maker MV/MZ image profile", prompt)
         self.assertIn("image_translation_log.md", prompt)
+        self.assertIn(str(Path(sys.executable).resolve()), prompt)
+        self.assertIn(
+            str(
+                (Path(__file__).resolve().parents[1] / "scripts" / "image_inpaint.py")
+                .resolve()
+            ),
+            prompt,
+        )
         self.assertNotIn("{{GAME_ROOT}}", prompt)
         self.assertNotIn("{{EDITABLE_IMAGES_FOLDER}}", prompt)
         self.assertNotIn("{{VOCAB_FILE}}", prompt)
         self.assertNotIn("{{ENGINE_NAME}}", prompt)
         self.assertNotIn("{{ENGINE_CONTEXT}}", prompt)
+        self.assertNotIn("{{IMAGE_TOOL_PYTHON}}", prompt)
+        self.assertNotIn("{{IMAGE_INPAINT_CLI}}", prompt)
         self.assertIn(
             "Copied image translation skill for 1 editable PNG",
             self.manager.status_label.text(),

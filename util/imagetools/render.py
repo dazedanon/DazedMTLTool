@@ -363,15 +363,10 @@ def _reconstruct(
             view[:, :] = pixels
             return Note("", ok, message, tight=tight)
 
-    unknown = hole | (view[:, :, 3] == 0)
-
-    rgb = cv2.cvtColor(np.ascontiguousarray(view), cv2.COLOR_RGBA2RGB)
-    repaired, complaint = inpaintmod.fill(rgb, unknown, method)
-    moved = int((repaired != rgb).any(axis=2)[hole].sum())
-    view[:, :, :3] = np.where(hole[:, :, None], repaired, view[:, :, :3])
-    view[:, :, 3] = np.where(
-        hole, inpaintmod.fill_alpha(np.ascontiguousarray(view[:, :, 3]), hole), view[:, :, 3]
-    )
+    original_rgb = np.ascontiguousarray(view[:, :, :3]).copy()
+    repaired, complaint, _ = inpaintmod.reconstruct_rgba(view, hole, method)
+    moved = int((repaired[:, :, :3] != original_rgb).any(axis=2)[hole].sum())
+    view[:, :] = repaired
 
     if not moved and hole.any():
         # Nothing was reconstructed, whatever the reason. Saying "reconstructed"

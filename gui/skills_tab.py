@@ -149,7 +149,8 @@ class SkillsTab(QWidget):
             hint=(
                 "Clipboard skill copied from the Image Manager for deterministic bitmap UI "
                 "localisation. Keep the {{ENGINE_NAME}}, {{ENGINE_CONTEXT}}, {{GAME_ROOT}}, "
-                "{{EDITABLE_IMAGES_FOLDER}}, and {{VOCAB_FILE}} placeholders."
+                "{{EDITABLE_IMAGES_FOLDER}}, {{VOCAB_FILE}}, {{IMAGE_TOOL_PYTHON}}, and "
+                "{{IMAGE_INPAINT_CLI}} placeholders."
             ),
             is_json=False,
         )

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import hashlib
+import sys
+from pathlib import Path
 
 from PyQt5.QtCore import (
     QEvent,
@@ -40,7 +41,12 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from util.paths import APP_NAME, ORG_NAME, prepare_game_translation_context
+from util.paths import (
+    APP_NAME,
+    ORG_NAME,
+    PROJECT_ROOT,
+    prepare_game_translation_context,
+)
 from util.skills import load_clipboard_skill
 
 from util.image_manager import (
@@ -1573,6 +1579,10 @@ class ImageManager(QWidget):
                 "{{GAME_ROOT}}": str(game_root),
                 "{{EDITABLE_IMAGES_FOLDER}}": str(self._editable_image_root().resolve()),
                 "{{VOCAB_FILE}}": str(glossary_path),
+                "{{IMAGE_TOOL_PYTHON}}": str(Path(sys.executable).resolve()),
+                "{{IMAGE_INPAINT_CLI}}": str(
+                    (PROJECT_ROOT / "scripts" / "image_inpaint.py").resolve()
+                ),
             }
             prompt = load_clipboard_skill("image_translation.md")
             missing = [token for token in replacements if token not in prompt]
