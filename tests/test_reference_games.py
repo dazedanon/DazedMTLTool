@@ -21,9 +21,9 @@ from util.reference_games import (
 )
 
 
-def _write(path: Path, value) -> None:
+def _write(path: Path, value, *, encoding: str = "utf-8") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding=encoding)
 
 
 class ReferenceGameTests(unittest.TestCase):
@@ -119,7 +119,7 @@ class ReferenceGameTests(unittest.TestCase):
         source = "おはよう。\n元気か？"
         self.assertEqual(index["matches"][source][0]["translation"], "Morning. How are you?")
 
-    def test_game_roots_are_detected_and_cached_as_a_normalized_pair(self):
+    def test_game_roots_cache_normalized_pair_and_accept_utf8_bom(self):
         japanese_game = self.root / "japanese-install"
         english_game = self.root / "english-install"
         _write(
@@ -129,6 +129,7 @@ class ReferenceGameTests(unittest.TestCase):
         _write(
             english_game / "www" / "data" / "Items.json",
             [None, {"id": 1, "name": "Tonic"}],
+            encoding="utf-8-sig",
         )
 
         registry = add_game_pair_reference(

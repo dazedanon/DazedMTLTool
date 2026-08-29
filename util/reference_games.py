@@ -61,8 +61,12 @@ def _atomic_write_json(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
+def _read_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8-sig"))
+
+
 def _read_object(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_text(encoding="utf-8"))
+    value = _read_json(path)
     if not isinstance(value, dict):
         raise ValueError(f"Expected a JSON object in {path}")
     return value
@@ -626,8 +630,8 @@ def _paired_pairs(entry: dict[str, Any]) -> Iterable[tuple[str, str, str]]:
         translated_path = translated_files.get(source_path.name)
         if translated_path is None:
             continue
-        source_entries = dict(_strings(json.loads(source_path.read_text(encoding="utf-8"))))
-        translated_entries = dict(_strings(json.loads(translated_path.read_text(encoding="utf-8"))))
+        source_entries = dict(_strings(_read_json(source_path)))
+        translated_entries = dict(_strings(_read_json(translated_path)))
         for logical_path, source in source_entries.items():
             translation = translated_entries.get(logical_path)
             if translation and source != translation and _JAPANESE_RE.search(source):
@@ -719,7 +723,7 @@ def sources_from_data(data_root: str | Path) -> set[str]:
     if sources:
         return sources
     for path in _json_files(data):
-        document = json.loads(path.read_text(encoding="utf-8"))
+        document = _read_json(path)
         sources.update(value for _logical, value in _strings(document) if _JAPANESE_RE.search(value))
     return sources
 
