@@ -126,7 +126,7 @@ class BatchProviderDetectionTests(unittest.TestCase):
             ("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/",
              "gemini-2.5-flash", "max_tokens"),
             ("mistral", "https://api.mistral.ai/v1/",
-             "mistral-medium-3.5", "max_tokens"),
+             "mistral-medium-3-5", "max_tokens"),
             ("openai", "https://api.deepseek.com/v1/",
              "deepseek-chat", "max_tokens"),
             ("openai", "https://openrouter.ai/api/v1",

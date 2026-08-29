@@ -3,10 +3,10 @@
 This step is required. DazedTL translates the normal game text, while the AI helper reads the game
 folder and helps with names, writing rules, menus, pictures, and Japanese text that was missed.
 
-You do not need to know how to program. **Cline Nightly works in both Cursor and VS Code**, so use
+You do not need to know how to program. **Cline works in both Cursor and VS Code**, so use
 whichever editor you prefer.
 
-## Recommended free setup: Mistral with Cline Nightly
+## Recommended no-cost setup: Mistral Free mode with Cline
 
 You can use the same Mistral API key in DazedTL and Cline. Mistral currently lets you enable Free
 mode without a credit card.
@@ -40,14 +40,14 @@ Run the installer, then open the editor you chose.
 
 Opening the correct folder is important. It lets Cline see the game files when you ask for help.
 
-### 4. Install Cline Nightly
+### 4. Install Cline
 
 These steps are the same in Cursor and VS Code:
 
 1. Click the **Extensions** button on the left side of the editor. It looks like four small blocks.
-   You can also press **Ctrl+Shift+X**.
-2. Search for **Cline Nightly**.
-3. Choose **[Cline (Nightly)](https://marketplace.visualstudio.com/items?itemName=saoudrizwan.cline-nightly)**
+   You can also press **Ctrl+Shift+X** on Windows/Linux or **Cmd+Shift+X** on macOS.
+2. Search for **Cline**.
+3. Choose **[Cline](https://marketplace.visualstudio.com/items?itemName=saoudrizwan.claude-dev)**
    and click **Install**.
 4. Click the Cline icon on the left side of the editor. If it does not appear, close and reopen the
    editor.
@@ -57,8 +57,8 @@ These steps are the same in Cursor and VS Code:
 1. In the Cline panel, click the **gear** button to open Settings.
 2. For **API Provider**, choose **Mistral**.
 3. Paste your Mistral API key into the **API Key** box.
-4. Choose the Mistral model you want to use. For this version of DazedTL, the suggested free model
-   is **Mistral Medium 3.5** (`mistral-medium-3.5`).
+4. Choose the Mistral model you want to use. For this version of DazedTL, the suggested model for
+   Mistral Free mode is **Mistral Medium 3.5** (`mistral-medium-3-5`).
 5. Set **Thinking** to **Medium**. Thinking gives the Agent more time to work through a task. Lower
    it if you want faster answers; raise it when a difficult task needs more care.
 6. Click **Done** at the top of the Cline panel.
@@ -79,19 +79,21 @@ You do not need Cline if you prefer Cursor's own Agent and have access to its AI
 1. Open Cursor and sign in so its AI features are available.
 2. Click **File → Open Folder** and choose your working copy of the game.
 3. Wait while Cursor finishes learning what is in the folder. A large game may take a few minutes.
-4. Press **Ctrl+I** to open Agent chat.
+4. Press **Ctrl+I** on Windows/Linux or **Cmd+I** on macOS to open Agent chat.
 5. Send this test message: `Tell me the name of the folder I have open.`
 
 If Cursor answers correctly, its built-in Agent is ready.
 
 ## Other supported Agents: Codex and Claude Code
 
-Both **Codex** and **Claude Code** can be installed in either Cursor or VS Code. Use one of these if
-you already have access through a paid account or prefer it over Cline.
+Both **Codex** and **Claude Code** can be installed in either Cursor or VS Code. Codex is available
+through supported ChatGPT plans, including Free, or with a billed API key. Claude Code requires
+eligible Anthropic access. Use whichever helper you already have access to or prefer over Cline.
 
 ### Codex
 
-1. Open **Extensions** in Cursor or VS Code with **Ctrl+Shift+X**.
+1. Open **Extensions** in Cursor or VS Code with **Ctrl+Shift+X** on Windows/Linux or
+   **Cmd+Shift+X** on macOS.
 2. Install the official **[Codex extension](https://developers.openai.com/codex/ide)**.
 3. Click the Codex icon and sign in.
 4. Open the game folder and send the same test message used above.
@@ -106,7 +108,8 @@ edited image before patching it into the game.
 
 ### Claude Code
 
-1. Open **Extensions** in Cursor or VS Code with **Ctrl+Shift+X**.
+1. Open **Extensions** in Cursor or VS Code with **Ctrl+Shift+X** on Windows/Linux or
+   **Cmd+Shift+X** on macOS.
 2. Search for **Claude Code** and install the official Anthropic extension.
 3. Open the Claude Code panel and sign in.
 4. Open the game folder and send the same test message used above.
@@ -125,23 +128,24 @@ advanced-text audit**:
 2. Return to your Agent chat.
 3. Paste the copied instructions and send them.
 4. Let the Agent read the game folder and finish the task.
-5. Copy only fenced paste-ready answers into the matching boxes. Apply unfenced settings manually.
+5. Return to DazedTL and follow the refresh, review, or manual-setting directions on that page.
 
-### Where the Project Setup answers go
+### What Project Setup changes
 
-The Agent's answer may contain these labels. Put each part in the matching place:
+Project Setup writes the guidance files directly inside the selected game's `.dazedtl` folder. Do
+not copy its report into the guidance editors.
 
-| Agent section | What you do in DazedTL |
+| Setup result | What you do in DazedTL |
 |---|---|
-| **Glossary** | Copy the fenced content into the **Glossary** box |
-| **Translation quirks** | Copy the fenced content into the **Translation quirks** box |
-| **Game skill** | Copy the fenced content into the **Game skill** box |
-| **Manual changes - Speaker settings** | Set the speaker choices shown above the boxes; do not paste this section |
-| **Manual changes - RPG Maker settings** | Set code 408, text widths, and fonts manually; do not paste this section |
+| **Glossary** | The helper updates `.dazedtl/glossary.txt`; reload and review it |
+| **Translation quirks** | The helper updates `.dazedtl/skills/quirks.md`; reload and review it |
+| **Game skill** | The helper updates `.dazedtl/skills/game.md`; reload and review it |
+| **Manual changes - Speaker settings** | Apply only the speaker options the report marks **ENABLE** |
+| **Manual changes - RPG Maker settings** | Apply the reported code 408, text-width, and font settings manually |
 
-Code fences mean **copy/paste**. Unfenced sections are instructions, evidence, repairs, or playtests
-and must not be pasted into the guidance boxes. If a section is missing or unclear, ask the Agent to
-show the answer again in the required order.
+Other copied skills may edit working files, return an audit, or ask you to review a proposed change.
+Follow the directions beside that particular Copy button and never paste a helper report into an
+unrelated guidance box.
 
 Read what the Agent plans to do before approving a file change or command. If you are unsure, ask
 it to explain the change in simple language first.
@@ -149,7 +153,8 @@ it to explain the change in simple language first.
 ## If something does not work
 
 - **Cline icon is missing:** Close and reopen Cursor or VS Code. You can also press
-  **Ctrl+Shift+P**, type `Cline: Open In New Tab`, and press Enter.
+  **Ctrl+Shift+P** on Windows/Linux or **Cmd+Shift+P** on macOS, type
+  `Cline: Open In New Tab`, and press Enter.
 - **Invalid API key:** Return to Mistral Studio, create a new key, and paste the new key into Cline
   Settings.
 - **Too many requests:** Free accounts have limits. Wait a little while, then try again.

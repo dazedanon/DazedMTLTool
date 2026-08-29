@@ -45,16 +45,20 @@ are:
 | Choice | Good for |
 |---|---|
 | **GPT-5.6 Sol** | Best translation quality; budget about $30 for an average full-game translation |
-| **GPT-5.6 Terra** | Recommended paid option; best overall translation quality-to-cost balance and supports Batch jobs |
-| **Claude Sonnet 4.6** | Lower-cost paid alternative; about 1.5× cheaper, with slightly lower average translation quality |
-| **Mistral Medium 3.5** | Free option; use Normal translation mode |
+| **GPT-5.6 Terra** | Recommended paid option; best overall translation quality-to-cost balance, efficient caching, and Batch support |
+| **Claude Sonnet 5** | Paid alternative; slightly lower average translation quality and about 1.5× the token usage |
+| **Mistral Medium 3.5** | No-cost option through Mistral Free mode; use Normal translation mode |
 
-Choose the **OpenAI** preset. Use **GPT-5.6 Sol** (`gpt-5.6-sol`) for the best quality, or
-**GPT-5.6 Terra** (`gpt-5.6-terra`) for the recommended quality-to-cost balance. A full-game Sol
-translation costs about **$30 on average**, but the actual total varies with the game's size and
-retries. Choose **Claude (Anthropic)** when lower cost matters more than the small average quality
-difference, or **Mistral** when you need the free option. Online translation may cost money, so the
-example starts with one small map.
+For most users, choose the **OpenAI** preset. Its models have a small average translation-quality
+edge over Claude in DazedTL, and OpenAI's caching works more efficiently with the tool. Use
+**GPT-5.6 Sol** (`gpt-5.6-sol`) for the best quality, or **GPT-5.6 Terra** (`gpt-5.6-terra`) for the
+recommended quality-to-cost balance. A full-game Sol translation costs about **$30 on average**,
+but the actual total varies with the game's size and retries.
+
+Choose **Claude (Anthropic)** if you prefer Anthropic, but keep in mind that its models typically
+use about **1.5× as many tokens** in DazedTL and are not generally the cheaper option after caching
+and token usage are included. Choose **Mistral Free mode** when you need the no-cost option. Online
+translation may cost money, so the example starts with one small map.
 
 ![Configuration General Settings with the provider preset, saved API key, model, and Save changes highlighted](images/configuration-api.png)
 

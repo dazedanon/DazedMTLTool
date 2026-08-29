@@ -45,7 +45,7 @@ apply only the `.gitignore` changes you approve.
 ## 3. Start Git from Cursor or VS Code
 
 1. Click the **Source Control** icon on the left. It looks like a line that splits into branches.
-   You can also press **Ctrl+Shift+G**.
+   You can also press **Ctrl+Shift+G** on Windows/Linux or **Control+Shift+G** on macOS.
 2. If you see **Initialize Repository**, click it.
 3. If you already see a list of changed files or a commit history, Git is already set up. Do not
    initialize it again.
@@ -79,7 +79,7 @@ The first local checkpoint is now ready.
 
 This is the normal routine after a small group of translations works:
 
-1. Press **Ctrl+Shift+G** to open Source Control.
+1. Press **Ctrl+Shift+G** on Windows/Linux or **Control+Shift+G** on macOS to open Source Control.
 2. Click each changed file you care about. The editor shows the old version and new version so you
    can review what changed.
 3. Click **+** beside the files you want, or beside **Changes** to prepare all visible changes.

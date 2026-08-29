@@ -25,9 +25,9 @@ models may miss small writing or place English badly, so difficult images need e
 
 ## When you find a problem
 
-Take a screenshot and write down where it happened. If Japanese text remains, the Windows
-Snipping Tool can copy words from the screenshot. Give the screenshot, copied words, and location
-to your Agent so it can help find the source.
+Take a screenshot and write down where it happened. If Japanese text remains, use your operating
+system's screenshot text-recognition feature, if available, to copy the words. Give the screenshot,
+copied words, and location to your Agent so it can help find the source.
 
 Fix and test a small problem before making more changes. If good English is simply too wide, use
 the RPG Maker **Rewrap** step.

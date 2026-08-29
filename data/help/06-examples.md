@@ -9,7 +9,7 @@ Before translating:
 
 - keep one untouched copy of the whole game;
 - complete **Set Up Your AI Helper**;
-- enter your translation API key and model under **Configuration → General**; and
+- enter your translation API key and model under **Configuration → General Settings**; and
 - complete **Set Up Git** if you want easy checkpoints and recovery.
 
 Open the working game folder—the copy containing `Game.exe`—in Cursor or VS Code. Keep that same
@@ -17,8 +17,8 @@ folder open in your Agent while you work.
 
 ## 2. Choose the game
 
-Click **Open Workflow** below the Guide and choose **RPG Maker MV / MZ / Ace**. In Step 0, choose
-the working game folder.
+Click **Open Workflow** below the Guide and choose **RPG Maker MV / MZ / Ace**. In Step 1
+(**Project**), choose the working game folder.
 
 Not sure which engine you have? RPG Maker games often contain a `www` or `data` folder. WOLF RPG
 games often contain `Data.wolf`. DazedTL also tries to recognize the game after you choose it.
@@ -40,13 +40,14 @@ shown here are harmless examples.*
 
 ## 4. Set up names and writing style
 
-Go to Step 2 and click **Collect names** first so DazedTL can add recognized speakers to the
-Glossary. Then click **Copy setup instructions**, paste them into your AI helper, and wait for its
-answer. If the **speakers** part marks an extra option **ENABLE**, turn it on and click **Collect
-names** again.
+Go to Step 3 (**Setup**) and click **Collect names** first so DazedTL can add recognized speakers
+to the Glossary. Then click **Copy setup instructions**, paste them into your AI helper, and wait
+for its answer. If the **speakers** part marks an extra option **ENABLE**, turn it on and click
+**Collect names** again.
 
-The answer is divided into labeled parts. Copy each part into its matching place in DazedTL, then
-save. The **Set Up Your AI Helper** page has a table showing where every label goes.
+The helper writes the Glossary, Translation quirks, and Game skill files directly. Do not paste its
+report into the editors. Click **Reload and review guidance**, inspect each tab, and save only if you
+make an additional change. Apply any manual speaker or RPG Maker settings listed in the report.
 
 ![Speakers and Guidance step with Collect names and Copy setup instructions highlighted](images/workflow-setup.png)
 
@@ -55,8 +56,8 @@ again.*
 
 ## 5. Translate the test
 
-Go to Step 3 and use **Normal** mode. Translate the main game information first, then the dialogue
-for the map you selected.
+Go to Step 4 (**Phase 1**) and use **Normal** mode. Translate the main game information first, then
+the dialogue for the map you selected.
 
 Wait for each job to finish. If there is an error, open **Activity** and read the newest message.
 Common problems are an incorrect AI key, no internet connection, or a temporary limit from the AI
@@ -68,8 +69,8 @@ company.
 
 ## 6. Put the English into the game
 
-Go to Step 5 and click **Export selected files**. This puts only the files from your small test back
-into the game.
+Go to Step 6 (**Export**) and click **Export selected files**. This puts only the files from your
+small test back into the game.
 
 ![Export to Game step with Export selected files highlighted](images/workflow-export.png)
 
@@ -83,8 +84,8 @@ Start the game and play that map. Look for:
 - Japanese words that were missed;
 - anything in the game that stopped working.
 
-Fix your setup now if names or writing style are wrong. Use Step 6 Rewrap if good English text is
-simply too wide for its box.
+Fix your setup now if names or writing style are wrong. Use Step 7 (**Rewrap**) if good English
+text is simply too wide for its box.
 
 ![Rewrap step with the over-limit safeguard, Preview rewrap, and Apply rewrap highlighted](images/workflow-rewrap.png)
 
@@ -92,8 +93,9 @@ simply too wide for its box.
 
 ## 7. Save a good checkpoint
 
-When the test works, press **Ctrl+Shift+G** in Cursor or VS Code to open **Source Control**. Review
-the changed files, click **+** beside the changes you want to save, type
+When the test works, press **Ctrl+Shift+G** on Windows/Linux or **Control+Shift+G** on macOS in
+Cursor or VS Code to open **Source Control**. Review the changed files, click **+** beside the
+changes you want to save, type
 `Complete first playable translation test`, and click **Commit**. Click **Sync Changes** too if you
 connected a private online repository.
 
@@ -101,21 +103,23 @@ Skip this step if you did not set up Git.
 
 ## 8. Translate the rest a little at a time
 
-When the test looks good, return to Step 0 and select more maps. Translate, export, and play again.
-Small groups are easier to check than the entire game at once.
+When the test looks good, return to Step 1 (**Project**) and select more maps. Translate, export,
+and play again. Small groups are easier to check than the entire game at once.
 
 You can use **Batch** mode for a large job if your AI service supports it. Keep using **Normal**
 mode when you want a result quickly or are fixing only a few files.
 
 ## 9. Clean up what was missed
 
-Only after normal dialogue works should you use Step 4 for harder text, Step 7 for words inside
-pictures, or Step 8 for optional testing tools.
+Only after normal dialogue works should you use Step 5 (**Phase 2**) for harder text. Rewrap the
+finished export in Step 7, complete the full-game QA pass in Step 8, translate words inside pictures
+in Step 9, and use the playtest and release tools in Step 10.
 
 When you see leftover Japanese while playing:
 
 1. Take a screenshot.
-2. Use the Windows Snipping Tool to copy the Japanese words from the picture.
+2. Use your operating system's screenshot text-recognition feature, if available, to copy the
+   Japanese words from the picture.
 3. Search for those words with your AI helper.
 4. Translate or edit the matching text.
 5. Export it and test again.
@@ -129,12 +133,12 @@ screen, and no important Japanese remains. The normal cycle is **translate → p
 
 The same idea applies to WOLF RPG:
 
-1. In Step 0, choose the game, unpack its text, and import the listed files into DazedTL.
-2. In Step 2, use your AI helper to prepare the names and writing rules.
-3. Translate only names marked **safe**, then the main game information and a small amount of
-   dialogue.
-4. Use **Preview all injection** before **Apply all translations**.
-5. Build the playable game and test it.
-6. Fix problems before translating more.
+1. In Step 1, choose the game, unpack its text, and import the listed files into DazedTL.
+2. In Step 3, use your AI helper to write the names and writing rules, then reload and review them.
+3. In Step 4, translate only names marked **safe**; then translate the main game information and a
+   small amount of dialogue in Steps 5 and 6.
+4. Use **Preview all files** in Step 7 before **Apply all translations** in Step 8.
+5. Build and test the playable game in Step 9.
+6. Fix layout problems in Step 10 before translating more.
 
 Open **WOLF RPG Steps** under **EXTRA INFORMATION** for the exact buttons and safety labels.

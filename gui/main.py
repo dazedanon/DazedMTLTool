@@ -1219,7 +1219,7 @@ class DazedMTLGUI(QMainWindow):
 
         # Batch history
         btn_batches = self.create_nav_button("📦", "Batches")
-        btn_batches.setToolTip("Batches - Anthropic Message Batch history")
+        btn_batches.setToolTip("Batches - Claude, GPT, and Gemini Batch history")
         btn_batches.clicked.connect(lambda: self.switch_page(self.PAGE_BATCHES))
         sidebar_layout.addWidget(btn_batches)
         self.nav_buttons.append(btn_batches)

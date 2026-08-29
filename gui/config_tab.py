@@ -50,7 +50,7 @@ class ModelFetchThread(QThread):
         "claude-sonnet-4-5", "claude-haiku-4-5",
         "gemini-3.6-flash", "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro",
         "deepseek-chat",
-        "mistral-medium-3.5",  # free-tier recommendation; avoid -latest (older 3.1)
+        "mistral-medium-3-5",  # Free-mode recommendation; stable family alias
     ]
 
     def __init__(self, api_key, api_url, parent=None, provider=None):

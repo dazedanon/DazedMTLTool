@@ -2,36 +2,6 @@
 
 Use **Workflow** for most jobs. The other tabs are useful when you need a specific tool.
 
-## Version Update
-
-Use this when you already translated an older release of a game and the developer publishes a new
-release. DazedTL tries to carry your work into the newer game.
-
-For the first update, you need three game folders:
-
-1. the untouched old release;
-2. your translated copy of that old release;
-3. the untouched new release.
-
-Click **Scan Update** first. Scanning only compares the folders; it does not change them. The safest
-choice afterward is **Create a separate updated folder**. This leaves all three starting folders
-untouched.
-
-Some changes cannot be chosen safely by the tool. Review anything marked **Needs review** or
-**Translation at risk**, then start the finished game and test the changed maps and menus.
-
-> Keep the hidden `.dazedtl` folder inside your translated game. DazedTL uses it to make future
-> updates safer. Do not delete it just because you do not recognize it.
-
-Packed RPG Maker Ace and WOLF game updates are not supported here yet.
-
-### Do not confuse the two update buttons
-
-- **Check for Updates** updates the DazedTL program itself.
-- **Version Update** moves your translation to a newer release of a game.
-
-They do not update each other.
-
 ## Translation
 
 This is the manual translation screen. Workflow opens it for you at the correct time.
@@ -65,8 +35,9 @@ backups, but you should keep your own untouched copy of the game.
 
 ## Batches
 
-This shows large Claude translation jobs that may take a while to finish. Open a finished job here
-to continue it on the Translation tab. If you only use Normal mode, you may never need this tab.
+This shows Claude, GPT, and Gemini Batch jobs that may take a while to finish. Open a finished job
+here to continue it on the Translation tab. If you only use Normal mode, you may never need this
+tab.
 
 ## Version Update
 
@@ -74,16 +45,16 @@ This page keeps official game releases and translations on two Git branches. Sel
 translated game first. DazedTL immediately checks for the `original` and `translation` branches
 and reads their recorded versions.
 
-If the branches are missing, select the clean original game that matches the current translation
-and enter its version. **Create original + translation branches** records both trees without
-replacing translated content. Valid JSON is normalized on both branch baselines so initialization
-does not create whole-file formatting changes. Files excluded by the repository's Git ignore
-rules remain on disk but are not committed. When bootstrap begins, it installs the bundled
+If the branches are missing, click **Set up version tracking**, select the clean original game that
+matches the current translation, and enter its version. **Create version tracking** records both
+trees without replacing translated content. Valid JSON is normalized on both branch baselines so
+initialization does not create whole-file formatting changes. Files excluded by the repository's
+Git ignore rules remain on disk but are not committed. When setup begins, it installs the bundled
 GameUpdate `.gitignore` before creating either commit. Existing project-specific rules are kept
 after the bundled rules so they still take precedence.
 
 For a later release, select the clean new official game, enter its version, and click **Preview
-changes**. If the developer instead supplies a smaller patch with instructions to copy its folders
+update**. If the developer instead supplies a smaller patch with instructions to copy its folders
 over the game and overwrite files, select the extracted patch folder and enable **This is a patch
 folder**. Files omitted from a patch are preserved; use a complete official game folder when an
 update needs to delete files. Select the translated game's root folder, not its `data` subfolder;
@@ -93,7 +64,7 @@ The overview lists added, modified, deleted, and potentially overlapping files. 
 JSON is shown as normalized before commit so Git can compare individual lines. A JSON file that
 cannot be safely formatted is left unchanged and displayed as a warning. Files excluded by Git
 are listed separately and are not included in the release commit. Review the overview, then click
-**Approve and apply**. The official release is committed to `original` and
+**Apply update**. The official release is committed to `original` and
 cherry-picked into `translation`. When both versions changed the same file, the official file
 wins so game structure remains intact; the Activity list tells you which files need translation
 review.
@@ -110,11 +81,22 @@ The official release delta and the resulting translation impact are displayed as
 Commit unfinished translation work before updating. If a cherry-pick is interrupted, this page
 can either finish it with official files or abort it and restore the translation branch.
 
+Keep the hidden `.dazedtl` folder inside the translated game. DazedTL uses its portable guidance
+and local tool state during later work; do not delete it just because you do not recognize it.
+Packed RPG Maker Ace and WOLF game updates are not supported here yet.
+
+### Do not confuse the two update buttons
+
+- **Check for Updates** updates the DazedTL program itself.
+- **Version Update** moves your translation to a newer release of a game.
+
+They do not update each other.
+
 ## Skills
 
 These are detailed written instructions given to the translation AI and your AI helper. Most users
 should leave the shared instructions alone. Game-specific names and writing rules belong in
-Workflow Step 2.
+Workflow Step 3.
 
 ## Configuration
 

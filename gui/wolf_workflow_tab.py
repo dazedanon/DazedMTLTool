@@ -1713,7 +1713,7 @@ class WolfWorkflowTab(QWidget):
         copy_btn.setFixedWidth(Geometry.ACTION_WIDE)
         copy_btn.setToolTip(
             "Clipboard skill for the game repo IDE. Performs baseline setup plus a global "
-            "localization investigation before returning final guidance and speaker settings."
+            "localization investigation, writes the guidance files, and reports manual settings."
         )
         copy_btn.clicked.connect(self._copy_project_setup_prompt)
         actions.addWidget(copy_btn)
@@ -1722,8 +1722,8 @@ class WolfWorkflowTab(QWidget):
 
         self._setup_ai_help_banner = StatusBanner(
             "How to use this: run Project Setup once. It performs the global investigation "
-            "internally, then returns final labeled results for the matching Glossary, "
-            "Translation quirks, or Game skill tab below.",
+            "internally, writes the Glossary, Translation quirks, and Game skill files directly, "
+            "then reports any manual settings. Do not paste its report into these tabs.",
             "info",
         )
         helper_card.add_widget(self._setup_ai_help_banner)
@@ -1738,7 +1738,8 @@ class WolfWorkflowTab(QWidget):
         review_card = WorkflowStageCard(
             2,
             "Review the generated guidance",
-            "Paste each labeled result into its matching tab, make any corrections, and save it.",
+            "Use Reload file in each tab, review the generated guidance, and save only "
+            "your own corrections.",
         )
 
         self.setup_editors = SetupSkillsEditors(
@@ -1756,7 +1757,10 @@ class WolfWorkflowTab(QWidget):
             prepend = build_known_speakers_context("wolf", speakers)
             prompt = load_project_setup("wolf", prepend=prepend)
             QApplication.clipboard().setText(prompt)
-            self._log("📋 Project Setup skill copied. Paste it into Cursor/Copilot with files/ open.")
+            self._log(
+                "📋 Project Setup skill copied. Paste it into your AI helper with the "
+                "game folder open; reload the guidance tabs after it finishes."
+            )
         except Exception as exc:
             self._log(f"❌ Could not load Project Setup skill: {exc}")
 
