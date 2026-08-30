@@ -365,21 +365,25 @@ class BatchMapNameTests(unittest.TestCase):
             "cached_items": 4,
             "cached_requests": 1,
         }
-        with (
-            patch.dict(os.environ, {"BATCH_PHASE": "collect"}),
-            patch.object(mvmz, "calculateCost", return_value=0.0),
-            patch.object(mvmz, "batch_collect_file_stats", return_value=stats),
-        ):
-            result = mvmz.getResultString(
-                [{}, [0, 0], None], 0.25, "Map001.json"
-            )
+        for phase in ("collect", "estimate"):
+            with self.subTest(phase=phase):
+                with (
+                    patch.dict(os.environ, {"BATCH_PHASE": phase}),
+                    patch.object(mvmz, "calculateCost", return_value=0.0),
+                    patch.object(
+                        mvmz, "batch_collect_file_stats", return_value=stats
+                    ),
+                ):
+                    result = mvmz.getResultString(
+                        [{}, [0, 0], None], 0.25, "Map001.json"
+                    )
 
-        self.assertIn("12 text items", result)
-        self.assertIn("2 batch requests", result)
-        self.assertIn("4 items reused from cache", result)
-        self.assertIn("3 candidates skipped", result)
-        self.assertNotIn("[Input:", result)
-        self.assertNotIn("[Cost:", result)
+            self.assertIn("12 text items", result)
+            self.assertIn("2 batch requests", result)
+            self.assertIn("4 items reused from cache", result)
+            self.assertIn("3 candidates skipped", result)
+            self.assertNotIn("[Input:", result)
+            self.assertNotIn("[Cost:", result)
 
 
 class TestMVMZSourceOriginal(unittest.TestCase):

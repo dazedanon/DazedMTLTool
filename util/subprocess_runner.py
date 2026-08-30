@@ -158,7 +158,7 @@ def run_handler(project_root, module_name, filename, estimate_only):
 
         # A persistent RPG Maker batch worker holds these scopes across every
         # file in the phase. Consume loads fetched results/cache once; collect
-        # snapshots cache reads and coalesces durable queue fragments.
+        # collect/estimate snapshot cache reads and coalesce durable queue fragments.
         cache_scope = nullcontext()
         queue_scope = nullcontext()
         batch_phase = os.getenv("BATCH_PHASE", "").strip().lower()
@@ -166,7 +166,7 @@ def run_handler(project_root, module_name, filename, estimate_only):
             from util.translation import deferred_translation_cache_writes
 
             cache_scope = deferred_translation_cache_writes()
-        elif batch_phase == "collect":
+        elif batch_phase in {"collect", "estimate"}:
             from util.translation import (
                 batch_collect_snapshot_reads,
                 buffered_batch_queue_writes,
@@ -185,7 +185,9 @@ def run_handler(project_root, module_name, filename, estimate_only):
                 if "RPG Maker MV/MZ" in module_name:
                     from modules import rpgmakermvmz
 
-                    if multi_file and batch_phase in {"collect", "consume"}:
+                    if multi_file and batch_phase in {
+                        "collect", "estimate", "consume"
+                    }:
                         rpgmakermvmz.configureBatchMapNames(filenames)
 
                 for current_filename in filenames:

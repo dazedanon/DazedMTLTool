@@ -461,8 +461,9 @@ def handleMVMZ(filename, estimate):
     # to a real per-file cost window instead of being reset before accounting.
     batch_map_name_tokens = [0, 0]
     if _is_map_data_filename(filename):
+        batch_phase = (os.getenv("BATCH_PHASE") or "").strip().lower()
         preparing_batch_map_names = (
-            (os.getenv("BATCH_PHASE") or "").strip().lower() == "collect"
+            batch_phase in {"collect", "estimate"}
             and _BATCH_MAP_NAME_FILES is not None
             and _BATCH_MAP_NAME_TRANSLATIONS is None
         )
@@ -473,7 +474,8 @@ def handleMVMZ(filename, estimate):
             map_file_count = len(_BATCH_MAP_NAME_FILES or ())
             unique_name_count = int(map_name_stats.get("source_items", 0) or 0)
             tqdm.write(
-                "[BATCH] Map names: "
+                ("[ESTIMATE]" if batch_phase == "estimate" else "[BATCH]")
+                + " Map names: "
                 + _countLabel(map_file_count, "map file")
                 + " → "
                 + _countLabel(unique_name_count, "unique name")
@@ -623,7 +625,8 @@ def getResultString(translatedData, translationTime, filename):
     cost = calculateCost(translatedData[1][0], translatedData[1][1], MODEL)
     if (
         filename != "TOTAL"
-        and (os.getenv("BATCH_PHASE") or "").strip().lower() == "collect"
+        and (os.getenv("BATCH_PHASE") or "").strip().lower()
+        in {"collect", "estimate"}
     ):
         totalTokenstring = (
             Fore.CYAN
@@ -1596,10 +1599,10 @@ def _is_map_data_filename(filename: str) -> bool:
 
 
 def configureBatchMapNames(filenames) -> None:
-    """Stage selected map files for one grouped collect/consume request."""
+    """Stage selected map files for one grouped collect/estimate/consume request."""
     global _BATCH_MAP_NAME_FILES, _BATCH_MAP_NAME_TRANSLATIONS
     phase = (os.getenv("BATCH_PHASE") or "").strip().lower()
-    if phase not in {"collect", "consume"}:
+    if phase not in {"collect", "estimate", "consume"}:
         _BATCH_MAP_NAME_FILES = None
         _BATCH_MAP_NAME_TRANSLATIONS = None
         return
@@ -1803,7 +1806,7 @@ def parseMap(data, filename):
                 batch_phase = (os.getenv("BATCH_PHASE") or "").strip().lower()
                 map_name_payload = (
                     [data["displayName"]]
-                    if batch_phase in {"collect", "consume"}
+                    if batch_phase in {"collect", "estimate", "consume"}
                     else data["displayName"]
                 )
                 response = translateAI(
@@ -5878,7 +5881,9 @@ def getSpeaker(speaker: str):
     # still unresolved (notably when resuming a batch collected before speaker
     # glossary persistence was fixed), preserve the source name in both phases
     # instead of making a one-line live request or changing the payload key.
-    if (os.getenv("BATCH_PHASE") or "").strip().lower() in {"collect", "consume"}:
+    if (os.getenv("BATCH_PHASE") or "").strip().lower() in {
+        "collect", "estimate", "consume"
+    }:
         return [speaker, [0, 0]]
 
     # A few RPG Maker fields routed through getSpeaker are compound labels

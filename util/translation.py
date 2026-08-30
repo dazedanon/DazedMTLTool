@@ -58,6 +58,11 @@ def _batch_freeze_glossary_text(fallback=""):
 
 def _active_batch_cache_key_version() -> int:
     """Return the key version for the active batch run, else the current default."""
+    # Estimate collection is intentionally isolated from resumable paid batch
+    # state.  A queued legacy batch must not change how a fresh estimate keys
+    # and deduplicates its requests.
+    if get_batch_phase() == "estimate":
+        return BATCH_CACHE_KEY_VERSION
     snapshotted = getattr(
         _thread_local, "batch_collect_cache_key_version", None
     )
@@ -211,9 +216,40 @@ _NO_SAMPLING_RE = re.compile(r"opus-4-(?:[7-9]\b|[1-9]\d)|fable", re.I)
 
 # Tracks which distinct batch sizes have already been cache-written during this estimate run.
 # Each unique numLines value maps to a distinct output_config schema → one write per size.
-# Persisted to disk so sequential GUI subprocesses share state.
+# Persisted under a cross-process lock so concurrent GUI subprocesses share state.
 _estimate_written_sizes: set = set()
 _ESTIMATE_SIZES_FILE = Path("log/estimate_written_sizes.json")
+_ESTIMATE_STATE_LOCK_FILE = Path("log/estimate_state.lock")
+_ESTIMATE_STATIC_TOKENS_FILE = Path("log/estimate_static_tokens.json")
+
+
+@contextmanager
+def _estimate_state_lock():
+    """Serialize estimate-only state shared by concurrent file workers."""
+    _ESTIMATE_STATE_LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_ESTIMATE_STATE_LOCK_FILE, "a+b") as lock_file:
+        if os.name == "nt":
+            import msvcrt
+
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write(b"\0")
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 def _load_estimate_written_sizes():
     """Load persisted written-sizes set from disk (for GUI subprocess sharing)."""
@@ -229,20 +265,80 @@ def _save_estimate_written_sizes():
     """Persist written-sizes set to disk."""
     try:
         _ESTIMATE_SIZES_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(_ESTIMATE_SIZES_FILE, "w", encoding="utf-8") as f:
+        tmp = _ESTIMATE_SIZES_FILE.with_name(
+            f"{_ESTIMATE_SIZES_FILE.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(list(_estimate_written_sizes), f)
+        os.replace(tmp, _ESTIMATE_SIZES_FILE)
     except Exception:
         pass
 
 def clear_estimate_written_sizes():
     """Reset the written-sizes file at the start of a new estimate run."""
     global _estimate_written_sizes
-    _estimate_written_sizes = set()
-    try:
-        if _ESTIMATE_SIZES_FILE.exists():
-            _ESTIMATE_SIZES_FILE.unlink()
-    except Exception:
-        pass
+    with _estimate_state_lock():
+        _estimate_written_sizes = set()
+        try:
+            if _ESTIMATE_SIZES_FILE.exists():
+                _ESTIMATE_SIZES_FILE.unlink()
+        except Exception:
+            pass
+
+
+def _estimate_static_token_count(static_system, model):
+    """Count one static prompt once and reuse it across parallel workers/runs."""
+    identity = hashlib.sha256(
+        (str(model or "") + "\0" + str(static_system or "")).encode("utf-8")
+    ).hexdigest()
+    with _estimate_state_lock():
+        cache = {}
+        try:
+            if _ESTIMATE_STATIC_TOKENS_FILE.is_file():
+                loaded = json.loads(
+                    _ESTIMATE_STATIC_TOKENS_FILE.read_text(encoding="utf-8")
+                )
+                if isinstance(loaded, dict):
+                    cache = loaded
+            cached = int(cache.get(identity, 0) or 0)
+            if cached > 0:
+                return cached
+        except Exception:
+            cache = {}
+
+        try:
+            client = anthropic.Anthropic(api_key=openai.api_key)
+            backtick = chr(96) * 3
+            system_block = [{
+                "type": "text",
+                "text": backtick + "\n" + static_system + "\n" + backtick,
+                "cache_control": {"type": "ephemeral", "ttl": "5m"},
+            }]
+            response = client.beta.messages.count_tokens(
+                betas=["token-counting-2024-11-01"],
+                model=model,
+                system=system_block,
+                messages=[{"role": "user", "content": "x"}],
+            )
+            token_count = int(response.input_tokens)
+        except Exception:
+            enc = tiktoken.encoding_for_model("gpt-4")
+            token_count = len(enc.encode(static_system))
+
+        try:
+            cache[identity] = token_count
+            _ESTIMATE_STATIC_TOKENS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            tmp = _ESTIMATE_STATIC_TOKENS_FILE.with_name(
+                f"{_ESTIMATE_STATIC_TOKENS_FILE.name}.{os.getpid()}.tmp"
+            )
+            tmp.write_text(
+                json.dumps(cache, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            os.replace(tmp, _ESTIMATE_STATIC_TOKENS_FILE)
+        except Exception:
+            pass
+        return token_count
 
 
 # ===== Placeholder Protection System =====
@@ -1586,11 +1682,14 @@ def set_var_translations_batch(pairs):
 #   collect: translateAI builds each cache-missed request (byte-identical to a
 #            live request, including the cached system block) and queues it
 #            instead of calling the API. Text is left untranslated.
+#   estimate: same request construction as collect, written to an isolated
+#             disposable queue that can never be submitted or resumed.
 #   consume: translateAI feeds fetched responses through the normal validation
 #            and restore path; missing or invalid results fail closed without a
 #            surprise full-price live request.
 # Between the passes, submit/poll/fetch the queue with runTranslationBatches().
 BATCH_QUEUE_FILE   = Path("log/batch_requests.json")
+BATCH_ESTIMATE_QUEUE_FILE = Path("log/estimate_requests.json")
 BATCH_STATE_FILE   = Path("log/batch_state.json")
 BATCH_RESULTS_FILE = Path("log/batch_results.json")
 BATCH_LOCK_FILE    = Path("log/batch_files.lock")
@@ -1609,10 +1708,9 @@ _batch_queue_pending = {}  # process-local queue entries not yet flushed to disk
 
 
 def set_batch_phase(phase):
-    """Set the batch phase ('collect', 'consume' or None) for this process and
-    any subprocesses it spawns (the GUI runs one per file)."""
+    """Set the batch phase for this process and any subprocesses it spawns."""
     global _batch_phase, _batch_results
-    _batch_phase = phase if phase in ("collect", "consume") else None
+    _batch_phase = phase if phase in ("collect", "consume", "estimate") else None
     if _batch_phase:
         os.environ["BATCH_PHASE"] = _batch_phase
     else:
@@ -1625,7 +1723,7 @@ def get_batch_phase():
     if _batch_phase:
         return _batch_phase
     phase = os.getenv("BATCH_PHASE", "").strip().lower()
-    return phase if phase in ("collect", "consume") else None
+    return phase if phase in ("collect", "consume", "estimate") else None
 
 
 @contextmanager
@@ -1728,20 +1826,29 @@ def _write_batch_file(path, data):
     tmp_file.replace(path)
 
 
-def _batch_queue_parts_dir():
-    """Directory of append-only collect fragments for the active queue."""
-    return BATCH_QUEUE_FILE.with_name(f"{BATCH_QUEUE_FILE.name}.parts")
+def _active_batch_queue_file():
+    """Queue target for the current collect-like phase."""
+    if get_batch_phase() == "estimate":
+        return BATCH_ESTIMATE_QUEUE_FILE
+    return BATCH_QUEUE_FILE
 
 
-def _read_batch_queue(*, strict=False):
+def _batch_queue_parts_dir(queue_file=None):
+    """Directory of append-only collect fragments for one queue."""
+    queue_file = Path(queue_file or _active_batch_queue_file())
+    return queue_file.with_name(f"{queue_file.name}.parts")
+
+
+def _read_batch_queue(*, strict=False, queue_file=None):
     """Read the compact queue snapshot plus all durable collect fragments.
 
     Callers coordinating queue lifecycle changes must hold ``_batch_file_lock``.
     A fragment is one atomic write from a collect subprocess, which avoids
     rewriting and reparsing the full, growing queue for every request.
     """
-    queue = _read_batch_file(BATCH_QUEUE_FILE, strict=strict)
-    parts_dir = _batch_queue_parts_dir()
+    queue_file = Path(queue_file or _active_batch_queue_file())
+    queue = _read_batch_file(queue_file, strict=strict)
+    parts_dir = _batch_queue_parts_dir(queue_file)
     try:
         if parts_dir.is_symlink():
             raise OSError("path is a symbolic link")
@@ -1781,9 +1888,9 @@ def _read_batch_queue(*, strict=False):
     return queue
 
 
-def _clear_batch_queue_parts(*, strict=False):
+def _clear_batch_queue_parts(*, strict=False, queue_file=None):
     """Remove queue fragments without traversing unexpected directories."""
-    parts_dir = _batch_queue_parts_dir()
+    parts_dir = _batch_queue_parts_dir(queue_file)
     try:
         if parts_dir.is_symlink():
             raise OSError(f"Batch queue fragments path is a link: {parts_dir}")
@@ -1820,26 +1927,28 @@ def _clear_batch_queue_parts(*, strict=False):
             raise
 
 
-def _clear_batch_queue_storage(*, strict=False):
+def _clear_batch_queue_storage(*, strict=False, queue_file=None):
     """Remove the compact queue snapshot and its append-only fragments."""
+    queue_file = Path(queue_file or _active_batch_queue_file())
     try:
-        if BATCH_QUEUE_FILE.exists():
-            BATCH_QUEUE_FILE.unlink()
+        if queue_file.exists():
+            queue_file.unlink()
     except Exception:
         if strict:
             raise
-    _clear_batch_queue_parts(strict=strict)
+    _clear_batch_queue_parts(strict=strict, queue_file=queue_file)
 
 
-def _compact_batch_queue(*, strict=True):
+def _compact_batch_queue(*, strict=True, queue_file=None):
     """Merge durable fragments into the legacy queue snapshot once."""
-    queue = _read_batch_queue(strict=strict)
-    parts_dir = _batch_queue_parts_dir()
+    queue_file = Path(queue_file or _active_batch_queue_file())
+    queue = _read_batch_queue(strict=strict, queue_file=queue_file)
+    parts_dir = _batch_queue_parts_dir(queue_file)
     if parts_dir.exists():
         # Write the complete snapshot before deleting any fragment. A crash can
         # therefore leave duplicates, but never lose a collected request.
-        _write_batch_file(BATCH_QUEUE_FILE, queue)
-        _clear_batch_queue_parts(strict=strict)
+        _write_batch_file(queue_file, queue)
+        _clear_batch_queue_parts(strict=strict, queue_file=queue_file)
     return queue
 
 
@@ -1961,7 +2070,7 @@ def buffered_batch_queue_writes():
                     pass
 
 
-def flush_batch_queue(*, force=False):
+def flush_batch_queue(*, force=False, queue_file=None):
     """Persist pending entries as one atomic queue fragment.
 
     Outside a buffered collect scope this remains an immediate durability
@@ -1969,6 +2078,7 @@ def flush_batch_queue(*, force=False):
     without producing a fragment for every parser call.
     """
     global _batch_queue_pending
+    queue_file = Path(queue_file or _active_batch_queue_file())
     with BATCH_LOCK:
         if not _batch_queue_pending:
             return False
@@ -1987,8 +2097,8 @@ def flush_batch_queue(*, force=False):
             with _batch_file_lock():
                 # A corrupt legacy snapshot must still block new collection;
                 # never hide or overwrite recovery data from an older build.
-                _read_batch_file(BATCH_QUEUE_FILE, strict=True)
-                parts_dir = _batch_queue_parts_dir()
+                _read_batch_file(queue_file, strict=True)
+                parts_dir = _batch_queue_parts_dir(queue_file)
                 part_name = (
                     f"{time.time_ns():020d}-{os.getpid()}-"
                     f"{threading.get_ident()}-{uuid.uuid4().hex}.json"
@@ -2011,7 +2121,7 @@ def batchQueueStaleContextCount(vocab_text=None, use_sfx_reference=None):
     are protected by the same context-aware result key; a mismatch stops consume
     rather than making an unapproved full-price live request.
     """
-    flush_batch_queue()
+    flush_batch_queue(queue_file=BATCH_QUEUE_FILE)
     if vocab_text is None:
         vocab_text = _batch_freeze_glossary_text()
     vocab_pairs = parseVocabWithCategories(vocab_text or "")
@@ -2021,7 +2131,7 @@ def batchQueueStaleContextCount(vocab_text=None, use_sfx_reference=None):
         )
 
     with _batch_file_lock():
-        queue = _read_batch_queue(strict=True)
+        queue = _read_batch_queue(strict=True, queue_file=BATCH_QUEUE_FILE)
 
     stale = 0
     for recorded_key, entry in queue.items():
@@ -2118,9 +2228,11 @@ def require_batch_result(
 
 def pendingBatchRequests():
     """Number of queued batch requests (call after the collect pass)."""
-    flush_batch_queue()
+    flush_batch_queue(queue_file=BATCH_QUEUE_FILE)
     with _batch_file_lock():
-        return len(_compact_batch_queue(strict=True))
+        return len(
+            _compact_batch_queue(strict=True, queue_file=BATCH_QUEUE_FILE)
+        )
 
 
 def batchRunState():
@@ -2138,7 +2250,7 @@ def batchRunState():
         with _batch_file_lock():
             state = _read_batch_file(BATCH_STATE_FILE, strict=True)
             results = _read_batch_file(BATCH_RESULTS_FILE, strict=True)
-            queue = _read_batch_queue(strict=True)
+            queue = _read_batch_queue(strict=True, queue_file=BATCH_QUEUE_FILE)
             if state.get("status") == "partially_submitted" and state.get("batches"):
                 return "partially_submitted"
             if state.get("batches"):
@@ -2246,7 +2358,9 @@ def clearBatchFiles(*, strict=False):
                 fetched_ids = list(state.get("batch_ids") or [])
                 if not fetched_ids:
                     fetched_ids = [b.get("id") for b in (state.get("batches") or []) if b.get("id")]
-            _clear_batch_queue_storage(strict=strict)
+            _clear_batch_queue_storage(
+                strict=strict, queue_file=BATCH_QUEUE_FILE
+            )
             for path in (BATCH_STATE_FILE, BATCH_RESULTS_FILE):
                 try:
                     if path.exists():
@@ -2260,8 +2374,9 @@ def clearBatchFiles(*, strict=False):
                     for path in (BATCH_QUEUE_FILE, BATCH_STATE_FILE, BATCH_RESULTS_FILE)
                     if path.exists()
                 ]
-                if _batch_queue_parts_dir().exists():
-                    remaining.append(str(_batch_queue_parts_dir()))
+                parts_dir = _batch_queue_parts_dir(BATCH_QUEUE_FILE)
+                if parts_dir.exists():
+                    remaining.append(str(parts_dir))
                 if remaining:
                     raise OSError(
                         "Could not discard batch recovery files: " + ", ".join(remaining)
@@ -2282,6 +2397,18 @@ def clearBatchFiles(*, strict=False):
             on_clear_active_files(had_results=True, fetched_ids=fetched_ids or None)
         except Exception as exc:
             print(f"[BATCH] history consume mark failed: {exc}", flush=True)
+
+
+def clearEstimateRequests(*, strict=False):
+    """Discard only the disposable request queue used by Estimate mode."""
+    global _batch_queue_pending
+    with BATCH_LOCK:
+        with _batch_file_lock():
+            _clear_batch_queue_storage(
+                strict=strict, queue_file=BATCH_ESTIMATE_QUEUE_FILE
+            )
+        if get_batch_phase() == "estimate":
+            _batch_queue_pending = {}
 
 
 def _get_anthropic_client():
@@ -2323,7 +2450,53 @@ def _estimate_openai_cache_reads(prompt_token_sequences):
     return cached_tokens
 
 
-def estimateBatchCost(model=None):
+def estimateCostComparison(
+    input_tokens,
+    output_tokens,
+    model=None,
+    *,
+    api_url=None,
+    api_provider=None,
+    batch_provider=None,
+):
+    """Return comparable no-cache live and Batch API estimates.
+
+    This is the common baseline used by normal Estimate mode and the richer
+    post-collection Batch Translate estimate. Prompt-cache savings are layered
+    onto the latter separately because they require the complete request set.
+    """
+    est_model = model or os.getenv("model", "")
+    pricing = getPricingConfig(est_model)
+    input_tokens = max(0, int(input_tokens or 0))
+    output_tokens = max(0, int(output_tokens or 0))
+    live_cost = (
+        input_tokens * pricing["inputAPICost"]
+        + output_tokens * pricing["outputAPICost"]
+    ) / 1_000_000
+    provider = batch_provider
+    if provider is None:
+        provider = getBatchProvider(
+            est_model,
+            api_url=api_url,
+            api_provider=api_provider,
+        )
+    normalized_model = str(est_model or "").lower().removeprefix("models/")
+    return {
+        "model": est_model,
+        "provider": provider,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "live_cost": live_cost,
+        "batch_cost": live_cost * 0.50 if provider else None,
+        "batch_supported": provider is not None,
+        "basis": "no_cache",
+        "unestimated_thinking_tokens": (
+            provider == "gemini" and normalized_model.startswith("gemini-3")
+        ),
+    }
+
+
+def estimateBatchCost(model=None, *, queue_file=None, log_prefix="[BATCH]"):
     """Print a cost estimate for the queued batch requests and return it.
 
     For Claude, cached-prefix accounting mirrors what Anthropic bills: each distinct cached
@@ -2335,11 +2508,16 @@ def estimateBatchCost(model=None):
     Gemini estimates exclude unpredictable thinking output and do not assume
     an implicit cache hit.
     """
-    flush_batch_queue()
+    queue_file = Path(queue_file or BATCH_QUEUE_FILE)
+    # Pending entries belong to the current process phase. Do not redirect a
+    # different phase's in-memory buffer merely because another queue is being
+    # priced explicitly.
+    if queue_file == _active_batch_queue_file():
+        flush_batch_queue(queue_file=queue_file)
     with _batch_file_lock():
-        queue = _read_batch_queue(strict=True)
+        queue = _compact_batch_queue(strict=True, queue_file=queue_file)
     if not queue:
-        print("[BATCH] No batch requests queued.", flush=True)
+        print(f"{log_prefix} No requests need translation.", flush=True)
         return None
 
     enc = tiktoken.encoding_for_model("gpt-4")
@@ -2400,8 +2578,18 @@ def estimateBatchCost(model=None):
     in_rate = pricing["inputAPICost"] / 1_000_000
     out_rate = pricing["outputAPICost"] / 1_000_000
 
-    batch_nocache = (raw_input_tok * in_rate + output_tokens * out_rate) * 0.50
-    live_cost = raw_input_tok * in_rate + output_tokens * out_rate
+    comparison = estimateCostComparison(
+        raw_input_tok,
+        output_tokens,
+        est_model,
+        batch_provider=est_provider,
+    )
+    batch_nocache = comparison["batch_cost"]
+    if batch_nocache is None:
+        # Legacy/test queues may omit provider metadata even though their
+        # entries already represent Batch API work.
+        batch_nocache = comparison["live_cost"] * 0.50
+    live_cost = comparison["live_cost"]
     cache_kind = None
     if est_provider == "anthropic" and cache_write_tok > 0:
         # Claude's explicit 1-hour cache writes the prefix once at 2x input
@@ -2451,43 +2639,44 @@ def estimateBatchCost(model=None):
         cache_read_tok = 0
         batch_cached = batch_nocache
     uses_prompt_cache = cache_kind is not None
-    normalized_model = str(est_model or "").lower().removeprefix("models/")
-    unestimated_thinking = (
-        est_provider == "gemini" and normalized_model.startswith("gemini-3")
-    )
+    unestimated_thinking = comparison["unestimated_thinking_tokens"]
 
     n_reread = sum(prefix_count.values()) - len(prefix_count)
-    print(f"[BATCH] {len(queue)} requests queued for {est_model}", flush=True)
+    request_state = "queued" if log_prefix == "[BATCH]" else "estimated"
+    print(
+        f"{log_prefix} {len(queue)} requests {request_state} for {est_model}",
+        flush=True,
+    )
     if cache_kind == "explicit":
         print(
-            f"[BATCH] cached prefix: {cache_write_tok:,} tokens "
+            f"{log_prefix} cached prefix: {cache_write_tok:,} tokens "
             f"(written once, re-read by {n_reread:,} requests)",
             flush=True,
         )
     elif cache_kind == "automatic":
         print(
-            f"[BATCH] estimated OpenAI automatic cache: "
+            f"{log_prefix} estimated OpenAI automatic cache: "
             f"{cache_write_tok:,} write / {cache_read_tok:,} read tokens "
             f"(best-effort prefix routing)",
             flush=True,
         )
     print(
-        f"[BATCH] estimated input: {raw_input_tok:,} tokens | "
+        f"{log_prefix} estimated input: {raw_input_tok:,} tokens | "
         f"estimated visible output: {output_tokens:,} tokens",
         flush=True,
     )
     if cache_kind == "explicit":
-        print(f"[BATCH] estimated cost: ${batch_cached:.4f} (batch + prompt cache)", flush=True)
-        print(f"[BATCH]                 ${batch_nocache:.4f} (batch, no cache hits)", flush=True)
+        print(f"{log_prefix} estimated cost: ${batch_cached:.4f} (batch + prompt cache)", flush=True)
+        print(f"{log_prefix}                 ${batch_nocache:.4f} (batch, no cache hits)", flush=True)
     elif cache_kind == "automatic":
-        print(f"[BATCH] estimated cost: ${batch_cached:.4f} (batch + automatic cache)", flush=True)
-        print(f"[BATCH]                 ${batch_nocache:.4f} (batch, no cache hits)", flush=True)
+        print(f"{log_prefix} estimated cost: ${batch_cached:.4f} (batch + automatic cache)", flush=True)
+        print(f"{log_prefix}                 ${batch_nocache:.4f} (batch, no cache hits)", flush=True)
     else:
-        print(f"[BATCH] estimated cost: ${batch_nocache:.4f} (batch)", flush=True)
-    print(f"[BATCH]                 ${live_cost:.4f} (live API)", flush=True)
+        print(f"{log_prefix} estimated cost: ${batch_nocache:.4f} (batch)", flush=True)
+    print(f"{log_prefix}                 ${live_cost:.4f} (live API)", flush=True)
     if unestimated_thinking:
         print(
-            "[BATCH] NOTE: Gemini thinking tokens are billed as output and cannot "
+            f"{log_prefix} NOTE: Gemini thinking tokens are billed as output and cannot "
             "be predicted before the run; they are not included above.",
             flush=True,
         )
@@ -2509,6 +2698,26 @@ def estimateBatchCost(model=None):
     }
 
 
+def estimateTranslationCosts(model=None):
+    """Price the isolated Estimate-mode queue using Batch Collect accounting."""
+    estimate = estimateBatchCost(
+        model,
+        queue_file=BATCH_ESTIMATE_QUEUE_FILE,
+        log_prefix="[ESTIMATE]",
+    )
+    if estimate is None:
+        return None
+    estimate = dict(estimate)
+    estimate["batch_supported"] = True
+    estimate["batch_cost"] = (
+        estimate["batch_cached_cost"]
+        if estimate.get("uses_prompt_cache")
+        else estimate["batch_nocache_cost"]
+    )
+    estimate["basis"] = "request_queue"
+    return estimate
+
+
 def submitTranslationBatches(file_set=None, cost_estimate=None):
     """Submit queued requests to the configured provider's Batch API.
 
@@ -2522,9 +2731,11 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
 
 def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
     """Submit while the caller holds the cross-process submission lock."""
-    flush_batch_queue()
+    flush_batch_queue(queue_file=BATCH_QUEUE_FILE)
     with _batch_file_lock():
-        queue = _compact_batch_queue(strict=True)
+        queue = _compact_batch_queue(
+            strict=True, queue_file=BATCH_QUEUE_FILE
+        )
         previous_state = _read_batch_file(BATCH_STATE_FILE, strict=True)
     if not queue:
         print("[BATCH] No batch requests queued.", flush=True)
@@ -2945,7 +3156,7 @@ def fetchTranslationBatches(batches=None):
             _write_batch_file(BATCH_RESULTS_FILE, results)
             # Drop the queue; keep a lightweight fetched marker (ids for consume→history).
             # custom_ids stay in durable history - do not destroy recovery maps.
-            _clear_batch_queue_storage()
+            _clear_batch_queue_storage(queue_file=BATCH_QUEUE_FILE)
             fetched_state = {
                 "status": "fetched",
                 "run_id": state.get("run_id"),
@@ -5146,13 +5357,17 @@ def calculateCost(inputTokens, outputTokens, model):
             write_batches = batch_count
             read_batches  = 0
         else:
-            _load_estimate_written_sizes()
-            seen_sizes = getattr(_thread_local, 'estimate_seen_sizes', set())
-            new_sizes = seen_sizes - _estimate_written_sizes
-            write_batches = len(new_sizes)  # one write per newly-seen size
-            read_batches  = batch_count - write_batches
-            _estimate_written_sizes.update(new_sizes)
-            _save_estimate_written_sizes()
+            # File estimates can run concurrently. Claim newly seen output
+            # schemas under one cross-process lock so exactly one worker counts
+            # each prompt-cache write while every other worker counts a read.
+            with _estimate_state_lock():
+                _load_estimate_written_sizes()
+                seen_sizes = getattr(_thread_local, 'estimate_seen_sizes', set())
+                new_sizes = seen_sizes - _estimate_written_sizes
+                write_batches = len(new_sizes)
+                read_batches = batch_count - write_batches
+                _estimate_written_sizes.update(new_sizes)
+                _save_estimate_written_sizes()
             _thread_local.estimate_seen_sizes = set()
         write_cost = (
             write_batches * static_tok / 1_000_000
@@ -5265,12 +5480,16 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
     _prev_bout = _thread_local.file_batch_output
     _thread_local.file_cost_ready = False  # will be set True at end of translateAI
 
-    # Provider batch phase ('collect'/'consume'); None when off or unsupported.
+    # Provider batch phase; Estimate uses the collect request builder with a
+    # disposable queue and never reaches a provider call.
     batch_phase = get_batch_phase()
     batch_provider = getBatchProvider(config.model)
-    if batch_phase and (config.estimateMode or not batch_provider):
+    if batch_phase and (
+        not batch_provider
+        or (config.estimateMode and batch_phase != "estimate")
+    ):
         batch_phase = None
-    if batch_phase == "collect" and isinstance(text, list):
+    if batch_phase in {"collect", "estimate"} and isinstance(text, list):
         _record_batch_collect_stats(source_items=len(text))
     
     if isinstance(text, list):
@@ -5448,17 +5667,20 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             subbedT, request_history, sfx_text, vocab_text
         )
 
-        # Batch collect queues list payloads only. Single strings (speaker and
+        # Batch collect/estimate queues list payloads only. Single strings (speaker and
         # variable names) translate live — modules memoize them and embed the
         # results into later payloads, so they must resolve identically in both
         # passes or the consume pass couldn't match the queued payload keys.
         # This is the names-first phase; names are a tiny share of the volume.
-        queue_for_batch = batch_phase == "collect" and isinstance(tItem, list)
+        queue_for_batch = (
+            batch_phase in {"collect", "estimate"}
+            and isinstance(tItem, list)
+        )
 
         # Check cache for this exact payload (the collect pass uses a
         # non-blocking peek so no pending markers are left behind for the
         # consume pass to wait on)
-        if queue_for_batch:
+        if queue_for_batch or batch_phase == "estimate":
             cached_result = peek_cached_translation(
                 subbedT, config.language, key_context, request_context
             )
@@ -5610,24 +5832,13 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                 and (not _est_api or "anthropic" in _est_api.lower())
             )
             if _is_claude_est:
-                # Use Anthropic's count_tokens API once to get the exact cached token count.
-                # Only called on the first batch; result reused for all subsequent batches.
+                # Count the shared static prefix once across every concurrent
+                # file worker. The keyed result persists across estimate runs
+                # until the model or prompt changes.
                 if not getattr(_thread_local, 'estimate_static_tokens', 0):
-                    try:
-                        _ant_count_client = anthropic.Anthropic(api_key=openai.api_key)
-                        backtick = chr(96) * 3
-                        _sys_block = [{"type": "text", "text": backtick + "\n" + static_system + "\n" + backtick, "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
-                        _count_resp = _ant_count_client.beta.messages.count_tokens(
-                            betas=["token-counting-2024-11-01"],
-                            model=config.model,
-                            system=_sys_block,
-                            messages=[{"role": "user", "content": "x"}]
-                        )
-                        _thread_local.estimate_static_tokens = _count_resp.input_tokens
-                    except Exception:
-                        # Fallback to tiktoken if count_tokens fails
-                        enc = tiktoken.encoding_for_model("gpt-4")
-                        _thread_local.estimate_static_tokens = len(enc.encode(static_system))
+                    _thread_local.estimate_static_tokens = (
+                        _estimate_static_token_count(static_system, config.model)
+                    )
                 regular_tok = max(0, estimate[0] - getattr(_thread_local, 'estimate_static_tokens', 0))
                 _thread_local.estimate_regular_tokens = getattr(_thread_local, 'estimate_regular_tokens', 0) + regular_tok
                 _thread_local.estimate_batch_count = getattr(_thread_local, 'estimate_batch_count', 0) + 1
@@ -6136,8 +6347,8 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
     if tList and isinstance(tList[0], list):
         tList = [t for sublist in tList for t in sublist]
     
-    # Batch collect pass: merge this call's queued requests into the disk queue.
-    if batch_phase == "collect":
+    # Collect-like passes merge this call's requests into their own disk queue.
+    if batch_phase in {"collect", "estimate"}:
         flush_batch_queue()
 
     # Accumulate Claude cache-aware calls and every provider's discounted batch.

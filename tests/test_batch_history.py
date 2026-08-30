@@ -24,6 +24,7 @@ class BatchHistoryTestBase(unittest.TestCase):
         tmp = Path(self._tmp.name)
         self._orig = {
             "QUEUE": T.BATCH_QUEUE_FILE,
+            "ESTIMATE_QUEUE": T.BATCH_ESTIMATE_QUEUE_FILE,
             "STATE": T.BATCH_STATE_FILE,
             "RESULTS": T.BATCH_RESULTS_FILE,
             "LOCK": T.BATCH_LOCK_FILE,
@@ -33,6 +34,7 @@ class BatchHistoryTestBase(unittest.TestCase):
             "pending": dict(T._batch_queue_pending),
         }
         T.BATCH_QUEUE_FILE = tmp / "batch_requests.json"
+        T.BATCH_ESTIMATE_QUEUE_FILE = tmp / "estimate_requests.json"
         T.BATCH_STATE_FILE = tmp / "batch_state.json"
         T.BATCH_RESULTS_FILE = tmp / "batch_results.json"
         T.BATCH_LOCK_FILE = tmp / "batch_files.lock"
@@ -48,6 +50,7 @@ class BatchHistoryTestBase(unittest.TestCase):
 
     def tearDown(self):
         T.BATCH_QUEUE_FILE = self._orig["QUEUE"]
+        T.BATCH_ESTIMATE_QUEUE_FILE = self._orig["ESTIMATE_QUEUE"]
         T.BATCH_STATE_FILE = self._orig["STATE"]
         T.BATCH_RESULTS_FILE = self._orig["RESULTS"]
         T.BATCH_LOCK_FILE = self._orig["LOCK"]
@@ -1448,6 +1451,39 @@ class BatchEstimateTests(BatchHistoryTestBase):
         self.assertLess(
             estimate["batch_cached_cost"],
             estimate["batch_nocache_cost"],
+        )
+
+        paid_queue = T._read_batch_queue(
+            strict=True, queue_file=T.BATCH_QUEUE_FILE
+        )
+        try:
+            T.set_batch_phase("estimate")
+            T.queue_batch_request(
+                '{"Line1":"isolated"}',
+                "English",
+                {
+                    "model": "gpt-5.6-terra",
+                    "messages": [{"role": "user", "content": "estimate only"}],
+                },
+                provider="openai",
+            )
+            T.flush_batch_queue()
+        finally:
+            T.set_batch_phase(None)
+
+        with mock.patch.object(
+            T,
+            "getPricingConfig",
+            return_value={"inputAPICost": 2.0, "outputAPICost": 12.0},
+        ):
+            isolated = T.estimateTranslationCosts()
+
+        self.assertEqual(isolated["requests"], 1)
+        self.assertEqual(isolated["basis"], "request_queue")
+        T.clearEstimateRequests(strict=True)
+        self.assertEqual(
+            T._read_batch_queue(strict=True, queue_file=T.BATCH_QUEUE_FILE),
+            paid_queue,
         )
 
 

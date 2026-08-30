@@ -4,6 +4,7 @@ import io
 import json
 import os
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,6 +23,46 @@ from gui.translation_tab import (
 
 
 class TranslationWorkerTests(unittest.TestCase):
+    def test_estimate_uses_file_concurrency_and_returns_both_prices(self) -> None:
+        """Estimate mode must stay accurate without forcing one file at a time."""
+        worker = TranslationWorker(Path.cwd(), ("JSON", (".json",), None))
+        barrier = threading.Barrier(3)
+        lock = threading.Lock()
+        active = {"count": 0, "max": 0}
+
+        def estimate_one(_filename, *_args):
+            with lock:
+                active["count"] += 1
+                active["max"] = max(active["max"], active["count"])
+            barrier.wait(timeout=1.0)
+            with lock:
+                active["count"] -= 1
+            return (
+                "TOTAL: [Input: 100][Output: 20]"
+                "[Cost: $0.0000][0.1s]"
+            )
+
+        worker.run_module_in_process = estimate_one
+        with mock.patch.dict(os.environ, {
+            "fileThreads": "3",
+            "model": "gpt-5.6-terra",
+            "api": "https://api.openai.com/v1",
+            "API_PROVIDER": "openai",
+        }):
+            result = worker._run_files(
+                ["a.json", "b.json", "c.json"], True
+            )
+
+        self.assertEqual(active["max"], 3)
+        self.assertIn("[Input: 300]", result)
+        self.assertIn("[Output: 60]", result)
+        self.assertIn("[Batch:", result)
+        self.assertIn("[Live:", result)
+        self.assertAlmostEqual(
+            worker.estimate_summary["batch_cost"],
+            worker.estimate_summary["live_cost"] * 0.5,
+        )
+
     def test_declining_batch_submission_discards_the_local_queue(self) -> None:
         worker = TranslationWorker(Path.cwd(), ("JSON", (".json",), None))
         worker.batch_phase_signal.connect(
@@ -113,7 +154,7 @@ class TranslationWorkerTests(unittest.TestCase):
         self.assertEqual(active["max"], 1)
 
     def test_mvmz_batch_phase_reuses_one_process_for_all_files(self) -> None:
-        """RPG Maker batch I/O must not pay one interpreter import per file."""
+        """RPG Maker batch collection and estimation reuse one interpreter."""
         worker = TranslationWorker(
             Path.cwd(), ("RPG Maker MV/MZ", (".json",), None)
         )
@@ -131,20 +172,33 @@ class TranslationWorkerTests(unittest.TestCase):
             return "Success"
 
         worker.run_module_in_process = run_many
-        result = worker._run_files(
+        consume_result = worker._run_files(
             ["Map001.json", "Map002.json", "Actors.json"],
             False,
             batch_phase="consume",
         )
+        estimate_result = worker._run_files(
+            ["Map001.json", "Map002.json", "Actors.json"],
+            True,
+            batch_phase="estimate",
+        )
 
-        self.assertEqual(result, "TOTAL: success")
+        self.assertEqual(consume_result, "TOTAL: success")
+        self.assertEqual(estimate_result, "TOTAL: success")
         self.assertEqual(
             calls,
-            [(
-                ["Map001.json", "Map002.json", "Actors.json"],
-                False,
-                "consume",
-            )],
+            [
+                (
+                    ["Map001.json", "Map002.json", "Actors.json"],
+                    False,
+                    "consume",
+                ),
+                (
+                    ["Map001.json", "Map002.json", "Actors.json"],
+                    True,
+                    "estimate",
+                ),
+            ],
         )
 
     def test_multi_file_runner_streams_input_and_per_file_results(self) -> None:
@@ -465,15 +519,57 @@ class TranslationTabUITests(unittest.TestCase):
             self.tab.progress_table.item(row, 1).text(), "Estimating"
         )
 
-        self.tab._apply_file_result("Actors.json", 100, 200, 0.50, 1.0)
+        # Request-set estimation has no per-file billing line. Its definitive
+        # file event must close the row, and a buffered tqdm event must not
+        # paint that completed row back to Estimating.
+        self.tab.update_file_progress(1, 1, "Actors.json")
         self.assertEqual(
             self.tab.progress_table.item(row, 1).text(), "Estimated"
         )
-        self.assertTrue(
-            self.tab.totals_cost_label.text().startswith("Estimated cost:")
+        self.tab.update_item_progress("Actors.json", 10, 10)
+        self.assertEqual(
+            self.tab.progress_table.item(row, 1).text(), "Estimated"
         )
+        self.assertEqual(self.tab.progress_table.item(row, 2).text(), "✓")
+
+        with mock.patch(
+            "gui.translation_tab._estimate_cost_comparison",
+            return_value={
+                "batch_supported": True,
+                "batch_cost": 0.25,
+                "live_cost": 0.50,
+                "unestimated_thinking_tokens": False,
+            },
+        ):
+            self.tab._apply_file_result("Actors.json", 100, 200, 0.50, 1.0)
+        self.assertEqual(
+            self.tab.progress_table.item(row, 1).text(), "Estimated"
+        )
+        self.assertIn("Batch $0.2500", self.tab.totals_cost_label.text())
+        self.assertIn("Live $0.5000", self.tab.totals_cost_label.text())
+
+        self.tab._apply_estimate_summary({
+            "basis": "request_queue",
+            "input_tokens": 1000,
+            "output_tokens": 200,
+            "batch_supported": True,
+            "batch_cost": 0.20,
+            "batch_cached_cost": 0.15,
+            "batch_nocache_cost": 0.20,
+            "live_cost": 0.40,
+            "uses_prompt_cache": True,
+            "cache_kind": "automatic",
+            "unestimated_thinking_tokens": False,
+            "elapsed_seconds": 1.5,
+        })
+        self.assertIn("1000 in / 200 out", self.tab.totals_tokens_label.text())
+        self.assertIn("Batch + auto cache $0.1500", self.tab.totals_cost_label.text())
+        self.assertIn("Batch worst-case $0.2000", self.tab.totals_cost_label.text())
+        self.assertIn("Live $0.4000", self.tab.totals_cost_label.text())
+        self.assertEqual(self.tab.totals_time_label.text(), "Time: 1.5s")
 
         self.tab._apply_finish_ui(True, "TOTAL: estimate")
+        self.assertIn("Batch + auto cache $0.1500", self.tab.totals_cost_label.text())
         self.assertEqual(self.tab.file_card.title_label.text(), "Estimation results")
         self.assertEqual(self.tab.translate_button.text(), "Estimation complete")
         self.assertTrue(self.tab.open_translations_button.isHidden())

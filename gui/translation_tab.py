@@ -287,6 +287,77 @@ def _format_estimated_cost(value) -> str:
     return f"${amount:.4f}" if abs(amount) < 1 else f"${amount:.2f}"
 
 
+def _estimate_cost_comparison(input_tokens, output_tokens):
+    from util.translation import estimateCostComparison
+
+    return estimateCostComparison(input_tokens, output_tokens)
+
+
+def _format_estimate_cost_comparison(comparison) -> str:
+    comparison = comparison or {}
+    thinking = " + thinking" if comparison.get("unestimated_thinking_tokens") else ""
+    live = _format_estimated_cost(comparison.get("live_cost")) + thinking
+    if comparison.get("uses_prompt_cache"):
+        cache_label = (
+            "auto cache"
+            if comparison.get("cache_kind") == "automatic"
+            else "prompt cache"
+        )
+        cached = _format_estimated_cost(
+            comparison.get("batch_cached_cost")
+        ) + thinking
+        worst = _format_estimated_cost(
+            comparison.get("batch_nocache_cost")
+        ) + thinking
+        return (
+            f"Est. cost: Batch + {cache_label} {cached} · "
+            f"Batch worst-case {worst} · Live {live}"
+        )
+    if comparison.get("batch_supported"):
+        batch = _format_estimated_cost(comparison.get("batch_cost")) + thinking
+        return f"Est. cost: Batch {batch} · Live {live}"
+    return f"Est. live cost: {live} · Batch unavailable for this provider"
+
+
+def _result_token_usage(result):
+    """Extract one subprocess TOTAL result for aggregate estimate reporting."""
+    if isinstance(result, tuple) and len(result) >= 3:
+        result = result[2]
+    text = _strip_ansi(str(result or ""))
+    match = re.search(
+        r"\[Input:\s*(?P<input>\d+)\].*?\[Output:\s*(?P<output>\d+)\]",
+        text,
+    )
+    if not match:
+        return None
+    return int(match.group("input")), int(match.group("output"))
+
+
+def _format_estimate_total(comparison) -> str:
+    comparison = comparison or {}
+    token_text = (
+        f"[Input: {int(comparison.get('input_tokens', 0) or 0)}]"
+        f"[Output: {int(comparison.get('output_tokens', 0) or 0)}]"
+    )
+    thinking = " + thinking" if comparison.get("unestimated_thinking_tokens") else ""
+    live = _format_estimated_cost(comparison.get("live_cost")) + thinking
+    if comparison.get("uses_prompt_cache"):
+        cached = _format_estimated_cost(
+            comparison.get("batch_cached_cost")
+        ) + thinking
+        worst = _format_estimated_cost(
+            comparison.get("batch_nocache_cost")
+        ) + thinking
+        return (
+            f"TOTAL estimate: {token_text}[Batch + cache: {cached}]"
+            f"[Batch worst-case: {worst}][Live: {live}]"
+        )
+    if comparison.get("batch_supported"):
+        batch = _format_estimated_cost(comparison.get("batch_cost")) + thinking
+        return f"TOTAL estimate: {token_text}[Batch: {batch}][Live: {live}]"
+    return f"TOTAL estimate: {token_text}[Live: {live}][Batch: unavailable]"
+
+
 def default_translation_mode(model=_CONFIG_UNSET, api_url=_CONFIG_UNSET,
                              api_provider=_CONFIG_UNSET) -> str:
     """Choose Batch when the configured route has a supported asynchronous API."""
@@ -464,6 +535,7 @@ class TranslationWorker(QThread):
     status_signal = pyqtSignal(str)  # updates the top translating_label from the worker
     finished_signal = pyqtSignal(bool, str)
     batch_phase_signal = pyqtSignal(str, object)  # phase name, optional payload
+    estimate_ready_signal = pyqtSignal(object)  # exact shared request-set estimate
     speaker_confirmation_signal = pyqtSignal(object)  # names plus local token/cost estimate
     
     def __init__(self, project_root, module_info, estimate_only=False, selected_files=None,
@@ -487,6 +559,7 @@ class TranslationWorker(QThread):
         self._batch_submit_event = threading.Event()
         self._batch_submit_approved = False
         self._batch_pending_estimate = None
+        self.estimate_summary = None
         self._speaker_confirm_event = threading.Event()
         self._speaker_translation_approved = False
         self._reported_unsupported_mvmz_files = set()
@@ -779,7 +852,7 @@ class TranslationWorker(QThread):
             # Run the script in a separate process
             env = os.environ.copy()
             env['PYTHONIOENCODING'] = 'utf-8'  # Force UTF-8 encoding
-            if batch_phase in ("collect", "consume"):
+            if batch_phase in ("collect", "estimate", "consume"):
                 env["BATCH_PHASE"] = batch_phase
                 if self.batch_runtime_profile is not None:
                     env["DAZED_BATCH_RUNTIME_PROFILE"] = json.dumps(
@@ -1233,6 +1306,8 @@ class TranslationWorker(QThread):
 
         completed_count = 0
         total_files = len(matching_files)
+        estimate_input_tokens = 0
+        estimate_output_tokens = 0
         self._run_had_mismatch = False
         self._run_mismatch_count = 0
 
@@ -1251,7 +1326,13 @@ class TranslationWorker(QThread):
 
         def _handle_file_result(filename, result):
             nonlocal total_cost, had_failure, completed_count
+            nonlocal estimate_input_tokens, estimate_output_tokens
             stopped = False
+            if estimate_only:
+                usage = _result_token_usage(result)
+                if usage is not None:
+                    estimate_input_tokens += usage[0]
+                    estimate_output_tokens += usage[1]
             try:
                 if (
                     isinstance(result, tuple)
@@ -1294,19 +1375,35 @@ class TranslationWorker(QThread):
             self.emit_progress(completed_count, total_files, filename)
             return stopped
 
+        def _completed_result():
+            if had_failure:
+                return "Fail"
+            if self.should_stop:
+                return "Stopped"
+            if estimate_only and batch_phase != "estimate":
+                comparison = _estimate_cost_comparison(
+                    estimate_input_tokens,
+                    estimate_output_tokens,
+                )
+                self.estimate_summary = comparison
+                return _format_estimate_total(comparison)
+            if estimate_only:
+                return total_cost if total_cost != "Fail" else "Success"
+            return total_cost
+
         for filename in unsupported_files:
             self._report_unsupported_mvmz_file(filename)
             completed_count += 1
             self.emit_progress(completed_count, total_files, filename)
 
         if not matching_files:
-            return "Success"
+            return _completed_result() if estimate_only else "Success"
 
         # Batch collection and consumption are local, CPU/file-heavy phases.
         # Reuse one imported RPG Maker process for the whole phase instead of
         # paying heavyweight SDK/module startup once per file. Consume remains
         # strictly ordered, preserving glossary harvest semantics.
-        if is_mvmz and batch_phase in ("collect", "consume"):
+        if is_mvmz and batch_phase in ("collect", "estimate", "consume"):
             observed = set()
 
             def _handle_persistent_result(filename, result):
@@ -1346,7 +1443,10 @@ class TranslationWorker(QThread):
                     break
             return "Fail" if had_failure else total_cost
 
-        max_workers = 1 if estimate_only else threads
+        # Estimate cache accounting now claims prompt-cache writes under a
+        # cross-process lock, so estimation can safely use the configured file
+        # concurrency instead of serializing every subprocess.
+        max_workers = max(1, threads)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         future_to_filename = {
             self.executor.submit(
@@ -1385,10 +1485,11 @@ class TranslationWorker(QThread):
                 self.executor.shutdown(wait=False)
             self.executor = None
 
-        return "Fail" if had_failure else total_cost
+        return _completed_result()
         
     def run(self):
         """Run the translation process."""
+        use_batch_estimate = False
         try:
             load_dotenv()
             sys.path.insert(0, str(self.project_root))
@@ -1410,12 +1511,17 @@ class TranslationWorker(QThread):
                 self.finished_signal.emit(False, f"Missing env: {names}")
                 return
 
+            if self.estimate_only:
+                from util.translation import isBatchSupported
+
+                use_batch_estimate = isBatchSupported()
+
             if self.batch_mode and self.parse_speakers:
                 self.emit_log("❌ Batch Translate does not support Parse Speakers mode.")
                 self.finished_signal.emit(False, "Batch + Parse Speakers unsupported")
                 return
 
-            if self.batch_mode:
+            if self.batch_mode or use_batch_estimate:
                 from util.runtime_profile import (
                     capture_batch_runtime_profile,
                     copy_batch_runtime_profile,
@@ -1423,7 +1529,7 @@ class TranslationWorker(QThread):
                 )
                 from util.translation import batchRunMetadata
 
-                if self.batch_resume_state:
+                if self.batch_mode and self.batch_resume_state:
                     saved_profile = batchRunMetadata().get("runtime_profile")
                     if is_rpgmaker_mvmz(self.module_info[0]) and saved_profile is None:
                         self.emit_log(
@@ -1483,7 +1589,7 @@ class TranslationWorker(QThread):
             old_cwd = os.getcwd()
             os.chdir(str(self.project_root))
 
-            if self.estimate_only:
+            if self.estimate_only and not use_batch_estimate:
                 try:
                     from util.translation import clear_estimate_written_sizes
                     clear_estimate_written_sizes()
@@ -1709,6 +1815,43 @@ class TranslationWorker(QThread):
                         except Exception:
                             pass
                         total_cost = self._run_files(matching_files, False, batch_phase="consume")
+                elif use_batch_estimate:
+                    from util.translation import (
+                        clearEstimateRequests,
+                        estimateCostComparison,
+                        estimateTranslationCosts,
+                    )
+
+                    clearEstimateRequests(strict=True)
+                    self.emit_log(
+                        "[ESTIMATE] Building the same deduplicated request set "
+                        "used by Batch Translate; nothing will be submitted."
+                    )
+                    estimate_started = time.monotonic()
+                    try:
+                        total_cost = self._run_files(
+                            matching_files,
+                            True,
+                            batch_phase="estimate",
+                        )
+                        if total_cost not in {"Fail", "Stopped"} and not self.should_stop:
+                            estimate = self._emit_batch_output(
+                                estimateTranslationCosts
+                            )
+                            if estimate is None:
+                                estimate = estimateCostComparison(0, 0)
+                                estimate["requests"] = 0
+                                estimate["basis"] = "request_queue"
+                            estimate = dict(estimate)
+                            estimate["files"] = len(matching_files)
+                            estimate["elapsed_seconds"] = max(
+                                0.0, time.monotonic() - estimate_started
+                            )
+                            self.estimate_summary = estimate
+                            self.estimate_ready_signal.emit(estimate)
+                            total_cost = _format_estimate_total(estimate)
+                    finally:
+                        clearEstimateRequests()
                 else:
                     total_cost = self._run_files(matching_files, self.estimate_only)
             finally:
@@ -2739,7 +2882,8 @@ class TranslationTab(QWidget):
 
         self.estimate_mode_note = QLabel(
             "ESTIMATE ONLY  ·  No translation-generation requests or translated "
-            "files  ·  Claude may use its token-counting endpoint"
+            "files  ·  Shows Batch and Live pricing  ·  Claude may use one cached "
+            "token-counting request"
         )
         self.estimate_mode_note.setWordWrap(True)
         self.estimate_mode_note.setStyleSheet(
@@ -3263,6 +3407,54 @@ class TranslationTab(QWidget):
     def _is_estimate_run(self) -> bool:
         """Whether the active/results view belongs to an estimate-only run."""
         return bool(getattr(self, "_estimate_active_run", False))
+
+    def _refresh_estimate_cost_label(self):
+        """Show comparable Batch API and live prices for current estimate tokens."""
+        if not self._is_estimate_run() or not hasattr(self, "totals_cost_label"):
+            return
+        comparison = getattr(self, "_estimate_cost_comparison", None)
+        if not comparison or comparison.get("basis") != "request_queue":
+            comparison = _estimate_cost_comparison(
+                getattr(self, "totals_input_tokens", 0),
+                getattr(self, "totals_output_tokens", 0),
+            )
+        self._estimate_cost_comparison = comparison
+        self.totals_cost_label.setText(
+            _format_estimate_cost_comparison(comparison)
+        )
+
+    def _apply_estimate_summary(self, comparison):
+        """Apply exact request-set totals emitted after estimate collection."""
+        comparison = dict(comparison or {})
+        self._estimate_cost_comparison = comparison
+        # This signal is emitted only after every file result was accepted.
+        # Reconcile any row whose queued item-progress event arrived out of
+        # order, then the terminal-state guard keeps it closed.
+        for filename, meta in (
+            getattr(self, "file_progress_items", {}) or {}
+        ).items():
+            status = (meta.get("status_text") or "").split(" ")[0]
+            if status not in {
+                "Done", "Estimated", "Mismatch", "Failed", "Skipped",
+                "Unsupported",
+            }:
+                self.mark_file_complete(filename, success=True)
+        self.totals_input_tokens = int(comparison.get("input_tokens", 0) or 0)
+        self.totals_output_tokens = int(comparison.get("output_tokens", 0) or 0)
+        self.totals_time = float(
+            comparison.get("elapsed_seconds", self.totals_time) or 0.0
+        )
+        if hasattr(self, "totals_tokens_label"):
+            self.totals_tokens_label.setText(
+                f"Estimated tokens: {self.totals_input_tokens} in / "
+                f"{self.totals_output_tokens} out"
+            )
+        if hasattr(self, "totals_cost_label"):
+            self.totals_cost_label.setText(
+                _format_estimate_cost_comparison(comparison)
+            )
+        if hasattr(self, "totals_time_label"):
+            self.totals_time_label.setText(f"Time: {self.totals_time:.1f}s")
 
     def _switch_progress_tab(self, index):
         """Switch Batch/Files views; index 0 = batch overview, 1 = per-file list."""
@@ -4747,11 +4939,11 @@ class TranslationTab(QWidget):
                 reply = QMessageBox.question(
                     self,
                     "Start Estimate",
-                    f"Estimate live-translation cost for {len(selected_files)} "
+                    f"Estimate Batch API and live-translation cost for {len(selected_files)} "
                     f"file(s) using {selected_module[0]}?\n\n"
                     "No translation-generation requests will be sent and no "
-                    "translated files will be written. Claude may use its "
-                    "token-counting endpoint.",
+                    "translated files will be written. Claude may use one cached "
+                    "token-counting request.",
                     QMessageBox.Yes | QMessageBox.No,
                 )
             else:
@@ -4830,6 +5022,7 @@ class TranslationTab(QWidget):
                 self.totals_output_tokens = 0
                 self.totals_cost = 0.0
                 self.totals_time = 0.0
+                self._estimate_cost_comparison = None
                 # Reset seen filenames for this run so totals can be applied anew
                 try:
                     self._applied_file_totals.clear()
@@ -4842,7 +5035,7 @@ class TranslationTab(QWidget):
                     )
                 if hasattr(self, 'totals_cost_label'):
                     self.totals_cost_label.setText(
-                        "Estimated cost: $0.0000"
+                        "Calculating Batch and Live estimates…"
                         if estimate_only else "Cost: $0.0000"
                     )
                 if hasattr(self, 'totals_time_label'):
@@ -4938,6 +5131,9 @@ class TranslationTab(QWidget):
             self.translation_worker.file_mismatch_signal.connect(self.on_file_mismatch)
             self.translation_worker.finished_signal.connect(self.on_translation_finished)
             self.translation_worker.batch_phase_signal.connect(self._on_batch_phase)
+            self.translation_worker.estimate_ready_signal.connect(
+                self._apply_estimate_summary
+            )
             self.translation_worker.speaker_confirmation_signal.connect(
                 self._on_speaker_confirmation
             )
@@ -5137,12 +5333,12 @@ class TranslationTab(QWidget):
                     f"{self.totals_output_tokens} out"
                 )
             if hasattr(self, 'totals_cost_label'):
-                cost_prefix = (
-                    "Estimated cost" if self._is_estimate_run() else "Cost"
-                )
-                self.totals_cost_label.setText(
-                    f"{cost_prefix}: ${self.totals_cost:.4f}"
-                )
+                if self._is_estimate_run():
+                    self._refresh_estimate_cost_label()
+                else:
+                    self.totals_cost_label.setText(
+                        f"Cost: ${self.totals_cost:.4f}"
+                    )
             if hasattr(self, 'totals_time_label'):
                 self.totals_time_label.setText(f"Time: {self.totals_time:.1f}s")
         except Exception:
@@ -5226,8 +5422,16 @@ class TranslationTab(QWidget):
                         progress="names",
                     )
             else:
-                sl = self.file_progress_items[filename].get("status_label")
-                if not sl or not sl.text():
+                meta = self.file_progress_items[filename]
+                row_status = (meta.get("status_text") or "").split(" ")[0]
+                terminal_statuses = {
+                    "Done", "Estimated", "Mismatch", "Failed", "Skipped",
+                    "Unsupported",
+                }
+                # Exact request-set estimates intentionally have no per-file
+                # token/cost result to parse. The FILE_RESULT event itself is
+                # definitive, even when the row currently says Estimating.
+                if row_status not in terminal_statuses:
                     self.mark_file_complete(filename, success=True)
 
         # Clear current_translating_file if it was the same file
@@ -5289,7 +5493,8 @@ class TranslationTab(QWidget):
         meta = self.file_progress_items.get(filename)
         row_status = ((meta or {}).get("status_text") or "").split(" ")[0]
         terminal_statuses = {
-            "Done", "Scanned", "Collected", "Failed", "Skipped", "Unsupported",
+            "Done", "Estimated", "Mismatch", "Scanned", "Collected",
+            "Failed", "Skipped", "Unsupported",
         }
         if row_status in terminal_statuses and not (
             batch_active and phase == "consume" and row_status == "Collected"
@@ -5379,6 +5584,11 @@ class TranslationTab(QWidget):
     def _apply_finish_ui(self, success, message):
         """Apply UI changes for a finished translation run."""
         estimate_run = self._is_estimate_run()
+        if estimate_run:
+            try:
+                self._refresh_estimate_cost_label()
+            except Exception:
+                pass
         if self.file_card.title_label is not None:
             self.file_card.title_label.setText(
                 "Estimation results" if estimate_run else "Translation results"

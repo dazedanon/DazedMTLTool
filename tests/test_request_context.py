@@ -310,35 +310,45 @@ class RequestContextSerializationTests(unittest.TestCase):
             ))
             return {"model": config.model, "messages": []}
 
-        with (
-            mock.patch.object(T, "get_batch_phase", return_value="collect"),
-            mock.patch.object(T, "getBatchProvider", return_value="anthropic"),
-            mock.patch.object(T, "peek_cached_translation", return_value=None),
-            mock.patch.object(T, "buildClaudeRequest", side_effect=capture),
-            mock.patch.object(T, "queue_batch_request"),
-            mock.patch.object(T, "flush_batch_queue"),
-            mock.patch.object(T, "save_cache"),
-        ):
-            T.reset_batch_collect_file_stats()
-            T.translateAI(
-                ['果歩 "一"', 'カミナ "二"', '凛 "三"'], [], config
-            )
+        for phase in ("collect", "estimate"):
+            with self.subTest(phase=phase):
+                captured.clear()
+                config.estimateMode = phase == "estimate"
+                with (
+                    mock.patch.object(T, "get_batch_phase", return_value=phase),
+                    mock.patch.object(
+                        T, "getBatchProvider", return_value="anthropic"
+                    ),
+                    mock.patch.object(
+                        T, "peek_cached_translation", return_value=None
+                    ),
+                    mock.patch.object(
+                        T, "buildClaudeRequest", side_effect=capture
+                    ),
+                    mock.patch.object(T, "queue_batch_request"),
+                    mock.patch.object(T, "flush_batch_queue"),
+                    mock.patch.object(T, "save_cache"),
+                ):
+                    T.reset_batch_collect_file_stats()
+                    T.translateAI(
+                        ['果歩 "一"', 'カミナ "二"', '凛 "三"'], [], config
+                    )
 
-        self.assertEqual(captured[0], ([], T.CONTEXT_SOURCE, []))
-        self.assertEqual(
-            captured[1],
-            (['果歩 "一"', 'カミナ "二"'], T.CONTEXT_SOURCE, []),
-        )
-        self.assertEqual(
-            T.batch_collect_file_stats(),
-            {
-                "source_items": 3,
-                "queued_items": 3,
-                "queued_requests": 2,
-                "cached_items": 0,
-                "cached_requests": 0,
-            },
-        )
+                self.assertEqual(captured[0], ([], T.CONTEXT_SOURCE, []))
+                self.assertEqual(
+                    captured[1],
+                    (['果歩 "一"', 'カミナ "二"'], T.CONTEXT_SOURCE, []),
+                )
+                self.assertEqual(
+                    T.batch_collect_file_stats(),
+                    {
+                        "source_items": 3,
+                        "queued_items": 3,
+                        "queued_requests": 2,
+                        "cached_items": 0,
+                        "cached_requests": 0,
+                    },
+                )
 
     def test_scalar_instruction_persists_across_every_batch_chunk(self):
         config = T.TranslationConfig(
