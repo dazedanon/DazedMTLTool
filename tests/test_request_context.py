@@ -117,6 +117,28 @@ class RequestContextSerializationTests(unittest.TestCase):
         self.assertNotIn("\nルドゥレンス (Ludurens)", marked)
         self.assertEqual(meaningful_punctuation, "")
 
+    def test_speaker_alias_patterns_are_reused_across_request_chunks(self):
+        """Large collects must not recompile every glossary alias per chunk."""
+        pairs = T.parseVocabWithCategories(
+            "# Game Characters\n"
+            "果歩 (Kaho)\n"
+            "ニーナ (Nina)\n"
+        )
+        payload = '{"Line1":"[果歩]: 次の場所へ行こう。"}'
+        T._speaker_alias_pattern.cache_clear()
+        try:
+            first = T.buildMatchedVocabText(pairs, payload)
+            after_first = T._speaker_alias_pattern.cache_info()
+            second = T.buildMatchedVocabText(pairs, payload)
+            after_second = T._speaker_alias_pattern.cache_info()
+        finally:
+            T._speaker_alias_pattern.cache_clear()
+
+        self.assertEqual(first, second)
+        self.assertGreater(after_first.misses, 0)
+        self.assertEqual(after_second.misses, after_first.misses)
+        self.assertGreater(after_second.hits, after_first.hits)
+
     def test_openai_source_context_is_not_assistant_history(self):
         params = T.buildOpenAIRequest(
             "Translate Japanese to English.",
@@ -297,6 +319,7 @@ class RequestContextSerializationTests(unittest.TestCase):
             mock.patch.object(T, "flush_batch_queue"),
             mock.patch.object(T, "save_cache"),
         ):
+            T.reset_batch_collect_file_stats()
             T.translateAI(
                 ['果歩 "一"', 'カミナ "二"', '凛 "三"'], [], config
             )
@@ -305,6 +328,16 @@ class RequestContextSerializationTests(unittest.TestCase):
         self.assertEqual(
             captured[1],
             (['果歩 "一"', 'カミナ "二"'], T.CONTEXT_SOURCE, []),
+        )
+        self.assertEqual(
+            T.batch_collect_file_stats(),
+            {
+                "source_items": 3,
+                "queued_items": 3,
+                "queued_requests": 2,
+                "cached_items": 0,
+                "cached_requests": 0,
+            },
         )
 
     def test_scalar_instruction_persists_across_every_batch_chunk(self):

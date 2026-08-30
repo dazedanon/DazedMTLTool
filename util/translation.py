@@ -21,7 +21,7 @@ import threading
 import uuid
 from collections import Counter
 from contextlib import contextmanager
-from functools import wraps
+from functools import lru_cache, wraps
 from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
@@ -3958,6 +3958,20 @@ def _text_for_vocab_search(subbedText):
     return "\n".join(values) if values else text
 
 
+@lru_cache(maxsize=4096)
+def _speaker_alias_pattern(alias):
+    """Compile one reusable speaker-position matcher.
+
+    Large game glossaries can contain more aliases than ``re``'s process-wide
+    512-entry cache.  Building every pattern inline made batch collection evict
+    and recompile the same glossary patterns for every request chunk.
+    """
+    return re.compile(
+        rf"(?m)^\s*(?:\[|【)?{re.escape(alias)}(?:\]|】)?\s*"
+        rf"(?=[:：|「『“\"'(（])"
+    )
+
+
 def _speaker_alias_in_text(alias, text):
     """Match a character-name component only in a speaker-tag position."""
     if not alias or len(alias) < 2:
@@ -3965,11 +3979,7 @@ def _speaker_alias_in_text(alias, text):
     # Supported forms include `果歩 "..."`, `果歩「...」`, `[果歩]: ...`, and
     # `【果歩】...`. Restricting aliases to the start of a logical line avoids
     # treating ordinary prose mentions as speaker identity.
-    pattern = (
-        rf"(?m)^\s*(?:\[|【)?{re.escape(alias)}(?:\]|】)?\s*"
-        rf"(?=[:：|「『“\"'(（])"
-    )
-    return bool(re.search(pattern, text))
+    return bool(_speaker_alias_pattern(alias).search(text))
 
 
 def buildMatchedVocabText(vocabPairs, subbedText, history=None):
@@ -4991,6 +5001,41 @@ _FILE_COST_COUNTERS = (
 )
 
 
+_BATCH_COLLECT_FILE_COUNTERS = (
+    "source_items",
+    "queued_items",
+    "queued_requests",
+    "cached_items",
+    "cached_requests",
+)
+
+
+def reset_batch_collect_file_stats():
+    """Reset the lightweight collect summary for the current worker thread."""
+    for name in _BATCH_COLLECT_FILE_COUNTERS:
+        setattr(_thread_local, f"batch_collect_{name}", 0)
+
+
+def batch_collect_file_stats():
+    """Return request-preparation counts for the current file's collect pass."""
+    return {
+        name: int(getattr(_thread_local, f"batch_collect_{name}", 0) or 0)
+        for name in _BATCH_COLLECT_FILE_COUNTERS
+    }
+
+
+def _record_batch_collect_stats(**increments):
+    for name, amount in increments.items():
+        if name not in _BATCH_COLLECT_FILE_COUNTERS:
+            continue
+        attr = f"batch_collect_{name}"
+        setattr(
+            _thread_local,
+            attr,
+            int(getattr(_thread_local, attr, 0) or 0) + int(amount or 0),
+        )
+
+
 def begin_file_cost_tracking(model=None):
     """Start an isolated per-file accurate-cost window.
 
@@ -5001,6 +5046,7 @@ def begin_file_cost_tracking(model=None):
     """
     for name in _FILE_COST_COUNTERS:
         setattr(_thread_local, name, 0)
+    reset_batch_collect_file_stats()
     _thread_local.file_cost_window_active = bool(
         isClaudeModel(model) or get_batch_phase() == "consume"
     )
@@ -5224,6 +5270,8 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
     batch_provider = getBatchProvider(config.model)
     if batch_phase and (config.estimateMode or not batch_provider):
         batch_phase = None
+    if batch_phase == "collect" and isinstance(text, list):
+        _record_batch_collect_stats(source_items=len(text))
     
     if isinstance(text, list):
         formatType = "json"
@@ -5457,6 +5505,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                 cached_result = None
 
         if cached_result is not None:
+            if queue_for_batch:
+                _record_batch_collect_stats(
+                    cached_items=len(source_values),
+                    cached_requests=1,
+                )
             # Estimate mode: keep original tList[index]; cached length may differ.
             if not config.estimateMode:
                 if isinstance(tItem, list):
@@ -5529,6 +5582,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                 cache_context=key_context,
                 provider=batch_provider,
                 request_context=request_context,
+            )
+            _record_batch_collect_stats(
+                queued_items=numLines,
+                queued_requests=1,
             )
             if lock and pbar is not None:
                 with lock:

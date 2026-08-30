@@ -180,46 +180,55 @@ def run_handler(project_root, module_name, filename, estimate_only):
         # the GUI retains per-file completion, mismatch, and error behavior.
         handler_result = None
         with cache_scope, queue_scope:
-            for current_filename in filenames:
-                try:
-                    if "RPG Maker MV/MZ" in module_name:
-                        from modules import rpgmakermvmz
+            rpgmakermvmz = None
+            try:
+                if "RPG Maker MV/MZ" in module_name:
+                    from modules import rpgmakermvmz
 
-                        # Separate subprocesses used to provide fresh totals for
-                        # every file. Preserve that behavior in a reused worker.
-                        rpgmakermvmz.TOKENS[:] = [0, 0]
-                        rpgmakermvmz.TIMETOTAL = 0
-                    handler_result = handler(current_filename, estimate_only)
-                    if multi_file:
-                        mismatch_count = 0
-                        if "RPG Maker MV/MZ" in module_name:
-                            mismatch_count = len(rpgmakermvmz.MISMATCH)
-                        print(
-                            "FILE_RESULT:"
-                            + json.dumps(
-                                {
-                                    "filename": current_filename,
-                                    "result": handler_result or "Fail",
-                                    "mismatch_count": mismatch_count,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                except Exception as exc:
-                    if multi_file:
-                        print(
-                            "FILE_ERROR:"
-                            + json.dumps(
-                                {
-                                    "filename": current_filename,
-                                    "error": str(exc),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                    raise
+                    if multi_file and batch_phase in {"collect", "consume"}:
+                        rpgmakermvmz.configureBatchMapNames(filenames)
+
+                for current_filename in filenames:
+                    try:
+                        if rpgmakermvmz is not None:
+                            # Separate subprocesses used to provide fresh totals for
+                            # every file. Preserve that behavior in a reused worker.
+                            rpgmakermvmz.TOKENS[:] = [0, 0]
+                            rpgmakermvmz.TIMETOTAL = 0
+                        handler_result = handler(current_filename, estimate_only)
+                        if multi_file:
+                            mismatch_count = 0
+                            if rpgmakermvmz is not None:
+                                mismatch_count = len(rpgmakermvmz.MISMATCH)
+                            print(
+                                "FILE_RESULT:"
+                                + json.dumps(
+                                    {
+                                        "filename": current_filename,
+                                        "result": handler_result or "Fail",
+                                        "mismatch_count": mismatch_count,
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                    except Exception as exc:
+                        if multi_file:
+                            print(
+                                "FILE_ERROR:"
+                                + json.dumps(
+                                    {
+                                        "filename": current_filename,
+                                        "error": str(exc),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                        raise
+            finally:
+                if rpgmakermvmz is not None:
+                    rpgmakermvmz.resetBatchMapNames()
         
         # Stop progress monitoring
         progress_active = False

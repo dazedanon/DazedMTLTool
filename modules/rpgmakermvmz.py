@@ -16,6 +16,7 @@ from tqdm import tqdm
 from util.translation import (
     BatchResultUnavailableError,
     TranslationConfig,
+    batch_collect_file_stats,
     begin_file_cost_tracking,
     calculateCost,
     convert_corner_brackets,
@@ -24,6 +25,7 @@ from util.translation import (
     last_translation_had_mismatch,
     nameplate_gloss_for_alias,
     parseVocabWithCategories,
+    reset_batch_collect_file_stats,
     set_var_translations_batch,
     speaker_source_lookup_keys,
     split_vocab_source_aliases,
@@ -76,6 +78,12 @@ _speakerVocabLock = threading.Lock()
 _speakerVocabSource = None
 _speakerVocabExact = {}
 _speakerVocabCharacterPairs = []
+
+# Persistent batch workers group map display names across files.  ``None``
+# means no multi-file group was configured; an empty dict means preparation
+# completed but none of the selected maps had a string display name.
+_BATCH_MAP_NAME_FILES: tuple[str, ...] | None = None
+_BATCH_MAP_NAME_TRANSLATIONS: dict[str, str] | None = None
 
 # Actor variable substitution (\n[X] -> name before AI, name -> \n[X] after)
 _ACTOR_MAP_CACHE: dict | None = None
@@ -252,10 +260,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = False
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE101 = True
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE408 = False
@@ -263,7 +271,7 @@ CODE408 = False
 # player-facing comment blocks should be sent for translation.
 
 # Variables
-CODE122 = True
+CODE122 = False
 # Comma-separated IDs and inclusive ranges, e.g. "35, 37-40, 402".
 # Leave blank to use the legacy minimum/maximum pair below.
 CODE122_VAR_RANGES = '17, 26, 30, 37, 39-40, 43-49, 51-52, 59-60, 80, 85, 116, 135'
@@ -272,14 +280,14 @@ CODE122_VAR_MAX = 10
 
 # Plugins / Scripts
 CODE355655 = False
-CODE357 = True
+CODE357 = False
 CODE657 = False
 CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE325 = False
 CODE111 = False
-CODE108 = True
+CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
 # All known code-357 headerMapping entries. Enable entries via ENABLED_PLUGINS_357.
@@ -448,9 +456,45 @@ def handleMVMZ(filename, estimate):
     refreshRuntimeConfig()
     begin_file_cost_tracking(MODEL)
 
+    # Persistent batch workers know the complete selected file set.  Delay the
+    # grouped map-name request until the first map so its fetched usage belongs
+    # to a real per-file cost window instead of being reset before accounting.
+    batch_map_name_tokens = [0, 0]
+    if _is_map_data_filename(filename):
+        preparing_batch_map_names = (
+            (os.getenv("BATCH_PHASE") or "").strip().lower() == "collect"
+            and _BATCH_MAP_NAME_FILES is not None
+            and _BATCH_MAP_NAME_TRANSLATIONS is None
+        )
+        map_name_start = time.time()
+        batch_map_name_tokens = prepareBatchMapNames()
+        if preparing_batch_map_names:
+            map_name_stats = batch_collect_file_stats()
+            map_file_count = len(_BATCH_MAP_NAME_FILES or ())
+            unique_name_count = int(map_name_stats.get("source_items", 0) or 0)
+            tqdm.write(
+                "[BATCH] Map names: "
+                + _countLabel(map_file_count, "map file")
+                + " → "
+                + _countLabel(unique_name_count, "unique name")
+                + "; "
+                + _batchCollectScanText(
+                    map_name_stats,
+                    empty_text="no eligible untranslated names",
+                )
+                + Fore.BLUE
+                + f" [{round(time.time() - map_name_start, 1)}s]"
+                + Fore.RESET
+            )
+            # Map names are a batch-level operation. Keep the first map's own
+            # scan summary limited to content actually found in that file.
+            reset_batch_collect_file_stats()
+
     # Translate
     start = time.time()
     translatedData = openFiles(filename)
+    translatedData[1][0] += batch_map_name_tokens[0]
+    translatedData[1][1] += batch_map_name_tokens[1]
 
     # Translate
     # Skip writing output file during speaker-parse mode
@@ -545,17 +589,56 @@ def openFiles(filename):
     return translatedData
 
 
+def _countLabel(count, singular):
+    return f"{count} {singular if count == 1 else singular + 's'}"
+
+
+def _batchCollectScanText(stats, *, empty_text="no eligible untranslated text"):
+    queued_items = int(stats.get("queued_items", 0) or 0)
+    queued_requests = int(stats.get("queued_requests", 0) or 0)
+    cached_items = int(stats.get("cached_items", 0) or 0)
+    source_items = int(stats.get("source_items", 0) or 0)
+    skipped_items = max(0, source_items - queued_items - cached_items)
+
+    details = []
+    if queued_items:
+        details.append(
+            f"{_countLabel(queued_items, 'text item')} prepared in "
+            f"{_countLabel(queued_requests, 'batch request')}"
+        )
+    if cached_items:
+        details.append(f"{_countLabel(cached_items, 'item')} reused from cache")
+    if skipped_items:
+        details.append(f"{_countLabel(skipped_items, 'candidate')} skipped")
+    if not details:
+        return empty_text
+    if not queued_requests:
+        details.append("no batch request needed")
+    return "; ".join(details)
+
+
 def getResultString(translatedData, translationTime, filename):
     global TIMETOTAL
     # File Print String
     cost = calculateCost(translatedData[1][0], translatedData[1][1], MODEL)
-    totalTokenstring = (
-        Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
-        "[Output: "
-        + str(translatedData[1][1])
-        + "]" "[Cost: ${:,.4f}".format(cost)
-        + "]"
-    )
+    if (
+        filename != "TOTAL"
+        and (os.getenv("BATCH_PHASE") or "").strip().lower() == "collect"
+    ):
+        totalTokenstring = (
+            Fore.CYAN
+            + "[Scan: "
+            + _batchCollectScanText(batch_collect_file_stats())
+            + "] "
+        )
+    else:
+        totalTokenstring = (
+            Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
+            "[Output: "
+            + str(translatedData[1][1])
+            + "]" "[Cost: ${:,.4f}".format(cost)
+            + "]"
+        )
     if filename != "TOTAL":
         timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
         TIMETOTAL += round(translationTime, 1)
@@ -1506,6 +1589,105 @@ def checkSave(data, filename, tokens):
         traceback.print_exc()
 
 
+def _is_map_data_filename(filename: str) -> bool:
+    """Match the same map-file family routed to ``parseMap`` by ``openFiles``."""
+    name = str(filename or "")
+    return "Map" in name and "MapInfos" not in name
+
+
+def configureBatchMapNames(filenames) -> None:
+    """Stage selected map files for one grouped collect/consume request."""
+    global _BATCH_MAP_NAME_FILES, _BATCH_MAP_NAME_TRANSLATIONS
+    phase = (os.getenv("BATCH_PHASE") or "").strip().lower()
+    if phase not in {"collect", "consume"}:
+        _BATCH_MAP_NAME_FILES = None
+        _BATCH_MAP_NAME_TRANSLATIONS = None
+        return
+    _BATCH_MAP_NAME_FILES = tuple(
+        str(filename)
+        for filename in filenames
+        if _is_map_data_filename(filename)
+    )
+    _BATCH_MAP_NAME_TRANSLATIONS = None
+
+
+def resetBatchMapNames() -> None:
+    """Drop map-name grouping state after a persistent batch phase."""
+    global _BATCH_MAP_NAME_FILES, _BATCH_MAP_NAME_TRANSLATIONS
+    _BATCH_MAP_NAME_FILES = None
+    _BATCH_MAP_NAME_TRANSLATIONS = None
+
+
+def prepareBatchMapNames() -> list[int]:
+    """Translate selected map display names in one ordered batch payload.
+
+    The first map handled by a persistent collect/consume worker performs this
+    preparation after its per-file cost window starts.  Collection therefore
+    queues list payloads instead of making full-price single-string calls, and
+    consume can attribute the grouped provider usage to that first map.
+    """
+    global PBAR, _BATCH_MAP_NAME_TRANSLATIONS
+    if _BATCH_MAP_NAME_FILES is None or _BATCH_MAP_NAME_TRANSLATIONS is not None:
+        return [0, 0]
+
+    filename_sources: list[tuple[str, str]] = []
+    unique_sources: list[str] = []
+    seen_sources: set[str] = set()
+    for filename in _BATCH_MAP_NAME_FILES:
+        path = Path("files") / filename
+        with path.open("r", encoding="utf-8-sig") as source_file:
+            document = json.load(source_file)
+        display_name = document.get("displayName")
+        if not isinstance(display_name, str):
+            continue
+        filename_sources.append((filename, display_name))
+        if display_name not in seen_sources:
+            seen_sources.add(display_name)
+            unique_sources.append(display_name)
+
+    translated_by_source = {source: source for source in unique_sources}
+    tokens = [0, 0]
+    if unique_sources:
+        previous_pbar = PBAR
+        PBAR = None
+        try:
+            response = translateAI(
+                unique_sources,
+                ctx("names.location"),
+                True,
+            )
+        finally:
+            PBAR = previous_pbar
+
+        translated = response[0]
+        if not isinstance(translated, list):
+            translated = [translated]
+        if len(translated) != len(unique_sources):
+            raise ValueError(
+                "Grouped map-name translation returned "
+                f"{len(translated)} result(s) for {len(unique_sources)} source name(s)"
+            )
+        translated_by_source.update(
+            (source, str(value).replace('"', ""))
+            for source, value in zip(unique_sources, translated)
+        )
+        token_info = response[1] if len(response) > 1 else [0, 0]
+        if isinstance(token_info, (list, tuple)) and len(token_info) >= 2:
+            tokens = [int(token_info[0] or 0), int(token_info[1] or 0)]
+
+    _BATCH_MAP_NAME_TRANSLATIONS = {
+        filename: translated_by_source[source]
+        for filename, source in filename_sources
+    }
+    return tokens
+
+
+def _preparedBatchMapName(filename: str):
+    if _BATCH_MAP_NAME_TRANSLATIONS is None:
+        return None
+    return _BATCH_MAP_NAME_TRANSLATIONS.get(filename)
+
+
 def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
     """Harvest translated DB names into the shared game glossary helper."""
     try:
@@ -1609,16 +1791,32 @@ def parseMap(data, filename):
     with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
         PBAR = pbar
 
-        # Translate the map name only after its progress bar is active.
+        # Persistent batch workers translate all selected map names together.
+        # Direct/single-file batch calls still use a one-item list so collection
+        # can never fall through to a full-price single-string API request.
         if "Map" in filename:
-            response = translateAI(
-                data["displayName"],
-                ctx("names.location"),
-                False,
-            )
-            totalTokens[0] += response[1][0]
-            totalTokens[1] += response[1][1]
-            data["displayName"] = response[0].replace('"', "")
+            prepared_name = _preparedBatchMapName(filename)
+            if prepared_name is not None:
+                data["displayName"] = prepared_name
+                pbar.update(1)
+            else:
+                batch_phase = (os.getenv("BATCH_PHASE") or "").strip().lower()
+                map_name_payload = (
+                    [data["displayName"]]
+                    if batch_phase in {"collect", "consume"}
+                    else data["displayName"]
+                )
+                response = translateAI(
+                    map_name_payload,
+                    ctx("names.location"),
+                    bool(isinstance(map_name_payload, list)),
+                )
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+                translated_name = response[0]
+                if isinstance(translated_name, list):
+                    translated_name = translated_name[0]
+                data["displayName"] = str(translated_name).replace('"', "")
         
         # Batch translate <LB> event names
         lbTokens = translateLBNames(events)

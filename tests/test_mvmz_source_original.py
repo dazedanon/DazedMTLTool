@@ -255,6 +255,133 @@ def _has_japanese(s: str) -> bool:
     return bool(re.search(LANGREGEX, s or ""))
 
 
+class BatchMapNameTests(unittest.TestCase):
+    def tearDown(self):
+        mvmz.resetBatchMapNames()
+
+    def test_selected_map_names_are_deduplicated_and_batched_together(self):
+        """Batch scanning must not make one live display-name call per map."""
+        maps = {
+            "Map001.json": "命刻山",
+            "Map002.json": "海辺",
+            "Map003.json": "命刻山",
+        }
+
+        class RecordingBar:
+            instances = []
+
+            def __init__(self, total, **_kwargs):
+                self.total = total
+                self.n = 0
+                self.instances.append(self)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def update(self, amount=1):
+                self.n += amount
+
+            def write(self, *_args, **_kwargs):
+                pass
+
+            def refresh(self):
+                pass
+
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            files = root / "files"
+            files.mkdir()
+            for filename, display_name in maps.items():
+                (files / filename).write_text(
+                    json.dumps(
+                        {"displayName": display_name, "events": []},
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
+                )
+
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                with (
+                    patch.dict(os.environ, {"BATCH_PHASE": "consume"}),
+                    patch.object(
+                        mvmz,
+                        "translateAI",
+                        return_value=[
+                            ["Fateful Hour Mountain", "Seaside"],
+                            [12, 4],
+                        ],
+                    ) as translate,
+                ):
+                    mvmz.configureBatchMapNames(list(maps))
+                    tokens = mvmz.prepareBatchMapNames()
+
+                    self.assertEqual(
+                        translate.call_args.args[0],
+                        ["命刻山", "海辺"],
+                    )
+                    self.assertEqual(tokens, [12, 4])
+                    translate.reset_mock()
+
+                    outputs = {}
+                    with (
+                        patch.object(mvmz, "tqdm", RecordingBar),
+                        patch.object(mvmz, "checkSave"),
+                    ):
+                        for filename, display_name in maps.items():
+                            result = mvmz.parseMap(
+                                {"displayName": display_name, "events": []},
+                                filename,
+                            )
+                            self.assertIsNone(result[2])
+                            outputs[filename] = result[0]["displayName"]
+
+                    translate.assert_not_called()
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual(
+            outputs,
+            {
+                "Map001.json": "Fateful Hour Mountain",
+                "Map002.json": "Seaside",
+                "Map003.json": "Fateful Hour Mountain",
+            },
+        )
+        self.assertEqual(
+            [(bar.total, bar.n) for bar in RecordingBar.instances],
+            [(1, 1), (1, 1), (1, 1)],
+        )
+
+    def test_collect_file_result_reports_scan_work_instead_of_zero_billing(self):
+        stats = {
+            "source_items": 19,
+            "queued_items": 12,
+            "queued_requests": 2,
+            "cached_items": 4,
+            "cached_requests": 1,
+        }
+        with (
+            patch.dict(os.environ, {"BATCH_PHASE": "collect"}),
+            patch.object(mvmz, "calculateCost", return_value=0.0),
+            patch.object(mvmz, "batch_collect_file_stats", return_value=stats),
+        ):
+            result = mvmz.getResultString(
+                [{}, [0, 0], None], 0.25, "Map001.json"
+            )
+
+        self.assertIn("12 text items", result)
+        self.assertIn("2 batch requests", result)
+        self.assertIn("4 items reused from cache", result)
+        self.assertIn("3 candidates skipped", result)
+        self.assertNotIn("[Input:", result)
+        self.assertNotIn("[Cost:", result)
+
+
 class TestMVMZSourceOriginal(unittest.TestCase):
     def test_optional_event_codes_preserve_changed_sources_without_changing_shapes(self):
         """Risky handlers retain exact sources while leaving runtime parameters intact."""
