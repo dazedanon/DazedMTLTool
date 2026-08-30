@@ -1471,6 +1471,11 @@ class TranslationWorker(QThread):
                 self.emit_log("📦 Batch mode: provider Batch API (typically 50% off)")
             else:
                 self.emit_log(f"📊 Estimate only: {'Yes' if self.estimate_only else 'No'}")
+                if self.estimate_only:
+                    self.emit_log(
+                        "🔒 Estimate safety: translation generation is disabled and "
+                        "translated files will not be written."
+                    )
             self.emit_log("")
 
             total_cost = "Fail"
@@ -1847,6 +1852,7 @@ class TranslationTab(QWidget):
         self._batch_ui_phase = None
         self._batch_consume_started = False
         self._batch_tab_index = -1
+        self._estimate_active_run = False
         self._mode_user_selected = False
         self._last_default_translation_mode = None
         
@@ -2449,7 +2455,8 @@ class TranslationTab(QWidget):
         
         # Files Translated counter
         files_layout = QHBoxLayout()
-        files_layout.addWidget(QLabel("Files Translated:"))
+        self.files_progress_caption = QLabel("Files Translated:")
+        files_layout.addWidget(self.files_progress_caption)
         self.files_translated_label = QLabel("0/0")
         self.files_translated_label.setStyleSheet("font-weight: bold; color: #007acc;")
         files_layout.addWidget(self.files_translated_label)
@@ -2458,7 +2465,8 @@ class TranslationTab(QWidget):
         
         # Currently translating
         translating_layout = QHBoxLayout()
-        translating_layout.addWidget(QLabel("Translating:"))
+        self.activity_progress_caption = QLabel("Translating:")
+        translating_layout.addWidget(self.activity_progress_caption)
         self.translating_label = QLabel("—")
         self.translating_label.setStyleSheet("font-weight: bold; color: #cccccc;")
         translating_layout.addWidget(self.translating_label)
@@ -2728,6 +2736,20 @@ class TranslationTab(QWidget):
         batch_note_layout.addLayout(batch_copy_layout, 1)
         self.batch_mode_note.setVisible(False)
         action_row.addWidget(self.batch_mode_note, 1)
+
+        self.estimate_mode_note = QLabel(
+            "ESTIMATE ONLY  ·  No translation-generation requests or translated "
+            "files  ·  Claude may use its token-counting endpoint"
+        )
+        self.estimate_mode_note.setWordWrap(True)
+        self.estimate_mode_note.setStyleSheet(
+            f"color:{COLORS.success};background-color:{COLORS.surface_2};"
+            f"border:1px solid {COLORS.border_strong};"
+            f"border-radius:{Geometry.RADIUS_CONTROL}px;padding:6px 9px;"
+            "font-size:11px;font-weight:600;"
+        )
+        self.estimate_mode_note.setVisible(False)
+        action_row.addWidget(self.estimate_mode_note, 1)
         action_row.addStretch(1)
 
         self.translate_button = QPushButton("Translate selected files")
@@ -3009,6 +3031,8 @@ class TranslationTab(QWidget):
         """Update the translate button text based on selected mode."""
         if hasattr(self, "batch_mode_note"):
             self.batch_mode_note.setVisible(mode_text == BATCH_MODE_LABEL)
+        if hasattr(self, "estimate_mode_note"):
+            self.estimate_mode_note.setVisible(mode_text == "Estimate")
         if not hasattr(self, "translate_button"):
             return
         if mode_text == "Translate":
@@ -3223,10 +3247,22 @@ class TranslationTab(QWidget):
         if not force and default_mode == self._last_default_translation_mode:
             return
         self._last_default_translation_mode = default_mode
-        if default_mode == "Translate" or force or not self._mode_user_selected:
+        current_mode = self.mode_combo.currentText()
+        should_apply_default = force or not self._mode_user_selected
+        # A provider change may make a selected Batch mode unsupported, in
+        # which case falling back to Translate is necessary. Estimate is always
+        # supported and is a safety-sensitive explicit choice: never silently
+        # replace it with a paid live run.
+        if current_mode == BATCH_MODE_LABEL and default_mode == "Translate":
+            should_apply_default = True
+        if should_apply_default:
             index = self.mode_combo.findText(default_mode)
             if index >= 0:
                 self.mode_combo.setCurrentIndex(index)
+
+    def _is_estimate_run(self) -> bool:
+        """Whether the active/results view belongs to an estimate-only run."""
+        return bool(getattr(self, "_estimate_active_run", False))
 
     def _switch_progress_tab(self, index):
         """Switch Batch/Files views; index 0 = batch overview, 1 = per-file list."""
@@ -4131,8 +4167,9 @@ class TranslationTab(QWidget):
             counts[st] = counts.get(st, 0) + 1
         parts = [f"{total} file(s)"]
         for key in (
-            "Done", "Scanned", "Collected", "Writing", "Scanning", "Translating",
-            "Failed", "Skipped", "Unsupported", "Waiting",
+            "Done", "Estimated", "Scanned", "Collected", "Writing", "Scanning",
+            "Estimating", "Translating", "Failed", "Skipped", "Unsupported",
+            "Waiting",
         ):
             if counts.get(key):
                 parts.append(f"{counts[key]} {key.lower()}")
@@ -4229,12 +4266,15 @@ class TranslationTab(QWidget):
         parse_speakers = bool(
             getattr(getattr(self, "translation_worker", None), "parse_speakers", False)
         )
+        estimate_run = self._is_estimate_run()
         if getattr(self, "_batch_active", False) and phase == "collect":
             status, color = "Scanning", "#007acc"
         elif getattr(self, "_batch_active", False) and phase == "consume":
             status, color = "Writing", "#007acc"
         elif parse_speakers:
             status, color = "Scanning", "#007acc"
+        elif estimate_run:
+            status, color = "Estimating", "#007acc"
         else:
             status, color = "Translating", "#007acc"
         self._set_progress_row(
@@ -4247,7 +4287,10 @@ class TranslationTab(QWidget):
     def _apply_success_status_icon(self, item, completion_kind="normal"):
         """Mark a successful row; tooltips explain skip / idle / mismatch when relevant."""
         try:
-            if completion_kind == "skip":
+            if self._is_estimate_run() and completion_kind in ("normal", "idle"):
+                tip = "Cost estimation completed; no translated file was written."
+                status, color, glyph = "Estimated", "#4ec9b0", "✓"
+            elif completion_kind == "skip":
                 reason = (item.get("_skip_reason") or "").strip()
                 tip = f"Skipped: {reason}" if reason else "Whole file skipped (paths/fonts only)."
                 status, color, glyph = "Skipped", "#dcdcaa", "✓"
@@ -4377,6 +4420,7 @@ class TranslationTab(QWidget):
     def reset_to_file_view(self):
         """Reset back to file selection view."""
         self._active_workflow_return = None
+        self._estimate_active_run = False
         self._reset_batch_pipeline_ui()
         self.file_stack.setCurrentIndex(0)
         if self.file_card.title_label is not None:
@@ -4699,6 +4743,17 @@ class TranslationTab(QWidget):
                     f"⚠ {BATCH_COLLECT_LIVE_CHARGE_NOTE}",
                     QMessageBox.Yes | QMessageBox.No,
                 )
+            elif estimate_only:
+                reply = QMessageBox.question(
+                    self,
+                    "Start Estimate",
+                    f"Estimate live-translation cost for {len(selected_files)} "
+                    f"file(s) using {selected_module[0]}?\n\n"
+                    "No translation-generation requests will be sent and no "
+                    "translated files will be written. Claude may use its "
+                    "token-counting endpoint.",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
             else:
                 action = mode.lower()
                 reply = QMessageBox.question(
@@ -4735,12 +4790,15 @@ class TranslationTab(QWidget):
 
         self._active_workflow_return = self._pending_workflow_return
         self._pending_workflow_return = None
+        self._estimate_active_run = estimate_only
         
         if True:
             # Switch to progress view
             self.file_stack.setCurrentIndex(1)
             if self.file_card.title_label is not None:
-                self.file_card.title_label.setText("Translation progress")
+                self.file_card.title_label.setText(
+                    "Estimation progress" if estimate_only else "Translation progress"
+                )
             self._set_activity_visible(True)
             self._set_run_controls_enabled(False)
             
@@ -4758,7 +4816,9 @@ class TranslationTab(QWidget):
             # Toggle button visibility
             self.translate_button.setVisible(True)
             self.translate_button.setEnabled(False)
-            self.translate_button.setText("Run in progress…")
+            self.translate_button.setText(
+                "Estimation in progress…" if estimate_only else "Run in progress…"
+            )
             if batch_mode:
                 # Shown during collect; hidden once collection finishes (see _on_batch_phase)
                 self.stop_button.setVisible(batch_resume_state is None)
@@ -4776,9 +4836,15 @@ class TranslationTab(QWidget):
                 except Exception:
                     self._applied_file_totals = set()
                 if hasattr(self, 'totals_tokens_label'):
-                    self.totals_tokens_label.setText("Tokens: 0 in / 0 out")
+                    self.totals_tokens_label.setText(
+                        "Estimated tokens: 0 in / 0 out"
+                        if estimate_only else "Tokens: 0 in / 0 out"
+                    )
                 if hasattr(self, 'totals_cost_label'):
-                    self.totals_cost_label.setText("Cost: $0.0000")
+                    self.totals_cost_label.setText(
+                        "Estimated cost: $0.0000"
+                        if estimate_only else "Cost: $0.0000"
+                    )
                 if hasattr(self, 'totals_time_label'):
                     self.totals_time_label.setText("Time: 0.0s")
                 if hasattr(self, 'totals_mismatch_label'):
@@ -4824,8 +4890,25 @@ class TranslationTab(QWidget):
                 self._batch_active = False
                 self._batch_ui_phase = None
                 self._batch_consume_started = False
+            if hasattr(self, "progress_table"):
+                self.progress_table.horizontalHeaderItem(3).setText(
+                    "Est. tokens" if estimate_only else "Tokens"
+                )
+                self.progress_table.horizontalHeaderItem(4).setText(
+                    "Est. cost" if estimate_only else "Cost"
+                )
+            if hasattr(self, "files_progress_caption"):
+                self.files_progress_caption.setText(
+                    "Files Estimated:" if estimate_only else "Files Translated:"
+                )
+            if hasattr(self, "activity_progress_caption"):
+                self.activity_progress_caption.setText(
+                    "Estimating:" if estimate_only else "Translating:"
+                )
             self.files_translated_label.setText(f"0/{self.files_total}")
-            self.translating_label.setText("Starting...")
+            self.translating_label.setText(
+                "Starting estimate…" if estimate_only else "Starting…"
+            )
             self.item_progress_label.setText("0/0")
             self.item_progress_bar.setValue(0)
             self.item_progress_bar.setMaximum(100)
@@ -5046,9 +5129,20 @@ class TranslationTab(QWidget):
             self.totals_time = max(self.totals_time, float(time_s))
             # Refresh totals labels
             if hasattr(self, 'totals_tokens_label'):
-                self.totals_tokens_label.setText(f"Tokens: {self.totals_input_tokens} in / {self.totals_output_tokens} out")
+                token_prefix = (
+                    "Estimated tokens" if self._is_estimate_run() else "Tokens"
+                )
+                self.totals_tokens_label.setText(
+                    f"{token_prefix}: {self.totals_input_tokens} in / "
+                    f"{self.totals_output_tokens} out"
+                )
             if hasattr(self, 'totals_cost_label'):
-                self.totals_cost_label.setText(f"Cost: ${self.totals_cost:.4f}")
+                cost_prefix = (
+                    "Estimated cost" if self._is_estimate_run() else "Cost"
+                )
+                self.totals_cost_label.setText(
+                    f"{cost_prefix}: ${self.totals_cost:.4f}"
+                )
             if hasattr(self, 'totals_time_label'):
                 self.totals_time_label.setText(f"Time: {self.totals_time:.1f}s")
         except Exception:
@@ -5067,6 +5161,7 @@ class TranslationTab(QWidget):
         parse_speakers = bool(
             getattr(getattr(self, "translation_worker", None), "parse_speakers", False)
         )
+        estimate_run = self._is_estimate_run()
 
         if batch_active:
             if phase == "collect":
@@ -5105,6 +5200,10 @@ class TranslationTab(QWidget):
         self.files_completed = current_file
         if parse_speakers:
             self.files_translated_label.setText(f"{current_file}/{total_files} scanned")
+        elif estimate_run:
+            self.files_translated_label.setText(
+                f"{current_file}/{total_files} estimated"
+            )
         else:
             self.files_translated_label.setText(f"{current_file}/{total_files}")
 
@@ -5135,8 +5234,8 @@ class TranslationTab(QWidget):
         if self.current_translating_file == filename:
             self.current_translating_file = None
 
-        # Update the top-level translating label: if there are more files
-        # remaining, keep it as a generic "Translating..." until the next
+        # Update the top-level activity label: if there are more files
+        # remaining, keep it generic until the next
         # file emits item-level progress (which will set the actual
         # filename). If this was the final file, show a neutral state.
         if batch_active and phase == "consume":
@@ -5146,9 +5245,13 @@ class TranslationTab(QWidget):
             )
             self.batch_live_status.setText(f"Current file: {filename}")
         if current_file < total_files:
-            self.translating_label.setText(
-                "Scanning speakers..." if parse_speakers else "Translating..."
-            )
+            if parse_speakers:
+                activity = "Scanning speakers…"
+            elif estimate_run:
+                activity = "Estimating…"
+            else:
+                activity = "Translating…"
+            self.translating_label.setText(activity)
         else:
             if batch_active and phase == "consume":
                 self.translating_label.setText("Finishing batch…")
@@ -5175,6 +5278,7 @@ class TranslationTab(QWidget):
         """Update the item-level progress (from tqdm)."""
         batch_active = getattr(self, "_batch_active", False)
         phase = getattr(self, "_batch_ui_phase", None) if batch_active else None
+        estimate_run = self._is_estimate_run()
 
         # The persistent RPG Maker worker's progress monitor runs beside the
         # file-result producer. Very fast files can therefore leave a queued
@@ -5203,6 +5307,8 @@ class TranslationTab(QWidget):
             if label.text() in ("Waiting...", "Queued"):
                 if batch_active and phase == "collect":
                     label.setText("Scanning...")
+                elif estimate_run:
+                    label.setText("Estimating…")
                 else:
                     label.setText("Translating...")
                 label.setStyleSheet("color: #007acc; font-weight: bold;")
@@ -5272,8 +5378,11 @@ class TranslationTab(QWidget):
 
     def _apply_finish_ui(self, success, message):
         """Apply UI changes for a finished translation run."""
+        estimate_run = self._is_estimate_run()
         if self.file_card.title_label is not None:
-            self.file_card.title_label.setText("Translation results")
+            self.file_card.title_label.setText(
+                "Estimation results" if estimate_run else "Translation results"
+            )
         if getattr(self, "_batch_active", False):
             phase = getattr(self, "_batch_ui_phase", None)
             mismatch_count = max(
@@ -5328,7 +5437,9 @@ class TranslationTab(QWidget):
             pass
 
         try:
-            self.open_translations_button.setVisible(not workflow_run)
+            self.open_translations_button.setVisible(
+                not workflow_run and not estimate_run
+            )
         except Exception:
             pass
 
@@ -5337,7 +5448,7 @@ class TranslationTab(QWidget):
         try:
             module_text = self.module_combo.currentText().lower()
             is_rpgmaker = "rpg maker" in module_text or "rpgmaker" in module_text
-            self.sync_export_button.setVisible(is_rpgmaker)
+            self.sync_export_button.setVisible(is_rpgmaker and not estimate_run)
         except Exception:
             pass
 
@@ -5361,6 +5472,9 @@ class TranslationTab(QWidget):
                 if mismatch_count:
                     self.translating_label.setText("Completed with warnings")
                     self.translate_button.setText("Completed with warnings")
+                elif estimate_run:
+                    self.translating_label.setText("Estimation completed!")
+                    self.translate_button.setText("Estimation complete")
                 else:
                     self.translating_label.setText("Completed!")
                     self.translate_button.setText("Run complete")
@@ -5388,6 +5502,7 @@ class TranslationTab(QWidget):
             
     def stop_translation(self):
         """Stop the translation process."""
+        estimate_run = self._is_estimate_run()
         if hasattr(self, 'translation_worker') and self.translation_worker.isRunning():
             self.translation_worker.stop()
             
@@ -5411,7 +5526,11 @@ class TranslationTab(QWidget):
 
         try:
             # Apply final UI for stopped run
-            self._apply_finish_ui(False, "Translation stopped by user")
+            stopped_message = (
+                "Estimation stopped by user"
+                if estimate_run else "Translation stopped by user"
+            )
+            self._apply_finish_ui(False, stopped_message)
         except Exception:
             pass
         self.translating_label.setText("Stopped")

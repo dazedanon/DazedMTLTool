@@ -377,5 +377,34 @@ class EmptyProviderContentTests(unittest.TestCase):
             self.assertIn("finish_reason=content_filter", mismatch_log)
 
 
+class EstimateModeSafetyTests(unittest.TestCase):
+    def test_estimate_never_calls_live_translation_generation(self):
+        """Cost estimation must return source text without provider generation."""
+        source = ["日本語のセリフ"]
+        config = tr.TranslationConfig(
+            model="gpt-5",
+            language="English",
+            prompt="Translate Japanese to English.",
+            vocab="",
+            batchSize=30,
+            estimateMode=True,
+            useSfxReference=False,
+        )
+
+        with (
+            mock.patch.object(tr, "get_batch_phase", return_value=None),
+            mock.patch.object(tr, "getBatchProvider", return_value=None),
+            mock.patch.object(tr, "get_cached_translation", return_value=None),
+            mock.patch.object(tr, "translateText") as translate,
+            mock.patch.object(tr, "cache_translation"),
+        ):
+            result = tr.translateAI(source, [], config)
+
+        translate.assert_not_called()
+        self.assertEqual(result[0], source)
+        self.assertGreater(result[1][0], 0)
+        self.assertGreater(result[1][1], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

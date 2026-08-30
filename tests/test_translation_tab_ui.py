@@ -420,6 +420,65 @@ class TranslationTabUITests(unittest.TestCase):
         apply_finish.assert_called_once_with(False, "Speaker translation canceled")
         self.assertIsNone(self.tab._finish_pending)
 
+    def test_estimate_choice_stays_safe_and_is_never_rendered_as_translation(
+        self,
+    ) -> None:
+        """A deliberate estimate must survive refreshes and remain unmistakable."""
+        self.tab.mode_combo.setCurrentText("Estimate")
+        self.tab._mark_mode_user_selected(1)
+        self.tab._last_default_translation_mode = "changed-provider"
+
+        with mock.patch(
+            "gui.translation_tab.default_translation_mode",
+            return_value="Translate",
+        ):
+            self.tab.refresh_default_translation_mode()
+
+        self.assertEqual(self.tab.mode_combo.currentText(), "Estimate")
+        self.assertFalse(self.tab.estimate_mode_note.isHidden())
+        self.assertIn(
+            "No translation-generation requests",
+            self.tab.estimate_mode_note.text(),
+        )
+
+        self.tab.project_root = Path(self.temporary.name)
+        self.tab.select_files_by_name(["Actors.json"])
+        with (
+            mock.patch(
+                "gui.translation_tab._activate_configured_game_context",
+                return_value=("", {}),
+            ),
+            mock.patch.object(TranslationWorker, "start") as start,
+        ):
+            self.tab.start_translation(skip_confirm=True)
+
+        start.assert_called_once_with()
+        self.assertTrue(self.tab.translation_worker.estimate_only)
+        self.assertEqual(self.tab.file_card.title_label.text(), "Estimation progress")
+        self.assertEqual(
+            self.tab.progress_table.horizontalHeaderItem(4).text(), "Est. cost"
+        )
+
+        self.tab.update_item_progress("Actors.json", 1, 10)
+        row = self.tab.file_progress_items["Actors.json"]["row"]
+        self.assertEqual(
+            self.tab.progress_table.item(row, 1).text(), "Estimating"
+        )
+
+        self.tab._apply_file_result("Actors.json", 100, 200, 0.50, 1.0)
+        self.assertEqual(
+            self.tab.progress_table.item(row, 1).text(), "Estimated"
+        )
+        self.assertTrue(
+            self.tab.totals_cost_label.text().startswith("Estimated cost:")
+        )
+
+        self.tab._apply_finish_ui(True, "TOTAL: estimate")
+        self.assertEqual(self.tab.file_card.title_label.text(), "Estimation results")
+        self.assertEqual(self.tab.translate_button.text(), "Estimation complete")
+        self.assertTrue(self.tab.open_translations_button.isHidden())
+        self.assertTrue(self.tab.sync_export_button.isHidden())
+
 
 
 
