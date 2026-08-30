@@ -485,11 +485,30 @@ class BatchTab(QWidget):
         if hasattr(parent, "switch_page"):
             page = getattr(parent, "PAGE_TRANSLATION", 4)
             parent.switch_page(page)
+        if resume_state == "queued":
+            resume_text = (
+                "Open this collected batch on Translation?\n\n"
+                "You will review the estimate before anything is submitted."
+            )
+        elif resume_state == "fetched":
+            resume_text = (
+                "Write this batch's downloaded results on Translation?\n\n"
+                "No new batch will be submitted."
+            )
+        elif resume_state == "partially_submitted":
+            resume_text = (
+                "Resume submitting the remaining split requests?\n\n"
+                "Already-submitted parts are kept. Additional provider charges may apply."
+            )
+        else:
+            resume_text = (
+                "Resume this provider batch on Translation?\n\n"
+                "No new batch will be submitted."
+            )
         reply = QMessageBox.question(
             self,
-            "Start Resume?",
-            f"Start Batch Translate resume ({resume_state}) on the Translation tab?\n\n"
-            "This will not clear batch files or submit a new batch.",
+            "Resume Batch?",
+            resume_text,
             QMessageBox.Yes | QMessageBox.No,
         )
         if reply != QMessageBox.Yes:

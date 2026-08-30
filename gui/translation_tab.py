@@ -270,12 +270,11 @@ def _translation_context_inventory(game_root: str | Path | None) -> dict[str, ob
 
 
 BATCH_MODE_BENEFIT_NOTE = (
-    "Provider Batch API — typically 50% cheaper than live translation (Claude, GPT, or Gemini)."
+    "Batch API: usually about 50% less than Live. You review the estimate before submission."
 )
 BATCH_COLLECT_LIVE_CHARGE_NOTE = (
-    "Before a fresh batch, unresolved RPG Maker and WolfDawn speaker names are scanned "
-    "and translated into the game glossary (with approval) so nameplates are not left "
-    "in Japanese while dialogue is batched."
+    "Unresolved RPG Maker or WolfDawn speakers use a separate Live API step "
+    "that requires approval."
 )
 
 _CONFIG_UNSET = object()
@@ -2839,9 +2838,7 @@ class TranslationTab(QWidget):
             QSizePolicy.MinimumExpanding, QSizePolicy.Preferred
         )
         self.batch_mode_note.setToolTip(
-            "Provider Batch API requests are typically 50% cheaper than live "
-            "translation. Fresh RPG Maker and WolfDawn batches check unresolved "
-            "speaker names before submission; approving them may use live API calls."
+            BATCH_MODE_BENEFIT_NOTE + " " + BATCH_COLLECT_LIVE_CHARGE_NOTE
         )
         batch_note_layout = QHBoxLayout(self.batch_mode_note)
         batch_note_layout.setContentsMargins(0, 0, 0, 0)
@@ -2860,14 +2857,13 @@ class TranslationTab(QWidget):
         batch_copy_layout = QVBoxLayout()
         batch_copy_layout.setContentsMargins(0, 0, 0, 0)
         batch_copy_layout.setSpacing(1)
-        batch_summary = QLabel("Typically 50% lower provider cost")
+        batch_summary = QLabel("Usually about 50% less than Live")
         batch_summary.setStyleSheet(
             f"color:{COLORS.text_primary};font-size:12px;font-weight:600;"
         )
         batch_copy_layout.addWidget(batch_summary)
         self.batch_mode_detail = QLabel(
-            "RPG Maker and WolfDawn speaker names are checked before submission "
-            "· approvals may use live API"
+            "Scans first · batch waits for approval · speakers may need separate Live approval"
         )
         self.batch_mode_detail.setStyleSheet(
             f"color:{COLORS.text_muted};font-size:11px;"
@@ -2881,9 +2877,8 @@ class TranslationTab(QWidget):
         action_row.addWidget(self.batch_mode_note, 1)
 
         self.estimate_mode_note = QLabel(
-            "ESTIMATE ONLY  ·  No translation-generation requests or translated "
-            "files  ·  Shows Batch and Live pricing  ·  Claude may use one cached "
-            "token-counting request"
+            "ESTIMATE ONLY  ·  Compares available Batch and Live costs  ·  "
+            "No translations generated or written"
         )
         self.estimate_mode_note.setWordWrap(True)
         self.estimate_mode_note.setStyleSheet(
@@ -3513,25 +3508,33 @@ class TranslationTab(QWidget):
             preview += f"\n  • …and {len(names) - preview_limit} more"
         estimate_text = ""
         if estimate:
-            cache_note = " (conservative cold-cache estimate)" if estimate.get("cold_cache") else ""
-            estimate_text = (
-                "Estimated speaker translation:\n"
-                f"  Model: {estimate.get('model', 'Unknown')}\n"
-                f"  Grouped requests: {int(estimate.get('request_count', 0)):,}\n"
-                f"  Tokens: {int(estimate.get('input_tokens', 0)):,} input / "
-                f"{int(estimate.get('output_tokens', 0)):,} output\n"
-                f"  Cost: approximately ${float(estimate.get('estimated_cost', 0.0)):.6f}"
-                f"{cache_note}\n\n"
+            request_count = int(estimate.get("request_count", 0))
+            request_label = (
+                f"{request_count:,} grouped "
+                f"{'request' if request_count == 1 else 'requests'}"
             )
+            cache_note = (
+                " · assumes no cached prompt" if estimate.get("cold_cache") else ""
+            )
+            estimate_text = (
+                f"Estimate: {request_label} · "
+                f"{int(estimate.get('input_tokens', 0)):,} in / "
+                f"{int(estimate.get('output_tokens', 0)):,} out · "
+                f"~${float(estimate.get('estimated_cost', 0.0)):.6f}\n"
+                f"Model: {estimate.get('model', 'Unknown')}{cache_note}\n\n"
+            )
+        speaker_count = len(names)
+        speaker_label = (
+            f"{speaker_count} unresolved "
+            f"{'speaker' if speaker_count == 1 else 'speakers'}"
+        )
         reply = QMessageBox.question(
             self,
-            "Translate collected speakers?",
-            f"DazedTL found {len(names)} unresolved unique speaker(s). No speaker "
-            "translation requests have been sent yet.\n\n"
+            "Translate unresolved speakers?",
+            f"Found {speaker_label}. No API request has been sent.\n\n"
             f"{estimate_text}"
             f"{preview}\n\n"
-            "Translate these names together in grouped list batches, save them to "
-            "this game's glossary, and then continue the translation run?",
+            "Translate them with the Live API, save them to the game glossary, and continue?",
             QMessageBox.Yes | QMessageBox.Cancel,
             QMessageBox.Yes,
         )
@@ -4814,19 +4817,23 @@ class TranslationTab(QWidget):
                 if batch_resume_state:
                     if batch_resume_state == "queued":
                         prompt = (
-                            "A saved batch is ready. Resume it?\n\n"
-                            "Choose No to discard it and start over."
+                            "A collected batch is ready for estimate review. Resume?\n\n"
+                            "Choose No to discard it and scan again."
                         )
                     elif batch_resume_state == "fetched":
                         prompt = (
-                            "A provider batch has finished and its results are ready "
-                            "to write. Resume the write pass?\n\n"
-                            "Choose No to discard those results and start over."
+                            "Downloaded results are ready to write. Resume?\n\n"
+                            "Choose No to discard them and scan again."
+                        )
+                    elif batch_resume_state == "partially_submitted":
+                        prompt = (
+                            "Part of a split batch was submitted. Resume submitting "
+                            "the remaining parts?\n\nAdditional provider charges may apply."
                         )
                     else:
                         prompt = (
-                            "A batch is already in progress. Resume it?\n\n"
-                            "Choosing No starts over and may duplicate provider charges."
+                            "A provider batch is already in progress. Resume it?\n\n"
+                            "Starting over may duplicate charges."
                         )
                     reply = QMessageBox.question(
                         self,
@@ -4918,40 +4925,49 @@ class TranslationTab(QWidget):
             QMessageBox.warning(
                 self,
                 "No Files Selected",
-                "Please check at least one file to translate.",
+                "Select at least one file.",
             )
             return
         
         # Confirm start (skipped when called programmatically from the Workflow tab
         # or when Batch history already confirmed Resume).
         if not skip_confirm and not forced_resume_state and not batch_choice_confirmed:
+            file_count = len(selected_files)
+            file_label = f"{file_count} {'file' if file_count == 1 else 'files'}"
             if batch_mode and not batch_resume_state:
                 reply = QMessageBox.question(
                     self,
                     "Start Batch Translate",
-                    f"Start batch translation for {len(selected_files)} file(s) using {selected_module[0]}?\n\n"
-                    "Pass 1 collects dialogue for the batch; you confirm the estimate, then the provider "
-                    "processes it (typically 50% off). Pass 2 writes translated files.\n\n"
-                    f"⚠ {BATCH_COLLECT_LIVE_CHARGE_NOTE}",
+                    f"Batch translate {file_label} with {selected_module[0]}?\n\n"
+                    "Scans first and shows an estimate; no batch requests are sent until you approve it. "
+                    "Batch is usually about 50% less than Live. Results go to translated/.\n\n"
+                    f"Note: {BATCH_COLLECT_LIVE_CHARGE_NOTE}",
                     QMessageBox.Yes | QMessageBox.No,
                 )
             elif estimate_only:
                 reply = QMessageBox.question(
                     self,
                     "Start Estimate",
-                    f"Estimate Batch API and live-translation cost for {len(selected_files)} "
-                    f"file(s) using {selected_module[0]}?\n\n"
-                    "No translation-generation requests will be sent and no "
-                    "translated files will be written. Claude may use one cached "
-                    "token-counting request.",
+                    f"Estimate {file_label} with {selected_module[0]}?\n\n"
+                    "Uses the same request builder as Batch Translate. Shows Batch with cache, "
+                    "Batch without cache, and Live costs. No translations are generated or written.",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+            elif parse_speakers:
+                reply = QMessageBox.question(
+                    self,
+                    "Scan Speakers",
+                    f"Scan {file_label} for speakers with {selected_module[0]}?\n\n"
+                    "Scans locally with no API requests. You review unresolved names before any Live "
+                    "translation; approved names are saved to the game glossary. No translated files are written.",
                     QMessageBox.Yes | QMessageBox.No,
                 )
             else:
-                action = mode.lower()
                 reply = QMessageBox.question(
                     self,
-                    f"Start {mode}",
-                    f"Start {action} for {len(selected_files)} file(s) using {selected_module[0]}?",
+                    "Start Translation",
+                    f"Translate {file_label} with {selected_module[0]}?\n\n"
+                    "Uses the Live API and writes results to translated/.",
                     QMessageBox.Yes | QMessageBox.No,
                 )
             if reply != QMessageBox.Yes:

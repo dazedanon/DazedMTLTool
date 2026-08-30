@@ -136,10 +136,11 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
 
         message = question.call_args.args[2]
         self.assertIn("Model: test-model", message)
-        self.assertIn("Grouped requests: 1", message)
-        self.assertIn("1,234 input / 56 output", message)
+        self.assertIn("1 grouped request", message)
+        self.assertIn("1,234 in / 56 out", message)
         self.assertIn("$0.012345", message)
-        self.assertIn("No speaker translation requests have been sent yet", message)
+        self.assertIn("No API request has been sent", message)
+        self.assertIn("Live API", message)
         self.assertEqual(responses, [True])
 
     def test_cancel_sends_no_speaker_translation(self):

@@ -490,8 +490,9 @@ class TranslationTabUITests(unittest.TestCase):
 
         self.assertEqual(self.tab.mode_combo.currentText(), "Estimate")
         self.assertFalse(self.tab.estimate_mode_note.isHidden())
+        self.assertIn("Batch and Live costs", self.tab.estimate_mode_note.text())
         self.assertIn(
-            "No translation-generation requests",
+            "No translations generated or written",
             self.tab.estimate_mode_note.text(),
         )
 
@@ -843,7 +844,8 @@ class TranslationTabUITests(unittest.TestCase):
             self.tab.start_translation(skip_confirm=True)
 
         prompt = question.call_args.args[2]
-        self.assertIn("has finished", prompt)
+        self.assertIn("Downloaded results", prompt)
+        self.assertIn("ready to write", prompt)
         self.assertNotIn("already in progress", prompt)
 
     def test_noncompletion_batch_outcomes_are_not_rendered_as_complete(self) -> None:
