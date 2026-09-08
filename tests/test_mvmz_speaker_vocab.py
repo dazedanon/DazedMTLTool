@@ -857,15 +857,25 @@ class CharacterCompoundMatchingTests(unittest.TestCase):
         self.assertNotIn("\nニーナ様 (", matched)
 
     def test_unique_full_name_component_matches_speaker_tag(self):
-        pairs = parseVocabWithCategories(
+        from types import SimpleNamespace
+        from util.translation import createContextParts
+
+        vocab = (
             "# Game Characters\n"
             "天草 果歩 (Kaho Amakusa)\n"
             "星宮 凛 (Rin Hoshimiya)\n"
         )
+        pairs = parseVocabWithCategories(vocab)
 
         matched = buildMatchedVocabText(pairs, '果歩 "どうしたの？"')
 
         self.assertIn("天草 果歩 (Kaho Amakusa)", matched)
+        config = SimpleNamespace(prompt="Translate into English.", vocab=vocab, language="English", useSfxReference=False)
+        source = json.dumps(["どうしたの？"], ensure_ascii=False)
+        _system, metadata_matched, sfx, user = createContextParts(config, source, "json", speaker_names=["果歩"])
+        self.assertEqual(metadata_matched, matched)
+        self.assertEqual(user, f"```json\n{source}\n```")
+        self.assertEqual(sfx, "")
 
     def test_full_name_component_does_not_match_ordinary_prose(self):
         pairs = parseVocabWithCategories(

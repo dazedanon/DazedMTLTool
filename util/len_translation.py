@@ -205,8 +205,32 @@ def shared_context(project: LenProject) -> dict:
     return context
 
 
+def _line_speakers(sources, speakers):
+    """Validate a complete speaker map/list before context files can be prepared."""
+    if speakers is None:
+        return None
+    if isinstance(sources, dict):
+        if not isinstance(speakers, dict) or set(speakers) != set(sources):
+            raise ValueError("Speakers must have exactly the same IDs as sources; use null for unidentified speakers.")
+        values = [speakers[key] for key in sources]
+    else:
+        if not isinstance(speakers, list) or len(speakers) != len(sources):
+            raise ValueError("Speakers must be a list aligned with every source line; use null for unidentified speakers.")
+        values = speakers
+    normalized = []
+    for value in values:
+        if value is None:
+            normalized.append(None)
+        elif not isinstance(value, str) or any(char in value for char in "\r\n\0"):
+            raise ValueError("Each speaker must be a single-line name or null.")
+        else:
+            normalized.append(value.strip() or None)
+    return dict(zip(sources, normalized)) if isinstance(sources, dict) else normalized
+
+
 def request_context(project: LenProject, sources: list[str] | dict[str, str], *,
-                    instruction_key: str | None = None, source_context: str = "") -> dict:
+                    instruction_key: str | None = None, source_context: str = "",
+                    speakers: list[str | None] | dict[str, str | None] | None = None) -> dict:
     """Compile one batch with DazedTL's actual glossary/SFX matching and current instructions.
 
     No provider calls. Pipelines consume these fields directly instead of rebuilding prompts.
@@ -219,10 +243,26 @@ def request_context(project: LenProject, sources: list[str] | dict[str, str], *,
         raise ValueError("Sources must be a nonempty JSON list of strings or an ID-to-string object.")
     if isinstance(sources, dict) and not all(isinstance(key, str) and key for key in sources):
         raise ValueError("Source IDs must be nonempty strings.")
+    line_speakers = _line_speakers(sources, speakers)
+    speaker_names = list(line_speakers.values()) if isinstance(line_speakers, dict) else line_speakers or []
     shared = shared_context(project)
     payload = json.dumps(sources, ensure_ascii=False)
     config = SimpleNamespace(prompt=shared["system"], vocab=shared["glossary"], language="English", useSfxReference=True)
-    system, glossary, sfx, user = createContextParts(config, payload, "json")
+    system, glossary, sfx, user = createContextParts(
+        config, payload, "json", speaker_names=tuple(dict.fromkeys(name for name in speaker_names if name)),
+    )
+    if line_speakers is not None:
+        metadata = json.dumps(line_speakers, ensure_ascii=False)
+        user = (
+            "Speaker metadata for the source below, matched by the same IDs or list positions. "
+            "Use it with the glossary for character voice and pronoun context. "
+            "Null means no identified speaker; do not automatically carry a previous speaker forward. "
+            "These labels are context only: do not translate this metadata, add it to dialogue, "
+            "or include it as extra output fields. Preserve any speaker tags actually present in the source.\n"
+            f"```json\n{metadata}\n```\n\n"
+            "Translate only the following source text, keeping its IDs/order and the required output schema:\n"
+            + user
+        )
     result = {
         "schema": 1, "context_sha256": shared["content_sha256"],
         "system": system, "glossary": glossary, "sfx_reference": sfx,
@@ -231,6 +271,8 @@ def request_context(project: LenProject, sources: list[str] | dict[str, str], *,
         "user": user,
         "reference_translations": reference_context(project.game_root, values),
     }
+    if line_speakers is not None:
+        result["speakers"] = line_speakers
     result["request_sha256"] = hashlib.sha256(
         json.dumps(result, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
@@ -392,6 +434,8 @@ The current assembled context is {json.dumps(str(project.workspace / 'context.js
 {json.dumps([sys.executable, str(DATA_DIR.parent / 'scripts/len_translation.py'), 'context', '--game-root', str(project.game_root)], ensure_ascii=False)}
 Command examples are argument arrays, not shell strings. For each translation batch, add --sources <JSON file containing a list of Japanese strings or an ID-to-Japanese-string object> and optionally --output <request-context.json>. Use the returned system, matched glossary, advisory SFX, source context, and advisory reference translations in direct translation or the pipeline's provider request. Keep the pipeline's required output schema. --instruction-key selects a shared field template when appropriate; --source-context supplies a text file of preceding untranslated Japanese. The request fingerprint binds retries/reviews to their source and guidance; preserve it with results and revalidate reuse after guidance changes. Context compilation performs no API calls.
 
+For dialogue batches, carry each unit's source speaker into --speakers <JSON file with the same IDs or list positions as --sources>. Resolve nameplates, speaker markup and actor-name variables from the engine and reviewed source; respect message-block and scene boundaries. Use null when the speaker is unidentified rather than guessing or carrying a name across a boundary. Extract this metadata as part of the task; the user need not label lines manually. The compiler attaches those speakers' glossary/voice notes even when their names are absent from the dialogue and includes the per-line speaker map as context in its user field. Send that complete user field to the model. Speaker metadata is not text to translate or a prefix to inject into dialogue. Translate actual separate nameplates as their own units (names.speaker is the shared instruction template), and preserve/translate tags that genuinely occur inside the source. Key dialogue reuse by the compiled request fingerprint, which includes speaker assignments; never deduplicate identical Japanese across different speakers or scenes using text alone. Validate speaker-to-line associations and restored nameplates during QA.
+
 Registered reference games are listed in context.json. Exact source matches are supplied by the same reference index as Workflow when --sources is provided. Build the source list from reviewed extraction units; never infer matches from unrelated files. Treat past translations as advisory evidence and resolve disagreements against current source and curated guidance.
 
 If the user's instructions name prequels, previous translations or a reference-corpus folder, read references/reference-translations.md from Len's skill and handle those references within this run. Inspect every specified game's existing terminology and aligned Japanese/English corpus before finalizing guidance. Reuse established names and terms where the current source supports the same meaning, and record the selected decisions in this game's shared glossary so they also apply inside new dialogue. Keep reference files read-only, preserve provenance and competing spellings, and resolve conflicts against explicit user priorities, the current source and curated guidance. Register supported aligned pairs in this project's shared reference registry for additional per-batch exact matches. The user can provide reference paths in these instructions without configuring the reference dialog.
@@ -401,6 +445,8 @@ If you already have a Len JSON glossary, use the shared import bridge in scripts
 Cover dialogue, choices, names, database descriptions, menus, plugin/script text and runtime-generated player-facing labels. Distinguish display text from internal identifiers. Preserve control codes, placeholders, archive structure and save compatibility.
 
 Preserve a recoverable source before changing game files. Put authored scripts, reviewed translation records, prequel provenance and QA notes in {json.dumps(str(project.work_root), ensure_ascii=False)} or existing versioned project folders. This work/ directory and the scope/status files are eligible for Git; generated prompts/context, caches, raw snapshots and API state outside work/ remain local. Check the work/ ignore policy when adding a new source format. Export database-backed translation stores to stable text records there so checkpoints protect completed translations. Preserve legacy adaptations and migrate useful authored work deliberately. After each validated milestone, review the diff and commit only the selected project files on the registered translation branch, preserving unrelated staged or working changes. Maintain {json.dumps(str(project.workspace / 'status.md'), ensure_ascii=False)} with the baseline and checkpoint commits, completed steps, artifact paths, measured coverage, unresolved issues and the next action. On resume, verify artifact and context fingerprints before reusing results. The presence of a handoff or a successful extraction is not evidence of completion.
+
+Before the first actual MV/MZ map or database write, make the injector preserve Workflow-compatible _original metadata even when it uses an external translation store. Read the _original section of references/engine-rpgmaker.md. Stage translated JSON separately, then use this script's write-rpgmaker-json --source <matching untranslated baseline or previous game JSON with originals intact> --translated <staged JSON> --output <actual game JSON> for each changed file. Historical reference injectors do not call this helper automatically; adapt their output destination before running them. The writer retains existing originals, handles grouped dialogue, choices, speakers, database/System fields and supported event parameters, and refuses ambiguous structural changes before replacing a file. An adapter that changes command counts/order or unsupported fields must bind original source units explicitly and pass the same independent QA checks; do not bypass preservation on refusal. Never reconstruct a missing Japanese source from current English. Keep _original immutable through corrections, wrapping and reinjection, and verify final source/live mappings with the existing RPG Maker QA manifest and independent verifier. For native/binary formats that cannot carry this key, preserve equivalent versioned source/translation sidecars with file/unit IDs, exact source, final live text, source hashes and injection bindings; do not add unknown fields to engine containers. This happens within the current task without a separate user prompt.
 
 Validate coverage independently of the extractor, placeholders, fonts, text width and row counts, injected output, and actual in-game scenes. Report string coverage, image coverage, and playtested scenes separately. Never claim 100% translation from string counts alone; record inaccessible content, excluded assets and untested scenes explicitly. If this environment cannot launch the game, leave that verification pending and give the user precise playtest steps. Re-inject before packaging. Build a local patch with installation instructions after the applicable QA gates pass; uploading or publishing is a separate user action.
 

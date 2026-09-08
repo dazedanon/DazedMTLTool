@@ -45,6 +45,15 @@ retain the request fingerprint with retries and review records. Add a suitable
 `--instruction-key section.key` for a field-specific shared instruction template.
 The compiler itself makes no API calls and exports no credentials.
 
+For dialogue, also pass `--speakers <speaker JSON>` with the same IDs or list positions
+as the source batch. Use resolved source names and null for unidentified speakers.
+The compiler includes current speakers' glossary guidance and puts the line-to-speaker
+map in the returned `user` context, keeping the translatable source body unchanged.
+Send that complete `user` field to the model. Keep actual nameplate translation and
+injection separate from this metadata. Preserve speaker/scene associations in stores
+and use the request fingerprint for cache/retry decisions; text-only dialogue dedup
+can reuse the wrong character's voice. The agent extracts speaker metadata itself.
+
 When the user names previous games or a reference-corpus folder in the starting
 instructions, follow `references/reference-translations.md` during setup. Inspect all
 specified prequels, promote verified recurring terminology into this game's shared
@@ -71,6 +80,14 @@ pipeline with its original game's absolute paths or write generated output into 
 application's shipped tool directories. Existing project-local copies from the earlier
 ZIP integration may contain useful adaptations; preserve them and reconcile relevant
 work with this shared contract rather than replacing them.
+
+Before writing translated MV/MZ game JSON, follow the `_original` preservation
+procedure in `references/engine-rpgmaker.md`, including when an external store is
+used. Stage reference-injector output and finalize each file with the live
+`scripts/len_translation.py write-rpgmaker-json` command. Existing reference
+injectors do not call it automatically. Keep source metadata immutable on reruns
+and verify the final source/live QA mappings. For native/binary formats, retain
+equivalent versioned source and injection sidecars without changing engine schemas.
 
 ## Follow the requested work mode
 

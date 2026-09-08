@@ -1308,9 +1308,54 @@ Where a pattern spans control codes, exclude structural characters from the capt
 
 ---
 
-## The `_original` sidecar
+## The `_original` source metadata
 
-**If you translate in place instead of through an external store, keep the Japanese in the same file under an `_original` key the engine ignores.** Without it a second pass feeds English back to the model, glossary corrections cannot be re-applied, the rewrap pass cannot tell a control code from source text, and QA has nothing to diff against.
+**For Len's MV/MZ map and database JSON, keep Japanese in the same file under a Workflow-compatible `_original` key, including when using an external translation store.** This lets the existing QA and bug-fix tools recover the source from the injected game itself. Capture it before the first write and retain it through reruns, wrapping and corrections.
+
+The historical reference injectors do not add this metadata automatically. Adapt
+them to write into a staging directory, then finalize each changed file with:
+
+```bash
+python DAZEDTL_ROOT/scripts/len_translation.py write-rpgmaker-json \
+  --source /path/to/matching-source/Map001.json \
+  --translated /path/to/staged/Map001.json \
+  --output /path/to/game/data/Map001.json
+```
+
+`--source` is a matching untranslated baseline or the previous game JSON with its
+originals intact; it may be the output path, since the writer reads it before
+replacement. `--translated` must be a separate staged file. Existing destination
+originals survive clean-baseline reinjection. Do not manufacture source from live
+English, or run an unadapted injector against the game before taking the snapshot.
+
+The pure `util.len_originals.preserve_originals(source, translated, filename=...)`
+helper also supports in-process adapters: snapshot the actual document before
+editing and serialize the returned annotated copy. The CLI checks the existing
+destination too and replaces one file atomically only after validation. It preserves
+the staged BOM, newline convention and indentation/minified form.
+
+The helper handles stable command arrays, grouped 401/405 dialogue, 108/408 comments,
+355/655 scripts, 101 nameplates, 102 choices, supported scalar/structured parameters,
+database fields and root-level System originals. Code 122 requires a single quoted
+literal. Existing source markers partition wrapped runs, so later corrections do not
+merge two originals. It rejects changed array lengths, IDs, codes/indents, conflicting
+metadata and unsupported translated fields. Array order must also be retained:
+equal-shaped command swaps cannot be inferred reliably from a JSON diff. For an
+injector that inserts/reorders commands or uses another schema, bind source units
+explicitly at injection time and validate the result; do not silently fall back to
+unprotected writes. Preserve technical identifiers and mirrored 402 branch labels
+without treating them as additional dialogue sources.
+
+After wrapping and final injection, build the shared RPG Maker QA manifest and run
+its independent verifier (`util.rpgmaker_qa_manifest` and
+`util.rpgmaker_qa_verify`). Check source/live correspondence against extraction
+coverage as well: absent `_original` metadata cannot prove a string was reviewed.
+Exercise a correction/reinjection on a small copy and confirm the original Japanese
+is unchanged. Keep external stores and backups as additional recovery evidence.
+
+For native VX Ace Marshal payloads or other containers that cannot accept this key,
+keep equivalent versioned sidecars as described in `project-lifecycle.md`; add
+`_original` to an exported QA JSON representation only where its adapter supports it.
 
 ### The dual-read invariant
 

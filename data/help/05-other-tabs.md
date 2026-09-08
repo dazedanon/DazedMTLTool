@@ -40,8 +40,19 @@ conflicting spellings for review.
 
 Glossary, Game frame, Quirks, custom skills and reference translations are shared with
 Workflow. Changes saved in either route apply to the next compiled translation context.
+For MV/MZ map and database writes, the starting prompt requires Workflow-compatible
+`_original` source metadata and preservation through reinjection and QA corrections.
+The assistant adapts the injector to stage JSON before the source-preserving write.
+Other native formats use versioned source/injection sidecars where extra keys are
+unsupported. This is handled within the same task.
+
 The base glossary checkbox controls whether Len’s batches include DazedTL’s stock terms.
 Setup includes the shared localization investigation and character identity safeguards.
+
+For dialogue, the assistant carries the speaker alongside each line. This brings in
+that character's glossary and voice notes even when the line does not mention their
+name. Unidentified speakers stay unknown. The speaker labels are context for the
+assistant; they are not added to dialogue unless the source actually contains them.
 
 Direct translation needs your coding assistant’s access, but no DazedTL API key. API mode
 requires a provider, model and budget agreed with the assistant. Preparation does not make

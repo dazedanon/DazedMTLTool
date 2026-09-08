@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import copy
+from contextlib import redirect_stderr, redirect_stdout
 import hashlib
+from io import StringIO
 import json
 import os
 import sys
@@ -417,6 +419,143 @@ class TestRPGMakerQAManifest(unittest.TestCase):
         write_manifest(first, one)
         write_manifest(second, two)
         self.assertEqual(one.read_bytes(), two.read_bytes())
+
+        # Len's staged writer must produce the same source/live contract that
+        # Workflow QA reads, including reflowed runs and immutable rerun sources.
+        from scripts.len_translation import main
+        from util.len_originals import preserve_originals
+
+        def command(code, parameters, **extra):
+            return {"code": code, "indent": 0, "parameters": parameters, **extra}
+
+        source = {"events": [None, {"id": 1, "pages": [{"list": [
+            command(101, ["FaceJP", 0, 0, 2, "レオン"]),
+            command(401, ["一行目。"]), command(401, ["二行目。"]),
+            command(102, [["残る", "去る", "Cancel"], 0, 0, 2, 0]),
+            command(402, [0, "残る"]),
+            command(405, ["長い文。"]), command(405, ["次の文。"]),
+            command(108, ["表示開始"]), command(408, ["表示終了"]),
+            command(355, ['show("開始");']), command(655, ['show("終了");']),
+            command(357, ["QuestSystem", "show", "表示", {"DetailNote": "鍵を探す", "id": "quest_a"}]),
+            command(122, [1, 1, 0, 4, "'元の値'"]),
+            command(111, [12, '$gameVariables.value(1) === "合言葉"']),
+            command(320, [1, "新しい名前"]),
+            command(0, []),
+        ]}]}]}
+        staged = copy.deepcopy(source)
+        commands = staged["events"][1]["pages"][0]["list"]
+        commands[0]["parameters"][0] = "FaceEN"  # Asset IDs are not nameplates.
+        commands[0]["parameters"][4] = "Leon"
+        translations = {1: "Both lines translated together.", 2: "", 5: "Long text.",
+                        6: "Next text.", 7: "Start display", 8: "End display",
+                        9: 'show("Start");', 10: 'show("End");'}
+        for index, value in translations.items():
+            commands[index]["parameters"][0] = value
+        commands[3]["parameters"][0][:2] = ["Stay", "Leave"]
+        commands[4]["parameters"][1] = "Stay"
+        commands[11]["parameters"][3]["DetailNote"] = "Find the key"
+        commands[12]["parameters"][4] = "'Original value'"
+        commands[13]["parameters"][1] = '$gameVariables.value(1) === "Password"'
+        commands[14]["parameters"][1] = "New name"
+        untouched = copy.deepcopy(source)
+        annotated = preserve_originals(source, staged, filename="Map001.json")
+        self.assertEqual(source, untouched)
+        self.assertNotIn("_original", commands[1])
+        rows = annotated["events"][1]["pages"][0]["list"]
+        self.assertEqual(rows[0]["_original"], "レオン")
+        self.assertEqual(rows[1]["_original"], "一行目。\n二行目。")
+        self.assertNotIn("_original", rows[2])
+        self.assertEqual(rows[3]["_original"], ["残る", "去る", None])
+        self.assertNotIn("_original", rows[4])
+        self.assertEqual(rows[11]["_original"], {"parameters": {"3": {"DetailNote": "鍵を探す"}}})
+        self.assertEqual(rows[12]["_original"], "元の値")
+
+        data = Path(self.temporary.name) / "len-data"
+        data.mkdir()
+        source_file, staged_file = data.parent / "source.json", data.parent / "staged.json"
+        output = data / "Map001.json"
+        _write_json(source_file, source)
+        staged_file.write_bytes(b"\xef\xbb\xbf" + json.dumps(staged, ensure_ascii=False).encode() + b"\r\n")
+        arguments = ["write-rpgmaker-json", "--source", str(source_file),
+                     "--translated", str(staged_file), "--output", str(output)]
+        with redirect_stdout(StringIO()):
+            self.assertEqual(main(arguments), 0)
+        self.assertEqual(json.loads(output.read_bytes().decode("utf-8-sig")), annotated)
+        self.assertTrue(output.read_bytes().startswith(b"\xef\xbb\xbf"))
+        self.assertTrue(output.read_bytes().endswith(b"\r\n"))
+
+        # Database/System shapes must match the reader, too (including a sparse
+        # list and nested terms anchored on System's root rather than on terms).
+        for filename, old, new in (
+            ("Items.json", [None, {"id": 1, "name": "薬", "description": "回復する"}],
+             [None, {"id": 1, "name": "Potion", "description": "Restores health"}]),
+            ("System.json", {"currencyUnit": "円", "armorTypes": ["", "服"], "terms": {"messages": {"win": "勝利"}}},
+             {"currencyUnit": "G", "armorTypes": ["", "Clothes"], "terms": {"messages": {"win": "Victory"}}}),
+        ):
+            preserved = preserve_originals(old, new, filename=filename)
+            _write_json(data / filename, preserved)
+            if filename == "System.json":
+                self.assertEqual(preserved["_original"]["terms"], {"messages": {"win": "勝利"}})
+                self.assertEqual(preserved["_original"]["armorTypes"], {"1": "服"})
+                self.assertNotIn("_original", preserved["terms"])
+        manifest = build_manifest(data, "release")
+        report = verify_manifest(data, manifest)
+        self.assertTrue(report["valid"], report["errors"])
+        pairs = {row["source"]: row["live"] for row in manifest["records"]}
+        self.assertEqual(pairs["一行目。\n二行目。"], "Both lines translated together.\n")
+        self.assertEqual(pairs["表示開始\n表示終了"], "Start display\nEnd display")
+        self.assertEqual(pairs['show("開始");\nshow("終了");'], 'show("Start");\nshow("End");')
+        self.assertEqual(pairs["元の値"], "Original value")
+        self.assertEqual(pairs["鍵を探す"], "Find the key")
+        self.assertNotIn("FaceJP", pairs)
+        self.assertEqual(set(pairs), {
+            "レオン", "一行目。\n二行目。", "残る", "去る", "長い文。\n次の文。",
+            "表示開始\n表示終了", 'show("開始");\nshow("終了");', "鍵を探す", "元の値",
+            '$gameVariables.value(1) === "合言葉"', "新しい名前", "薬", "回復する", "円", "服", "勝利",
+        })
+
+        # A clean-baseline reinjection must also keep metadata already in the game.
+        saved = output.read_bytes()
+        with redirect_stdout(StringIO()):
+            self.assertEqual(main(arguments), 0)
+        self.assertEqual(output.read_bytes(), saved)
+        correction = copy.deepcopy(annotated)
+        corrected_rows = correction["events"][1]["pages"][0]["list"]
+        corrected_rows[1]["parameters"][0] = "A better translation."
+        corrected_rows[3]["parameters"][0][1] = "Depart"
+        corrected = preserve_originals(annotated, correction, filename=output.name)
+        self.assertEqual(corrected["events"][1]["pages"][0]["list"][1]["_original"], "一行目。\n二行目。")
+        self.assertEqual(corrected["events"][1]["pages"][0]["list"][3]["_original"], ["残る", "去る", None])
+
+        # Existing adjacent source markers partition independently editable runs.
+        separate = [command(401, ["First"], _original="最初"), command(401, ["Second"], _original="次")]
+        revised = copy.deepcopy(separate)
+        revised[0]["parameters"][0] = "Revised first"
+        revised[1]["parameters"][0] = "Revised second"
+        self.assertEqual([row["_original"] for row in preserve_originals(separate, revised, filename=output.name)], ["最初", "次"])
+        legacy = command(357, ["QuestSystem", "show", "表示", {"DetailNote": "Find it"}], _original={"DetailNote": "探す"})
+        revised = copy.deepcopy(legacy)
+        revised["parameters"][3]["DetailNote"] = "Find the item"
+        self.assertEqual(preserve_originals(legacy, revised, filename=output.name)["_original"], {"DetailNote": "探す"})
+
+        # Refusals must leave the destination byte-for-byte intact.
+        bad_cases = []
+        for mutation in (
+            lambda doc: doc["events"].pop(),
+            lambda doc: doc["events"][1].update(id=2),
+            lambda doc: doc["events"][1]["pages"][0]["list"][1].update(_original="Invented source"),
+            lambda doc: doc["events"][1]["pages"][0]["list"][2].update(code=405),
+            lambda doc: doc["events"][1]["pages"][0]["list"][12]["parameters"].__setitem__(4, "buildText()"),
+            lambda doc: doc["events"][1]["pages"][0]["list"][12]["parameters"].__setitem__(4, "'First' + 'Second'"),
+        ):
+            bad = copy.deepcopy(staged)
+            mutation(bad)
+            bad_cases.append(bad)
+        for bad in bad_cases:
+            _write_json(staged_file, bad)
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                self.assertEqual(main(arguments), 1)
+            self.assertEqual(output.read_bytes(), saved)
 
 
 if __name__ == "__main__":

@@ -98,12 +98,48 @@ information the user has not supplied. Keep credentials out of project artifacts
 Revalidate saved results after guidance or source changes. Correct missing, malformed
 or stale outputs before injection; a populated cache does not prove valid translation.
 
+For dialogue, extract and retain a source speaker for each unit. Use the engine's
+nameplates/markup and resolved actor names; respect message-block and scene boundaries.
+Preserve source-visible aliases and anonymous labels instead of substituting an
+internal identity or a name revealed later in the story.
+Leave unidentified speakers null rather than assigning the last named character or
+guessing from gender/register. Supply `--speakers` alongside `--sources`, with exactly
+the same IDs or list positions, during every dialogue-context compilation. Both files
+must come from the same reviewed batch snapshot. The user need not build this mapping.
+
+The compiled `user` field includes the speaker map as context only; send it intact.
+The glossary includes current speakers' character notes even if their names never
+appear in the dialogue. The source strings, SFX matching and exact reference matching
+remain based on the text to translate. Return only the required translations, without
+extra metadata fields or invented name prefixes. Separate nameplates are translated
+as separate units, using the curated glossary and `names.speaker` template as appropriate.
+Speaker changes alter the request fingerprint: preserve per-occurrence IDs and do not
+reuse a translation solely because another speaker says the same Japanese text.
+
 ## 5. Inject, validate and deliver
+
+Capture exact source before the first live write. MV/MZ map and database JSON must
+carry Workflow-compatible `_original` metadata even when translations also live in
+a separate store. Follow `engine-rpgmaker.md`'s preservation procedure: stage the
+injector's output, then call `DAZEDTL_ROOT/scripts/len_translation.py
+write-rpgmaker-json --source <matching source> --translated <staged JSON> --output
+<game JSON>` for every changed file. The historical injectors need this adaptation.
+Retain existing originals through correction and rewrapping; validate the final
+source/live bindings with the shared QA manifest and independent verifier.
+Do not backfill missing Japanese from an already translated live value. Recover it
+from the matching baseline/store and verify IDs and source hashes first.
+For formats that cannot store `_original`, keep versioned sidecars under `work/`
+with file/unit IDs, exact source, final live text, source hashes and injection
+bindings. Validate these against the shipped payload without adding unsupported
+keys to native containers. A Git baseline or store alone does not establish that
+the final injected text still maps to the correct source.
 
 Apply reviewed output with the engine's appropriate injector or patcher. Check source
 coverage, placeholders, layout, fonts, runtime-generated labels and images in scope.
 Report actual playtested scenes separately from static checks. Mark unavailable runtime
 verification pending instead of treating it as passed.
+Check speaker-to-line binding and the final restored nameplates as well as dialogue
+bodies; metadata separated from a text unit must not disappear from injection QA.
 
 Use the engine-compatible delivery route: GameUpdate where the project supports it,
 otherwise the reference pipeline's validated patch/install/restore procedure. Verify

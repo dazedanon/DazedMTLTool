@@ -94,8 +94,8 @@ class LenTranslationTests(unittest.TestCase):
             jp, en = root / "jp", root / "en"
             jp.mkdir()
             en.mkdir()
-            (jp / "Text.json").write_text(json.dumps({"line": "鍵", "other": "別"}))
-            (en / "Text.json").write_text(json.dumps({"line": "Old Key", "other": "Other"}))
+            (jp / "Text.json").write_text(json.dumps({"line": "鍵", "other": "別", "name": "レオン"}))
+            (en / "Text.json").write_text(json.dumps({"line": "Old Key", "other": "Other", "name": "Old Leon"}))
             add_paired_reference(game, "Earlier Game", jp, en)
             sources = {"line1": "若様、鍵と魔法。" , "line2": "鍵"}
             batch = request_context(project, sources, instruction_key="events.choice_with_context", source_context="前の台詞")
@@ -108,6 +108,34 @@ class LenTranslationTests(unittest.TestCase):
             self.assertIn("前の台詞", batch["request_instructions"])
             self.assertEqual(json.loads(batch["user"].removeprefix("```json\n").removesuffix("\n```")), sources)
             self.assertEqual(os.environ["DAZED_GAME_ROOT"], str(root / "unrelated-game"))
+
+            # Speaker identity is necessary even when identical short dialogue
+            # never names its speaker. Metadata must not alter the source body.
+            dialogue = {"a": "はい。", "b": "はい。", "c": "鍵"}
+            speakers = {"b": "ハイメ", "c": None, "a": "レオン"}
+            bare = request_context(project, dialogue)
+            from util.translation import build_sfx_reference_text
+            with patch("util.translation.build_sfx_reference_text", wraps=build_sfx_reference_text) as sfx_matcher:
+                spoken = request_context(project, dialogue, speakers=speakers)
+            sfx_matcher.assert_called_once_with(json.dumps(dialogue, ensure_ascii=False), enabled=True)
+            self.assertEqual(spoken["speakers"], speakers)
+            self.assertTrue(spoken["user"].endswith(bare["user"]))
+            self.assertIn(json.dumps(spoken["speakers"], ensure_ascii=False), spoken["user"])
+            self.assertIn("レオン (Leon) - gender: unknown; register: formal", spoken["glossary"])
+            self.assertIn("ハイメ (Jaime) - curated evidence", spoken["glossary"])
+            self.assertNotIn("司祭 (Priest)", spoken["glossary"])
+            self.assertNotIn("レオン (Leon)", bare["glossary"])
+            self.assertEqual(spoken["sfx_reference"], bare["sfx_reference"])
+            self.assertEqual(spoken["reference_translations"], bare["reference_translations"])
+            swapped = request_context(project, dialogue, speakers={"a": "ハイメ", "b": "レオン", "c": None})
+            self.assertEqual(spoken["glossary"], swapped["glossary"])
+            self.assertNotEqual(spoken["request_sha256"], swapped["request_sha256"])
+            normalized = request_context(project, ["待って。"], speakers=["ﾚｵﾝ"])
+            self.assertIn("レオン (Leon)", normalized["glossary"])
+            self.assertEqual(normalized["speakers"], ["ﾚｵﾝ"])
+            unidentified = request_context(project, ["待って。"], speakers=[" "], source_context="レオンの前の台詞")
+            self.assertEqual(unidentified["speakers"], [None])
+            self.assertNotIn("レオン (Leon)", unidentified["glossary"])
             revised = replace(project, stage="continue", mode="api", include_images=False, include_glossary_base=False)
             self.assertNotIn("魔法 (Magic)", request_context(revised, sources)["glossary"])
             (overlays / "quirks.md").write_text("Keep pauses.")
@@ -122,6 +150,13 @@ class LenTranslationTests(unittest.TestCase):
             with redirect_stdout(StringIO()):
                 self.assertEqual(main(["context", "--game-root", str(game), "--sources", str(source_file)]), 0)
             self.assertEqual(json.loads((project.workspace / "request-context.json").read_text())["system"], updated["system"])
+            speaker_file = root / "speakers.json"
+            speaker_file.write_text(json.dumps({"line1": "レオン", "line2": None}))
+            with redirect_stdout(StringIO()):
+                self.assertEqual(main(["context", "--game-root", str(game), "--sources", str(source_file), "--speakers", str(speaker_file)]), 0)
+            compiled = json.loads((project.workspace / "request-context.json").read_text())
+            self.assertEqual(compiled["speakers"], {"line1": "レオン", "line2": None})
+            self.assertIn("レオン (Leon)", compiled["glossary"])
             prepare_project(revised, skill)
             self.assertEqual(load_project(game), revised)
             self.assertEqual(custom.read_text(), "# adapted for this game\n")
@@ -164,6 +199,16 @@ class LenTranslationTests(unittest.TestCase):
             for sources in ([], {}, [None], [""], {"": "鍵"}, "鍵"):
                 with self.subTest(sources=sources), self.assertRaises(ValueError):
                     request_context(project, sources)
+            for sources, speakers in (
+                (["鍵"], []), (["鍵"], ["レオン", "ハイメ"]),
+                (["鍵"], {"0": "レオン"}), ({"a": "鍵"}, ["レオン"]),
+                ({"a": "鍵"}, {}), ({"a": "鍵"}, {"b": "レオン"}),
+                ({"a": "鍵"}, {"a": "レオン", "extra": None}),
+                (["鍵"], [3]), (["鍵"], [{"name": "レオン"}]),
+                (["鍵"], ["レオン\nハイメ"]), (["鍵"], ["レオン\0"]),
+            ):
+                with self.subTest(speakers=speakers), self.assertRaises(ValueError):
+                    request_context(project, sources, speakers=speakers)
             for invalid in (replace(project, mode="unknown"), replace(project, include_images="false")):
                 with self.assertRaises(ValueError):
                     prepare_project(invalid, skill)

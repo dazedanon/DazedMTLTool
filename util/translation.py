@@ -4388,7 +4388,7 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
     return matchedVocabText
 
 
-def createContextParts(config, subbedText, formatType, history=None):
+def createContextParts(config, subbedText, formatType, history=None, *, speaker_names=()):
     """Create separate glossary, SFX-reference, system, and user context.
 
     Returns ``(static_system, glossary_text, sfx_text, user)``. Both dynamic
@@ -4400,10 +4400,28 @@ def createContextParts(config, subbedText, formatType, history=None):
 
     Dynamic:
       - only glossary terms found in the current batch text
+      - character guidance for explicitly supplied current speakers
       - only SFX reference records found in the current batch text
     """
     vocabPairs = parseVocabWithCategories(getattr(config, "vocab", "") or "")
-    matchedVocabText = buildMatchedVocabText(vocabPairs, subbedText, history)
+    match_text = subbedText
+    if speaker_names:
+        # Match speaker metadata without adding it to translatable text or SFX.
+        # Prefer an exact curated source form before trying the shared nameplate
+        # normalization/honorific/OCR lookup keys.
+        character_sources = set()
+        for term, _line, category in vocabPairs:
+            primary = re.split(r"\s*[·・|/]\s*", str(category or "").lstrip("#").strip().casefold(), maxsplit=1)[0]
+            if isinstance(term, tuple) and primary in {"game characters", "speakers"}:
+                character_sources.update(split_vocab_source_aliases(term[0]))
+        tags = []
+        for name in speaker_names:
+            key = next((key for key in speaker_source_lookup_keys(name) if key in character_sources), name)
+            tags.append(f"[{key}]:")
+        # Speaker-position matching retains the existing unique-full-name and
+        # curated-over-generated rules without matching opaque request IDs.
+        match_text = json.dumps([_text_for_vocab_search(subbedText), *tags], ensure_ascii=False)
+    matchedVocabText = buildMatchedVocabText(vocabPairs, match_text, history)
     matchedSfxText = build_sfx_reference_text(
         subbedText,
         enabled=bool(getattr(config, "useSfxReference", True)),

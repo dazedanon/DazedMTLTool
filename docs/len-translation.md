@@ -62,6 +62,26 @@ It does not select an unrelated Workflow game. The reference lifecycle also cove
 independent extraction coverage, current context on resume, engine-compatible packaging
 and explicit pending status for runtime checks that could not be performed.
 
+Len's starting prompt also requires source metadata at injection time. For MV/MZ,
+the assistant stages map/database JSON and writes each file through:
+
+```bash
+python scripts/len_translation.py write-rpgmaker-json \
+  --source '/path/to/source/Map001.json' \
+  --translated '/path/to/staged/Map001.json' \
+  --output '/path/to/game/data/Map001.json'
+```
+
+This adds Workflow-compatible `_original` entries and retains existing Japanese
+through corrections and clean-baseline reinjection. The source must be the matching
+untranslated baseline or a previous game file with its originals intact. The writer
+checks alignment before replacing one file atomically; command insertion/reordering
+and unsupported schemas require an explicit source-aware adapter. The historical
+reference injectors need their output redirected to staging first. Final source/live
+records are checked with the existing RPG Maker QA tools. Native formats that cannot
+store `_original` use versioned source/injection sidecars instead. These steps are
+part of the same starting prompt.
+
 ## Shared project context
 
 The game’s existing portable files remain authoritative:
@@ -132,6 +152,27 @@ Optional `--instruction-key section.key` selects a shared field template; `--sou
 reads a UTF-8 text file of preceding untranslated Japanese and fills contextual templates.
 The generated JSON separates system, glossary, SFX, request instructions, source context,
 source payload and reference translations. It contains no credentials.
+
+Dialogue batches also accept `--speakers '/path/to/speakers.json'`. The agent builds
+this metadata from the game's speaker fields, markup and reviewed extraction. For
+sources `{"line1": "待って。", "line2": "はい。", "line3": "静かな夜だ。"}`, a matching
+speaker file is `{"line1": "ハイメ", "line2": "レオン", "line3": null}`. For a source
+list, supply an equally sized speaker list. Every ID/position must be present; use
+null for unidentified speakers (blank names normalize to null). Missing/extra IDs,
+wrong shapes, non-text names and multiline names fail before context is prepared.
+
+The compiler includes current speakers' glossary/voice notes even when their names
+are absent from the source. It returns the normalized `speakers` metadata and embeds
+that map as context before the unchanged source body in `user`. Send the complete
+`user` field to the model; only the source body is translated, with the original
+IDs/order and the driver's output schema. Separate nameplates remain separate
+translation/injection units. Speaker metadata does not affect SFX or exact reference
+matching. Unknown speakers do not inherit the previous speaker automatically.
+
+Changing a speaker assignment changes `request_sha256`, even if the dialogue and
+matched glossary stay identical. Use it for dialogue cache/retry decisions and retain
+speaker/scene associations in stored units. Calls without `--speakers` retain their
+existing request format for non-dialogue and legacy callers.
 
 Direct translation and adapted API drivers must consume those fields, retain their own
 required output schema, and store the request fingerprint with results. Recompile before
