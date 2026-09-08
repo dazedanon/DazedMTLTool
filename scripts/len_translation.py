@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile shared Len/Workflow context or import a reviewed Len glossary. No API calls."""
+"""Prepare Len's handoff, shared context, glossary and local Git baselines. No API calls."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ from util.len_translation import (  # noqa: E402
 
 
 def main(argv=None) -> int:
+    from util.version_update import GitWorkflowError
+
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("prepare", help="Prepare shared guidance, setup instructions and the skill handoff")
@@ -31,6 +33,12 @@ def main(argv=None) -> int:
     importer = commands.add_parser("import-glossary", help="Merge reviewed names/terms; reject conflicting existing decisions")
     importer.add_argument("--game-root", type=Path, required=True)
     importer.add_argument("--input", type=Path, required=True)
+    git_inspect = commands.add_parser("git-status", help="Inspect the selected game's Git baselines without changing them")
+    git_inspect.add_argument("--game-root", type=Path, required=True)
+    git_setup = commands.add_parser("git-setup", help="Create or reuse local original/translation baselines, preserving native game bytes")
+    git_setup.add_argument("--game-root", type=Path, required=True)
+    git_setup.add_argument("--original", type=Path, help="Verified clean original; use the game itself only before any translation")
+    git_setup.add_argument("--version", help="Release label belonging to that clean original")
     args = parser.parse_args(argv)
     try:
         project = load_project(args.game_root)
@@ -38,6 +46,11 @@ def main(argv=None) -> int:
             print(prepare_project(project))
         elif args.command == "import-glossary":
             result = import_glossary(project, json.loads(args.input.read_text(encoding="utf-8-sig")))
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.command in {"git-status", "git-setup"}:
+            from util.len_git import git_status, setup_git
+
+            result = git_status(project) if args.command == "git-status" else setup_git(project, original_game=args.original, version=args.version)
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             if not args.sources and (args.instruction_key or args.source_context):
@@ -54,7 +67,7 @@ def main(argv=None) -> int:
             output.parent.mkdir(parents=True, exist_ok=True)
             _write_atomic(output, json.dumps(result, ensure_ascii=False, indent=2) + "\n")
             print(output)
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, GitWorkflowError) as exc:
         print(f"Len context error: {exc}", file=sys.stderr)
         return 1
     return 0

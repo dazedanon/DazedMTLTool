@@ -6,6 +6,14 @@ Re-translating is unaffordable and throws away every manual fix.
 Carrying it forward by hand is worse, because the lines that changed are exactly the ones you cannot spot by eye.
 
 **Reference implementation:** `DAZEDTL_ROOT/util/version_update/git_workflow.py`
+
+**DazedTL Len projects:** begin with `references/project-lifecycle.md` and the live
+`scripts/len_translation.py git-status` / `git-setup` commands. Newly created Len
+baselines preserve native game bytes and the reviewed project ignore policy.
+`dazedtl.preserveGameFiles` and the `DazedTL-Preserve-Game-Files` commit trailer carry
+that choice into later shared updates. The normalization advice below applies to
+projects whose engine and established baseline use normalized text; do not apply it
+over a native-byte baseline or force the RPG Maker file allowlist onto another engine.
 (3,014 lines) drives the flow, `gui/version_update_tab.py` (1,326 lines) is the operator
 view, `gameupdate/` holds the in-game notice (`TranslationUpdateCheck.js`,
 `patch-config.txt`), and `data/skills/post_update_translation.md` is the reusable prompt

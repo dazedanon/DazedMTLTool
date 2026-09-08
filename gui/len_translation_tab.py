@@ -18,10 +18,11 @@ from util.paths import APP_NAME, ORG_NAME
 
 
 class LenTranslationTab(QWidget):
-    def __init__(self, parent=None, *, settings=None, skill_root: Path = BUNDLED_SKILL):
+    def __init__(self, parent=None, *, settings=None, skill_root: Path = BUNDLED_SKILL, open_version_tracking=None):
         super().__init__(parent)
         self.settings = settings if settings is not None else QSettings(ORG_NAME, APP_NAME)
         self.skill_root = skill_root
+        self._open_version_tracking = open_version_tracking
         self._loaded_game = ""
         self._context_dialog = None
         self._references_dialog = None
@@ -92,7 +93,7 @@ class LenTranslationTab(QWidget):
         handoff_card = SectionCard(
             "2. Start with one prompt",
             "Copy the prompt and paste it into your coding assistant with the game folder open. "
-            "Your assistant will inspect the game, prepare its glossary and guidance, then carry out the selected task.",
+            "Your assistant will preserve the original, set up local Git and translation guidance, then carry out the selected task.",
         )
         actions = QHBoxLayout()
         self.copy_button = make_action_button("Copy starting prompt", variant="primary")
@@ -139,12 +140,15 @@ class LenTranslationTab(QWidget):
         self.review_button.clicked.connect(self._review_context)
         self.references_button = make_action_button("Reference translations")
         self.references_button.clicked.connect(self._review_references)
-        for button in (self.review_button, self.references_button):
+        self.git_button = make_action_button("Git version tracking")
+        self.git_button.clicked.connect(self._review_git)
+        self.git_button.setVisible(self._open_version_tracking is not None)
+        for button in (self.review_button, self.references_button, self.git_button):
             button.setEnabled(False)
             context_actions.addWidget(button)
         context_actions.addStretch()
         context_card.add_layout(context_actions)
-        self.guidance_section = DisclosureSection("Optional: review guidance and references", context_card)
+        self.guidance_section = DisclosureSection("Optional: project tools and references", context_card)
         root.addWidget(self.guidance_section)
 
         evidence_card = SectionCard(
@@ -179,7 +183,7 @@ class LenTranslationTab(QWidget):
         self._invalidate()
         if not hasattr(self, "review_button"):
             return
-        for button in (self.review_button, self.references_button):
+        for button in (self.review_button, self.references_button, self.git_button):
             button.setEnabled(False)
         if self._context_dialog is not None:
             self._context_dialog.editors.invalidate()
@@ -218,7 +222,7 @@ class LenTranslationTab(QWidget):
             self.base_check.setChecked(project.include_glossary_base)
             self.instructions_edit.setPlainText(project.instructions)
             self._loaded_game = str(project.game_root)
-            for button in (self.copy_button, self.review_button, self.references_button):
+            for button in (self.copy_button, self.review_button, self.references_button, self.git_button):
                 button.setEnabled(True)
             self._refresh_progress()
             set_status_text(self.status, "Ready. Copy the starting prompt and paste it into your coding assistant.", "info")
@@ -238,7 +242,7 @@ class LenTranslationTab(QWidget):
             self.settings.setValue("len_method/game_root", str(project.game_root))
             self._prepared = project
             self.preview.setPlainText(prompt)
-            for button in (self.review_button, self.references_button):
+            for button in (self.review_button, self.references_button, self.git_button):
                 button.setEnabled(True)
             for button in (self.open_game_button, self.open_skill_button, self.open_workspace_button):
                 button.setEnabled(True)
@@ -270,6 +274,10 @@ class LenTranslationTab(QWidget):
         self._references_dialog.reload()
         self._references_dialog.show()
         self._references_dialog.raise_()
+
+    def _review_git(self):
+        if self._loaded_game and self._open_version_tracking is not None:
+            self._open_version_tracking(self._loaded_game)
 
     def _open(self, target):
         if self._prepared is None:

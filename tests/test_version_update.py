@@ -86,6 +86,9 @@ class GitVersionUpdateTests(unittest.TestCase):
 
     def test_bootstrap_same_folder_creates_identical_baselines(self):
         """Prepare uses one pre-translation game as both original and translation."""
+        self.enterContext(patch.dict(os.environ, {
+            "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_ATTR_NOSYSTEM": "1",
+        }))
         game = self.translated
         game.joinpath("game.txt").write_text("Japanese\n", encoding="utf-8")
         game.joinpath("data.json").write_text('{"name":"Hero","v":1}')
@@ -107,6 +110,91 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertEqual(status.translation_version, "1.00")
         self.assertTrue(status.worktree_clean)
         self.assertIn("data.json", result.formatted_json_paths)
+
+        # Len uses the same backend for native formats, without normalizing
+        # payloads or adopting Workflow's extension allowlist.
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from scripts.len_translation import main as len_main
+        from tests.test_len_translation import guidance_fixture, make_skill
+        from util.len_translation import LenProject, prepare_project
+        from util.len_git import git_status, setup_git
+
+        native = self.root / "Native game"
+        native.mkdir()
+        script = b"first line\r\nsecond line\r\n"
+        packed = b"\x00\xffnative archive"
+        metadata = b'\xef\xbb\xbf{"z":2,"a":1}\r\n'
+        (native / "scene.ks").write_bytes(script)
+        (native / "labels.lua").write_text('label = "Japanese"\n')
+        (native / "data.json").write_bytes(metadata)
+        (native / "assets.pak").write_bytes(packed)
+        (native / ".gitignore").write_text("*.pak\n")
+        (native / ".env").write_text("PRIVATE=fixture\n")
+        with guidance_fixture(self.root):
+            project = LenProject(native)
+            prepare_project(project, make_skill(self.root / "skill"))
+            (project.work_root / "driver.py").write_text("# authored tool\n")
+            (project.work_root / "translations.jsonl").write_text('{"source":"鍵","target":"Key"}\n')
+            (project.work_root / ".env").write_text("PRIVATE=fixture\n")
+            (project.workspace / "status.md").write_text("Setup complete\n")
+            output = StringIO()
+            real_read_bytes = Path.read_bytes
+
+            def read_small_files(path):
+                if path.suffix == ".pak":
+                    raise AssertionError("Native archives must be streamed, not read into a formatting buffer")
+                return real_read_bytes(path)
+
+            with redirect_stdout(output), patch.object(Path, "read_bytes", read_small_files):
+                self.assertEqual(len_main(["git-setup", "--game-root", str(native), "--original", str(native), "--version", "1.00"]), 0)
+            state = json.loads(output.getvalue())
+            self.assertEqual(state["action"], "created")
+            self.assertTrue(state["configured"])
+            self.assertTrue(state["preserve_game_files"])
+            self.assertTrue(state["worktree_clean"])
+            self.assertEqual((native / "scene.ks").read_bytes(), script)
+            self.assertEqual((native / "data.json").read_bytes(), metadata)
+            tracked = self.git(native, "ls-files").splitlines()
+            self.assertIn("labels.lua", tracked)
+            self.assertIn(".dazedtl/len-method/work/driver.py", tracked)
+            self.assertIn(".dazedtl/len-method/work/translations.jsonl", tracked)
+            self.assertIn(".dazedtl/len-method/status.md", tracked)
+            self.assertNotIn(".dazedtl/len-method/work/.env", tracked)
+            self.assertNotIn(".dazedtl/len-method/context.json", tracked)
+            self.assertNotIn(".env", tracked)
+            self.assertNotIn(".dazedtl/", self.git(native, "ls-tree", "-r", "--name-only", "original"))
+            commits = self.git(native, "show-ref")
+            self.assertEqual(setup_git(project)["action"], "reused")
+            self.assertEqual(self.git(native, "show-ref"), commits)
+
+            cloned = self.root / "Cloned native game"
+            self.git(self.root, "-c", "core.autocrlf=true", "clone", str(native), str(cloned))
+            self.assertEqual((cloned / "scene.ks").read_bytes(), script)
+            self.assertEqual((cloned / "data.json").read_bytes(), metadata)
+            # Local original/translation registration config does not clone;
+            # reuse its existing remote-tracking original without fetching.
+            restored = setup_git(LenProject(cloned, stage="continue"))
+            self.assertTrue(restored["configured"])
+            self.assertTrue(restored["preserve_game_files"])
+            self.assertEqual(restored["original_commit"], state["original_commit"])
+
+            # Local config is absent after cloning; the persisted policy must
+            # still keep the next official update's CRLF/BOM/JSON bytes intact.
+            self.git(native, "config", "--unset", "dazedtl.preserveGameFiles")
+            self.assertTrue(git_status(project)["preserve_game_files"])
+            new_native = self.root / "Native update"
+            new_native.mkdir()
+            (new_native / "scene.ks").write_bytes(script)
+            (new_native / "labels.lua").write_text('label = "Japanese"\n')
+            updated_metadata = b'\xef\xbb\xbf{"z":3,"a":1}\r\n'
+            (new_native / "data.json").write_bytes(updated_metadata)
+            (new_native / "assets.pak").write_bytes(packed)
+            apply_official_update(native, new_native, "1.01")
+            self.assertEqual((native / "data.json").read_bytes(), updated_metadata)
+            self.assertEqual((native / "scene.ks").read_bytes(), script)
+            self.assertEqual((project.work_root / "driver.py").read_text(), "# authored tool\n")
+            self.assertEqual((native / ".env").read_text(), "PRIVATE=fixture\n")
 
     def test_bootstrap_formats_worktree_before_git_init(self):
         """Formatting must hit disk before repository creation."""
@@ -969,23 +1057,61 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.assertFalse(inspect_repository(self.translated).asset_sync_pending)
 
     def test_existing_repository_without_original_is_reconciled_in_place(self):
+        self.enterContext(patch.dict(os.environ, {
+            "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_ATTR_NOSYSTEM": "1",
+        }))
+        from util.len_git import setup_git
+        from util.len_translation import LenProject
+
         self.write_versions("Japanese\n", "English\n", "New\n")
-        self.git(self.translated, "init", "-b", "main")
+        self.git(self.translated, "init", "-b", "localization")
         self.git(self.translated, "config", "user.name", "Test")
         self.git(self.translated, "config", "user.email", "test@example.invalid")
         self.git(self.translated, "add", ".")
         self.git(self.translated, "commit", "-m", "existing translation")
 
-        bootstrap_repository(self.translated, self.old, "1.00")
+        project = LenProject(self.translated, stage="continue")
+        head = self.git(self.translated, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(GitWorkflowError, "separate clean"):
+            setup_git(project, original_game=self.translated, version="1.00")
+        with self.assertRaisesRegex(GitWorkflowError, "Supply --original"):
+            setup_git(project, version="1.00")
+        (self.translated / "notes.txt").write_text("unrelated staged work")
+        self.git(self.translated, "add", "notes.txt")
+        index_before = self.git(self.translated, "ls-files", "--stage")
+        with self.assertRaisesRegex(GitWorkflowError, "checkpoint current"):
+            setup_git(project, original_game=self.old, version="1.00")
+        self.assertEqual(self.git(self.translated, "ls-files", "--stage"), index_before)
+        self.assertEqual(self.git(self.translated, "rev-parse", "HEAD"), head)
+        self.assertFalse(self.git(self.translated, "branch", "--list", "original"))
+        self.git(self.translated, "commit", "-m", "reviewed notes")
+        nested = self.translated / "nested-game"
+        nested.mkdir()
+        with self.assertRaisesRegex(GitWorkflowError, "parent repository"):
+            setup_git(LenProject(nested), original_game=self.old, version="1.00")
+        self.assertFalse((nested / ".git").exists())
+        (self.translated / ".git/MERGE_HEAD").write_text(head + "\n")
+        with self.assertRaisesRegex(GitWorkflowError, "pending Git"):
+            setup_git(project, original_game=self.old, version="1.00")
+        (self.translated / ".git/MERGE_HEAD").unlink()
+
+        self.assertEqual(setup_git(project, original_game=self.old, version="1.00")["action"], "created")
         status = inspect_repository(self.translated)
 
-        self.assertEqual(status.current_branch, "main")
-        self.assertEqual(status.translation_branch, "main")
+        self.assertEqual(status.current_branch, "localization")
+        self.assertEqual(status.translation_branch, "localization")
         self.assertTrue(status.original_exists)
         self.assertTrue(status.translation_exists)
         self.assertFalse(self.git(self.translated, "branch", "--list", "translation"))
         self.assertEqual(self.translated.joinpath("game.txt").read_text(), "English\n")
         self.assertTrue(status.worktree_clean)
+        with self.assertRaisesRegex(GitWorkflowError, "Version Update"):
+            setup_git(project, version="2.00")
+        self.git(self.translated, "checkout", "original")
+        before = self.git(self.translated, "show-ref")
+        with self.assertRaisesRegex(GitWorkflowError, "translation branch"):
+            setup_git(project)
+        self.assertEqual(self.git(self.translated, "show-ref"), before)
 
     def test_existing_original_can_register_and_switch_translation_branch(self):
         self.write_versions("Japanese\n", "English\n", "New\n")
@@ -1665,6 +1791,9 @@ class VersionUpdateUITests(unittest.TestCase):
                 card.close()
 
     def test_sidebar_page_exposes_git_bootstrap_and_update_actions(self):
+        self.enterContext(patch.dict(os.environ, {
+            "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_ATTR_NOSYSTEM": "1",
+        }))
         from gui.version_update_tab import VersionUpdateTab
 
         tab = VersionUpdateTab()
@@ -1692,6 +1821,18 @@ class VersionUpdateUITests(unittest.TestCase):
                 tab._show_bootstrap_fields()
                 self.assertFalse(tab.bootstrap_fields.isHidden())
                 self.assertTrue(tab.show_bootstrap_btn.isHidden())
+                # Opening this page from Len must preserve native bytes even
+                # if the user creates the baseline here before running the agent.
+                native_payload = Path(temporary) / "scene.ks"
+                native_payload.write_bytes(b"first\r\nsecond\r\n")
+                tab.select_len_project(temporary)
+                self.assertEqual(tab.current_edit.text(), temporary)
+                tab.original_edit.setText(temporary)
+                tab.original_version_edit.setText("1.00")
+                with patch.object(tab, "_run", side_effect=lambda operation, success: operation()):
+                    tab._bootstrap()
+                self.assertEqual(native_payload.read_bytes(), b"first\r\nsecond\r\n")
+                self.assertTrue(inspect_repository(temporary).original_exists)
         finally:
             tab.close()
 

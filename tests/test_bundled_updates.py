@@ -23,6 +23,7 @@ _SHIPPED_DATA_FILES = (
     "data/skills/game-translation/.gitignore",
     "data/skills/game-translation/SKILL.md",
     "data/skills/game-translation/references/glossary-and-prompts.md",
+    "data/skills/game-translation/references/project-lifecycle.md",
     "data/skills/game-translation/scripts/check_tools.py",
     "data/skills/game-translation/tools/Game Translation/GameMaker/vendor/manifest.json",
     "data/skills/game-translation/tools/Game Translation/GameMaker/vendor/source-reference/LICENSE.txt",

@@ -440,6 +440,18 @@ class VersionUpdateTab(QWidget):
             current = candidate
         self.use_workflow_btn.setVisible(bool(candidate and candidate != current))
 
+    def select_len_project(self, game_root: str) -> None:
+        """Open Len's exact game scope and retain native bytes during first setup."""
+        self._len_project_root = str(Path(game_root).expanduser().resolve())
+        self.current_edit.setText(game_root)
+        self.refresh_status()
+
+    def _preserve_len_game_files(self, game_root: str) -> bool:
+        if not game_root:
+            return False
+        root = Path(game_root).expanduser().resolve()
+        return str(root) == getattr(self, "_len_project_root", "") or (root / ".dazedtl/len-method/project.json").is_file()
+
     def _translated_game_changed(self, text: str) -> None:
         self._invalidate_preview()
         self._bootstrap_expanded = False
@@ -828,7 +840,7 @@ class VersionUpdateTab(QWidget):
                 )
                 return
             self._run(
-                lambda: register_translation_branch(current, version),
+                lambda: register_translation_branch(current, version, preserve_game_files=self._preserve_len_game_files(current)),
                 self._show_bootstrap_result,
             )
             return
@@ -840,7 +852,7 @@ class VersionUpdateTab(QWidget):
             )
             return
         self._run(
-            lambda: bootstrap_repository(current, original, version),
+            lambda: bootstrap_repository(current, original, version, preserve_game_files=self._preserve_len_game_files(current)),
             self._show_bootstrap_result,
         )
 

@@ -20,6 +20,88 @@ from util.reference_games import load_registry, reference_context
 
 BUNDLED_SKILL = SKILLS_DIR / "game-translation"
 WORKSPACE_RELATIVE = Path(".dazedtl") / "len-method"
+_WORK_GITIGNORE = """# Version authored tools, translation records and QA notes; keep runtime data local.
+*
+!*/
+!.gitignore
+!.gitattributes
+!*.md
+!*.txt
+!*.json
+!*.jsonl
+!*.csv
+!*.tsv
+!*.py
+!*.js
+!*.cjs
+!*.mjs
+!*.cs
+!*.csproj
+!*.csx
+!*.c
+!*.h
+!*.cpp
+!*.rs
+!*.toml
+!*.yaml
+!*.yml
+!*.ps1
+!*.sh
+!*.bat
+!*.cmd
+!*.rb
+!*.gml
+!*.lua
+!*.rpy
+!*.ks
+!*.tjs
+!*.html
+!*.css
+!*.svg
+!*.ini
+!*.cfg
+!*.sln
+!*.resx
+!*.def
+.env
+.env.*
+api_keys.json
+*_key.txt
+*_keys.txt
+__pycache__/
+.venv/
+venv/
+node_modules/
+cache/
+logs/
+bin/
+obj/
+target/
+"""
+_WORK_IGNORE_BEGIN = "# BEGIN DazedTL Len project work"
+_WORK_IGNORE_END = "# END DazedTL Len project work"
+_WORK_IGNORE_BLOCK = f"""{_WORK_IGNORE_BEGIN}
+.env
+.env.*
+.api_key
+api_keys.json
+*_key.txt
+*_keys.txt
+.venv/
+venv/
+__pycache__/
+node_modules/
+saves/
+save/
+logs/
+cache/
+!/.dazedtl/len-method/
+/.dazedtl/len-method/*
+!/.dazedtl/len-method/project.json
+!/.dazedtl/len-method/status.md
+!/.dazedtl/len-method/work/
+{_WORK_IGNORE_END}
+"""
 STAGES = {
     "translate": "Translate the whole game",
     "prepare": "Prepare extraction and guidance",
@@ -50,6 +132,10 @@ class LenProject:
         """Preserve adaptations made by the initial ZIP-based integration."""
         return self.workspace / "game-translation"
 
+    @property
+    def work_root(self) -> Path:
+        return self.workspace / "work"
+
 
 def _validate_project(project: LenProject) -> None:
     if not project.game_root.is_absolute() or not project.game_root.is_dir():
@@ -61,7 +147,7 @@ def _validate_project(project: LenProject) -> None:
     if not isinstance(project.instructions, str):
         raise ValueError("Project instructions must be text.")
     # Do not write through project metadata symlinks into unrelated locations.
-    for path in (project.game_root / ".dazedtl", project.workspace):
+    for path in (project.game_root / ".dazedtl", project.workspace, project.work_root):
         if path.is_symlink() or (path.exists() and not path.is_dir()):
             raise ValueError(f"The Len workspace must use normal directories: {path}")
 
@@ -281,6 +367,12 @@ Read the skill entrypoint first and resolve its references/ and tools/ relative 
 
 Task: {task}
 
+Before changing game files, complete the project lifecycle in references/project-lifecycle.md from Len's skill. Inspect Git with this application command (argument array):
+{json.dumps([sys.executable, str(DATA_DIR.parent / 'scripts/len_translation.py'), 'git-status', '--game-root', str(project.game_root)], ensure_ascii=False)}
+Set up or reuse local version tracking with the same script's git-setup command. A new baseline requires --original <verified clean game folder> and --version <release label>. Use this game as its own original only when it is verified untouched and translation has not begun; continuing or QA without a baseline requires a separate clean original. Verify the version from local evidence, or label an unversioned snapshot initial-unversioned and record that limitation. The helper uses the shared Workflow backend, preserves native game bytes, and records that policy for later official updates. It preserves existing branch names/history and refuses ambiguous parent repositories, wrong branches, dirty reconciliation, and unfinished Git operations. Do not work around a refusal by resetting, discarding, relabeling translated files as original, or changing unrelated repository state. Resolve the actual prerequisite; request a clean original location if none is available. This local Git setup and reviewed local checkpoints are part of the selected task; remote creation, pushing and publishing require a separate user request.
+
+Before the first baseline, review the game's .gitignore and .gitattributes against the actual engine: include the game text and patch inputs that need protection, exclude secrets, saves, caches and unrelated bulk assets, and preserve engine-required bytes and line endings (use scoped -text rules where appropriate). The Len Git mode does not impose Workflow's file-extension allowlist or reformat game payloads. Keep an untouched original copy as well; Git's ignored-asset inventory is not a backup of those bytes. After setup, verify both baseline commits, the active translated branch and the files actually tracked before translating.
+
 Translation mode: {mode}
 
 Image scope: {images}
@@ -308,7 +400,7 @@ If you already have a Len JSON glossary, use the shared import bridge in scripts
 
 Cover dialogue, choices, names, database descriptions, menus, plugin/script text and runtime-generated player-facing labels. Distinguish display text from internal identifiers. Preserve control codes, placeholders, archive structure and save compatibility.
 
-Preserve a recoverable source before changing game files. Keep extraction stores, scripts, translations and QA evidence in this workspace or stable project folders; preserve previous work when resuming. Maintain {json.dumps(str(project.workspace / 'status.md'), ensure_ascii=False)} with completed steps, artifact paths, measured coverage, unresolved issues and the next action. The presence of a handoff or a successful extraction is not evidence of completion.
+Preserve a recoverable source before changing game files. Put authored scripts, reviewed translation records, prequel provenance and QA notes in {json.dumps(str(project.work_root), ensure_ascii=False)} or existing versioned project folders. This work/ directory and the scope/status files are eligible for Git; generated prompts/context, caches, raw snapshots and API state outside work/ remain local. Check the work/ ignore policy when adding a new source format. Export database-backed translation stores to stable text records there so checkpoints protect completed translations. Preserve legacy adaptations and migrate useful authored work deliberately. After each validated milestone, review the diff and commit only the selected project files on the registered translation branch, preserving unrelated staged or working changes. Maintain {json.dumps(str(project.workspace / 'status.md'), ensure_ascii=False)} with the baseline and checkpoint commits, completed steps, artifact paths, measured coverage, unresolved issues and the next action. On resume, verify artifact and context fingerprints before reusing results. The presence of a handoff or a successful extraction is not evidence of completion.
 
 Validate coverage independently of the extractor, placeholders, fonts, text width and row counts, injected output, and actual in-game scenes. Report string coverage, image coverage, and playtested scenes separately. Never claim 100% translation from string counts alone; record inaccessible content, excluded assets and untested scenes explicitly. If this environment cannot launch the game, leave that verification pending and give the user precise playtest steps. Re-inject before packaging. Build a local patch with installation instructions after the applicable QA gates pass; uploading or publishing is a separate user action.
 
@@ -320,14 +412,40 @@ Additional project instructions:
 def _write_atomic(path: Path, text: str) -> None:
     if path.is_symlink():
         raise ValueError(f"Refusing to replace a symlink: {path}")
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as handle:
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", errors="surrogateescape", dir=path.parent, delete=False) as handle:
         temporary = Path(handle.name)
         try:
             handle.write(text)
             handle.close()
+            if path.exists():
+                temporary.chmod(path.stat().st_mode)
             temporary.replace(path)
         finally:
             temporary.unlink(missing_ok=True)
+
+
+def _prepare_versioned_work(project: LenProject) -> None:
+    """Expose authored project work without tracking generated context or credentials."""
+    ignore = project.game_root / ".gitignore"
+    text = ignore.read_text(encoding="utf-8", errors="surrogateescape") if ignore.exists() else ""
+    if text.count(_WORK_IGNORE_BEGIN) != text.count(_WORK_IGNORE_END) or text.count(_WORK_IGNORE_BEGIN) > 1:
+        raise ValueError("The Len project .gitignore block is incomplete or duplicated.")
+    if _WORK_IGNORE_BEGIN in text:
+        start = text.index(_WORK_IGNORE_BEGIN)
+        end = text.index(_WORK_IGNORE_END) + len(_WORK_IGNORE_END)
+        if end < start:
+            raise ValueError("The Len project .gitignore block is out of order.")
+        updated = text[:start] + _WORK_IGNORE_BLOCK.rstrip() + text[end:]
+    else:
+        updated = text + ("\n" if text and not text.endswith("\n") else "") + "\n" + _WORK_IGNORE_BLOCK
+    if updated != text:
+        _write_atomic(ignore, updated)
+    project.work_root.mkdir(parents=True, exist_ok=True)
+    work_ignore = project.work_root / ".gitignore"
+    if work_ignore.is_symlink() or (work_ignore.exists() and not work_ignore.is_file()):
+        raise ValueError("The Len work .gitignore must be a regular file.")
+    if not work_ignore.exists():
+        _write_atomic(work_ignore, _WORK_GITIGNORE)
 
 
 def prepare_project(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> Path:
@@ -336,6 +454,7 @@ def prepare_project(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> Pa
     _validate_skill(skill_root)
     context = shared_context(project)
     project.workspace.mkdir(parents=True, exist_ok=True)
+    _prepare_versioned_work(project)
     settings = asdict(project)
     settings.pop("game_root")
     _write_atomic(project.workspace / "project.json", json.dumps({"version": 2, **settings}, indent=2) + "\n")

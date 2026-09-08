@@ -70,7 +70,7 @@ def main() -> int:
     print(f"\nbundled    : {len(BUNDLED) - len(missing)}/{len(BUNDLED)} present")
     for rel in missing:
         print(f"  MISSING  tools/{rel}")
-    shared = ("util/len_translation.py", "util/skills/system.py", "scripts/len_translation.py", "data/skills/project_setup.md")
+    shared = ("util/len_translation.py", "util/len_git.py", "util/skills/system.py", "scripts/len_translation.py", "data/skills/project_setup.md")
     missing_shared = [rel for rel in shared if not (DAZEDTL_ROOT / rel).is_file()]
     print(f"shared     : {len(shared) - len(missing_shared)}/{len(shared)} present")
     for rel in missing_shared:

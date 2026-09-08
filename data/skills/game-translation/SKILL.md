@@ -16,6 +16,10 @@ The craft is in three things: **finding every string, keeping control codes/plac
 
 ## DazedTL shared integration
 
+Read `references/project-lifecycle.md` for the required source preservation, local Git
+baseline, checkpoints, resumable artifacts and delivery phases. These are part of the
+same starting prompt, before and after the engine-specific translation work.
+
 This copy lives at `DAZEDTL_ROOT/data/skills/game-translation`. Resolve DAZEDTL_ROOT
 as the application folder three levels above this skill folder. `tools/...` paths
 are relative to this skill folder; `DAZEDTL_ROOT/...` paths use the live application.
@@ -51,6 +55,11 @@ JSON as an archive, and make all future guidance edits in the shared files. Hist
 pipelines are adaptation examples. They are not additional authoritative files for this
 integration. Keep longer synopsis, route and research notes in the workspace; assemble
 translation instructions from the shared files without repeating their contents.
+
+Keep authored tools, reviewed translation records and QA notes under the handoff's
+`.dazedtl/len-method/work/` or existing versioned project folders. Generated context,
+raw snapshots and API state outside `work/` remain local. Verify Git actually tracks
+the authored work and preserves native game bytes before relying on its checkpoints.
 
 Read and reuse Len's tools, copying those that need adaptation into the workspace.
 Use live DazedTL modules instead of a frozen DazedTL extract. Do not run a reference

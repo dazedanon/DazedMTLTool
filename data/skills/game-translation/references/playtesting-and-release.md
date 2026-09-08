@@ -326,6 +326,12 @@ whole-game copy.
 
 ## Per-game state lives inside the game folder, behind an allowlist
 
+In the DazedTL integration, preserve the managed `.dazedtl` guidance rules and the
+separate Len work block. `len-method/project.json`, `len-method/status.md` and authored
+files allowed by `len-method/work/.gitignore` are versioned too. Generated context,
+provider state, caches and raw snapshots remain local. The example below illustrates
+the general pattern; do not replace the integration's current blocks with it.
+
 Keep per-game state in a dot-directory inside the game root so it travels with the
 project, and track it **partially** on purpose: commit the glossary, the settings file
 holding the measured line widths, and the per-game guidance markdown. Ignore local

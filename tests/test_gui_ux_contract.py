@@ -93,7 +93,8 @@ class GUIUXContractTests(unittest.TestCase):
             second_game = root / "second-game"
             second_game.mkdir()
             settings = QSettings(str(root / "settings.ini"), QSettings.IniFormat)
-            tab = LenTranslationTab(settings=settings, skill_root=make_skill(root / "skill"))
+            opened_git_projects = []
+            tab = LenTranslationTab(settings=settings, skill_root=make_skill(root / "skill"), open_version_tracking=opened_git_projects.append)
             try:
                 tab.game_edit.setText(str(game))
                 tab._load_game()
@@ -108,6 +109,8 @@ class GUIUXContractTests(unittest.TestCase):
                 self.assertEqual(self.app.clipboard().text(), (saved.workspace / "handoff.md").read_text())
                 self.assertTrue((saved.workspace / "setup.md").is_file())
                 tab.guidance_section.toggle.click()
+                tab.git_button.click()
+                self.assertEqual(opened_git_projects, [str(game)])
                 tab.review_button.click()
                 self.assertTrue(tab._context_dialog.copy_setup_button.isHidden())
                 editors = tab._context_dialog.editors
@@ -152,7 +155,11 @@ class GUIUXContractTests(unittest.TestCase):
                 self.assertEqual(tab.preview.toPlainText(), "")
                 tab.game_edit.setText(str(second_game))
                 self.assertFalse(tab.copy_button.isEnabled())
+                tab.git_button.click()
+                self.assertEqual(opened_git_projects, [str(game)])
                 tab._load_game()
+                tab.git_button.click()
+                self.assertEqual(opened_git_projects[-1], str(second_game))
                 editors.vocab_editor.setPlainText("stale edit")
                 editors._save_vocab()
                 self.assertFalse((second_game / ".dazedtl/glossary.txt").exists())

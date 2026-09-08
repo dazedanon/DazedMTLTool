@@ -37,7 +37,7 @@ the user to fill the reference dialog or manually transfer a glossary first.
    context compiler. Preserve existing curated decisions and document justified
    changes. Do not copy entire historical glossaries or plot bibles into the prompt.
 5. Keep a concise provenance/conflict report under
-   `.dazedtl/len-method/prequel-terminology.md`, outside runtime skill overlays.
+   `.dazedtl/len-method/work/prequel-terminology.md`, outside runtime skill overlays.
    Record references checked, inherited decisions, unresolved variants and gaps.
    Lack of an exact old line is not proof that a term is absent from the prequels.
 6. Register supported aligned JP/EN data for each reference using the shared helpers

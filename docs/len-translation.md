@@ -6,7 +6,52 @@ preparation, full translation, continuation and QA, with direct translation or a
 API. Image translation defaults to included. Choose the game and scope, click **Copy starting
 prompt**, and paste it into the coding assistant with the game folder open. That single action
 prepares or refreshes the workspace and copies the full handoff; it makes no API calls.
-The assistant performs setup and investigation as phases of the selected task.
+The assistant performs source preservation, local Git setup, investigation, translation
+and validated checkpoints as phases of the selected task. Copying the prompt itself
+prepares instructions and workspace files; Git operations run when the assistant starts.
+
+## Local Git and resumable work
+
+The starting prompt requires a verified source baseline before changing game files.
+The CLI uses Workflow's Git backend to create `original` and the translated branch,
+or reuse existing baselines and branch names:
+
+```bash
+python scripts/len_translation.py git-status --game-root '/path/to/game'
+python scripts/len_translation.py git-setup --game-root '/path/to/game' \
+  --original '/path/to/clean-original' --version '1.00'
+```
+
+Only a verified new untranslated game may use itself as the clean original. Continuing
+or QA without a registered baseline requires a separate untouched original. Setup
+refuses ambiguous parent repositories, unfinished Git operations, wrong branches and
+dirty reconciliation. It leaves existing staged and working changes for deliberate
+review and checkpointing. It does not create remotes or push.
+
+New Len baselines preserve native encodings, line endings and JSON layout. They keep the
+project's reviewed ignore policy instead of installing Workflow's extension allowlist.
+When `.gitattributes` is missing, setup adds a byte-preserving default; existing rules
+are retained for review. A clone can reuse an unambiguous existing remote-tracking
+`original` ref without fetching or pushing.
+The policy is stored in local Git configuration and commit trailers, so shared update
+previews and official updates keep it after cloning. Existing complete repositories are
+reused with their established policy. Review `.gitattributes` and the actual tracked
+payload before relying on a baseline; Git does not replace an untouched source copy.
+
+Authored scripts, translation records and QA notes belong under
+`.dazedtl/len-method/work/` or existing versioned project folders. The work directory's
+text/source allowlist, `project.json` and `status.md` are eligible for Git. Generated
+context, handoff files, provider state and caches remain local. Export database-backed
+translations into stable text records for checkpoints; extend the work allowlist when
+an intended authored format is missing. Existing work rules and legacy adaptations are
+preserved. The assistant records reviewed milestone commits and verifies saved artifacts
+before resuming.
+
+**Git version tracking** under **Optional: project tools and references** opens the
+existing Version Update page for the selected Len game, including native-byte setup.
+It does not select an unrelated Workflow game. The reference lifecycle also covers
+independent extraction coverage, current context on resume, engine-compatible packaging
+and explicit pending status for runtime checks that could not be performed.
 
 ## Shared project context
 
@@ -18,7 +63,7 @@ The game’s existing portable files remain authoritative:
 - Other `.dazedtl/skills/*.md`: custom instructions.
 - The existing reference-game registry: advisory translations from earlier games.
 
-Under **Optional: review guidance and references**, **Review glossary & skills** opens the
+Under **Optional: project tools and references**, **Review glossary & skills** opens the
 same editor used for generic Translation context, with its separate setup-prompt action hidden.
 **Reference translations** registers paired Japanese/English JSON folders or DazedTL JSON
 with `_original` fields in the same registry as Workflow. For another engine, first extract
@@ -51,6 +96,7 @@ Each game’s `.dazedtl/len-method/` contains:
 - `context.json`: current assembled system prompt, glossary and reference registry.
 - `handoff.md`: scoped instructions and paths for the coding assistant.
 - `status.md`: assistant-written progress and evidence; prompt preparation never overwrites it.
+- `work/`: versioned authored tools, translation records and QA/provenance notes.
 - Any project-specific tools, extraction stores, research and translation outputs.
 
 Copy refreshes shared guidance from disk. Moving a game and copying its starting prompt again

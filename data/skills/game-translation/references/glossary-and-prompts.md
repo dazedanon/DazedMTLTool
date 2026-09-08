@@ -18,7 +18,7 @@ Reference examples on disk (copy the closest genre), all under `tools/Game Trans
 | `.dazedtl/skills/quirks.md` | Cross-cutting voice and recurring motifs with literal Japanese anchors | Individual biographies, one-off jokes, layout numbers |
 | `.dazedtl/skills/game.md` | Compact theme, era, register policy, naming policy, evidenced mythology | Cast lists, duplicated quirks or glossary entries |
 | Other `.dazedtl/skills/*.md` | User-chosen, narrowly scoped translation instructions | Pipeline implementation and research inventories |
-| `.dazedtl/len-method/` notes | Longer synopsis, routes, research, extraction metadata, QA evidence | Another authoritative copy of the glossary or translation prompt |
+| `.dazedtl/len-method/work/` notes | Longer synopsis, routes, research, extraction metadata, QA evidence | Another authoritative copy of the glossary or translation prompt |
 
 Use the shared Setup skill and its investigation phase before finalizing guidance.
 `DAZEDTL_ROOT/scripts/len_translation.py context` refreshes the current assembled

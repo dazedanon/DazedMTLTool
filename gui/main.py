@@ -1364,8 +1364,14 @@ class DazedMTLGUI(QMainWindow):
         self.evaluation_tab = EvaluationTab(self)
         self.content_stack.addWidget(self.evaluation_tab)
 
-        self.len_translation_tab = LenTranslationTab(self, settings=self.settings)
+        self.len_translation_tab = LenTranslationTab(
+            self, settings=self.settings, open_version_tracking=self._open_len_version_tracking,
+        )
         self.content_stack.addWidget(self.len_translation_tab)
+
+    def _open_len_version_tracking(self, game_root: str) -> None:
+        self.version_update_tab.select_len_project(game_root)
+        self.switch_page(self.PAGE_VERSION_UPDATE)
 
     def _create_workflow_container(self) -> QWidget:
         """Wrap the RPGMaker and Wolf guided workflows behind an engine selector."""

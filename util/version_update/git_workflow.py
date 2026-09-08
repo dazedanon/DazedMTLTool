@@ -36,6 +36,8 @@ ORIGINAL_BRANCH = "original"
 TRANSLATION_BRANCH = "main"
 _LEGACY_TRANSLATION_BRANCH = "translation"
 _TRANSLATION_BRANCH_CONFIG = "dazedtl.translationBranch"
+_PRESERVE_GAME_FILES_CONFIG = "dazedtl.preserveGameFiles"
+_PRESERVE_GAME_FILES_TRAILER = "DazedTL-Preserve-Game-Files: true"
 VERSION_TRAILER = "DazedTL-Version"
 _TOOL_NAME = "DazedMTLTool"
 _TOOL_EMAIL = "local@dazedmtl.invalid"
@@ -94,6 +96,9 @@ _TOOL_RESOURCE_DIRECTORIES = frozenset(
 _LOCAL_ONLY_DIRECTORIES = frozenset(
     {
         ".dazedtl",
+        ".venv",
+        "venv",
+        "__pycache__",
         "cache",
         "caches",
         "crash",
@@ -366,6 +371,24 @@ def _configure_exact_tree_repo(repo: Path) -> None:
     _run_git(repo, "config", "core.eol", "lf")
 
 
+def _preserve_game_files(repo: Path) -> bool:
+    """Len projects keep native encodings/layout and their reviewed ignore policy."""
+    result = _run_git(repo, "config", "--local", "--bool", "--get", _PRESERVE_GAME_FILES_CONFIG, check=False)
+    if result.returncode not in {0, 1}:
+        raise GitWorkflowError("Invalid repository setting: " + _PRESERVE_GAME_FILES_CONFIG)
+    if result.returncode == 0:
+        return result.stdout.strip() == "true"
+    # Repo-local settings do not travel with a clone. The original release
+    # commit records this policy so later updates cannot silently normalize it.
+    original = _run_git(repo, "log", "-1", "--format=%B", "refs/heads/original", check=False)
+    if original.returncode == 0 and _PRESERVE_GAME_FILES_TRAILER in original.stdout.splitlines():
+        return True
+    # Adopting a pre-existing original records the policy on the translation
+    # registration commit instead of rewriting that original's history.
+    adopted = _run_git(repo, "log", "-1", "--format=%B", f"--grep=^{_PRESERVE_GAME_FILES_TRAILER}$", "HEAD", check=False)
+    return adopted.returncode == 0 and _PRESERVE_GAME_FILES_TRAILER in adopted.stdout.splitlines()
+
+
 def _ref_commit(repo: Path, ref: str) -> str | None:
     result = _run_git(
         repo,
@@ -632,8 +655,9 @@ def _source_files(source: Path, *, format_json: bool) -> list[_SourceFile]:
         mode = "100755" if candidate.stat().st_mode & executable_bits else "100644"
         normalized_text = None
         warning = None
-        raw = candidate.read_bytes()
-        source_text = _decode_utf8_text(raw)
+        # Native engine archives can be gigabytes. Raw tree collection only
+        # needs paths/modes; Git and the asset hasher stream the bytes later.
+        source_text = _decode_utf8_text(candidate.read_bytes()) if format_json else None
         if format_json and candidate.suffix.casefold() == ".json":
             if source_text is None:
                 warning = f"{rel_text}: JSON formatting skipped (not valid UTF-8 text)"
@@ -909,8 +933,17 @@ def _ensure_local_excludes(repo: Path) -> None:
             handle.write(f"{rule}\n")
 
 
-def _install_gameupdate_gitignore(game_root: Path) -> bool:
+def _install_gameupdate_gitignore(game_root: Path, *, preserve_game_files: bool = False) -> bool:
     """Install the bundled ignore policy without discarding project rules."""
+    if preserve_game_files:
+        attributes = game_root / ".gitattributes"
+        if attributes.is_symlink() or (attributes.exists() and not attributes.is_file()):
+            raise GitWorkflowError("The game .gitattributes must be a regular file")
+        if not attributes.exists():
+            # This travels with clones; repo-local core.autocrlf alone does not.
+            with attributes.open("xb") as handle:
+                handle.write(b"# Preserve native game payload bytes across platforms.\n* -text\n")
+        return ensure_game_tool_gitignore(game_root)
     try:
         template = _GAMEUPDATE_GITIGNORE.read_bytes()
     except OSError as exc:
@@ -1224,6 +1257,9 @@ def _is_local_only_asset(path: str) -> bool:
     name = lowered_parts[-1]
     return bool(
         name in _LOCAL_ONLY_FILENAMES
+        or name in {".env", ".api_key", "api_keys.json"}
+        or name.startswith(".env.")
+        or name.endswith(("_key.txt", "_keys.txt"))
         or name.startswith("save")
         or name.startswith("bsxscript_")
         or Path(name).suffix in _NON_GAME_RESOURCE_EXTENSIONS | {".log", ".tmp"}
@@ -1446,17 +1482,18 @@ def _write_tree_from_folder(
     format_json: bool = True,
     materialize_json: bool = False,
     replace_game_tree: bool = True,
+    include_tool_state: bool = True,
 ) -> _TreeBuild:
-    discovered_files = _source_files(source, format_json=format_json)
-    managed_ignore = repo.joinpath(game_prefix, ".gitignore")
-    if managed_ignore.is_file():
-        discovered_files = [
-            entry for entry in discovered_files if entry.relative != ".gitignore"
-        ]
-        discovered_files.append(
-            _SourceFile(managed_ignore, ".gitignore", "100644")
-        )
-        discovered_files.sort(key=lambda entry: entry.relative)
+    preserve_native = _preserve_game_files(repo)
+    discovered_files = _source_files(source, format_json=format_json and not preserve_native)
+    if not include_tool_state:
+        discovered_files = [entry for entry in discovered_files if not entry.relative.startswith(".dazedtl/")]
+    for filename in ((".gitignore", ".gitattributes") if preserve_native else (".gitignore",)):
+        managed = repo.joinpath(game_prefix, filename)
+        if managed.is_file():
+            discovered_files = [entry for entry in discovered_files if entry.relative != filename]
+            discovered_files.append(_SourceFile(managed, filename, "100644"))
+    discovered_files.sort(key=lambda entry: entry.relative)
     ignored = _ignored_paths(repo, discovered_files, game_prefix)
     files = [entry for entry in discovered_files if entry.relative not in ignored]
     if materialize_json:
@@ -1557,6 +1594,8 @@ def _commit_tree(
     message: str,
     parents: Iterable[str] = (),
 ) -> str:
+    if _preserve_game_files(repo) and _PRESERVE_GAME_FILES_TRAILER not in message.splitlines():
+        message = message.rstrip() + "\n\n" + _PRESERVE_GAME_FILES_TRAILER
     args = [
         "-c",
         f"user.name={_TOOL_NAME}",
@@ -1592,13 +1631,23 @@ def bootstrap_repository(
     translated_game: str | Path,
     original_game: str | Path,
     version: str,
+    *,
+    preserve_game_files: bool = False,
 ) -> BootstrapResult:
+    """Record official/translated baselines; optionally preserve native game bytes.
+
+    The preservation setting is repository-local and also applies to later
+    registration, update previews and official updates. Existing Workflow callers
+    retain their normalized text and bundled GameUpdate ignore policy.
+    """
     translated = Path(translated_game).expanduser().resolve()
     if not translated.is_dir():
         raise GitWorkflowError(f"Translated game folder not found: {translated}")
     version = _validate_version(version)
     original = _validate_source(original_game, translated)
     found = _repository_for(translated)
+    if found is not None:
+        preserve_game_files = preserve_game_files or _preserve_game_files(found[0])
 
     if found is None:
         if translated.joinpath(".git").exists():
@@ -1606,19 +1655,27 @@ def bootstrap_repository(
         # Format and validate on disk before creating any repository state.
         # The clean official folder is left untouched when it is a separate path;
         # same-folder Prepare bootstrap normalizes the single selected game once.
-        if original == translated:
+        if preserve_game_files:
+            _source_files(original, format_json=False)
+            if original != translated:
+                _source_files(translated, format_json=False)
+            preformatted, prewarnings = (), ()
+        elif original == translated:
             preformatted, prewarnings = _prepare_worktree_formatting(translated)
         else:
             _source_files(original, format_json=True)
             preformatted, prewarnings = _prepare_worktree_formatting(translated)
-        gitignore_installed = _install_gameupdate_gitignore(translated)
+        gitignore_installed = _install_gameupdate_gitignore(translated, preserve_game_files=preserve_game_files)
         _run_git(translated, "init", "-b", TRANSLATION_BRANCH)
         repo, prefix = translated, ""
         translation_branch = TRANSLATION_BRANCH
         _configure_exact_tree_repo(repo)
+        if preserve_game_files:
+            _run_git(repo, "config", "--local", _PRESERVE_GAME_FILES_CONFIG, "true")
         _ensure_local_excludes(repo)
         original_tree = _write_tree_from_folder(
-            repo, original, game_prefix=prefix, base_commit=None
+            repo, original, game_prefix=prefix, base_commit=None,
+            include_tool_state=not preserve_game_files,
         )
         original_commit = _commit_tree(
             repo,
@@ -1676,11 +1733,18 @@ def bootstrap_repository(
                 "Check out the branch containing the translated game before reconciliation"
             )
         # Normalize the working translation tree before baseline commits.
-        preformatted, prewarnings = _prepare_worktree_formatting(translated)
-        gitignore_installed = _install_gameupdate_gitignore(translated)
+        if preserve_game_files:
+            _source_files(original, format_json=False)
+            _source_files(translated, format_json=False)
+            preformatted, prewarnings = (), ()
+            _run_git(repo, "config", "--local", _PRESERVE_GAME_FILES_CONFIG, "true")
+        else:
+            preformatted, prewarnings = _prepare_worktree_formatting(translated)
+        gitignore_installed = _install_gameupdate_gitignore(translated, preserve_game_files=preserve_game_files)
         _ensure_translation_branch(repo, head_commit, translation_branch)
         original_tree = _write_tree_from_folder(
-            repo, original, game_prefix=prefix, base_commit=head_commit
+            repo, original, game_prefix=prefix, base_commit=head_commit,
+            include_tool_state=not preserve_game_files,
         )
         original_commit = _commit_tree(
             repo,
@@ -1755,6 +1819,7 @@ def register_translation_branch(
     *,
     branch: str | None = None,
     replace: bool = False,
+    preserve_game_files: bool = False,
 ) -> BootstrapResult:
     """Register an existing local branch as the translated game branch."""
     game = Path(translated_game).expanduser().resolve()
@@ -1784,8 +1849,10 @@ def register_translation_branch(
         )
     resolved_version = _validate_version(version or status.original_version or "")
     _configure_exact_tree_repo(status.repo_root)
+    if preserve_game_files:
+        _run_git(status.repo_root, "config", "--local", _PRESERVE_GAME_FILES_CONFIG, "true")
     _ensure_local_excludes(status.repo_root)
-    gitignore_installed = _install_gameupdate_gitignore(game)
+    gitignore_installed = _install_gameupdate_gitignore(game, preserve_game_files=_preserve_game_files(status.repo_root))
     translation_tree = _write_tree_from_folder(
         status.repo_root,
         game,

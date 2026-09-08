@@ -13,12 +13,21 @@ playtesting and building a local translation patch.
 3. Click **Copy starting prompt**. DazedTL prepares or refreshes the project workspace
    and copies the complete instructions in one action.
 4. Open the game folder in your coding assistant and paste that prompt. The assistant
-   inspects the game, prepares its glossary and guidance, and carries out the selected task.
+   preserves the original, sets up local Git tracking, prepares the glossary and guidance,
+   and carries out the selected task with reviewed checkpoints.
 5. Use **Reload progress report** to review the assistant’s work and remaining checks.
 
 One starting prompt includes setup. You do not need to copy guidance between tabs or run
-a separate setup prompt. **Optional: review guidance and references** contains the shared
-editors and tools for adding reference translations whenever you want to use them.
+a separate setup prompt. **Optional: project tools and references** contains the shared
+editors, reference translations and **Git version tracking** for this game.
+
+Git setup records a clean original baseline and a translated branch, preserving existing
+repositories and native game bytes. If work has already begun and no baseline exists,
+the assistant needs an untouched original copy; it must not label translated files as
+original. Keep that source copy even when using Git. Authored tools, translated records
+and QA notes go in the versioned `work/` folder; generated caches and API state stay local.
+Git setup and local checkpoints are included in the starting task. Online publishing is
+separate.
 
 To reuse names and vocabulary from multiple prequels, list their folders or a prepared
 corpus folder in **Instructions**, such as “Use the translations in /path/to/prequels
