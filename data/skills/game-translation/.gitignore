@@ -1,0 +1,118 @@
+# These rules apply after the application-wide !data/skills/** exception.
+# Keep reusable sources, licenses, prompts, example configs and curated evidence.
+
+# Private settings, environments, package installs and caches.
+.env
+.env.*
+!.env.example
+.api_key
+api_keys.json
+*_key.txt
+*_keys.txt
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+node_modules/
+*.tmp
+*.part
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.db-wal
+*.db-shm
+operation.lock
+_submitting.lock
+_batch_state.json
+.DS_Store
+Thumbs.db
+
+# Compiler scratch. The two intentional offline Wolf executables still ship.
+[Bb]in/
+[Oo]bj/
+build/
+dist/
+**/target/**
+!tools/C++/Wolf/wolf_rpg_decode/target/release/
+!tools/C++/Wolf/wolf_rpg_decode/target/release/wolf_rpg_decode.exe
+!tools/C++/Wolf/wolf_unpack/target/release/
+!tools/C++/Wolf/wolf_unpack/target/release/wolf_unpack.exe
+*.obj
+*.o
+*.pdb
+
+# Rebuild these example plugins against the selected game's assemblies.
+tools/Game Translation/Active Projects/Artesia (Bakin)/**/*.exe
+tools/Game Translation/Active Projects/Artesia (Bakin)/**/*.dll
+tools/Game Translation/Reference Pipelines/Bakin (Miyutsure)/**/*.exe
+tools/Game Translation/Reference Pipelines/Bakin (Miyutsure)/**/*.dll
+
+# Installed PyPI packages; the tool's requirements.txt is the source of truth.
+tools/C++/Unreal/python/
+tools/C++/Unreal/tools/python/
+
+# Optional downloaded tools and target-game reference assemblies.
+tools/.NET/AssetRipper/
+tools/.NET/Il2CppDumper-win-*/
+tools/.NET/Cpp2IL/
+tools/.NET/BepInEx/
+tools/.NET/HarmonyX/
+tools/.NET/Il2CppInterop/
+tools/.NET/MelonLoader/
+tools/.NET/dnspy/
+tools/.NET/de4dotex/
+tools/.NET/die/
+tools/.NET/ILSpy/
+tools/C++/Unreal/retoc/
+tools/C++/Unreal/repak/
+tools/C++/Unreal/UAssetGUI/
+tools/C++/FModel/
+tools/Game Translation/Unity BepInEx Text Layout Plugin/VBV/References/
+
+# Extracted game text and generated lookup tables, rebuilt for each game.
+tools/C++/Trois/tts_jp_table.json
+tools/C++/Trois/tts_jp_table.bin
+tools/Game Translation/Unity Text Extraction Pipeline/LoserLife/LoserLifeATest/translations/known_texts.b64
+tools/Game Translation/Reference Pipelines/SRPG Studio (Belphegor)/jstools/js_strings.json
+tools/Game Translation/Reference Pipelines/Unity IL2CPP (Hitonatsu)/plugin/HitonatsuTL/translations/*.json
+tools/Game Translation/Reference Pipelines/Unity IL2CPP (Hitonatsu)/workspace/font_coverage.json
+tools/Game Translation/Active Projects/Loccubus (RPG Maker MZ)/preparation/source/
+tools/Game Translation/Active Projects/Loccubus (RPG Maker MZ)/preparation/source_snapshot.zip
+tools/Game Translation/Active Projects/Loccubus (RPG Maker MZ)/preparation/units.json
+tools/Game Translation/Active Projects/Loccubus (RPG Maker MZ)/preparation/sites.json
+tools/Game Translation/Active Projects/Loccubus (RPG Maker MZ)/preparation/manifest.json
+tools/Game Translation/Active Projects/Loccubus (RPG Maker MZ)/preparation/batches/
+
+# Generated census, audit and runtime state; retain their scripts and prose.
+**/reports/*.json
+**/reports/*.jsonl
+**/reports/*.tsv
+**/reports/*.csv
+logs/
+tools/Game Translation/Reference Pipelines/RPG Maker MZ (Gakuen)/audit/*.txt
+tools/Game Translation/Active Projects/Musi Dream (TyranoScript)/images/census_*.json
+tools/Game Translation/Active Projects/Musi Dream (TyranoScript)/images/coverage.json
+tools/Game Translation/Active Projects/Musi Dream (TyranoScript)/images/inventory.json
+tools/Game Translation/Active Projects/Musi Dream (TyranoScript)/images/*_review.json
+tools/Game Translation/Active Projects/Musi Dream (TyranoScript)/manual/runtime_audit/electron_js2c_browser_init.js
+tools/Game Translation/Active Projects/Nightfall Princess (GameMaker)/manual-translation/installation.json
+tools/Game Translation/Active Projects/Nightfall Princess (GameMaker)/manual-translation/followup-status/roundtrip/
+tools/Game Translation/Active Projects/Nightfall Princess (GameMaker)/review/anchor-counts.json
+tools/Game Translation/Active Projects/Tropical Chase (RPG Maker MZ)/release-project/verification*.json
+tools/Game Translation/Active Projects/Tropical Chase (RPG Maker MZ)/release-project/repository.json
+
+# Rendered game replacements and scratch previews. Deliberate before/after
+# evidence under Tropical Chase/evidence/ and image-builder inputs still ship.
+**/images/out/
+tools/Game Translation/Reference Pipelines/RPG Maker MZ (Gakuen)/audit/*.png
+tools/Game Translation/Reference Pipelines/RPG Maker MZ (Gakuen)/images/compare.png
+tools/Game Translation/Reference Pipelines/RPG Maker MZ (Gakuen)/images/overlays.png
+tools/Game Translation/Reference Pipelines/RPG Maker MZ (Gakuen)/images/zoom_*.png

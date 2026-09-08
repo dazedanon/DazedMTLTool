@@ -1,0 +1,21 @@
+{
+ "_comment": "Line ids whose `text` was hand-authored. `fanout` overwrites every sibling in a dedup group, so a hand fix that is not listed here is lost on the next fetch/retry. Copy the id straight out of batch.json.",
+ "locked_ids": [
+  "0|/names/134/text",
+  "0|/names/135/text",
+  "0|/names/136/text",
+  "0|/names/313/text",
+  "0|/names/322/text",
+  "0|/names/323/text",
+  "1|/scenes/16/lines/1/text",
+  "1|/scenes/189/lines/91/text",
+  "1|/scenes/29/lines/0/text",
+  "1|/scenes/37/lines/0/text",
+  "1|/scenes/37/lines/1/text",
+  "1|/scenes/62/lines/0/text",
+  "1|/scenes/87/lines/0/text",
+  "1|/scenes/87/lines/1/text",
+  "42|/scenes/31/lines/8/text",
+  "7|/scenes/0/lines/1/text"
+ ]
+}

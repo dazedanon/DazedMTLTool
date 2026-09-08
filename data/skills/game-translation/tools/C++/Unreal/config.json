@@ -1,0 +1,25 @@
+{
+  "projectName": "StoryFramework",
+  "gameName": "Ikisaw",
+  "engineVersion": "VER_UE5_5",
+  "retocZenVersion": "UE5_5",
+  "paksDir": "StoryFramework/Content/Paks",
+  "toolVersions": {
+    "retoc": "v0.1.5",
+    "repak": "v0.2.3",
+    "uassetgui": "v1.1.0"
+  },
+  "targetPathPatterns": [
+    "StoryFramework/Content/R18Frame/Datatables",
+    "StoryFramework/Content/R18Frame/Enum",
+    "StoryFramework/Content/R18Frame/Widget",
+    "StoryFramework/Content/R18_IkiSaw/DataTable",
+    "StoryFramework/Content/R18_IkiSaw/Blueprint",
+    "StoryFramework/Content/R18_IkiSaw/LevelSequence",
+    "StoryFramework/Content/R18_IkiSaw/Map",
+    "StoryFramework/Content/R18_IkiSaw/Widget",
+    "StoryFramework/Content/StoryFramework/Core/UserInterface/Widgets",
+    "StoryFramework/Content/StoryFramework/Menus"
+  ],
+  "patchBaseName": "Ikisaw_Translation_P"
+}

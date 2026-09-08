@@ -1,0 +1,2 @@
+# Already installed and verified; no API SDKs required.
+fonttools==4.63.0

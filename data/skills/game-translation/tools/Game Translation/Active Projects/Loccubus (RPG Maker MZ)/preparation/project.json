@@ -1,0 +1,25 @@
+{
+    "schema": 1,
+    "game": "Loccubus v1.0",
+    "engine": "RPG Maker MZ",
+    "engine_version": "1.9.0",
+    "game_root": "/home/dazed/DazedTranslations/Translations/Loccubus/Loccubus",
+    "source_language": "zh-CN",
+    "reference_language": "ja",
+    "target_language": "en",
+    "work_mode": "preparation_only_no_api",
+    "scope": "reviewed nonsexual general UI only",
+    "node": "node",
+    "api_enabled": false,
+    "images_authorized": false,
+    "locale_activation": false,
+    "gameplay_phase2_deployment": false,
+    "layout": {
+        "source_font": "fonts/yuyang-W03.ttf",
+        "message_width_config": 1720,
+        "message_font_size": 42,
+        "message_rows_config": 3,
+        "native_measurement_done": false
+    },
+    "stable_backup": "/home/dazed/DazedTranslations/Tools/Len TL Tools/tools/Game Translation/Active Projects/Loccubus (RPG Maker MZ)/preparation"
+}

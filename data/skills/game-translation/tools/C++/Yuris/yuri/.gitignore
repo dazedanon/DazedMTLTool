@@ -1,0 +1,8 @@
+.vscode
+files/*
+example/*
+!files/v494
+!example/v494.ycd
+**/__pycache__
+notes
+test-*

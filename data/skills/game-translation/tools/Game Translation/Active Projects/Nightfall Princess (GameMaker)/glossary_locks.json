@@ -1,0 +1,1230 @@
+{
+  "status": "planned_not_applied",
+  "entries": [
+    {
+      "id": "CODE:2:313",
+      "source": "ミスリルのリング",
+      "planned_text": "Mithril Ring"
+    },
+    {
+      "id": "CODE:2:316",
+      "source": "魔法の指輪",
+      "planned_text": "Magic Ring"
+    },
+    {
+      "id": "CODE:2:319",
+      "source": "王冠",
+      "planned_text": "Crown"
+    },
+    {
+      "id": "CODE:2:322",
+      "source": "神秘の護符",
+      "planned_text": "Mystic Amulet"
+    },
+    {
+      "id": "CODE:2:325",
+      "source": "天使の翼",
+      "planned_text": "Angel Wings"
+    },
+    {
+      "id": "CODE:2:328",
+      "source": "神秘のペンダント",
+      "planned_text": "Mystic Pendant"
+    },
+    {
+      "id": "CODE:2:331",
+      "source": "魔力の天秤",
+      "planned_text": "Arcane Scales"
+    },
+    {
+      "id": "CODE:2:334",
+      "source": "魔法の帽子",
+      "planned_text": "Magic Hat"
+    },
+    {
+      "id": "CODE:2:337",
+      "source": "紅蓮の腕輪",
+      "planned_text": "Crimson Bracelet"
+    },
+    {
+      "id": "CODE:2:340",
+      "source": "隠者のマント",
+      "planned_text": "Hermit's Mantle"
+    },
+    {
+      "id": "CODE:2:343",
+      "source": "永遠の指輪",
+      "planned_text": "Eternity Ring"
+    },
+    {
+      "id": "CODE:2:346",
+      "source": "運命のブレスレット",
+      "planned_text": "Bracelet of Fate"
+    },
+    {
+      "id": "CODE:2:349",
+      "source": "闇の剣",
+      "planned_text": "Dark Sword"
+    },
+    {
+      "id": "CODE:2:352",
+      "source": "古代のチョーカー",
+      "planned_text": "Ancient Choker"
+    },
+    {
+      "id": "CODE:2:355",
+      "source": "風のアンクレット",
+      "planned_text": "Wind Anklet"
+    },
+    {
+      "id": "CODE:2:358",
+      "source": "魔法石のイヤリング",
+      "planned_text": "Magic Stone Earrings"
+    },
+    {
+      "id": "CODE:2:361",
+      "source": "神秘の剣",
+      "planned_text": "Mystic Sword"
+    },
+    {
+      "id": "CODE:2:364",
+      "source": "魔法のペンダント",
+      "planned_text": "Magic Pendant"
+    },
+    {
+      "id": "CODE:2:367",
+      "source": "古神の杯",
+      "planned_text": "Ancient God's Chalice"
+    },
+    {
+      "id": "CODE:2:370",
+      "source": "龍爪",
+      "planned_text": "Dragon Claw"
+    },
+    {
+      "id": "CODE:2:373",
+      "source": "仕込み刃",
+      "planned_text": "Hidden Blade"
+    },
+    {
+      "id": "CODE:2:376",
+      "source": "死神の鎌",
+      "planned_text": "Reaper's Scythe"
+    },
+    {
+      "id": "CODE:2:379",
+      "source": "聖剣エクスカリバー",
+      "planned_text": "Holy Sword Excalibur"
+    },
+    {
+      "id": "CODE:2:382",
+      "source": "聖なる剣",
+      "planned_text": "Holy Sword"
+    },
+    {
+      "id": "CODE:2:385",
+      "source": "龍鱗",
+      "planned_text": "Dragon Scale"
+    },
+    {
+      "id": "CODE:2:388",
+      "source": "ドラゴンの首飾り",
+      "planned_text": "Dragon Necklace"
+    },
+    {
+      "id": "CODE:2:391",
+      "source": "闘士の腕輪",
+      "planned_text": "Fighter's Bracelet"
+    },
+    {
+      "id": "CODE:2:394",
+      "source": "ダークソウルリング",
+      "planned_text": "Dark Soul Ring"
+    },
+    {
+      "id": "CODE:2:397",
+      "source": "龍の牙",
+      "planned_text": "Dragon Fang"
+    },
+    {
+      "id": "CODE:2:400",
+      "source": "風のクローク",
+      "planned_text": "Wind Cloak"
+    },
+    {
+      "id": "CODE:2:403",
+      "source": "ダイヤの指輪",
+      "planned_text": "Diamond Ring"
+    },
+    {
+      "id": "CODE:2:406",
+      "source": "悪魔の呪いの剣",
+      "planned_text": "Demon-Cursed Sword"
+    },
+    {
+      "id": "CODE:2:409",
+      "source": "炎の剣",
+      "planned_text": "Flame Sword"
+    },
+    {
+      "id": "CODE:2:412",
+      "source": "十字架",
+      "planned_text": "Cross"
+    },
+    {
+      "id": "CODE:2:415",
+      "source": "鳳凰の羽根",
+      "planned_text": "Phoenix Feather"
+    },
+    {
+      "id": "CODE:2:418",
+      "source": "エルフのイヤリング",
+      "planned_text": "Elven Earrings"
+    },
+    {
+      "id": "CODE:2:421",
+      "source": "聖杯",
+      "planned_text": "Holy Grail"
+    },
+    {
+      "id": "CODE:2:424",
+      "source": "妖精の羽根",
+      "planned_text": "Fairy Feather"
+    },
+    {
+      "id": "CODE:2:427",
+      "source": "魔法の指輪",
+      "planned_text": "Magic Ring"
+    },
+    {
+      "id": "CODE:2:430",
+      "source": "魔術師のマント",
+      "planned_text": "Mage's Mantle"
+    },
+    {
+      "id": "CODE:2:433",
+      "source": "魔法のベルト",
+      "planned_text": "Magic Belt"
+    },
+    {
+      "id": "CODE:2:436",
+      "source": "魔法の石",
+      "planned_text": "Magic Stone"
+    },
+    {
+      "id": "CODE:2:439",
+      "source": "天使のハープ",
+      "planned_text": "Angel's Harp"
+    },
+    {
+      "id": "CODE:2:442",
+      "source": "闇のマント",
+      "planned_text": "Dark Mantle"
+    },
+    {
+      "id": "CODE:2:445",
+      "source": "破魔のスクロール",
+      "planned_text": "Warding Scroll"
+    },
+    {
+      "id": "CODE:2:448",
+      "source": "世界樹の葉",
+      "planned_text": "World Tree Leaf"
+    },
+    {
+      "id": "CODE:2:451",
+      "source": "魔法のトランプ",
+      "planned_text": "Magic Playing Cards"
+    },
+    {
+      "id": "CODE:2:454",
+      "source": "バラのかんざし",
+      "planned_text": "Rose Hairpin"
+    },
+    {
+      "id": "CODE:2:457",
+      "source": "フェアリーウィング",
+      "planned_text": "Fairy Wings"
+    },
+    {
+      "id": "CODE:2:460",
+      "source": "フェアリーティアラ",
+      "planned_text": "Fairy Tiara"
+    },
+    {
+      "id": "CODE:2:463",
+      "source": "月のティアラ",
+      "planned_text": "Moon Tiara"
+    },
+    {
+      "id": "CODE:2:466",
+      "source": "聖なる指輪",
+      "planned_text": "Holy Ring"
+    },
+    {
+      "id": "CODE:2:469",
+      "source": "エメラルドのイヤリング",
+      "planned_text": "Emerald Earrings"
+    },
+    {
+      "id": "CODE:2:472",
+      "source": "天使の光輪",
+      "planned_text": "Angel's Halo"
+    },
+    {
+      "id": "CODE:2:475",
+      "source": "大地のブーツ",
+      "planned_text": "Earth Boots"
+    },
+    {
+      "id": "CODE:2:478",
+      "source": "聖光のイヤリング",
+      "planned_text": "Holy Light Earrings"
+    },
+    {
+      "id": "CODE:2:481",
+      "source": "聖なるローブ",
+      "planned_text": "Holy Robe"
+    },
+    {
+      "id": "CODE:2:484",
+      "source": "ダイヤのネックレス",
+      "planned_text": "Diamond Necklace"
+    },
+    {
+      "id": "CODE:2:487",
+      "source": "命のブレスレット",
+      "planned_text": "Life Bracelet"
+    },
+    {
+      "id": "CODE:2:490",
+      "source": "水晶の首飾り",
+      "planned_text": "Crystal Necklace"
+    },
+    {
+      "id": "CODE:2:493",
+      "source": "氷のマント",
+      "planned_text": "Ice Mantle"
+    },
+    {
+      "id": "CODE:2:496",
+      "source": "魔法のブレスレット",
+      "planned_text": "Magic Bracelet"
+    },
+    {
+      "id": "CODE:2:499",
+      "source": "魔法のステッキ",
+      "planned_text": "Magic Wand"
+    },
+    {
+      "id": "CODE:2:502",
+      "source": "風のペンダント",
+      "planned_text": "Wind Pendant"
+    },
+    {
+      "id": "CODE:2:505",
+      "source": "真理の鍵",
+      "planned_text": "Key of Truth"
+    },
+    {
+      "id": "CODE:2:508",
+      "source": "聖なる燭台",
+      "planned_text": "Holy Candelabrum"
+    },
+    {
+      "id": "CODE:2:511",
+      "source": "天使の羽",
+      "planned_text": "Angel Feather"
+    },
+    {
+      "id": "CODE:2:514",
+      "source": "光の杖",
+      "planned_text": "Staff of Light"
+    },
+    {
+      "id": "CODE:2:517",
+      "source": "聖なる石",
+      "planned_text": "Holy Stone"
+    },
+    {
+      "id": "CODE:2:520",
+      "source": "氷のネックレス",
+      "planned_text": "Ice Necklace"
+    },
+    {
+      "id": "CODE:2:523",
+      "source": "プラチナのネックレス",
+      "planned_text": "Platinum Necklace"
+    },
+    {
+      "id": "CODE:2:526",
+      "source": "水の指輪",
+      "planned_text": "Water Ring"
+    },
+    {
+      "id": "CODE:2:529",
+      "source": "聖なるバイオリン",
+      "planned_text": "Holy Violin"
+    },
+    {
+      "id": "CODE:2:532",
+      "source": "光の宝珠",
+      "planned_text": "Orb of Light"
+    },
+    {
+      "id": "CODE:2:535",
+      "source": "魔法のガントレット",
+      "planned_text": "Magic Gauntlet"
+    },
+    {
+      "id": "CODE:2:538",
+      "source": "真鍮の腕輪",
+      "planned_text": "Brass Bracelet"
+    },
+    {
+      "id": "CODE:2:541",
+      "source": "光輝の剣",
+      "planned_text": "Radiant Sword"
+    },
+    {
+      "id": "CODE:40:253",
+      "source": "重装兵",
+      "planned_text": "Heavy Infantry"
+    },
+    {
+      "id": "CODE:40:256",
+      "source": "魔化兵",
+      "planned_text": "Corrupted Soldier"
+    },
+    {
+      "id": "CODE:40:259",
+      "source": "洗脳された市民",
+      "planned_text": "Brainwashed Citizen"
+    },
+    {
+      "id": "CODE:40:262",
+      "source": "強盗",
+      "planned_text": "Bandit"
+    },
+    {
+      "id": "CODE:40:265",
+      "source": "敵国の兵士",
+      "planned_text": "Enemy Soldier"
+    },
+    {
+      "id": "CODE:40:268",
+      "source": "吸乳虫",
+      "planned_text": "Milk Leech"
+    },
+    {
+      "id": "CODE:40:271",
+      "source": "泥の怪物",
+      "planned_text": "Mud Monster"
+    },
+    {
+      "id": "CODE:40:274",
+      "source": "触手魔人",
+      "planned_text": "Tentacle Fiend"
+    },
+    {
+      "id": "CODE:40:277",
+      "source": "魔物化した花",
+      "planned_text": "Monstrous Flower"
+    },
+    {
+      "id": "CODE:40:280",
+      "source": "魔人",
+      "planned_text": "Fiend"
+    },
+    {
+      "id": "CODE:40:283",
+      "source": "ゴブリン",
+      "planned_text": "Goblin"
+    },
+    {
+      "id": "CODE:40:286",
+      "source": "インプ",
+      "planned_text": "Imp"
+    },
+    {
+      "id": "CODE:40:289",
+      "source": "オーク兵士",
+      "planned_text": "Orc Soldier"
+    },
+    {
+      "id": "CODE:40:292",
+      "source": "オーク戦士",
+      "planned_text": "Orc Warrior"
+    },
+    {
+      "id": "CODE:40:295",
+      "source": "亡霊",
+      "planned_text": "Wraith"
+    },
+    {
+      "id": "CODE:40:298",
+      "source": "ゾンビ",
+      "planned_text": "Zombie"
+    },
+    {
+      "id": "CODE:40:301",
+      "source": "狂ったゾンビ",
+      "planned_text": "Frenzied Zombie"
+    },
+    {
+      "id": "CODE:40:304",
+      "source": "邪悪な大魔術師",
+      "planned_text": "Evil Archmage"
+    },
+    {
+      "id": "CODE:40:307",
+      "source": "ライオン",
+      "planned_text": "Lion"
+    },
+    {
+      "id": "CODE:40:310",
+      "source": "スライム",
+      "planned_text": "Slime"
+    },
+    {
+      "id": "CODE:40:313",
+      "source": "一般兵",
+      "planned_text": "Foot Soldier"
+    },
+    {
+      "id": "CODE:40:316",
+      "source": "魔蛇",
+      "planned_text": "Demon Serpent"
+    },
+    {
+      "id": "CODE:40:319",
+      "source": "将軍",
+      "planned_text": "General"
+    },
+    {
+      "id": "CODE:40:322",
+      "source": "モンク",
+      "planned_text": "Monk"
+    },
+    {
+      "id": "CODE:40:325",
+      "source": "空飛ぶ悪魔",
+      "planned_text": "Flying Demon"
+    },
+    {
+      "id": "CODE:40:328",
+      "source": "スケルトン",
+      "planned_text": "Skeleton"
+    },
+    {
+      "id": "CODE:40:331",
+      "source": "洗脳された兵士",
+      "planned_text": "Brainwashed Soldier"
+    },
+    {
+      "id": "CODE:40:334",
+      "source": "妖術師",
+      "planned_text": "Sorcerer"
+    },
+    {
+      "id": "CODE:40:337",
+      "source": "青いゴーレム",
+      "planned_text": "Blue Golem"
+    },
+    {
+      "id": "CODE:40:340",
+      "source": "緑のゴーレム",
+      "planned_text": "Green Golem"
+    },
+    {
+      "id": "CODE:40:343",
+      "source": "魔族の戦士",
+      "planned_text": "Demon Warrior"
+    },
+    {
+      "id": "CODE:40:346",
+      "source": "狂った魔族",
+      "planned_text": "Frenzied Demon"
+    },
+    {
+      "id": "CODE:40:349",
+      "source": "壮健なオーク",
+      "planned_text": "Brawny Orc"
+    },
+    {
+      "id": "CODE:40:352",
+      "source": "素早い魔人",
+      "planned_text": "Swift Fiend"
+    },
+    {
+      "id": "CODE:40:355",
+      "source": "魔物化した蔓",
+      "planned_text": "Monstrous Vines"
+    },
+    {
+      "id": "CODE:40:358",
+      "source": "魔族の女戦士",
+      "planned_text": "Female Demon Warrior"
+    },
+    {
+      "id": "CODE:40:361",
+      "source": "吸血鬼",
+      "planned_text": "Vampire"
+    },
+    {
+      "id": "CODE:40:364",
+      "source": "平民捕虜",
+      "planned_text": "Civilian Captive"
+    },
+    {
+      "id": "CODE:40:367",
+      "source": "闇魔導士",
+      "planned_text": "Dark Mage"
+    },
+    {
+      "id": "CODE:40:370",
+      "source": "鉄鎧の戦士",
+      "planned_text": "Ironclad Warrior"
+    },
+    {
+      "id": "CODE:40:373",
+      "source": "壮健な強盗",
+      "planned_text": "Brawny Bandit"
+    },
+    {
+      "id": "CODE:40:376",
+      "source": "猛毒魔人",
+      "planned_text": "Venomous Fiend"
+    },
+    {
+      "id": "CODE:40:379",
+      "source": "青いゴブリン",
+      "planned_text": "Blue Goblin"
+    },
+    {
+      "id": "CODE:40:382",
+      "source": "野犬",
+      "planned_text": "Wild Dog"
+    },
+    {
+      "id": "CODE:40:385",
+      "source": "剣兵",
+      "planned_text": "Swordsman"
+    },
+    {
+      "id": "CODE:40:388",
+      "source": "ゴブリンの奴隷主",
+      "planned_text": "Goblin Slavemaster"
+    },
+    {
+      "id": "CODE:40:391",
+      "source": "残忍な魔人",
+      "planned_text": "Cruel Fiend"
+    },
+    {
+      "id": "CODE:40:394",
+      "source": "盾兵",
+      "planned_text": "Shield Soldier"
+    },
+    {
+      "id": "CODE:40:397",
+      "source": "大司教",
+      "planned_text": "Archbishop"
+    },
+    {
+      "id": "CODE:40:400",
+      "source": "独眼の魔人",
+      "planned_text": "One-Eyed Fiend"
+    },
+    {
+      "id": "CODE:40:403",
+      "source": "深海の魔人",
+      "planned_text": "Deep-Sea Fiend"
+    },
+    {
+      "id": "CODE:40:406",
+      "source": "商人",
+      "planned_text": "Merchant"
+    },
+    {
+      "id": "CODE:40:409",
+      "source": "兵士",
+      "planned_text": "Soldier"
+    },
+    {
+      "id": "CODE:40:412",
+      "source": "兵士",
+      "planned_text": "Soldier"
+    },
+    {
+      "id": "CODE:40:415",
+      "source": "兵士",
+      "planned_text": "Soldier"
+    },
+    {
+      "id": "CODE:40:418",
+      "source": "兵士",
+      "planned_text": "Soldier"
+    },
+    {
+      "id": "CODE:40:421",
+      "source": "魔物化した蔓",
+      "planned_text": "Monstrous Vines"
+    },
+    {
+      "id": "CODE:40:424",
+      "source": "悪魔ボール",
+      "planned_text": "Demon Ball"
+    },
+    {
+      "id": "CODE:40:427",
+      "source": "フェアリーの卵",
+      "planned_text": "Fairy Egg"
+    },
+    {
+      "id": "CODE:40:430",
+      "source": "魔物化した蔓",
+      "planned_text": "Monstrous Vines"
+    },
+    {
+      "id": "CODE:74:73",
+      "source": "兵士を慰める",
+      "planned_text": "Comfort the Soldiers"
+    },
+    {
+      "id": "CODE:74:76",
+      "source": "パイズリ",
+      "planned_text": "Titjob"
+    },
+    {
+      "id": "CODE:74:79",
+      "source": "更に一歩",
+      "planned_text": "One Step Further"
+    },
+    {
+      "id": "CODE:74:82",
+      "source": "薬剤の実験",
+      "planned_text": "Drug Trial"
+    },
+    {
+      "id": "CODE:74:85",
+      "source": "騎乗位",
+      "planned_text": "Cowgirl"
+    },
+    {
+      "id": "CODE:74:88",
+      "source": "2人と…",
+      "planned_text": "With Two..."
+    },
+    {
+      "id": "CODE:74:91",
+      "source": "3人と…",
+      "planned_text": "With Three..."
+    },
+    {
+      "id": "CODE:74:94",
+      "source": "乱交",
+      "planned_text": "Orgy"
+    },
+    {
+      "id": "CODE:74:97",
+      "source": "石化の眼",
+      "planned_text": "Petrifying Gaze"
+    },
+    {
+      "id": "CODE:74:100",
+      "source": "薬草採取",
+      "planned_text": "Herb Gathering"
+    },
+    {
+      "id": "CODE:74:103",
+      "source": "薬草採取2",
+      "planned_text": "Herb Gathering 2"
+    },
+    {
+      "id": "CODE:74:106",
+      "source": "フェアリーの卵",
+      "planned_text": "Fairy Egg"
+    },
+    {
+      "id": "CODE:74:109",
+      "source": "鉱石採取",
+      "planned_text": "Ore Gathering"
+    },
+    {
+      "id": "CODE:74:112",
+      "source": "魔族の残党",
+      "planned_text": "Demon Remnants"
+    },
+    {
+      "id": "CODE:74:115",
+      "source": "魔物化した蔓",
+      "planned_text": "Monstrous Vines"
+    },
+    {
+      "id": "CODE:74:118",
+      "source": "深淵の峡谷",
+      "planned_text": "Abyssal Gorge"
+    },
+    {
+      "id": "CODE:74:121",
+      "source": "魔と化した森",
+      "planned_text": "Corrupted Forest"
+    },
+    {
+      "id": "CODE:84:325",
+      "source": "爆発力",
+      "planned_text": "Burst Power"
+    },
+    {
+      "id": "CODE:84:328",
+      "source": "追撃",
+      "planned_text": "Follow-Up"
+    },
+    {
+      "id": "CODE:84:331",
+      "source": "突撃",
+      "planned_text": "Assault"
+    },
+    {
+      "id": "CODE:84:334",
+      "source": "魔力融合",
+      "planned_text": "Arcane Fusion"
+    },
+    {
+      "id": "CODE:84:337",
+      "source": "武器エンチャント",
+      "planned_text": "Weapon Enchantment"
+    },
+    {
+      "id": "CODE:84:340",
+      "source": "魔力増幅",
+      "planned_text": "Arcane Amplification"
+    },
+    {
+      "id": "CODE:84:343",
+      "source": "魔法支援",
+      "planned_text": "Magic Support"
+    },
+    {
+      "id": "CODE:84:346",
+      "source": "魔力スパーク",
+      "planned_text": "Arcane Spark"
+    },
+    {
+      "id": "CODE:84:349",
+      "source": "戦闘策略",
+      "planned_text": "Battle Strategy"
+    },
+    {
+      "id": "CODE:84:352",
+      "source": "絶学",
+      "planned_text": "Master Technique"
+    },
+    {
+      "id": "CODE:84:355",
+      "source": "全面強化",
+      "planned_text": "All-Stat Boost"
+    },
+    {
+      "id": "CODE:84:358",
+      "source": "終結の刃",
+      "planned_text": "Finishing Blade"
+    },
+    {
+      "id": "CODE:84:361",
+      "source": "迅速斬撃",
+      "planned_text": "Swift Slash"
+    },
+    {
+      "id": "CODE:84:364",
+      "source": "鋭刃",
+      "planned_text": "Keen Edge"
+    },
+    {
+      "id": "CODE:84:367",
+      "source": "天神の一撃",
+      "planned_text": "Divine Strike"
+    },
+    {
+      "id": "CODE:84:370",
+      "source": "蓄勢待発",
+      "planned_text": "Poised to Strike"
+    },
+    {
+      "id": "CODE:84:373",
+      "source": "波動の刃",
+      "planned_text": "Wave Blade"
+    },
+    {
+      "id": "CODE:84:376",
+      "source": "魔力引爆",
+      "planned_text": "Arcane Detonation"
+    },
+    {
+      "id": "CODE:84:379",
+      "source": "魔法波紋",
+      "planned_text": "Magic Ripple"
+    },
+    {
+      "id": "CODE:84:382",
+      "source": "刃を研ぐ",
+      "planned_text": "Hone the Blade"
+    },
+    {
+      "id": "CODE:84:385",
+      "source": "弱点攻撃",
+      "planned_text": "Weak-Point Strike"
+    },
+    {
+      "id": "CODE:84:388",
+      "source": "地裂斬",
+      "planned_text": "Earthsplitter"
+    },
+    {
+      "id": "CODE:84:391",
+      "source": "柔軟な対応",
+      "planned_text": "Adaptability"
+    },
+    {
+      "id": "CODE:84:394",
+      "source": "剣刃エンチャント",
+      "planned_text": "Blade Enchantment"
+    },
+    {
+      "id": "CODE:84:397",
+      "source": "貫通の刃",
+      "planned_text": "Piercing Blade"
+    },
+    {
+      "id": "CODE:84:400",
+      "source": "精密な突き",
+      "planned_text": "Precision Thrust"
+    },
+    {
+      "id": "CODE:84:403",
+      "source": "空裂斬",
+      "planned_text": "Skysplitter"
+    },
+    {
+      "id": "CODE:84:406",
+      "source": "剣刃充填",
+      "planned_text": "Blade Charge"
+    },
+    {
+      "id": "CODE:84:409",
+      "source": "貫通強化",
+      "planned_text": "Piercing Boost"
+    },
+    {
+      "id": "CODE:84:412",
+      "source": "殺戮の欲望",
+      "planned_text": "Bloodlust"
+    },
+    {
+      "id": "CODE:84:415",
+      "source": "恐怖の拡散",
+      "planned_text": "Spreading Terror"
+    },
+    {
+      "id": "CODE:84:418",
+      "source": "血に飢えた刃",
+      "planned_text": "Bloodthirsty Blade"
+    },
+    {
+      "id": "CODE:84:421",
+      "source": "震動の刃",
+      "planned_text": "Tremor Blade"
+    },
+    {
+      "id": "CODE:84:424",
+      "source": "群星斬",
+      "planned_text": "Starfall Slash"
+    },
+    {
+      "id": "CODE:84:427",
+      "source": "影の球",
+      "planned_text": "Shadow Orb"
+    },
+    {
+      "id": "CODE:84:430",
+      "source": "装甲腐食",
+      "planned_text": "Armor Corrosion"
+    },
+    {
+      "id": "CODE:84:433",
+      "source": "蔦の束縛",
+      "planned_text": "Binding Vines"
+    },
+    {
+      "id": "CODE:84:436",
+      "source": "スプラッシュ",
+      "planned_text": "Splash"
+    },
+    {
+      "id": "CODE:84:439",
+      "source": "森の種",
+      "planned_text": "Forest Seed"
+    },
+    {
+      "id": "CODE:84:442",
+      "source": "奥義射撃",
+      "planned_text": "Secret Shot"
+    },
+    {
+      "id": "CODE:84:445",
+      "source": "弾幕強化",
+      "planned_text": "Projectile Boost"
+    },
+    {
+      "id": "CODE:84:448",
+      "source": "腐食の球",
+      "planned_text": "Corrosive Orb"
+    },
+    {
+      "id": "CODE:84:451",
+      "source": "絡みつく球",
+      "planned_text": "Entangling Orb"
+    },
+    {
+      "id": "CODE:84:454",
+      "source": "森の再生",
+      "planned_text": "Forest Renewal"
+    },
+    {
+      "id": "CODE:84:457",
+      "source": "貫通射撃",
+      "planned_text": "Piercing Shot"
+    },
+    {
+      "id": "CODE:84:460",
+      "source": "腐食射撃",
+      "planned_text": "Corrosive Shot"
+    },
+    {
+      "id": "CODE:84:463",
+      "source": "蔦の蔓延",
+      "planned_text": "Spreading Vines"
+    },
+    {
+      "id": "CODE:84:466",
+      "source": "弾幕魔術",
+      "planned_text": "Projectile Magic"
+    },
+    {
+      "id": "CODE:84:469",
+      "source": "生育の風",
+      "planned_text": "Wind of Growth"
+    },
+    {
+      "id": "CODE:84:472",
+      "source": "貫通強化",
+      "planned_text": "Piercing Boost"
+    },
+    {
+      "id": "CODE:84:475",
+      "source": "装甲破壊",
+      "planned_text": "Armor Shatter"
+    },
+    {
+      "id": "CODE:84:478",
+      "source": "森の魔力",
+      "planned_text": "Forest Magic"
+    },
+    {
+      "id": "CODE:84:481",
+      "source": "分裂貫通",
+      "planned_text": "Splintering Pierce"
+    },
+    {
+      "id": "CODE:84:484",
+      "source": "種子蔓延",
+      "planned_text": "Spreading Seeds"
+    },
+    {
+      "id": "CODE:84:487",
+      "source": "分裂強化",
+      "planned_text": "Splintering Boost"
+    },
+    {
+      "id": "CODE:84:490",
+      "source": "落地生根",
+      "planned_text": "Taking Root"
+    },
+    {
+      "id": "CODE:84:493",
+      "source": "森の意志",
+      "planned_text": "Will of the Forest"
+    },
+    {
+      "id": "CODE:84:496",
+      "source": "光輝追撃",
+      "planned_text": "Radiant Follow-Up"
+    },
+    {
+      "id": "CODE:84:499",
+      "source": "光の軌跡",
+      "planned_text": "Trail of Light"
+    },
+    {
+      "id": "CODE:84:502",
+      "source": "光の痕跡",
+      "planned_text": "Trace of Light"
+    },
+    {
+      "id": "CODE:84:505",
+      "source": "凍てつく花",
+      "planned_text": "Frozen Flower"
+    },
+    {
+      "id": "CODE:84:508",
+      "source": "聖なる光柱",
+      "planned_text": "Sacred Light Pillar"
+    },
+    {
+      "id": "CODE:84:511",
+      "source": "光輝の波動",
+      "planned_text": "Radiant Wave"
+    },
+    {
+      "id": "CODE:84:514",
+      "source": "魔法の螺旋",
+      "planned_text": "Magic Spiral"
+    },
+    {
+      "id": "CODE:84:517",
+      "source": "神の翼",
+      "planned_text": "Divine Wings"
+    },
+    {
+      "id": "CODE:84:520",
+      "source": "減速領域",
+      "planned_text": "Slowing Field"
+    },
+    {
+      "id": "CODE:84:523",
+      "source": "光線",
+      "planned_text": "Light Ray"
+    },
+    {
+      "id": "CODE:84:526",
+      "source": "きらめく聖光",
+      "planned_text": "Gleaming Holy Light"
+    },
+    {
+      "id": "CODE:84:529",
+      "source": "螺旋の舞",
+      "planned_text": "Spiral Dance"
+    },
+    {
+      "id": "CODE:84:532",
+      "source": "聖なる印",
+      "planned_text": "Sacred Seal"
+    },
+    {
+      "id": "CODE:84:535",
+      "source": "幽冥の光",
+      "planned_text": "Netherworld Light"
+    },
+    {
+      "id": "CODE:84:538",
+      "source": "光輝射撃",
+      "planned_text": "Radiant Shot"
+    },
+    {
+      "id": "CODE:84:541",
+      "source": "聖光の泉",
+      "planned_text": "Fount of Holy Light"
+    },
+    {
+      "id": "CODE:84:544",
+      "source": "螺旋強化",
+      "planned_text": "Spiral Boost"
+    },
+    {
+      "id": "CODE:84:547",
+      "source": "聖なる法球",
+      "planned_text": "Sacred Orb"
+    },
+    {
+      "id": "CODE:84:550",
+      "source": "螺旋光柱",
+      "planned_text": "Spiral Light Pillar"
+    },
+    {
+      "id": "CODE:84:553",
+      "source": "光輝",
+      "planned_text": "Radiance"
+    },
+    {
+      "id": "CODE:84:556",
+      "source": "光斑",
+      "planned_text": "Lightspot"
+    },
+    {
+      "id": "CODE:84:559",
+      "source": "眩い光柱",
+      "planned_text": "Dazzling Light Pillar"
+    },
+    {
+      "id": "CODE:84:562",
+      "source": "爆裂閃光",
+      "planned_text": "Explosive Flash"
+    },
+    {
+      "id": "CODE:86:41",
+      "source": "攻撃速度",
+      "planned_text": "Attack Speed"
+    },
+    {
+      "id": "CODE:86:44",
+      "source": "射程",
+      "planned_text": "Range"
+    },
+    {
+      "id": "CODE:86:47",
+      "source": "最大感度",
+      "planned_text": "Pleasure Limit"
+    },
+    {
+      "id": "CODE:86:50",
+      "source": "経験倍率",
+      "planned_text": "EXP Multiplier"
+    },
+    {
+      "id": "CODE:86:53",
+      "source": "攻撃力",
+      "planned_text": "Attack"
+    },
+    {
+      "id": "CODE:86:56",
+      "source": "体力",
+      "planned_text": "HP"
+    },
+    {
+      "id": "CODE:86:59",
+      "source": "感度回復",
+      "planned_text": "Pleasure Recovery"
+    },
+    {
+      "id": "CODE:86:65",
+      "source": "移動速度",
+      "planned_text": "Move Speed"
+    },
+    {
+      "id": "CODE:128:364",
+      "source": "フラヴィア",
+      "planned_text": "Flavia"
+    },
+    {
+      "id": "CODE:128:367",
+      "source": "イララ",
+      "planned_text": "Irara"
+    },
+    {
+      "id": "CODE:128:370",
+      "source": "ルミニア",
+      "planned_text": "Luminia"
+    }
+  ]
+}

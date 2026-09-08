@@ -1,0 +1,7 @@
+# Translation drivers.
+anthropic>=0.116.0
+
+# Text fitting measures against the game's own font (data/others/MyFont1.otf),
+# and image_review.py reads image dimensions. Both fall back gracefully, but the
+# width checks are estimates without it.
+Pillow>=10.0.0

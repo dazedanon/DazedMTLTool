@@ -1,0 +1,4 @@
+interface:
+  display_name: "Game Translation"
+  short_description: "Translate and patch Japanese games into English"
+  default_prompt: "Use $game-translation to extract, translate and patch this game's text into English."

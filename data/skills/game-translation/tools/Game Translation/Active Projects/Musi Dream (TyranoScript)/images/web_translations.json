@@ -1,0 +1,408 @@
+[
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "お気に入り",
+    "target": "Favorites",
+    "draw_box": [
+      2512,
+      29,
+      2738,
+      86
+    ],
+    "font": "arial",
+    "size": 44,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "大きなチューリップの育て方",
+    "target": "How to Grow Giant Tulips",
+    "draw_box": [
+      125,
+      805,
+      660,
+      866
+    ],
+    "font": "arialbd",
+    "size": 39,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "仲良し友達４人組で廃病院肝試し！",
+    "target": "4 friends brave an abandoned hospital!",
+    "draw_box": [
+      1197,
+      805,
+      1850,
+      867
+    ],
+    "font": "arialbd",
+    "size": 32,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "お嬢様にゴキブリ降らせてみたドッキリｗ",
+    "target": "Roach rain prank on a rich girl lol",
+    "draw_box": [
+      2014,
+      805,
+      2840,
+      867
+    ],
+    "font": "arialbd",
+    "size": 38,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "拘束されてきたけど楽しすぎて草",
+    "target": "Got tied up. Way too much fun lol",
+    "draw_box": [
+      125,
+      1495,
+      910,
+      1557
+    ],
+    "font": "arialbd",
+    "size": 38,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "助けてください！虫に襲われました…",
+    "target": "Help! A bug attacked me...",
+    "draw_box": [
+      1070,
+      1495,
+      1850,
+      1557
+    ],
+    "font": "arialbd",
+    "size": 40,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "ちなみの虫うんちく寝かしつけ",
+    "target": "Chinami’s bug facts to lull you to sleep",
+    "draw_box": [
+      2055,
+      1495,
+      2630,
+      1557
+    ],
+    "font": "arialbd",
+    "size": 30,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "大きな チューリップの育て方",
+    "target": "GROW GIANT TULIPS",
+    "draw_box": [
+      27,
+      632,
+      794,
+      761
+    ],
+    "font": "segoepr",
+    "size": 63,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "友達と廃病院を肝試し",
+    "target": "FRIENDS TAKE THE",
+    "draw_box": [
+      990,
+      654,
+      1844,
+      703
+    ],
+    "font": "segoepr",
+    "size": 48,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "友達と廃病院を肝試し",
+    "target": "ABANDONED HOSPITAL DARE",
+    "draw_box": [
+      990,
+      716,
+      1844,
+      775
+    ],
+    "font": "segoepr",
+    "size": 49,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "ドッキリ",
+    "target": "PRANK",
+    "draw_box": [
+      2230,
+      387,
+      2500,
+      465
+    ],
+    "font": "segoepr",
+    "size": 65,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "ゴキブリ",
+    "target": "ROACH",
+    "draw_box": [
+      2230,
+      488,
+      2500,
+      559
+    ],
+    "font": "segoepr",
+    "size": 60,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "降らせた",
+    "target": "RAIN",
+    "draw_box": [
+      2230,
+      582,
+      2500,
+      654
+    ],
+    "font": "segoepr",
+    "size": 60,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "結果",
+    "target": "RESULTS",
+    "draw_box": [
+      2230,
+      678,
+      2500,
+      754
+    ],
+    "font": "segoepr",
+    "size": 56,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "拘束してみた",
+    "target": "TRIED BONDAGE",
+    "draw_box": [
+      42,
+      1175,
+      340,
+      956
+    ],
+    "font": "segoepr",
+    "size": 60,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "ぬるぬる 触手",
+    "target": "SLIMY TENTACLES",
+    "draw_box": [
+      850,
+      975,
+      850,
+      1381
+    ],
+    "font": "segoepr",
+    "size": 62,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "何コレ",
+    "target": "WHAT IS THIS?",
+    "draw_box": [
+      1325,
+      950,
+      1580,
+      1038
+    ],
+    "font": "segoepr",
+    "size": 31,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "実際の映像",
+    "target": "REAL FOOTAGE",
+    "draw_box": [
+      1083,
+      1350,
+      1556,
+      1442
+    ],
+    "font": "segoepr",
+    "size": 52,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "JKちなみ",
+    "target": "Schoolgirl Chinami",
+    "draw_box": [
+      1940,
+      945,
+      2360,
+      1006
+    ],
+    "font": "segoepr",
+    "size": 38,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source": "蟲",
+    "target": "BUG",
+    "draw_box": [
+      1952,
+      1110,
+      2135,
+      1280
+    ],
+    "font": "segoeprb",
+    "size": 78,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_sakuzyo.jpg",
+    "source": "お気に入り",
+    "target": "Favorites",
+    "draw_box": [
+      2512,
+      29,
+      2738,
+      86
+    ],
+    "font": "arial",
+    "size": 44,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_sakuzyo.jpg",
+    "source": "助けてください！虫に襲われました…",
+    "target": "Help! A bug attacked me...",
+    "draw_box": [
+      189,
+      1495,
+      1130,
+      1557
+    ],
+    "font": "arialbd",
+    "size": 40,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_sakuzyo.jpg",
+    "source": "何コレ",
+    "target": "WHAT IS THIS?",
+    "draw_box": [
+      895,
+      328,
+      1408,
+      503
+    ],
+    "font": "segoepr",
+    "size": 64,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_sakuzyo.jpg",
+    "source": "実際の映像",
+    "target": "REAL FOOTAGE",
+    "draw_box": [
+      301,
+      1180,
+      1350,
+      1370
+    ],
+    "font": "segoepr",
+    "size": 100,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_sakuzyo.jpg",
+    "source": "この動画は、Ytube利用規約違反のため、削除されました。",
+    "target": "This video was removed",
+    "draw_box": [
+      830,
+      696,
+      1910,
+      780
+    ],
+    "font": "timesbd",
+    "size": 75,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_sakuzyo.jpg",
+    "source": "この動画は、Ytube利用規約違反のため、削除されました。",
+    "target": "for violating Ytube’s",
+    "draw_box": [
+      830,
+      803,
+      1910,
+      882
+    ],
+    "font": "timesbd",
+    "size": 75,
+    "status": "translated"
+  },
+  {
+    "path": "data/bgimage/ev_sakuzyo.jpg",
+    "source": "この動画は、Ytube利用規約違反のため、削除されました。",
+    "target": "terms of service.",
+    "draw_box": [
+      830,
+      906,
+      1910,
+      984
+    ],
+    "font": "timesbd",
+    "size": 75,
+    "status": "translated"
+  },
+  {
+    "path": "data/fgimage/default/ev_baby8.jpg",
+    "source": "お気に入り",
+    "target": "Favorites",
+    "draw_box": [
+      2512,
+      29,
+      2738,
+      86
+    ],
+    "font": "arial",
+    "size": 44,
+    "status": "translated"
+  },
+  {
+    "path": "data/fgimage/default/ev_baby8.jpg",
+    "source": "虫を大量に産んでアヘってしまいました",
+    "target": "I gave birth to a swarm of bugs and went cross-eyed.",
+    "draw_box": [
+      45,
+      1495,
+      1900,
+      1560
+    ],
+    "font": "arialbd",
+    "size": 42,
+    "status": "translated"
+  }
+]

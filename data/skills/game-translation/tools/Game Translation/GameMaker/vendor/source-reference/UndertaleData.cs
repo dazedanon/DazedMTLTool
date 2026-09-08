@@ -1,0 +1,800 @@
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq;
+using System.Reflection;
+using Underanalyzer.Decompiler;
+using Underanalyzer.Decompiler.GameSpecific;
+using UndertaleModLib.Compiler;
+using UndertaleModLib.Models;
+
+namespace UndertaleModLib
+{
+    /// <summary>
+    /// An object representing a GameMaker Studio data file.
+    /// </summary>
+    /// <remarks>This is basically the heart of the data file, which is usually named <c>data.win</c>, <c>data.unx</c>,
+    /// <c>data.ios</c> or <c>data.droid</c>, depending for which OS the game was compiled for.. <br/>
+    /// It includes all the data within it accessible by either the <see cref="FORM"/>-Chunk attribute,
+    /// but also via already organized attributes such as <see cref="Backgrounds"/> or <see cref="GameObjects"/>.
+    /// TODO: add more documentation about how a data file works at one point.</remarks>
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)]
+    public class UndertaleData : IDisposable
+    {
+        /// <summary>
+        /// Indexer to access the resource list by its name.
+        /// </summary>
+        /// <param name="resourceTypeName">The resource name to get.</param>
+        /// <exception cref="MissingMemberException"> if the data file does not contain a property with that name.</exception>
+        public IList this[string resourceTypeName]
+        {
+            get
+            {
+                // Prevent recursion
+                if (resourceTypeName == "Item")
+                    return null;
+
+                var property = GetType().GetProperty(resourceTypeName);
+                if (property is null)
+                    throw new MissingMemberException($"\"UndertaleData\" doesn't contain a property named \"{resourceTypeName}\".");
+
+                return property.GetValue(this, null) as IList;
+            }
+            set
+            {
+                // Prevent recursion
+                if (resourceTypeName == "Item")
+                    return;
+                
+                var property = GetType().GetProperty(resourceTypeName);
+                if (property is null)
+                    throw new MissingMemberException($"\"UndertaleData\" doesn't contain a property named \"{resourceTypeName}\".");
+
+                property.SetValue(this, value, null);
+            }
+        }
+
+        /// <summary>
+        /// Indexer to access the resource list by its items type.
+        /// </summary>
+        /// <param name="resourceType">The resource type to get.</param>
+        /// <exception cref="NotSupportedException"> if the type is not an <see cref="UndertaleNamedResource"/>.</exception>
+        /// <exception cref="MissingMemberException"> if the data file does not contain a property of that type.</exception>
+        public IList this[Type resourceType]
+        {
+            get
+            {
+                // Prevent recursion
+                if (resourceType == typeof(UndertaleResource))
+                    return null;
+
+                if (!typeof(UndertaleResource).IsAssignableFrom(resourceType))
+                    throw new NotSupportedException($"\"{resourceType.FullName}\" is not an UndertaleResource.");
+
+                var property = GetType().GetProperties().Where(x => x.PropertyType.Name == "IList`1")
+                                                        .FirstOrDefault(x => x.PropertyType.GetGenericArguments()[0] == resourceType);
+                if (property is null)
+                    throw new MissingMemberException($"\"UndertaleData\" doesn't contain a resource list of type \"{resourceType.FullName}\".");
+
+                return property.GetValue(this, null) as IList;
+            }
+            set
+            {
+                if (!typeof(UndertaleResource).IsAssignableFrom(resourceType))
+                    throw new NotSupportedException($"\"{resourceType.FullName}\" is not an UndertaleResource.");
+
+                var property = GetType().GetProperties().Where(x => x.PropertyType.Name == "IList`1")
+                                                        .FirstOrDefault(x => x.PropertyType.GetGenericArguments()[0] == resourceType);
+                if (property is null)
+                    throw new MissingMemberException($"\"UndertaleData\" doesn't contain a resource list of type \"{resourceType.FullName}\".");
+
+                property.SetValue(this, value, null);
+            }
+        }
+
+        /// <summary>
+        /// The FORM chunk of the data file.
+        /// </summary>
+        public UndertaleChunkFORM FORM;
+
+        /// <summary>
+        /// General info of the data file.
+        /// </summary>
+        public UndertaleGeneralInfo GeneralInfo => FORM.GEN8?.Object;
+
+        /// <summary>
+        /// General Options of the data file.
+        /// </summary>
+        public UndertaleOptions Options => FORM.OPTN?.Object;
+
+        /// <summary>
+        /// Languages of the data file.
+        /// </summary>
+        public UndertaleLanguage Language => FORM.LANG?.Object;
+
+        /// <summary>
+        /// The used extensions of the data file.
+        /// </summary>
+        public IList<UndertaleExtension> Extensions => FORM.EXTN?.List;
+
+        /// <summary>
+        /// The used sounds of the data file.
+        /// </summary>
+        public IList<UndertaleSound> Sounds => FORM.SOND?.List;
+
+        /// <summary>
+        /// The audio groups of the data file.
+        /// </summary>
+        public IList<UndertaleAudioGroup> AudioGroups => FORM.AGRP?.List;
+
+        /// <summary>
+        /// The sprites of the data file.
+        /// </summary>
+        public IList<UndertaleSprite> Sprites => FORM.SPRT?.List;
+
+        /// <summary>
+        /// The backgrounds (or Tilesets) of the data file.
+        /// </summary>
+        public IList<UndertaleBackground> Backgrounds => FORM.BGND?.List;
+
+        /// <summary>
+        /// The paths of the data file.
+        /// </summary>
+        public IList<UndertalePath> Paths => FORM.PATH?.List;
+
+        /// <summary>
+        /// The scripts of the data file.
+        /// </summary>
+        public IList<UndertaleScript> Scripts => FORM.SCPT?.List;
+
+        /// <summary>
+        /// The global initialization scripts of the data file.
+        /// </summary>
+        public IList<UndertaleGlobalInit> GlobalInitScripts => FORM.GLOB?.List;
+
+        /// <summary>
+        /// The global end scripts of the data file.
+        /// </summary>
+        public IList<UndertaleGlobalInit> GameEndScripts => FORM.GMEN?.List;
+
+        /// <summary>
+        /// The used shaders of the data file.
+        /// </summary>
+        public IList<UndertaleShader> Shaders => FORM.SHDR?.List;
+
+        /// <summary>
+        /// The fonts of the data file.
+        /// </summary>
+        public IList<UndertaleFont> Fonts => FORM.FONT?.List;
+
+        /// <summary>
+        /// The Timelines of the data file.
+        /// </summary>
+        public IList<UndertaleTimeline> Timelines => FORM.TMLN?.List;
+
+        /// <summary>
+        /// The game objects of the data file.
+        /// </summary>
+        public IList<UndertaleGameObject> GameObjects => FORM.OBJT?.List;
+
+        /// <summary>
+        /// The rooms of the data file.
+        /// </summary>
+        public IList<UndertaleRoom> Rooms => FORM.ROOM?.List;
+        //[Obsolete("Unused")]
+        // DataFile
+
+        /// <summary>
+        /// The texture page items from the data file.
+        /// </summary>
+        public IList<UndertaleTexturePageItem> TexturePageItems => FORM.TPAG?.List;
+
+        /// <summary>
+        /// The code entries of the data file.
+        /// </summary>
+        public IList<UndertaleCode> Code => FORM.CODE?.List;
+
+        /// <summary>
+        /// The used variables of the data file.
+        /// </summary>
+        public IList<UndertaleVariable> Variables => FORM.VARI?.List;
+
+        /// <summary>
+        /// TODO: Unknown value, need more research.
+        /// </summary>
+        public uint VarCount1 { get => FORM.VARI.VarCount1; set => FORM.VARI.VarCount1 = value; }
+
+        /// <summary>
+        /// TODO: Unknown value, need more research.
+        /// </summary>
+        public uint VarCount2 { get => FORM.VARI.VarCount2; set => FORM.VARI.VarCount2 = value; }
+
+        /// <summary>
+        /// TODO: Unknown value, need more research. Also obsolete.
+        /// </summary>
+        public bool DifferentVarCounts { get => FORM.VARI.DifferentVarCounts; set => FORM.VARI.DifferentVarCounts = value; }
+
+        /// <summary>
+        /// TODO: Unknown value, need more research. Also obsolete.
+        /// </summary>
+        [Obsolete]
+        public uint InstanceVarCount { get => VarCount1; set => VarCount1 = value; }
+
+        /// <summary>
+        /// TODO: Unknown value, need more research. Also obsolete.
+        /// </summary>
+        [Obsolete]
+        public uint InstanceVarCountAgain { get => VarCount2; set => VarCount2 = value; }
+
+        /// <summary>
+        /// TODO: Unknown value, need more research.
+        /// </summary>
+        public uint MaxLocalVarCount { get => FORM.VARI.MaxLocalVarCount; set => FORM.VARI.MaxLocalVarCount = value; }
+
+        /// <summary>
+        /// The functions of the data file.
+        /// </summary>
+        public IList<UndertaleFunction> Functions => FORM.FUNC?.Functions;
+
+        /// <summary>
+        /// The code locals of the data file.
+        /// </summary>
+        public IList<UndertaleCodeLocals> CodeLocals => FORM.FUNC?.CodeLocals;
+
+        /// <summary>
+        /// The used strings of the data file.
+        /// </summary>
+        public IList<UndertaleString> Strings => FORM.STRG?.List;
+
+        /// <summary>
+        /// The embedded images of the data file. This is used to store built-in particle sprites,
+        /// every time you use <c>part_sprite</c> functions.
+        /// </summary>
+        public IList<UndertaleEmbeddedImage> EmbeddedImages => FORM.EMBI?.List;
+
+        /// <summary>
+        /// The embedded textures of the data file.
+        /// </summary>
+        public IList<UndertaleEmbeddedTexture> EmbeddedTextures => FORM.TXTR?.List;
+
+        /// <summary>
+        /// The texture group infos of the data file.
+        /// </summary>
+        public IList<UndertaleTextureGroupInfo> TextureGroupInfo => FORM.TGIN?.List;
+
+        /// <summary>
+        /// The embedded audio of the data file.
+        /// </summary>
+        public IList<UndertaleEmbeddedAudio> EmbeddedAudio => FORM.AUDO?.List;
+
+        /// <summary>
+        /// The used tags of the data file.
+        /// </summary>
+        public UndertaleTags Tags => FORM.TAGS?.Object;
+
+        /// <summary>
+        /// The animation curves of the data file.
+        /// </summary>
+        public IList<UndertaleAnimationCurve> AnimationCurves => FORM.ACRV?.List;
+
+        /// <summary>
+        /// The sequences of the data file.
+        /// </summary>
+        public IList<UndertaleSequence> Sequences => FORM.SEQN?.List;
+
+        /// <summary>
+        /// The feature flags stored in the data file.
+        /// </summary>
+        public UndertaleFeatureFlags FeatureFlags => FORM.FEAT?.Object;
+
+        /// <summary>
+        /// The filter effects stored in the data file.
+        /// </summary>
+        public IList<UndertaleFilterEffect> FilterEffects => FORM.FEDS?.List;
+
+        /// <summary>
+        /// The particle systems stored in the data file.
+        /// </summary>
+        public IList<UndertaleParticleSystem> ParticleSystems => FORM.PSYS?.List;
+
+        /// <summary>
+        /// The particle system emitters stored in the data file.
+        /// </summary>
+        public IList<UndertaleParticleSystemEmitter> ParticleSystemEmitters => FORM.PSEM?.List;
+
+
+        /// <summary>
+        /// Whether this is an unsupported bytecode version.
+        /// </summary>
+        public bool UnsupportedBytecodeVersion = false;
+
+        /// <summary>
+        /// Whether the Texture Page Items (TPGA) chunk is 4 byte aligned.
+        /// </summary>
+        public bool IsTPAG4ByteAligned = false;
+
+        /// <summary>
+        /// Whether the data file has short circuiting enabled.
+        /// </summary>
+        public bool ShortCircuit = true;
+
+        /// <summary>
+        /// Whether the data file has array copy-on-write enabled.
+        /// </summary>
+        public bool ArrayCopyOnWrite = false;
+
+        /// <summary>
+        /// The last room particle system instance ID of the data file (incrementing).
+        /// </summary>
+        /// <remarks>
+        /// The first actual usable ID is 8388608.
+        /// </remarks>
+        public int LastParticleSystemInstanceID { get; set; } = 8388607;
+
+        /// <summary>
+        /// Some info for the editor to store data on.
+        /// </summary>
+        public readonly ToolInfo ToolInfo = new();
+
+        /// <summary>
+        /// Shows the current padding value. <c>-1</c> indicates a pre 1.4.9999 padding, where the default is 16.
+        /// </summary>
+        public int PaddingAlignException = -1;
+
+        /// <summary>
+        /// A list of known GameMaker Studio constants and variables.
+        /// </summary>
+        public BuiltinList BuiltinList;
+
+        /// <summary>
+        /// Cache for GMLv2 functions defined in global scripts. 
+        /// Can be updated by <see cref="Decompiler.GlobalDecompileContext"/>, if no <see cref="IGlobalFunctions"/> is provided to it.
+        /// </summary>
+        public GlobalFunctions GlobalFunctions;
+
+        /// <summary>
+        /// Registry for macro types, their resolvers, and other data specific to this game.
+        /// </summary>
+        public GameSpecificRegistry GameSpecificRegistry;
+
+        /// <summary>
+        /// An array of a <see cref="UndertaleData"/> properties with <see cref="IList{T}"/> as their type.
+        /// </summary>
+        public PropertyInfo[] AllListProperties { get; private set; }
+
+        /// <summary>
+        /// Initializes new <see cref="UndertaleData"/> instance.
+        /// </summary>
+        public UndertaleData()
+        {
+            AllListProperties = GetType().GetProperties()
+                                .Where(x => x.PropertyType.IsGenericType
+                                            && x.PropertyType.GetGenericTypeDefinition() == typeof(IList<>))
+                                .ToArray();
+        }
+
+        /// <summary>
+        /// Get a resource from the data file by name.
+        /// </summary>
+        /// <remarks>
+        /// This does a linear search, and will thus be slow if used many times. It's recommended to build lookup maps if many searches are required.
+        /// </remarks>
+        /// <param name="name">The name of the desired resource.</param>
+        /// <param name="ignoreCase">Whether to ignore casing while searching.</param>
+        /// <returns>The <see cref="UndertaleNamedResource"/>.</returns>
+        public UndertaleNamedResource ByName(string name, bool ignoreCase = false)
+        {
+            return 
+                Sounds.ByName(name, ignoreCase) ??
+                Sprites.ByName(name, ignoreCase) ??
+                Backgrounds.ByName(name, ignoreCase) ??
+                Paths.ByName(name, ignoreCase) ??
+                Scripts.ByName(name, ignoreCase) ??
+                Fonts.ByName(name, ignoreCase) ??
+                GameObjects.ByName(name, ignoreCase) ??
+                Rooms.ByName(name, ignoreCase) ??
+                Extensions.ByName(name, ignoreCase) ??
+                Shaders.ByName(name, ignoreCase) ??
+                Timelines.ByName(name, ignoreCase) ??
+                AnimationCurves?.ByName(name, ignoreCase) ??
+                Sequences?.ByName(name, ignoreCase) ??
+                AudioGroups?.ByName(name, ignoreCase) ??
+                (UndertaleNamedResource)null;
+        }
+
+        /// <summary>
+        /// Returns the zero-based index of the first occurrence of the specified <see cref="UndertaleResource"/>.
+        /// </summary>
+        /// <remarks>
+        /// This does a linear search, and will thus be slow if used many times. It's recommended to build lookup maps if many searches are required.
+        /// </remarks>
+        /// <param name="obj">The object to get the index of.</param>
+        /// <param name="panicIfInvalid">Whether to throw if <paramref name="obj"/> is not a valid object.</param>
+        /// <returns>The zero-based index position of the <paramref name="obj"/> parameter if it is found, or -1 if it is not found.</returns>
+        /// <exception cref="InvalidOperationException"><paramref name="panicIfInvalid"/> is <see langword="true"/>
+        /// and <paramref name="obj"/> could not be found.</exception>
+        public int IndexOf(UndertaleResource obj, bool panicIfInvalid = true)
+        {
+            Type objType = obj.GetType();
+            PropertyInfo objListPropInfo = AllListProperties.FirstOrDefault(x => x.PropertyType.GetGenericArguments()[0] == objType);
+            if (objListPropInfo is not null)
+            {
+                if (objListPropInfo.GetValue(this) is IList list)
+                    return list.IndexOf(obj);
+            }
+
+            if (panicIfInvalid)
+                throw new InvalidOperationException();
+            return -1;
+        }
+
+
+        /// <summary>
+        /// Returns the zero-based index of the first occurrence of the specified <see cref="UndertaleNamedResource"/>.
+        /// </summary>
+        /// <remarks>
+        /// This does a linear search, and will thus be slow if used many times. It's recommended to build lookup maps if many searches are required.
+        /// </remarks>
+        /// <param name="name">The name of the desired resource.</param>
+        /// <param name="ignoreCase">Whether to ignore casing while searching.</param>
+        /// <returns>The zero-based index position of the <see cref="UndertaleNamedResource"/> if it is found, or -1 if it is not found.</returns>
+        public int IndexOfByName(string name, bool ignoreCase = false)
+        {
+            int res = Sounds.IndexOfName(name, ignoreCase);
+            if (res >= 0) return res;
+            res = Sprites.IndexOfName(name, ignoreCase);
+            if (res >= 0) return res;
+            res = Backgrounds.IndexOfName(name, ignoreCase);
+            if (res >= 0) return res;
+            res = Paths.IndexOfName(name, ignoreCase);
+            if (res >= 0) return res;
+            res = Scripts.IndexOfName(name, ignoreCase);
+            if (res >= 0) return res;
+            res = Fonts.IndexOfName(name, ignoreCase);
+            if (res >= 0) return res;
+            res = GameObjects.IndexOfName(name, ignoreCase);
+            if (res >= 0) return res;
+            res = Rooms.IndexOfName(name, ignoreCase);
+            if (res >= 0) return res;
+            res = Extensions.IndexOfName(name, ignoreCase);
+            if (res >= 0) return res;
+            res = Shaders.IndexOfName(name, ignoreCase);
+            if (res >= 0) return res;
+            res = Timelines.IndexOfName(name, ignoreCase);
+            if (res >= 0) return res;
+
+            if (AnimationCurves is not null)
+            {
+                res = AnimationCurves.IndexOfName(name, ignoreCase);
+                if (res >= 0) return res;
+            }
+            if (Sequences is not null)
+            {
+                res = Sequences.IndexOfName(name, ignoreCase);
+                if (res >= 0) return res;
+            }
+            if (AudioGroups is not null)
+            {
+                res = AudioGroups.IndexOfName(name, ignoreCase);
+                if (res >= 0) return res;
+            }
+
+            return -1;
+        }
+
+        /// <summary>
+        /// Reports whether the data file was built by GameMaker Studio 2.
+        /// </summary>
+        /// <returns><see langword="true"/> if yes, <see langword="false"/> if not.</returns>
+        public bool IsGameMaker2()
+        {
+            return IsVersionAtLeast(2);
+        }
+
+
+        // Old Versions: https://store.yoyogames.com/downloads/gm-studio/release-notes-studio-old.html
+        // https://web.archive.org/web/20150304025626/https://store.yoyogames.com/downloads/gm-studio/release-notes-studio.html
+        // Early Access: https://web.archive.org/web/20181002232646/http://store.yoyogames.com:80/downloads/gm-studio-ea/release-notes-studio.html
+        private bool TestGMS1Version(uint stableBuild, uint betaBuild, bool allowGMS2 = false)
+        {
+            return (allowGMS2 || !IsGameMaker2()) && (IsVersionAtLeast(1, 0, 0, stableBuild) || (IsVersionAtLeast(1, 0, 0, betaBuild) && !IsVersionAtLeast(1, 0, 0, 1000)));
+        }
+
+        // Helper for verifying valid major GMS2 versions
+        private static void VerifyMajorGMS2Version(uint major)
+        {
+            if (major != 2 && major != 2022 && major != 2023 && major != 2024 && major != 2026)
+            {
+                throw new NotSupportedException("Attempted to set a version of GameMaker " + major + " using SetGMS2Version");
+            }
+        }
+
+        /// <summary>
+        /// Sets the GMS2+ version flag in GeneralInfo.
+        /// </summary>
+        public void SetGMS2Version(UndertaleGeneralInfo.RuntimeVersion ver) 
+        {
+            VerifyMajorGMS2Version(ver.Major);
+            GeneralInfo.Version = ver;
+        }
+
+
+        /// <summary>
+        /// Sets the GMS2+ version flag in GeneralInfo.
+        /// </summary>
+        /// <param name="major">The major version.</param>
+        /// <param name="minor">The minor version.</param>
+        /// <param name="release">The release version.</param>
+        /// <param name="build">The build version.</param>
+        /// <param name="isLTS">If included, alter the data branch between LTS and non-LTS.</param>
+        public void SetGMS2Version(uint major, uint minor = 0, uint release = 0, uint build = 0, bool? isLTS = null)
+        {
+            VerifyMajorGMS2Version(major);
+
+            GeneralInfo.Major = major;
+            GeneralInfo.Minor = minor;
+            GeneralInfo.Release = release;
+            GeneralInfo.Build = build;
+
+            if (isLTS is not null)
+            {
+                SetLTS((bool)isLTS);
+            }
+        }
+
+        /// <summary>
+        /// Sets the branch type in GeneralInfo to the appropriate LTS or non-LTS version based on 
+        /// </summary>
+        /// <param name="isLTS">If included, alter the data branch between LTS and non-LTS.</param>
+        public void SetLTS(bool isLTS)
+        {
+            // Insert additional logic as needed for new branches using IsVersionAtLeast
+            GeneralInfo.Branch = isLTS ? UndertaleGeneralInfo.BranchType.LTS2022_0 : UndertaleGeneralInfo.BranchType.Post2022_0;
+        }
+
+        /// <summary>
+        /// Reports whether the version of the data file is the same or higher than a specified version.
+        /// </summary>
+        public bool IsVersionAtLeast(UndertaleGeneralInfo.RuntimeVersion ver) => IsVersionAtLeast(ver.Major, ver.Minor, ver.Release, ver.Build);
+
+        /// <summary>
+        /// Reports whether the version of the data file is the same or higher than a specified version.
+        /// </summary>
+        /// <param name="major">The major version.</param>
+        /// <param name="minor">The minor version.</param>
+        /// <param name="release">The release version.</param>
+        /// <param name="build">The build version.</param>
+        /// <returns>Whether the version of the data file is the same or higher than a specified version.</returns>
+        public bool IsVersionAtLeast(uint major, uint minor = 0, uint release = 0, uint build = 0)
+        {
+            if (GeneralInfo is null)
+            {
+                Debug.WriteLine("\"UndertaleData.IsVersionAtLeast()\" error - \"GeneralInfo\" is null.");
+                return false;
+            }
+
+            if (GeneralInfo.Major != major)
+                return (GeneralInfo.Major > major);
+
+            if (GeneralInfo.Minor != minor)
+                return (GeneralInfo.Minor > minor);
+
+            if (GeneralInfo.Release != release)
+                return (GeneralInfo.Release > release);
+
+            if (GeneralInfo.Build != build)
+                return (GeneralInfo.Build > build);
+
+            return true; // The version is exactly what supplied.
+        }
+
+        /// <summary>
+        /// Reports whether the version of the data file is the same or higher than a specified version, and off the LTS branch that lacks some features.
+        /// </summary>
+        /// <returns>Whether the version of the data file is the same or higher than a specified version. Always false for LTS.</returns>
+        public bool IsNonLTSVersionAtLeast(UndertaleGeneralInfo.RuntimeVersion ver) => IsNonLTSVersionAtLeast(ver.Major, ver.Minor, ver.Release, ver.Build);
+
+        /// <summary>
+        /// Reports whether the version of the data file is the same or higher than a specified version, and off the LTS branch that lacks some features.
+        /// </summary>
+        /// <param name="major">The major version.</param>
+        /// <param name="minor">The minor version.</param>
+        /// <param name="release">The release version.</param>
+        /// <param name="build">The build version.</param>
+        /// <returns>Whether the version of the data file is the same or higher than a specified version. Always false for LTS.</returns>
+        public bool IsNonLTSVersionAtLeast(uint major, uint minor = 0, uint release = 0, uint build = 0)
+        {
+            if (GeneralInfo is null)
+            {
+                Debug.WriteLine("\"UndertaleData.IsNonLTSVersionAtLeast()\" error - \"GeneralInfo\" is null.");
+                return false;
+            }
+
+            if (GeneralInfo.Branch < UndertaleGeneralInfo.BranchType.Post2022_0)
+                return false;
+
+            return IsVersionAtLeast(major, minor, release, build);
+        }
+
+        /// <summary>
+        /// Returns the ID of the builtin (i.e., embedded in the main data file) audio group. Varies depending on version.
+        /// </summary>
+        /// <returns>ID of the builtin audio group; 0 or 1.</returns>
+        public int GetBuiltinSoundGroupID()
+        {
+            // It is known it works this way in 1.0.1266. The exact version which changed this is unknown.
+            // If we find a game which does not fit the version identified here, we should fix this check.
+            return TestGMS1Version(1250, 161, true) ? 0 : 1;
+        }
+
+        /// <summary>
+        /// Reports whether the data file was compiled with YYC.
+        /// </summary>
+        /// <returns><see langword="true"/> if yes, <see langword="false"/> if not.</returns>
+        public bool IsYYC()
+        {
+            return GeneralInfo != null && Code == null;
+        }
+
+        /// <summary>
+        /// TODO: Undocumented helper method.
+        /// </summary>
+        /// <returns>TODO</returns>
+        public uint ExtensionFindLastId()
+        {
+            // The reason:
+            // Extension function id is literally the index of it in the Runner internal lists
+            // It must never overlap
+            // So, a good helper is needed.
+
+            uint id = 1; // first Id is always one, I checked.
+            foreach (var extn in this.Extensions)
+            {
+                foreach (var file in extn.Files)
+                {
+                    foreach (var func in file.Functions)
+                    {
+                        if (func.ID > id)
+                        {
+                            id = func.ID;
+                        }
+                    }
+                }
+            }
+
+            id++; // last id that *we* can use, so increment by one.
+            return id;
+        }
+
+        /// <summary>
+        /// Creates a new empty data file.
+        /// </summary>
+        /// <returns>The newly created data file.</returns>
+        public static UndertaleData CreateNew()
+        {
+            UndertaleData data = new UndertaleData();
+            data.FORM = new UndertaleChunkFORM();
+            data.FORM.Chunks["GEN8"] = new UndertaleChunkGEN8();
+            data.FORM.Chunks["OPTN"] = new UndertaleChunkOPTN();
+            data.FORM.Chunks["LANG"] = new UndertaleChunkLANG();
+            data.FORM.Chunks["EXTN"] = new UndertaleChunkEXTN();
+            data.FORM.Chunks["SOND"] = new UndertaleChunkSOND();
+            data.FORM.Chunks["AGRP"] = new UndertaleChunkAGRP();
+            data.FORM.Chunks["SPRT"] = new UndertaleChunkSPRT();
+            data.FORM.Chunks["BGND"] = new UndertaleChunkBGND();
+            data.FORM.Chunks["PATH"] = new UndertaleChunkPATH();
+            data.FORM.Chunks["SCPT"] = new UndertaleChunkSCPT();
+            data.FORM.Chunks["GLOB"] = new UndertaleChunkGLOB();
+            data.FORM.Chunks["SHDR"] = new UndertaleChunkSHDR();
+            data.FORM.Chunks["FONT"] = new UndertaleChunkFONT();
+            data.FORM.Chunks["TMLN"] = new UndertaleChunkTMLN();
+            data.FORM.Chunks["OBJT"] = new UndertaleChunkOBJT();
+            data.FORM.Chunks["ROOM"] = new UndertaleChunkROOM();
+            data.FORM.Chunks["DAFL"] = new UndertaleChunkDAFL();
+            data.FORM.Chunks["TPAG"] = new UndertaleChunkTPAG();
+            data.FORM.Chunks["CODE"] = new UndertaleChunkCODE();
+            data.FORM.Chunks["VARI"] = new UndertaleChunkVARI();
+            data.FORM.Chunks["FUNC"] = new UndertaleChunkFUNC();
+            data.FORM.Chunks["STRG"] = new UndertaleChunkSTRG();
+            data.FORM.Chunks["TXTR"] = new UndertaleChunkTXTR();
+            data.FORM.Chunks["AUDO"] = new UndertaleChunkAUDO();
+            foreach (UndertaleChunk chunk in data.FORM.Chunks.Values)
+                data.FORM.ChunksTypeDict[chunk.GetType()] = chunk;
+            data.FORM.GEN8.Object = new UndertaleGeneralInfo();
+            data.FORM.OPTN.Object = new UndertaleOptions();
+            data.FORM.LANG.Object = new UndertaleLanguage();
+            data.GeneralInfo.FileName = data.Strings.MakeString("NewGame");
+            data.GeneralInfo.Config = data.Strings.MakeString("Default");
+            data.GeneralInfo.Name = data.Strings.MakeString("NewGame");
+            data.GeneralInfo.DisplayName = data.Strings.MakeString("New UndertaleModTool Game");
+            data.GeneralInfo.GameID = (uint)new Random().Next();
+            data.GeneralInfo.Timestamp = (uint)new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
+            data.Options.Constants.Add(new UndertaleOptions.Constant() { Name = data.Strings.MakeString("@@SleepMargin"), Value = data.Strings.MakeString(1.ToString()) });
+            data.Options.Constants.Add(new UndertaleOptions.Constant() { Name = data.Strings.MakeString("@@DrawColour"), Value = data.Strings.MakeString(0xFFFFFFFF.ToString()) });
+            data.Rooms.Add(new UndertaleRoom() { Name = data.Strings.MakeString("room0"), Caption = data.Strings.MakeString("") });
+            data.BuiltinList = new BuiltinList(data);
+            Decompiler.GameSpecificResolver.Initialize(data);
+            return data;
+        }
+
+        /// <inheritdoc/>
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
+
+            Type disposableType = typeof(IDisposable);
+            PropertyInfo[] dataProperties = GetType().GetProperties();
+            var dataDisposableProps = dataProperties.Except(AllListProperties)
+                                                    .Where(x => disposableType.IsAssignableFrom(x.PropertyType));
+
+            // Dispose disposable properties
+            foreach (PropertyInfo disposableProp in dataDisposableProps)
+            {
+                // If property is null
+                if (disposableProp.GetValue(this) is not IDisposable disposable)
+                    continue;
+
+                disposable.Dispose();
+            }
+
+            // Clear all object lists (sprites, code, etc.)
+            foreach (PropertyInfo dataListProperty in AllListProperties)
+            {
+                // If it's an indexer property
+                if (dataListProperty.Name == "Item")
+                    continue;
+
+                // If list is null
+                if (dataListProperty.GetValue(this) is not IList list)
+                    continue;
+
+                // If list elements are disposable
+                if (disposableType.IsAssignableFrom(list.GetType().GetGenericArguments()[0]))
+                {
+                    foreach (IDisposable disposable in list)
+                        disposable?.Dispose();
+                }
+
+                list.Clear();
+            }
+
+            // Clear other references
+            FORM = null;
+            GlobalFunctions = null;
+            GameSpecificRegistry = null;
+        }
+    }
+
+    /// <summary>
+    /// An info handle for an editor to store data on.
+    /// </summary>
+    public class ToolInfo
+    {
+        /// <summary>
+        /// Default settings to be used by the Underanalyzer decompiler,
+        /// for a tool and in any scripts that desire matching the same settings.
+        /// </summary>
+        public IDecompileSettings DecompilerSettings = new DecompileSettings();
+
+        /// <summary>
+        /// Function that returns the prefix to be used when 
+        /// resolving instance ID references in the compiler and decompiler.
+        /// </summary>
+        public Func<string> InstanceIdPrefix = () => "inst_";
+    }
+
+    public static class ListExtensions
+    {
+        /// <summary>
+        /// Returns an enumerable that filters <see langword="null"/> items.
+        /// </summary>
+        /// <typeparam name="T">The type of the elements of <paramref name="list" />.</typeparam>
+        /// <returns>An <see cref="IEnumerable{T}"/> without <see langword="null"/> items.</returns>
+        public static IEnumerable<T> SkipNullItems<T>(this IList<T> list)
+        {
+            return list.Where(x => x is not null);
+        }
+    }
+}

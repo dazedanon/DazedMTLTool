@@ -1,0 +1,6 @@
+[
+  {"file":"data/CommonEvents.json","path":[59,"list",143,"parameters",4],"expected":"男","target":"","unit_index":864,"reason":"Third-person narration introducing the man's insertion; separate adjacent male speech uses Man B. Three independent speaker reviews agree."},
+  {"file":"data/CommonEvents.json","path":[61,"list",50,"parameters",4],"expected":"男","target":"","unit_index":1025,"reason":"Narrative action ending with the noun 'man'; continuation is untagged narration. Three independent speaker reviews agree."},
+  {"file":"data/CommonEvents.json","path":[63,"list",111,"parameters",4],"expected":"男","target":"","unit_index":1106,"reason":"Third-person description of Shizuka's sensations between her voiced reactions. Three independent speaker reviews agree."},
+  {"file":"data/CommonEvents.json","path":[65,"list",99,"parameters",4],"expected":"男","target":"","unit_index":1226,"reason":"Narrator describes the man opening drinks; his actual exclamation follows separately. Three independent speaker reviews agree."}
+]

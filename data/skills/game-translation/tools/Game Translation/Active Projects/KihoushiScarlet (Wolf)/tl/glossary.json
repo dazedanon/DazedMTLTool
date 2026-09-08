@@ -1,0 +1,2792 @@
+{
+ "names": {
+  "スカーレット": {
+   "en": "Scarlet",
+   "gender": "female",
+   "role": "player character; noble knight who protects the town",
+   "register": "Formal knightly diction, no contractions when composed; breaks into fragments and stops under strain, never picks crude words",
+   "aliases": [
+    "スカーレット様",
+    "Scarlet-sama"
+   ]
+  },
+  "マッサージ屋": {
+   "en": "Massage Boss",
+   "gender": "male",
+   "role": "proprietor of the massage parlor front",
+   "register": "Service keigo: いらっしゃいませ／かしこまりました, then a loose はぁ～～い",
+   "aliases": [
+    "massage shop owner"
+   ]
+  },
+  "ガキ": {
+   "en": "Brat",
+   "gender": "male",
+   "role": "neighborhood kid NPC",
+   "register": "僕, boyish taunting, 黙れ！-tier shouting",
+   "aliases": [
+    "kid"
+   ]
+  },
+  "男": {
+   "en": "Man",
+   "gender": "male",
+   "role": "generic unnamed man",
+   "register": "俺, rough street speech, sneering ねぇ endings",
+   "aliases": [
+    "some guy"
+   ]
+  },
+  "店番": {
+   "en": "Shopkeep",
+   "gender": "male",
+   "role": "counter attendant at the goods stall",
+   "register": "Lazy clerk slang: へいへい, 仰せの通り, rough ねぇ endings",
+   "aliases": [
+    "counter guy"
+   ]
+  },
+  "エロマッスル": {
+   "en": "Lewd Muscle",
+   "gender": "male",
+   "role": "one of the Four Aphrodisiac Kings; muscle boss",
+   "register": "俺様, boastful macho shouting, repeats MUSCLE constantly",
+   "aliases": [
+    "マッスル様",
+    "Muscle-sama"
+   ]
+  },
+  "客": {
+   "en": "Customer",
+   "gender": "male",
+   "role": "generic customer at the alley shops",
+   "register": "Excited everyman だよな speech, thinks aloud in parentheses",
+   "aliases": [
+    "patron"
+   ]
+  },
+  "VIP": {
+   "en": "VIP",
+   "gender": "male",
+   "role": "rich arena gambler",
+   "register": "Cold polished keigo, でしょう？／なさい, condescending 貴女 address",
+   "aliases": [
+    "VIP共",
+    "the VIPs"
+   ]
+  },
+  "客紳士A": {
+   "en": "Gentleman A",
+   "gender": "male",
+   "role": "first of the two 'gentleman' spectators",
+   "register": "Mock-aristocratic 同志／ですな pomposity",
+   "aliases": [
+    "gentleman customer A"
+   ]
+  },
+  "客紳士B": {
+   "en": "Gentleman B",
+   "gender": "male",
+   "role": "second 'gentleman' spectator, colder",
+   "register": "Prim のだね formality, sniffy disapproval",
+   "aliases": [
+    "gentleman customer B"
+   ]
+  },
+  "客紳士A＆B": {
+   "en": "Gentlemen A & B",
+   "gender": "male",
+   "role": "the two gentlemen speaking in unison",
+   "register": "Flat menacing unison chant, one repeated imperative",
+   "aliases": [
+    "the gentlemen"
+   ]
+  },
+  "搾乳おじさん": {
+   "en": "Milking Man",
+   "gender": "male",
+   "role": "milking-machine man at the ranch",
+   "register": "All exclamation marks, オラ！ barking",
+   "aliases": [
+    "搾乳おじさんたち",
+    "the milking men"
+   ]
+  },
+  "エロ紳士": {
+   "en": "Lewd Gentleman",
+   "gender": "male",
+   "role": "one of the Four Aphrodisiac Kings; key holder",
+   "register": "私, immaculate soft keigo, apologetic, never raises voice",
+   "aliases": [
+    "Ero Gentleman"
+   ]
+  },
+  "エロマッサージ師": {
+   "en": "Lewd Masseur",
+   "gender": "male",
+   "role": "technician who performs the parlor 'treatment'",
+   "register": "Flat clinical monotone, reports procedure steps like a machine",
+   "aliases": [
+    "treatment technician"
+   ]
+  },
+  "触手": {
+   "en": "Tentacle",
+   "gender": "na",
+   "role": "tentacle monster",
+   "register": "Wordless slither noise only",
+   "aliases": [
+    "tentacles"
+   ]
+  },
+  "エロ触手": {
+   "en": "Lewd Tentacle",
+   "gender": "na",
+   "role": "stronger tentacle variant",
+   "register": "Slither noise only, more urgent",
+   "aliases": [
+    "ero tentacle"
+   ]
+  },
+  "アナル・リザード": {
+   "en": "Anal Lizard",
+   "gender": "na",
+   "role": "lizard monster",
+   "register": "Slither and flick noises only",
+   "aliases": [
+    "anal lizards"
+   ]
+  },
+  "アナル・ワーム": {
+   "en": "Anal Worm",
+   "gender": "na",
+   "role": "worm monster that ambushes from grass",
+   "register": "Squelching onomatopoeia only",
+   "aliases": [
+    "anal worms"
+   ]
+  },
+  "エロギンチャク": {
+   "en": "Lewd Anemone",
+   "gender": "na",
+   "role": "sea-anemone monster",
+   "register": "Slither noises only",
+   "aliases": [
+    "ero anemone"
+   ]
+  },
+  "台座": {
+   "en": "Pedestal",
+   "gender": "na",
+   "role": "talking trial pedestal in the ruins",
+   "register": "Katakana machine voice; render as clipped ALL-CAPS machine English",
+   "aliases": [
+    "the pedestal"
+   ]
+  },
+  "男A": {
+   "en": "Man A",
+   "gender": "male",
+   "role": "first thug in the gang scenes",
+   "register": "俺, coarse ぜ endings, meaner and more direct than B",
+   "aliases": [
+    "thug A"
+   ]
+  },
+  "男B": {
+   "en": "Man B",
+   "gender": "male",
+   "role": "second thug, the one who offers to call friends",
+   "register": "Same gutter tier as A but wheedling and gossipy",
+   "aliases": [
+    "thug B"
+   ]
+  },
+  "ゴブリン": {
+   "en": "Goblin",
+   "gender": "male",
+   "role": "common goblin enemy",
+   "register": "Wet laughing grunts only, no sentences",
+   "aliases": [
+    "goblins"
+   ]
+  },
+  "ガキ共": {
+   "en": "Brats",
+   "gender": "male",
+   "role": "pack of kids at the ranch (plural of Brat)",
+   "register": "Chorus of children shouting over each other",
+   "aliases": [
+    "the kids"
+   ]
+  },
+  "受付": {
+   "en": "Front Desk",
+   "gender": "male",
+   "role": "arena registration clerk",
+   "register": "Rough friendly barker, だぜ／わかるよな",
+   "aliases": [
+    "arena clerk"
+   ]
+  },
+  "A": {
+   "en": "Guy A",
+   "gender": "male",
+   "role": "unnamed groper A in mob scenes",
+   "register": "俺-tier street speech, へへへ cackling"
+  },
+  "B": {
+   "en": "Guy B",
+   "gender": "male",
+   "role": "unnamed groper B in mob scenes",
+   "register": "オレら, same gutter tier, more talkative than A"
+  },
+  "街長": {
+   "en": "Mayor",
+   "gender": "male",
+   "role": "town mayor who begs Scarlet to stay",
+   "register": "Flustered grovelling, long drawn-out wails, ですからー！！",
+   "aliases": [
+    "town chief"
+   ]
+  },
+  "街長＆街人": {
+   "en": "Mayor & Townsfolk",
+   "gender": "male",
+   "role": "mayor and townsfolk calling out together",
+   "register": "Unison shout of Scarlet's name",
+   "aliases": [
+    "mayor and townspeople"
+   ]
+  },
+  "サウナーA＆B": {
+   "en": "Sauna Guys A & B",
+   "gender": "male",
+   "role": "the two sauna regulars speaking in unison",
+   "register": "Deep grunts, then flat っす gym-bro clip",
+   "aliases": [
+    "サウナーA",
+    "サウナーB"
+   ]
+  },
+  "サウナーA": {
+   "en": "Sauna Guy A",
+   "gender": "male",
+   "role": "sauna regular who gatekeeps the bench",
+   "register": "Terse っす speech, minimal words",
+   "aliases": [
+    "サウナーA＆B"
+   ]
+  },
+  "サウナーB": {
+   "en": "Sauna Guy B",
+   "gender": "male",
+   "role": "the other sauna regular, keeps asking to pour löyly",
+   "register": "自分 for 'I', same っす clip",
+   "aliases": [
+    "サウナーA＆B"
+   ]
+  },
+  "魔法陣お姉さん": {
+   "en": "Warp Lady",
+   "gender": "female",
+   "role": "operator of the teleport circle",
+   "register": "Apologetic soft clerk politeness, 申し上げにくいのですが hedging",
+   "aliases": [
+    "magic circle lady"
+   ]
+  },
+  "オナニー男": {
+   "en": "Wank Guy",
+   "gender": "male",
+   "role": "masturbation enthusiast who founds a dojo",
+   "register": "俺, explosively grateful shouting, religious reverence for the topic",
+   "aliases": [
+    "masturbator"
+   ]
+  },
+  "オナニー者": {
+   "en": "Wanker",
+   "gender": "male",
+   "role": "member of the masturbation fraternity",
+   "register": "私, grandiose 同志よ comrade-speak",
+   "aliases": [
+    "masturbationist"
+   ]
+  },
+  "オナニーバスターズ": {
+   "en": "Wank Busters",
+   "gender": "male",
+   "role": "squad that breaks up public masturbation",
+   "register": "Unison enforcement voice, flat ねぇぜ",
+   "aliases": [
+    "masturbation busters"
+   ]
+  },
+  "クイズガール": {
+   "en": "Quiz Girl",
+   "gender": "female",
+   "role": "quiz host who tests Scarlet on town trivia",
+   "register": "Peppy game-show patter: 第一問！／ぶっぶー！／正解～！",
+   "aliases": [
+    "quiz host"
+   ]
+  },
+  "チャラ男": {
+   "en": "Flashy Playboy",
+   "gender": "male",
+   "role": "club doorman who gates entry on Scarlet's equipped title",
+   "register": "Gyaru-o slang, ちょ openers, しくよろ, じゃん／んだね",
+   "aliases": [
+    "party boy",
+    "flashy guy"
+   ]
+  },
+  "？？？": {
+   "en": "???",
+   "gender": "unknown",
+   "role": "hidden-speaker placeholder before a reveal",
+   "register": "Whatever the hidden speaker's register is; nameplate always stays ???",
+   "aliases": [
+    "伝説の薬草"
+   ]
+  },
+  "司会": {
+   "en": "Announcer",
+   "gender": "unknown",
+   "role": "arena match announcer",
+   "register": "Shouted ring announcements, no personal pronouns anywhere",
+   "aliases": [
+    "MC"
+   ]
+  },
+  "伝説の番頭": {
+   "en": "Legendary Bathkeep",
+   "gender": "male",
+   "role": "bathhouse manager who enforces the no-lewdness rule",
+   "register": "俺／てめぇ／オラ, tough-guy threats delivered as house rules",
+   "aliases": [
+    "bathhouse manager"
+   ]
+  },
+  "パイズリ屋": {
+   "en": "Titfuck Boss",
+   "gender": "male",
+   "role": "owner of the titfuck alley shop who recruits Scarlet",
+   "register": "Gruff folksy shopkeeper, ぜ／だからな, weirdly principled",
+   "aliases": [
+    "titjob shop owner"
+   ]
+  },
+  "老婆": {
+   "en": "Old Woman",
+   "gender": "female",
+   "role": "proprietress of the nursing-handjob shop",
+   "register": "Warm grandmotherly drawl: おやおや, ～かい？, ておくれよ",
+   "aliases": [
+    "granny"
+   ]
+  },
+  "見抜き屋": {
+   "en": "Peepshow Boss",
+   "gender": "male",
+   "role": "owner of the watch-and-wank shop",
+   "register": "Dry easygoing pitchman, drawn-out ～さ tails, explains deadpan",
+   "aliases": [
+    "peep shop owner"
+   ]
+  },
+  "催眠王": {
+   "en": "Hypno King",
+   "gender": "male",
+   "role": "self-styled hypnosis king running the massage scheme",
+   "register": "俺／貴様, grandiose then instantly deflated",
+   "aliases": [
+    "hypnotist king"
+   ]
+  },
+  "催眠マッサージ師": {
+   "en": "Hypno Masseur",
+   "gender": "male",
+   "role": "the hypnosis king in his masseur role",
+   "register": "俺, quiet reflection relapsing into world-conquest talk",
+   "aliases": [
+    "催眠王"
+   ]
+  },
+  "調合ババア": {
+   "en": "Brew Hag",
+   "gender": "female",
+   "role": "old alchemist who brews items from materials",
+   "register": "あたし, crone dialect じゃろ／ぞい／わい, blunt and cheerful",
+   "aliases": [
+    "potion granny"
+   ]
+  },
+  "処女チュウ": {
+   "en": "Virgin Chu",
+   "gender": "male",
+   "role": "mouse creature obsessed with virginity",
+   "register": "Ends every sentence with the っちゅ tic; nosy and forward",
+   "aliases": [
+    "cherry chu"
+   ]
+  },
+  "秘・処女チュウ": {
+   "en": "Secret Virgin Chu",
+   "gender": "male",
+   "role": "hidden, hostile version of Virgin Chu",
+   "register": "Same っちゅ tic, rude and dismissive",
+   "aliases": [
+    "hidden cherry chu"
+   ]
+  },
+  "セックス中の男": {
+   "en": "Man Mid-Sex",
+   "gender": "male",
+   "role": "man audibly having sex behind a door",
+   "register": "Panting between shouted words, embarrassed refusals, then polite 承知しました",
+   "aliases": [
+    "セックスの中の男"
+   ]
+  },
+  "セックスの中の男": {
+   "en": "Man Mid-Sex",
+   "gender": "male",
+   "role": "same speaker under a typo'd nameplate",
+   "register": "Identical to セックス中の男; do not treat as a second character",
+   "aliases": [
+    "セックス中の男"
+   ]
+  },
+  "セックス中の女": {
+   "en": "Woman Mid-Sex",
+   "gender": "female",
+   "role": "woman on the other side of that door",
+   "register": "私, high pleading よぉっ tails",
+   "aliases": [
+    "woman having sex"
+   ]
+  },
+  "張り紙": {
+   "en": "Notice",
+   "gender": "na",
+   "role": "paper sign on the toilet door",
+   "register": "Terse posted text that abruptly breaks character and screams",
+   "aliases": [
+    "posted sign"
+   ]
+  },
+  "店長": {
+   "en": "Manager",
+   "gender": "unknown",
+   "role": "shop manager who swallowed his store key",
+   "register": "Wailing えーーーんっ, retching noises, no gendered marker",
+   "aliases": [
+    "store manager"
+   ]
+  },
+  "足攣った男": {
+   "en": "Cramping Man",
+   "gender": "male",
+   "role": "man with a leg cramp begging for relief",
+   "register": "Drawn-out ～～～ wails, male ねぇ, demanding させて",
+   "aliases": [
+    "leg cramp man"
+   ]
+  },
+  "街人": {
+   "en": "Townsman",
+   "gender": "male",
+   "role": "generic male townsperson delivering news and hints",
+   "register": "俺, ordinary polite-casual, shouts headlines",
+   "aliases": [
+    "townsfolk"
+   ]
+  },
+  "街人たち": {
+   "en": "Townsfolk",
+   "gender": "male",
+   "role": "crowd of townspeople staring",
+   "register": "Staring onomatopoeia, no words",
+   "aliases": [
+    "街人"
+   ]
+  },
+  "こそこそ街人": {
+   "en": "Sneaky Townsman",
+   "gender": "male",
+   "role": "townsman muttering about Scarlet behind her back",
+   "register": "Low conspiratorial mutter, 見ろよ／ぜ",
+   "aliases": [
+    "街人"
+   ]
+  },
+  "街民": {
+   "en": "Townsperson",
+   "gender": "male",
+   "role": "townsman ranting about the town's collapse",
+   "register": "Agitated っすか！？ shouting, blunt チクショウ",
+   "aliases": [
+    "citizen"
+   ]
+  },
+  "親切な人": {
+   "en": "Kind Stranger",
+   "gender": "male",
+   "role": "fake-friendly man who lures Scarlet into a trap",
+   "register": "Sing-song ですよぉ politeness dropping into flat おい／ねぇだろ",
+   "aliases": [
+    "helpful person"
+   ]
+  },
+  "親切な人2": {
+   "en": "Kind Stranger 2",
+   "gender": "male",
+   "role": "his accomplice",
+   "register": "Same oily politeness, then flat 黙って～ commands",
+   "aliases": [
+    "helpful person 2"
+   ]
+  },
+  "S級闘技者ユニコーン": {
+   "en": "S-Rank Unicorn",
+   "gender": "male",
+   "role": "S-rank arena fighter, a unicorn guarding his virginity",
+   "register": "Weary slacker slang, ちっ tongue clicks, ねーよ despair",
+   "aliases": [
+    "unicorn"
+   ]
+  },
+  "古代マニア": {
+   "en": "Antiquity Nut",
+   "gender": "male",
+   "role": "ancient-ruins obsessive who digs everything up",
+   "register": "私 when formal, snarling street threats when crossed",
+   "aliases": [
+    "ancient mania"
+   ]
+  },
+  "常連": {
+   "en": "Regular",
+   "gender": "male",
+   "role": "bathhouse regular who refuses to leave",
+   "register": "俺, stubborn barked declarations, then sleep-mumbling",
+   "aliases": [
+    "bathhouse regular"
+   ]
+  },
+  "真面目な男": {
+   "en": "Earnest Man",
+   "gender": "male",
+   "role": "man who proposes investigating the well, then asks for money",
+   "register": "Stiff keigo with proverbs, humble この私め, deadpan punchline",
+   "aliases": [
+    "serious man"
+   ]
+  },
+  "釣りキチ": {
+   "en": "Fishing Nut",
+   "gender": "male",
+   "role": "fishing fanatic on the beach",
+   "register": "俺, screaming enthusiasm, manic repeated chants",
+   "aliases": [
+    "fishing maniac"
+   ]
+  },
+  "サムライ": {
+   "en": "Samurai",
+   "gender": "male",
+   "role": "samurai patrolling the underground district",
+   "register": "でござる on every line, calls Scarlet 主殿",
+   "aliases": [
+    "retainer"
+   ]
+  },
+  "バカ": {
+   "en": "Idiot",
+   "gender": "male",
+   "role": "fool who begs to borrow money",
+   "register": "僕チン, nonsense catchphrases, ちょんまげ／ありがとピーマン wordplay",
+   "aliases": [
+    "fool"
+   ]
+  },
+  "浮浪者": {
+   "en": "Vagrant",
+   "gender": "male",
+   "role": "homeless man who trades an item for a titfuck",
+   "register": "Heavy panting ふーっ, whining drawn-out begging",
+   "aliases": [
+    "bum"
+   ]
+  },
+  "女A": {
+   "en": "Woman A",
+   "gender": "female",
+   "role": "first of two Scarlet superfans duelling over merch",
+   "register": "あァたくし affectation, shrill のよ／わ tails",
+   "aliases": [
+    "fan girl A"
+   ]
+  },
+  "女B": {
+   "en": "Woman B",
+   "gender": "female",
+   "role": "her rival superfan",
+   "register": "私, competitive screeching, わよ tails",
+   "aliases": [
+    "fan girl B"
+   ]
+  },
+  "女A＆B": {
+   "en": "Women A & B",
+   "gender": "female",
+   "role": "the two fangirls in unison",
+   "register": "Synchronized fangirl screaming",
+   "aliases": [
+    "fan girls"
+   ]
+  },
+  "伝説の薬草": {
+   "en": "Legendary Herb",
+   "gender": "male",
+   "role": "talking herb that insists it is legendary",
+   "register": "俺／お前, wounded pride collapsing into self-pity",
+   "aliases": [
+    "？？？"
+   ]
+  },
+  "やっちゃった男": {
+   "en": "Guy Who Screwed Up",
+   "gender": "male",
+   "role": "man who injured himself and needs medicine; later the sea tavern cook",
+   "register": "俺, frantic shouting, gratitude just as loud",
+   "aliases": [
+    "コック"
+   ]
+  },
+  "コック": {
+   "en": "Cook",
+   "gender": "male",
+   "role": "sea tavern cook making good on his promise",
+   "register": "Bright grateful ますよ！／ください！ service speech",
+   "aliases": [
+    "やっちゃった男"
+   ]
+  },
+  "爽やかな男": {
+   "en": "Wholesome Guy",
+   "gender": "male",
+   "role": "pleasant man whose greeting slides into a proposition",
+   "register": "ボク, breezy clean politeness that never changes tone",
+   "aliases": [
+    "refreshing man"
+   ]
+  },
+  "主婦": {
+   "en": "Housewife",
+   "gender": "female",
+   "role": "housewife shopping for monster meat",
+   "register": "あらやだ！ exclamations, appraising ～ね shopper verdicts",
+   "aliases": [
+    "wife"
+   ]
+  },
+  "ナンパ男": {
+   "en": "Pickup Guy",
+   "gender": "male",
+   "role": "man hitting on Scarlet outside the bar",
+   "register": "Party-boy hollering いぇ～い／うぇーい, パーリナイ slang",
+   "aliases": [
+    "pickup artist"
+   ]
+  },
+  "誠実なナンパ男": {
+   "en": "Sincere Pickup Guy",
+   "gender": "male",
+   "role": "pickup artist whose gimmick is total bluntness",
+   "register": "俺, deadpan direct propositions with no build-up",
+   "aliases": [
+    "sincere pickup guy"
+   ]
+  },
+  "部長": {
+   "en": "Department Head",
+   "gender": "male",
+   "role": "government section chief at the town office",
+   "register": "Mild reasonable office keigo んですよ used for insane content",
+   "aliases": [
+    "division chief"
+   ]
+  },
+  "注意喚起おねえさん": {
+   "en": "Warning Lady",
+   "gender": "female",
+   "role": "woman posted to warn travelers about what is ahead",
+   "register": "私, urgent よ／わ／てちょうだい",
+   "aliases": [
+    "注意喚起お姉さん",
+    "alert lady"
+   ]
+  },
+  "注意喚起お姉さん": {
+   "en": "Warning Lady",
+   "gender": "female",
+   "role": "same warning woman, variant nameplate spelling",
+   "register": "Identical urgent わよ／のよ register; not a second character",
+   "aliases": [
+    "注意喚起おねえさん"
+   ]
+  },
+  "用心棒": {
+   "en": "Bouncer",
+   "gender": "male",
+   "role": "bored hired muscle at the door",
+   "register": "俺, slack bored drawl だぜ～, whiny そんな～ when refused",
+   "aliases": [
+    "guard"
+   ]
+  },
+  "牛神": {
+   "en": "Cow God",
+   "gender": "na",
+   "role": "divine cow at the milking ranch",
+   "register": "Moos only, varying intensity; keep it entirely bovine",
+   "aliases": [
+    "cow deity"
+   ]
+  },
+  "牛さん": {
+   "en": "Moo-san",
+   "gender": "na",
+   "role": "transport cow that ferries Scarlet between locations",
+   "register": "Moos with the menu prompt in parentheses",
+   "aliases": [
+    "transport cow"
+   ]
+  },
+  "牛": {
+   "en": "Cow",
+   "gender": "na",
+   "role": "an ordinary cow",
+   "register": "A single questioning moo",
+   "aliases": [
+    "ranch cow"
+   ]
+  },
+  "別居中女": {
+   "en": "Separated Wife",
+   "gender": "female",
+   "role": "woman living apart from her husband",
+   "register": "Screams, then instantly composed あら／ごきげんよう keigo",
+   "aliases": [
+    "separated woman"
+   ]
+  },
+  "ポジティブ": {
+   "en": "Positive Guy",
+   "gender": "male",
+   "role": "relentlessly upbeat man who reframes every insult as praise",
+   "register": "Chipper です polite, exclamation on every line",
+   "aliases": [
+    "ポジティブな男",
+    "optimist"
+   ]
+  },
+  "ポジティブな男": {
+   "en": "Positive Guy",
+   "gender": "male",
+   "role": "same man under his full nameplate",
+   "register": "Same positivity, here weaponized as an insult",
+   "aliases": [
+    "ポジティブ"
+   ]
+  },
+  "勘違いされる女": {
+   "en": "Misunderstood Woman",
+   "gender": "female",
+   "role": "woman convinced everyone envies and misreads her",
+   "register": "私って self-analysis, sighing あ～ぁ, passive-aggressive んです",
+   "aliases": [
+    "misread woman"
+   ]
+  },
+  "就活ゴブリン": {
+   "en": "Job-Hunt Goblin",
+   "gender": "male",
+   "role": "goblin trying to find honest work",
+   "register": "Meek self-deprecating trailing んだ／かな mumbles",
+   "aliases": [
+    "jobhunting goblin"
+   ]
+  },
+  "ビーチの兵士": {
+   "en": "Beach Guard",
+   "gender": "male",
+   "role": "lone soldier assigned to police the beach",
+   "register": "僕, polite んです complaints flipping into hollering and ♡ gushing",
+   "aliases": [
+    "beach soldier"
+   ]
+  },
+  "日向ぼっこGUY": {
+   "en": "Sunbathing GUY",
+   "gender": "male",
+   "role": "man sunbathing on the beach who refuses every advance",
+   "register": "オレ, laid-back surfer drawl ぜ～, names himself in third person",
+   "aliases": [
+    "sunbathing guy"
+   ]
+  },
+  "斜に構えた女": {
+   "en": "Cynical Woman",
+   "gender": "female",
+   "role": "woman with furious grievances about sex positions",
+   "register": "Sour ranting のよ／わ／じゃない？, repeated ムカつく",
+   "aliases": [
+    "斜めに構えた女",
+    "jaded woman"
+   ]
+  },
+  "斜めに構えた女": {
+   "en": "Cynical Woman",
+   "gender": "female",
+   "role": "same woman, variant nameplate spelling",
+   "register": "Identical sour よ／わ complaint register",
+   "aliases": [
+    "斜に構えた女"
+   ]
+  },
+  "ババア": {
+   "en": "Old Hag",
+   "gender": "female",
+   "role": "old woman immune to the aphrodisiac and bitter about it",
+   "register": "Crone dialect じゃ／のじゃがのー, grumbling and left out",
+   "aliases": [
+    "granny"
+   ]
+  },
+  "店主": {
+   "en": "Shopkeeper",
+   "gender": "male",
+   "role": "bar/shop owner who sends Scarlet out to work the floor",
+   "register": "オレ, gruff dismissive こいや／だろ, then wistful about old dreams",
+   "aliases": [
+    "proprietor"
+   ]
+  },
+  "キレ気味の店主": {
+   "en": "Angry Shopkeeper",
+   "gender": "male",
+   "role": "furious shop owner who screams invented criminal charges",
+   "register": "俺, explosive んじゃねぇ！／てェか！？ at full volume",
+   "aliases": [
+    "irate shopkeeper"
+   ]
+  },
+  "泥酔騎士": {
+   "en": "Wasted Knight",
+   "gender": "male",
+   "role": "blackout-drunk knight in the bar",
+   "register": "Slurred whining with dragged vowels, alternating flat status reports",
+   "aliases": [
+    "blackout knight"
+   ]
+  },
+  "酔っ払い騎士": {
+   "en": "Drunk Knight",
+   "gender": "male",
+   "role": "another drunk knight, maudlin about his own weakness",
+   "register": "ひっく！ hiccups, leering shouts, then bleak sober honesty",
+   "aliases": [
+    "drunken knight"
+   ]
+  },
+  "立ちんぼ騎士": {
+   "en": "Loitering Knight",
+   "gender": "male",
+   "role": "knight standing around who dares Scarlet to move him",
+   "register": "オレ／俺, cocky てみな challenge, folds instantly when beaten",
+   "aliases": [
+    "idle knight"
+   ]
+  },
+  "焦った戦士": {
+   "en": "Panicked Warrior",
+   "gender": "male",
+   "role": "warrior in a permanent state of alarm",
+   "register": "俺, nothing but やべっ variants and panicked stammering",
+   "aliases": [
+    "flustered warrior"
+   ]
+  },
+  "看板": {
+   "en": "Signboard",
+   "gender": "na",
+   "role": "signboards posted around town, including the stats readout",
+   "register": "Flat posted text, no personality",
+   "aliases": [
+    "sign"
+   ]
+  },
+  "門番": {
+   "en": "Gatekeeper",
+   "gender": "male",
+   "role": "gate guard of the underground district",
+   "register": "Chatty slacker だよな／ぜ／ははっ, calls Scarlet アンタ",
+   "aliases": [
+    "gate guard"
+   ]
+  },
+  "餓えた男": {
+   "en": "Starving Man",
+   "gender": "male",
+   "role": "man listing abstract things he hungers for",
+   "register": "Broken one-phrase fragments in quote marks, ellipsis on every line",
+   "aliases": [
+    "hungry man"
+   ]
+  },
+  "熱い男": {
+   "en": "Hot-Blooded Man",
+   "gender": "male",
+   "role": "passionate man chasing his food-truck dream",
+   "register": "俺たち, shonen bellowing, quotes big words in brackets, ぜ／ねぇ",
+   "aliases": [
+    "passionate man"
+   ]
+  },
+  "キマったサウナー": {
+   "en": "Tripping Sauna Guy",
+   "gender": "male",
+   "role": "sauna user gone cosmic in the heat",
+   "register": "僕, soft spacey philosophical run-ons",
+   "aliases": [
+    "blissed sauna guy"
+   ]
+  },
+  "サウナー": {
+   "en": "Sauna Guy",
+   "gender": "male",
+   "role": "sauna user who rejects being told he is beautiful",
+   "register": "僕, shouted denials escalating to full screaming",
+   "aliases": [
+    "sauna user"
+   ]
+  },
+  "整い男": {
+   "en": "Sauna Sage",
+   "gender": "male",
+   "role": "man theorizing about the sauna 'totonou' state",
+   "register": "Pseudo-profound だぜ／んだよな, air quotes around every buzzword",
+   "aliases": [
+    "totonou man"
+   ]
+  },
+  "一流": {
+   "en": "First-Rate Guy",
+   "gender": "male",
+   "role": "man who considers himself first-rate and rates everyone else",
+   "register": "ボカァ affectation, smug pontificating, one-word verdicts",
+   "aliases": [
+    "the first-rater"
+   ]
+  },
+  "遊びたい男": {
+   "en": "Guy Looking to Play",
+   "gender": "male",
+   "role": "card-game creep who lures women with 'borrow a deck' patter",
+   "register": "ぐへへ／くくく／けけけ leers, calls her 姉ちゃん, then TCG jargon",
+   "aliases": [
+    "gamer creep"
+   ]
+  },
+  "男たち": {
+   "en": "Men",
+   "gender": "male",
+   "role": "crowd of men drinking together",
+   "register": "Drunken unison chant, repeated imperatives",
+   "aliases": [
+    "the men"
+   ]
+  },
+  "モヒカン": {
+   "en": "Mohawk Thug",
+   "gender": "male",
+   "role": "wasteland-punk thug roaming the streets",
+   "register": "俺たち／オレ, gang menace alternating with hollow self-pity",
+   "aliases": [
+    "mohawks"
+   ]
+  },
+  "お誘いおじさん": {
+   "en": "Soliciting Guy",
+   "gender": "male",
+   "role": "middle-aged man who politely propositions Scarlet",
+   "register": "Unctuous でございますなぁ～ keigo, consent-conscious phrasing",
+   "aliases": [
+    "solicitous uncle"
+   ]
+  },
+  "恍惚お姉さん": {
+   "en": "Blissed-Out Lady",
+   "gender": "female",
+   "role": "massage-parlor customer in a daze",
+   "register": "Melting breathy ですよぉ with ♡ tails",
+   "aliases": [
+    "恍惚姉さん",
+    "ecstatic lady"
+   ]
+  },
+  "恍惚姉さん": {
+   "en": "Blissed-Out Lady",
+   "gender": "female",
+   "role": "same customer under a shortened nameplate",
+   "register": "Identical melting ♡-laden keigo; not a second character",
+   "aliases": [
+    "恍惚お姉さん"
+   ]
+  },
+  "闇の住人": {
+   "en": "Dark Dweller",
+   "gender": "male",
+   "role": "chuunibyou edgelord who gifts Scarlet the dark outfit",
+   "register": "俺／貴様, theatrical くっくっくっ, darkness-and-flame metaphors",
+   "aliases": [
+    "dweller in darkness"
+   ]
+  },
+  "新郎": {
+   "en": "Groom",
+   "gender": "male",
+   "role": "bridegroom negotiating what counts as cheating",
+   "register": "Weaselly じゃなくない？, sheepish concessions, sudden っすか bravado",
+   "aliases": [
+    "bridegroom"
+   ]
+  },
+  "新婦": {
+   "en": "Bride",
+   "gender": "female",
+   "role": "bride driving Scarlet away from the honeymoon room",
+   "register": "Shrieking exorcism chants, 退散！, calls the groom 主人",
+   "aliases": [
+    "wife"
+   ]
+  },
+  "学生": {
+   "en": "Student",
+   "gender": "male",
+   "role": "university student testing lecture-hall theories",
+   "register": "Pedantic かい？／だね, indignant 貴様 when alarmed",
+   "aliases": [
+    "scholar"
+   ]
+  },
+  "恋する学生": {
+   "en": "Lovestruck Student",
+   "gender": "female",
+   "role": "student in love with the man next door",
+   "register": "Demure literary politeness, 殿方, のですが tails",
+   "aliases": [
+    "恋する女学生"
+   ]
+  },
+  "恋する女学生": {
+   "en": "Lovestruck Coed",
+   "gender": "female",
+   "role": "the same lovestruck student taking Scarlet's advice",
+   "register": "Eager ますね！ politeness with ♡ tails, worshipful toward Scarlet",
+   "aliases": [
+    "恋する学生"
+   ]
+  },
+  "ジジイ": {
+   "en": "Geezer",
+   "gender": "male",
+   "role": "old man in the mixed bath feigning innocence",
+   "register": "ワシ, old-man dialect ぞい／のぉ／じゃが",
+   "aliases": [
+    "old man"
+   ]
+  },
+  "一文無し女": {
+   "en": "Broke Woman",
+   "gender": "female",
+   "role": "penniless woman pushing her method and hand-me-downs",
+   "register": "私, snarling わ／なさい, aggressive generosity, チッ！",
+   "aliases": [
+    "penniless woman"
+   ]
+  },
+  "力を欲する男": {
+   "en": "Power-Hungry Man",
+   "gender": "male",
+   "role": "man praying for absurdly petty superpowers",
+   "register": "Groaning incantation, trailing 力を……, one trivial power per line",
+   "aliases": [
+    "力が欲しい男"
+   ]
+  },
+  "力が欲しい男": {
+   "en": "Power-Hungry Man",
+   "gender": "male",
+   "role": "same man under a variant nameplate",
+   "register": "Identical groaning 力が欲しい…… schtick; not a second character",
+   "aliases": [
+    "力を欲する男"
+   ]
+  },
+  "怪しい商人": {
+   "en": "Shady Merchant",
+   "gender": "male",
+   "role": "black-market dealer who needs a password",
+   "register": "Clipped and menacing, long ellipses, snaps to profanity",
+   "aliases": [
+    "suspicious merchant"
+   ]
+  },
+  "下町のガキ": {
+   "en": "Downtown Brat",
+   "gender": "male",
+   "role": "kid from the lower town who explains the local situation",
+   "register": "Cocky kid slang だぜ／なめんなよ, brags to sound grown up",
+   "aliases": [
+    "slum kid"
+   ]
+  },
+  "不良ガキ": {
+   "en": "Delinquent Kid",
+   "gender": "male",
+   "role": "child playing at being a delinquent",
+   "register": "Kid slang stretched for effect, drawn-out English caps",
+   "aliases": [
+    "punk kid"
+   ]
+  },
+  "不良キッズ": {
+   "en": "Delinquent Kids",
+   "gender": "unknown",
+   "role": "the delinquent children reacting in awe",
+   "register": "Squeaks and gasps only",
+   "aliases": [
+    "不良ガキ"
+   ]
+  },
+  "やけ酒女": {
+   "en": "Sorrow Drinker",
+   "gender": "female",
+   "role": "woman drowning her frustration in booze",
+   "register": "私だって self-pity, shouted one-word bursts, わ tails",
+   "aliases": [
+    "drunk woman"
+   ]
+  },
+  "正気に戻ったマッサージ師": {
+   "en": "Recovered Masseur",
+   "gender": "male",
+   "role": "masseur restored to sanity, barely holding on",
+   "register": "俺, bright service voice decaying into stammering",
+   "aliases": [
+    "sane masseur"
+   ]
+  },
+  "正気を失ったマッサージ師": {
+   "en": "Maddened Masseur",
+   "gender": "male",
+   "role": "masseur lost to the 'raging lymph'",
+   "register": "俺, broken chanting, guttural dakuten grunts",
+   "aliases": [
+    "insane masseur"
+   ]
+  },
+  "そわそわ男": {
+   "en": "Fidgety Guy",
+   "gender": "male",
+   "role": "man loitering by the toilet waiting for the 'party'",
+   "register": "Restless repetition, casual んだよ／しなよ invitations",
+   "aliases": [
+    "restless man"
+   ]
+  },
+  "おじさん": {
+   "en": "Middle-Aged Man",
+   "gender": "male",
+   "role": "pushy older townsman",
+   "register": "Blunt entitled しろよ／オラ, no politeness",
+   "aliases": [
+    "uncle"
+   ]
+  },
+  "限界職員": {
+   "en": "Burnt-Out Clerk",
+   "gender": "unknown",
+   "role": "government worker at the end of their rope",
+   "register": "Exhausted flat keigo んです／でしょうか asking horrifying questions calmly",
+   "aliases": [
+    "overworked staffer"
+   ]
+  },
+  "限界職員2": {
+   "en": "Burnt-Out Clerk 2",
+   "gender": "female",
+   "role": "second government worker, the one who reports on the boss",
+   "register": "私, same drained office keigo, asks permission for everything",
+   "aliases": [
+    "overworked staffer 2"
+   ]
+  },
+  "自信のない男": {
+   "en": "Insecure Man",
+   "gender": "male",
+   "role": "timid man anxious about his own inexperience",
+   "register": "Hesitant んでしょうか／んだろうな, tiny えいっ when acting",
+   "aliases": [
+    "unconfident man"
+   ]
+  },
+  "マスター": {
+   "en": "Barkeep",
+   "gender": "male",
+   "role": "tavern master desperate for staff",
+   "register": "Bellowing repeated 人が足りねぇ！, blunt くれ requests",
+   "aliases": [
+    "bar master"
+   ]
+  },
+  "ひどいナンパ待ち女": {
+   "en": "Awful Pickup Girl",
+   "gender": "female",
+   "role": "woman waiting to be hit on while insulting every taker",
+   "register": "Cutting ちょうだい／だわ, contempt alternating with self-pity",
+   "aliases": [
+    "picky woman"
+   ]
+  },
+  "慎重なおじさん": {
+   "en": "Cautious Guy",
+   "gender": "male",
+   "role": "middle-aged man who suspects every drink is a trap",
+   "register": "僕, measured かい？／んだ, calm paranoia, reasons aloud",
+   "aliases": [
+    "careful uncle"
+   ]
+  },
+  "哲学者": {
+   "en": "Philosopher",
+   "gender": "unknown",
+   "role": "street philosopher defining life one word at a time",
+   "register": "Bare aphorisms, no verbs, no politeness level",
+   "aliases": [
+    "thinker"
+   ]
+  },
+  "紳士": {
+   "en": "Gentleman",
+   "gender": "male",
+   "role": "generic gentleman in the gentlemen's garden",
+   "register": "Smooth amused ふふふっ／でしょう, minimal words",
+   "aliases": [
+    "a gentleman"
+   ]
+  },
+  "うっかりドラゴン": {
+   "en": "Clumsy Dragon",
+   "gender": "female",
+   "role": "dragon who gets stuck, then opens a shop",
+   "register": "私, soft apologetic ですね／ますので, giggly えへへ",
+   "aliases": [
+    "careless dragon"
+   ]
+  },
+  "温泉おじさん": {
+   "en": "Hot Spring Guy",
+   "gender": "male",
+   "role": "man in the hot spring worrying about being noticed",
+   "register": "Long silences and tiny muttered かな？ worries",
+   "aliases": [
+    "hot spring uncle"
+   ]
+  },
+  "乞食": {
+   "en": "Beggar",
+   "gender": "male",
+   "role": "beggar who used to be someone else",
+   "register": "Wheezing laughs, male アンタ／んだ, one line of quiet regret",
+   "aliases": [
+    "panhandler"
+   ]
+  },
+  "読書家": {
+   "en": "Bookworm",
+   "gender": "unknown",
+   "role": "bathhouse patron who reads in the bath",
+   "register": "Flat conversational よね／んだ; the calm about violence is the joke",
+   "aliases": [
+    "reader"
+   ]
+  },
+  "手下": {
+   "en": "Henchman",
+   "gender": "male",
+   "role": "mook serving Lewd Muscle",
+   "register": "Raider whooping, げへへ leers, panics instantly, male ぜ",
+   "aliases": [
+    "手下たち",
+    "mooks"
+   ]
+  },
+  "部屋": {
+   "en": "Room",
+   "gender": "na",
+   "role": "a room whose noises are attributed to the room itself",
+   "register": "Noise only, no words",
+   "aliases": [
+    "the room"
+   ]
+  },
+  "海の男": {
+   "en": "Sea Dog",
+   "gender": "male",
+   "role": "man of the sea who will not move from his spot",
+   "register": "俺, terse seafarer bravado ぜ, then meek apology",
+   "aliases": [
+    "sailor"
+   ]
+  },
+  "宿屋": {
+   "en": "Innkeeper",
+   "gender": "unknown",
+   "role": "inn counter voice",
+   "register": "Two flat service lines, one with a deliberate typo-flub",
+   "aliases": [
+    "inn"
+   ]
+  },
+  "受付お姉さん": {
+   "en": "Reception Lady",
+   "gender": "female",
+   "role": "receptionist who asks people to take things outside",
+   "register": "Placid counter keigo してくださいね, breaking into private complaint",
+   "aliases": [
+    "受付のお姉さん"
+   ]
+  },
+  "受付のお姉さん": {
+   "en": "Reception Lady",
+   "gender": "female",
+   "role": "same receptionist, variant nameplate spelling",
+   "register": "Wounded formal keigo, wry で～す deflection; not a second character",
+   "aliases": [
+    "受付お姉さん"
+   ]
+  },
+  "ケツデカ姉さん": {
+   "en": "Big-Ass Lady",
+   "gender": "female",
+   "role": "woman warning about the worms in the grass",
+   "register": "Knowing わよ／のよ warnings, drawn-out ominous delivery",
+   "aliases": [
+    "ケツデカお姉さん"
+   ]
+  },
+  "ケツデカお姉さん": {
+   "en": "Big-Ass Lady",
+   "gender": "female",
+   "role": "the same woman conceding defeat",
+   "register": "私, deflated formal keigo 参りました; not a second character",
+   "aliases": [
+    "ケツデカ姉さん"
+   ]
+  },
+  "キングスケベゴブリン": {
+   "en": "King Perv Goblin",
+   "gender": "male",
+   "role": "goblin boss",
+   "register": "A single screech, no words",
+   "aliases": [
+    "king lewd goblin"
+   ]
+  },
+  "落ち着いたおじさん": {
+   "en": "Calm Guy",
+   "gender": "male",
+   "role": "middle-aged man who has lost everything and is at peace",
+   "register": "Quiet ふふふ, gentle んだ／んだね observations",
+   "aliases": [
+    "composed uncle"
+   ]
+  },
+  "全開放おじさん": {
+   "en": "Full-Unlock Guy",
+   "gender": "male",
+   "role": "utility NPC toggling the full-unlock option",
+   "register": "Menu prompts only, casual かい？",
+   "aliases": [
+    "full unlock uncle"
+   ]
+  },
+  "落書き": {
+   "en": "Graffiti",
+   "gender": "na",
+   "role": "scrawl on a wall",
+   "register": "Just the scrawled words",
+   "aliases": [
+    "scribble"
+   ]
+  },
+  "写真屋": {
+   "en": "Photographer",
+   "gender": "unknown",
+   "role": "photo shop counter voice",
+   "register": "Two clipped trailing service fragments",
+   "aliases": [
+    "photo shop"
+   ]
+  },
+  "商人": {
+   "en": "Merchant",
+   "gender": "unknown",
+   "role": "generic shop merchant",
+   "register": "One bare shop greeting",
+   "aliases": [
+    "trader"
+   ]
+  },
+  "店員": {
+   "en": "Shop Clerk",
+   "gender": "unknown",
+   "role": "generic store clerk",
+   "register": "One drawn-out retail greeting",
+   "aliases": [
+    "shop staff"
+   ]
+  },
+  "バイト": {
+   "en": "Part-Timer",
+   "gender": "unknown",
+   "role": "bored part-time worker",
+   "register": "Mumbled contracted greeting, half-swallowed",
+   "aliases": [
+    "temp worker"
+   ]
+  },
+  "像": {
+   "en": "Statue",
+   "gender": "na",
+   "role": "puzzle statue demanding an offering",
+   "register": "Single flat imperative, oracular",
+   "aliases": [
+    "the statue"
+   ]
+  },
+  "石碑": {
+   "en": "Stone Tablet",
+   "gender": "na",
+   "role": "stone tablet that confirms puzzle answers",
+   "register": "One-word verdicts",
+   "aliases": [
+    "monument"
+   ]
+  },
+  "オナニスト": {
+   "en": "Onanist",
+   "gender": "male",
+   "role": "member of the masturbation fraternity (one line)",
+   "register": "Same grandiose comrade-speak as the other Wank Dojo members",
+   "aliases": [
+    "オナニー者"
+   ]
+  },
+  "以下ボス系": {
+   "en": "(boss list marker)",
+   "gender": "na",
+   "role": "NOT a speaker - the author's own editor annotation, 'the following are bosses', left in one nameplate slot",
+   "register": "Never drawn as dialogue; render the label literally if it ever appears"
+  }
+ },
+ "terms": {
+  "オナニーの構え": "Fap Stance",
+  "ナイトペロリ": "Knight Lick",
+  "パイズリ": "Titfuck",
+  "乳首チラ見せ": "Nipple Flash",
+  "rerorero": "Rerorero",
+  "うおアッツ！": "Whoa, Hot!",
+  "アイスエッジ": "Ice Edge",
+  "イド": "Id",
+  "イリュージョン": "Illusion",
+  "エネルギーボルト": "Energy Bolt",
+  "オナニーの呼吸一の型": "Fap Breath 1st Form",
+  "オナニーの呼吸二の型": "Fap Breath 2nd Form",
+  "オナニーの呼吸三の型": "Fap Breath 3rd Form",
+  "オナニーの呼吸四の型": "Fap Breath 4th Form",
+  "オナニーの呼吸五の型": "Fap Breath 5th Form",
+  "オーラシールド": "Aura Shield",
+  "オールアップ": "All Up",
+  "カウンター": "Counter",
+  "ガードブレイク": "Guard Break",
+  "キュア": "Cure",
+  "サイレンス": "Silence",
+  "ジャッジメント": "Judgment",
+  "スターフォール": "Star Fall",
+  "ストーンフォール": "Stone Fall",
+  "スピードアップ": "Speed Up",
+  "ダークスフィア": "Dark Sphere",
+  "チェスト": "Chesto!",
+  "デストラクション": "Destruction",
+  "ドグマロード": "Dogma Lord",
+  "ノック": "Knock",
+  "ハラパンツァー": "Gut Panzer",
+  "パラライズ": "Paralyze",
+  "パワーアップ": "Power Up",
+  "ヒール": "Heal",
+  "ヒールアップ": "Heal Up",
+  "ヒールレイン": "Heal Rain",
+  "ファイアーボール": "Fireball",
+  "フレイムピラー": "Flame Pillar",
+  "ホーリー": "Holy",
+  "ポイズンミスト": "Poison Mist",
+  "マグロタイム": "Dead Fish Time",
+  "マジックミラー": "Magic Mirror",
+  "マジックミラー・業": "Magic Mirror: Karma",
+  "マネーバズーカ": "Money Bazooka",
+  "ライトニング": "Lightning",
+  "不快なうねり": "Nasty Writhing",
+  "催眠": "Hypnosis",
+  "全体攻撃": "All-Target Attack",
+  "力ため": "Power Charge",
+  "強斬り": "Power Slash",
+  "炎獄": "Inferno",
+  "烈・カウンター": "Fierce Counter",
+  "烈・強斬り": "Fierce Power Slash",
+  "白旗": "White Flag",
+  "逆鱗解放": "Wrath Unleashed",
+  "通り魔の矜持": "Slasher's Pride",
+  "通常攻撃（技能側）": "Fight (Skill)",
+  "防御": "Defend",
+  "隠れる": "Hide",
+  "【オナニスト】": "【Onanist】",
+  "まかない飯": "Staff Meal",
+  "イキタクナール": "Wannacumnol",
+  "イカナクナール": "Nocumminol",
+  "エロクナール": "Getlewdnol",
+  "エロクナクナール": "Nolewdnol",
+  "ムラツクール": "Gethornol",
+  "ムラツカナクナール": "Nohornol",
+  "チンコナオース": "Dickfixol",
+  "エリクサー": "Elixir",
+  "カオスハンターの極意": "Chaos Hunter Secrets",
+  "シーセーバーの極意": "Sea Saver Secrets",
+  "マネーノドラゴンの極意": "Money Dragon Secrets",
+  "騎紅士の極意": "Crimson Knight Secrets",
+  "クッサバ": "Stinkleaf",
+  "クリティカルの実": "Crit Fruit",
+  "俊敏の実": "Speed Fruit",
+  "攻撃の実": "Attack Fruit",
+  "防御の実": "Defense Fruit",
+  "魔力の実": "Magic Fruit",
+  "魔防の実": "M.Defense Fruit",
+  "ティッシュ": "Tissues",
+  "ディープキス": "Deep Kiss",
+  "デカフグ": "Big Puffer",
+  "ネズミ同盟バッチ": "Rat Alliance Badge",
+  "マグロ": "Tuna",
+  "ミルク": "Milk",
+  "ムラムラレベル": "Horny Level",
+  "世界の至宝": "World's Treasure",
+  "伝説の薬草？": "Legendary Herb?",
+  "使用済みゴム": "Used Condom",
+  "写真A": "Photo A",
+  "写真B": "Photo B",
+  "写真C": "Photo C",
+  "写真S": "Photo S",
+  "処女": "Virginity",
+  "処女強化パッチ": "Virgin Patch",
+  "非処女強化パッチ": "Non-Virgin Patch",
+  "処女証明書": "Virginity Cert.",
+  "太古の遺物": "Ancient Relic",
+  "復活の薬": "Revival Potion",
+  "情報": "Info",
+  "炎の巻物": "Flame Scroll",
+  "癒しの雨の巻物": "Heal Rain Scroll",
+  "聖なる裁きの巻物": "Judgment Scroll",
+  "経験値の巻": "EXP Scroll",
+  "牛神ミルク": "Cow God Milk",
+  "犯人": "Culprit",
+  "番長": "Gang Boss",
+  "癒しの水": "Healing Water",
+  "魔力の水": "Magic Water",
+  "興奮剤": "Aphrodisiac",
+  "薬草": "Herb",
+  "釣り竿": "Fishing Rod",
+  "魔法陣の鍵": "Magic Circle Key",
+  "アンデッドキング": "Undead King",
+  "オーク": "Orc",
+  "クラーケン": "Kraken",
+  "グリフォン": "Griffon",
+  "グレートドラゴン": "Great Dragon",
+  "サラマンダー": "Salamander",
+  "スケベゴブリン": "Perv Goblin",
+  "スケルトンナイト": "Skeleton Knight",
+  "ドラゴン": "Dragon",
+  "バジリスク": "Basilisk",
+  "マッサージ師": "Masseur",
+  "ユニコーン": "Unicorn",
+  "ワイバーン": "Wyvern",
+  "中1": "7th Grader",
+  "井戸王": "Well King",
+  "激昂する伝説の番頭": "Enraged Bathkeep",
+  "奇形魚": "Deformed Fish",
+  "弱決闘": "Weak Duelist",
+  "狂信者": "Fanatic",
+  "荒くれ者": "Ruffian",
+  "虹色鳥": "Rainbow Bird",
+  "龍の子": "Dragon Child",
+  "HP+": "HP+",
+  "HP・SP半減": "HP/SP Halved",
+  "オ呼一": "Fap 1",
+  "オ呼二": "Fap 2",
+  "オ呼三": "Fap 3",
+  "オ呼四": "Fap 4",
+  "オ呼五": "Fap 5",
+  "ク+": "Crit+",
+  "マッサージ": "Massage",
+  "マッサージ2": "Massage 2",
+  "不快": "Discomfort",
+  "力": "Power",
+  "力+": "Power+",
+  "力++": "Power++",
+  "力ため+": "Charge+",
+  "力ため++": "Charge++",
+  "力ためすぎ": "Overcharge",
+  "命中率減少": "Accuracy Down",
+  "封": "Seal",
+  "封印": "Sealed",
+  "幻": "Illus",
+  "引きつける": "Taunt",
+  "戦闘不能": "K.O.",
+  "攻+": "Atk+",
+  "攻-": "Atk-",
+  "攻撃強化": "Attack Up",
+  "攻撃強化小": "Attack Up (S)",
+  "攻撃減少": "Attack Down",
+  "敵攻撃集中": "Target Focus",
+  "暴走": "Berserk",
+  "最大HP増加": "Max HP Up",
+  "毒": "Poison",
+  "火": "Fire",
+  "火傷": "Burn",
+  "発情Lv1": "Heat Lv1",
+  "発情Lv2": "Heat Lv2",
+  "発情Lv3": "Heat Lv3",
+  "発情Lv4": "Heat Lv4",
+  "発情Lv5": "Heat Lv5",
+  "眠": "Sleep",
+  "眠り": "Asleep",
+  "精+": "Spr+",
+  "精神強化": "Spirit Up",
+  "速+": "Spd+",
+  "速度強化": "Agility Up",
+  "防+": "Def+",
+  "防-": "Def-",
+  "防御強化": "Defense Up",
+  "防御減少": "Defense Down",
+  "隠": "Hidden",
+  "麻痺": "Paralysis",
+  "ﾏﾋ": "Para",
+  "HP": "HP",
+  "SP": "SP",
+  "Lv": "Lv",
+  "ゴールド": "Gold",
+  "システム": "System",
+  "セーブ": "Save",
+  "データ": "Data",
+  "命中率": "Accuracy",
+  "回避率": "Evasion",
+  "戦闘": "Battle",
+  "攻撃力": "Attack",
+  "敏捷性": "Agility",
+  "次Lvまで": "To Next Lv",
+  "武器": "Weapon",
+  "特殊技能": "Skills",
+  "経験値": "EXP",
+  "装備": "Equip",
+  "装飾": "Accessory",
+  "装飾3": "Accessory 3",
+  "装飾4": "Accessory 4",
+  "装飾5": "Accessory 5",
+  "身体": "Body",
+  "逃走": "Flee",
+  "防御力": "Defense",
+  "魔力": "Magic",
+  "魔防御": "M.Defense",
+  "ｸﾘﾃｨｶﾙ": "Critical",
+  "ウィザードロッド": "Wizard Rod",
+  "エンシェントブレード": "Ancient Blade",
+  "エンシェントマグロブレード": "Ancient Tuna Blade",
+  "グレートスピア": "Great Spear",
+  "グレートソード": "Great Sword",
+  "グレートボウ": "Great Bow",
+  "ショートスピア": "Short Spear",
+  "ショートソード": "Short Sword",
+  "ショートボウ": "Short Bow",
+  "ロングスピア": "Long Spear",
+  "ロングソード": "Long Sword",
+  "ロングボウ": "Long Bow",
+  "スケベ一文字": "Perv Ichimonji",
+  "ダガー": "Dagger",
+  "ドラゴンソード": "Dragon Sword",
+  "バカソード": "Idiot Sword",
+  "マインゴーシュ": "Main Gauche",
+  "ミニブレイド": "Mini Blade",
+  "ユニコーンソード": "Unicorn Sword",
+  "怪しい剣": "Shady Sword",
+  "木の杖": "Wooden Staff",
+  "鉄の杖": "Iron Staff",
+  "銀のダガー": "Silver Dagger",
+  "黄金ブレード": "Golden Blade",
+  "アイアンアーマー": "Iron Armor",
+  "アイアンシールド": "Iron Shield",
+  "ドラゴンアーマー": "Dragon Armor",
+  "ドラゴンシールド": "Dragon Shield",
+  "ドラゴンの指輪": "Dragon Ring",
+  "ナイトアーマー": "Knight Armor",
+  "ナイトシールド": "Knight Shield",
+  "バカアーマー": "Idiot Armor",
+  "バカシールド": "Idiot Shield",
+  "バカの指輪": "Idiot Ring",
+  "ユニコーンアーマー": "Unicorn Armor",
+  "ユニコーンシールド": "Unicorn Shield",
+  "ユニコーンの指輪": "Unicorn Ring",
+  "レザーアーマー": "Leather Armor",
+  "レザーシールド": "Leather Shield",
+  "ソルジャーコート": "Soldier Coat",
+  "ゴム手袋": "Rubber Gloves",
+  "サングラス": "Sunglasses",
+  "ミトン": "Mitten",
+  "懐中電灯": "Flashlight",
+  "湯たんぽ": "Hot Water Bottle",
+  "厚手の服": "Thick Clothes",
+  "薄い服": "Thin Clothes",
+  "呪われた服": "Cursed Clothes",
+  "王族のローブ": "Royal Robe",
+  "綿のローブ": "Cotton Robe",
+  "術士のローブ": "Mage Robe",
+  "鉄の小手": "Iron Gauntlets",
+  "銀の小手": "Silver Gauntlets",
+  "革の小手": "Leather Gauntlets",
+  "加速の腕輪": "Speed Bracelet",
+  "必殺の腕輪": "Crit Bracelet",
+  "筋力増強の腕輪": "Power Bracelet",
+  "身かわしの腕輪": "Evasion Bracelet",
+  "魔力の腕輪": "Magic Bracelet",
+  "アナリスト": "Analyst",
+  "ウリ": "Hooker",
+  "エロサンドバック": "Lewd Punching Bag",
+  "影のオナニスト": "Shadow Onanist",
+  "オナバスコナーズ": "Onavasconers",
+  "カオスハンター": "Chaos Hunter",
+  "ザーメンタンク": "Cum Tank",
+  "シーセーバー": "Sea Saver",
+  "スラッガー": "Slugger",
+  "セフレ": "Fuckbuddy",
+  "ドスケベマッサージ師": "Filthy Masseur",
+  "ビッチ": "Bitch",
+  "ヤリマン": "Slut",
+  "肉便器": "Cumdump",
+  "変態": "Pervert",
+  "通り魔": "Slasher",
+  "ビリビリのがし": "Zap Guard",
+  "マネーノドラゴン": "Money Dragon",
+  "乞食女": "Beggar Woman",
+  "伝説のエロ客": "Legend Perv Client",
+  "処女免許証": "Virgin License",
+  "大人げない大人": "Childish Adult",
+  "最強": "Strongest",
+  "赤の勇気": "Crimson Courage",
+  "騎紅士": "Crimson Knight",
+  "麻酔のプロ": "Anesthesia Pro",
+  "[ボス]アンデッドキングx1": "[Boss]Undead Kingx1",
+  "[ボス]クラーケンx1": "[Boss]Krakenx1",
+  "[ボス]グリフォンx1": "[Boss]Griffonx1",
+  "[ボス]グレートドラゴンx1": "[Boss]Great Dragonx1",
+  "[ボス]ドラゴンx1": "[Boss]Dragonx1",
+  "[ボス]バジリスクx1": "[Boss]Basiliskx1",
+  "オオカミx1": "Wolfx1",
+  "オオカミx2": "Wolfx2",
+  "オークx1": "Orcx1",
+  "オークx2": "Orcx2",
+  "コウモリx3": "Batx3",
+  "ゴブリンx2": "Goblinx2",
+  "サラマンダーx1": "Salamanderx1",
+  "スケルトンナイトx1": "Skeleton Knightx1",
+  "スケルトンナイトx2": "Skeleton Knightx2",
+  "ドラゴンバインx1": "Dragon Vinex1",
+  "ハーピィx2": "Harpyx2",
+  "ミイラ男x1": "Mummyx1",
+  "ユニコーンx1": "Unicornx1",
+  "ワイバーンx1": "Wyvernx1",
+  "奇形魚x3": "Deformed Fishx3",
+  "巨大ニワトリx2": "Giant Chickenx2",
+  "巨大ヘビx1": "Giant Snakex1",
+  "弱1": "Weak 1",
+  "強決闘": "Strong Duelist",
+  "日向ぼっこGAY": "Sunbathing GAY",
+  "町民": "Townspeople",
+  "虹色鳥x2": "Rainbow Birdx2",
+  "くちばし": "Beak",
+  "ローブ": "Robe",
+  "剣": "Sword",
+  "小手": "Gauntlet",
+  "弓矢": "Bow",
+  "斧": "Axe",
+  "服": "Clothes",
+  "杖": "Staff",
+  "棍棒": "Club",
+  "槍": "Spear",
+  "爪": "Claw",
+  "盾": "Shield",
+  "短剣": "Short Blade",
+  "称号": "Title",
+  "銃": "Gun",
+  "鎧": "Armor",
+  "エロ属性攻撃": "Lewd Attack",
+  "冷気攻撃": "Ice Attack",
+  "暗黒攻撃": "Dark Attack",
+  "炎攻撃": "Fire Attack",
+  "物理攻撃": "Physical Attack",
+  "神聖攻撃": "Holy Attack",
+  "雷攻撃": "Thunder Attack",
+  "通常攻撃": "Fight",
+  "スキル": "Skill",
+  "アイテム": "Item",
+  "戦士": "Fighter",
+  "僧侶": "Priest",
+  "盗賊": "Thief",
+  "海賊": "Pirate",
+  "魔法使い": "Mage",
+  "ファイターさん": "Fighter-san",
+  "プリーストさん": "Priest-san",
+  "シーフさん": "Thief-san",
+  "パイレーツさん": "Pirate-san",
+  "ウィッチさん": "Mage-san",
+  "エロステータス": "Lewd Status",
+  "ジョブチェンジ": "Job Change",
+  "ファストトラベル": "Fast Travel",
+  "物理50％軽減": "Physical 50% Cut",
+  "回想部屋": "Replay Room",
+  "エロナオシ山": "Mt. Lewdfix",
+  "ゴブリンの巣穴": "Goblin Den",
+  "ビーチ": "Beach",
+  "謎のビーチ": "Mystery Beach",
+  "下町": "Downtown",
+  "催眠基地": "Hypno Base",
+  "地下街": "Underground City",
+  "大通り": "Main Street",
+  "悪のマッサージ団基地": "Evil Massage HQ",
+  "搾乳牧場": "Milking Ranch",
+  "紳士の間": "Gentleman's Room",
+  "縦割り洞窟": "Vertical Cave",
+  "触手の洞窟": "Tentacle Cave",
+  "謎の遺跡": "Mystery Ruins",
+  "うおでっか……": "Whoa, huge…",
+  "なぜ僕は殴られたの？？？": "Why'd I get hit???",
+  "なんか寝かされてた": "I got laid out somehow",
+  "やってるわコイツ": "This one's doing it",
+  "スカーレット様万歳！": "Long live Scarlet!",
+  "ムラついてんのにふざけんな": "Horny, don't mess w/ me",
+  "怖い": "Scary",
+  "感度高すぎ": "Way too sensitive",
+  "淫乱すぎるだろ……": "Too damn slutty…",
+  "淫乱マゾデカパイ": "Slut Maso Big Tits",
+  "淫乱度1": "Lewdness 1",
+  "淫乱度2": "Lewdness 2",
+  "淫乱度3": "Lewdness 3",
+  "発情してた……": "She was in heat…",
+  "雰囲気1": "Mood 1",
+  "雰囲気2": "Mood 2",
+  "雰囲気3": "Mood 3",
+  "ジョブアクション1低": "Job Action 1 Low",
+  "ジョブアクション1中": "Job Action 1 Mid",
+  "ジョブアクション1高": "Job Action 1 High",
+  "ジョブアクション2低": "Job Action 2 Low",
+  "ジョブアクション2中": "Job Action 2 Mid",
+  "ジョブアクション2高": "Job Action 2 High",
+  "ジョブアクション3低": "Job Action 3 Low",
+  "ジョブアクション3中": "Job Action 3 Mid",
+  "ジョブアクション3高": "Job Action 3 High",
+  "ジョブアクション4低": "Job Action 4 Low",
+  "ジョブアクション4中": "Job Action 4 Mid",
+  "ジョブアクション4高": "Job Action 4 High",
+  "デカパイ乞食": "Big-Tit Beggar",
+  "一番打者": "Leadoff Batter",
+  "三冠王": "Triple Crown",
+  "乳首見せてくれた": "Showed her nipples",
+  "昏睡王": "Coma King",
+  "期待のルーキー": "Promising Rookie",
+  "見せたがり": "Exhibitionist",
+  "デカパイで財を成しそう": "Getting rich off tits",
+  "金が吸われていく": "Money's draining away",
+  "金で買えるデカパイ": "Tits money can buy",
+  "売春1": "Prostitution 1",
+  "売春2": "Prostitution 2",
+  "売春3": "Prostitution 3",
+  "なし": "None",
+  "テストドッグ": "Test Dog",
+  "【以下ボス系】": "[Bosses Below]",
+  "騎士": "Knight",
+  "ライフセーバー": "Lifesaver",
+  "ああああ": "aaaa",
+  "個": "pcs",
+  "枚": "sheets",
+  "本": "units",
+  "人": "people",
+  "{W8}{W9}速度 X {W10} Y {W11}": "{W8}{W9}Speed X {W10} Y {W11}",
+  "の{W4}が{W12}ポイント回復した。": "'s {W4} recovered {W12} points.",
+  "の{W4}が{W12}ポイント減少した。": "'s {W4} dropped by {W12} points.",
+  "{W4}の": "{W4}'s",
+  "{W4}が": "{W4}",
+  "{W10}上がった！": "rose by {W10}!",
+  "{W10}下がった！": "fell by {W10}!",
+  "最大{W4} {W13}{W14}": "Max {W4} {W13}{W14}",
+  "最大{W4} {W13}{W14}{W15}": "Max {W4} {W13}{W14}{W15}",
+  "{W4}は{W12}の{W13}を手に入れた！": "{W4} obtained {W12} {W13}!",
+  "{W4}は{W12}の{W13}を失った！": "{W4} lost {W12} {W13}!",
+  "{W13}の最大{W4}が": "{W13}'s max {W4}",
+  "{W12}上がった！": "rose by {W12}!",
+  "{W12}下がった！": "fell by {W12}!",
+  "{W13}の{W4}が": "{W13}'s {W4}",
+  "{W6} を習得！": "Learned {W6}!",
+  "{W33}購入": "{W33}Buy",
+  "{W33}売却": "{W33}Sell",
+  "{W34}所持金{W35}\n<R>{W33}{W36}{W34} {W13}": "{W34}Gold{W35}\n<R>{W33}{W36}{W34} {W13}",
+  "{W33}所持数{W35}\n{W37}<R>{W33}{W38}": "{W33}Owned{W35}\n{W37}<R>{W33}{W38}",
+  "×装備不能": "×Can't equip",
+  "○装備可能": "○Can equip",
+  "■装備中": "■Equipped",
+  "淫乱度{W39}": "Lewdness {W39}",
+  "データがありません": "No data",
+  "{W33}- システム設定 -": "{W33}- System Settings -",
+  "{W33}ここに説明が表示されます": "{W33}Descriptions appear here",
+  "キー位置保存": "Save cursor pos",
+  "ＯＦＦ": "OFF",
+  "ＯＮ": "ON",
+  "キーリピート速度": "Key repeat speed",
+  "１:最も遅い": "1: Slowest",
+  "２:やや遅い": "2: Slower",
+  "３: 通常": "3: Normal",
+  "４:やや高速": "4: Faster",
+  "５:最も高速": "5: Fastest",
+  "戦闘時 自動連打": "Battle auto-repeat",
+  "連打 続行": "Keep repeating",
+  "連打 停止": "Stop repeating",
+  "ＢＧＭ音量": "BGM volume",
+  "ＳＥ音量": "SE volume",
+  "決定キー": "Confirm key",
+  "キャンセル": "Cancel key",
+  "サブキー": "Sub key",
+  "キーボード": "Keyboard",
+  "パッド": "Gamepad",
+  "リセット": "Reset",
+  "設定完了": "Done",
+  "技能・アイテムを開いたときの\nカーソル位置を保存します": "Saves the cursor position\nwhen you open Skills or Items",
+  "キーのリピート速度を変更します。\n速いほど、キーの反応が早くなります。": "Changes the key repeat speed.\nThe higher the setting, the faster keys respond.",
+  "戦闘時、キーを押しっぱなしにしたとき\nターンを越えても連打を続けるか設定": "Sets whether holding a key in battle\nkeeps auto-repeating across turns",
+  "ＢＧＭの音量を設定します": "Sets the BGM volume",
+  "効果音の音量を設定します": "Sets the sound effect volume",
+  "パッドのキー設定を設定します。\n変更したいボタンを押して下さい。": "Configures the gamepad buttons.\nPress the button you want to change.",
+  "キーボードのキー設定を設定します。\n変更したいキーを押して下さい。": "Configures the keyboard keys.\nPress the key you want to change.",
+  "すべての設定を元に戻します": "Restores all settings to their defaults",
+  "この設定を反映します": "Applies these settings",
+  "ここに説明文が表示されます": "Descriptions appear here",
+  "変更を保存して終了": "Save changes and exit",
+  "変更せず終了": "Exit without saving",
+  "残り x {W10}": "Left x {W10}",
+  "外すことができません": "Can't be removed",
+  "外すことができない装備があるため、{W41}この装備を付けることができませんでした。": "You have equipment that can't be removed,{W41}so this item could not be equipped.",
+  "<装備を外す>": "<Remove Equipment>",
+  "装備を解除します。": "Unequips the item.",
+  "使用対象を": "Select the target",
+  "選択して下さい": "to use it on",
+  "ランダムで": "Targets are chosen",
+  "使用されます": "at random",
+  "自分自身には使用できません。": "Can't be used on yourself.",
+  "これ以上": "Can't use",
+  "使用できません": "any more",
+  "誰が{W6}を": "Who will use {W6}",
+  "使用しますか？": "right now?",
+  "ロード画面を開きます（サブキー + セーブ画面）": "Opens the Load screen (Sub key + Save screen)",
+  "設定を反映しました。": "Settings applied.",
+  "自分以外の対象が存在しませんでした。": "There was no target other than yourself.",
+  "残り{W7}ターン！": "{W7} turns left!",
+  "ミス！": "Miss!",
+  "クリティカル！": "Critical!",
+  "{W14}　入手！": "{W14}　obtained!",
+  "入手！": "obtained!",
+  "{W46}<C>{W34}【入手アイテム】\n\n{W33}": "{W46}<C>{W34}[Items Obtained]\n\n{W33}",
+  "{W13}の": "{W13}'s",
+  "{W13}が": "{W13}",
+  "{W47}上がった！": "rose by {W47}!",
+  "{W47}下がった！": "fell by {W47}!",
+  "最大{W39} {W13}{W14}": "Max {W39} {W13}{W14}",
+  "に失敗した！": "failed!",
+  "何も行動せずターンを進めます": "Skip your turn without acting",
+  "何もしない": "Do nothing",
+  "がなかった！": "was not there!",
+  "が足りない！": "is not enough!",
+  "T：乳首チラ見せ　O：オナニー　A：ジョブアクション": "T: Nipple Flash　O: Masturbate　A: Job Action",
+  "{W0}ムラムラゲージ-100{W1}": "{W0}Horny Gauge -100{W1}",
+  "決定キー：転職 ←・→・サブキー：画面切り替え キャンセルキー：戻る": "Confirm: Change Job ←/→/Sub: Switch view Cancel: Back",
+  "[成長]": "[Growth]",
+  "装備可能タイプ": "Equippable Types",
+  "戦闘コマンド": "Battle Commands",
+  "{W13}から{W39}へ転職しますか？": "Change job from {W13} to {W39}?",
+  "はい": "Yes",
+  "いいえ": "No",
+  "{W39}へ転職した！": "Changed job to {W39}!",
+  "←・→：ページの切り替え\nサブキー：画面切り替え\nキャンセルキー：戻る": "←/→: Change page\nSub key: Switch view\nCancel key: Back",
+  "[属性耐性]": "[Elem. Resist]",
+  "[状態耐性]": "[Status Resist]",
+  "{W39}\n{W50}に転職できるようになった！": "{W39}\nYou can now change job to {W50}!",
+  "最大{W39}{W13}{W10}": "Max {W39}{W13}{W10}",
+  "総精液搾取量": "Total Semen Drained",
+  "{W51}ml": "{W51}ml",
+  "口開発Lv{W52}": "Mouth Dev Lv{W52}",
+  "手開発Lv{W53}": "Hand Dev Lv{W53}",
+  "胸開発Lv{W54}": "Breast Dev Lv{W54}",
+  "尻開発Lv{W55}": "Ass Dev Lv{W55}",
+  "膣開発Lv{W56}": "Pussy Dev Lv{W56}",
+  "口開発Lv{W57}": "Mouth Dev Lv{W57}",
+  "手開発Lv{W58}": "Hand Dev Lv{W58}",
+  "胸開発Lv{W59}": "Breast Dev Lv{W59}",
+  "尻開発Lv{W60}": "Ass Dev Lv{W60}",
+  "膣開発Lv0": "Pussy Dev Lv0",
+  "【スカーレット】\n性行為は伴侶とのみ為されるべきだ\nま、ましてや見ず知らずの者など……！\n媚薬に蝕まられようと一線を超えることはない！": "[Scarlet]\nSexual intercourse should only ever be with one's spouse.\nL-let alone with a complete stranger...!\nEaten away by an aphrodisiac or not, I will never cross that line!",
+  "淫乱度": "Lewdness",
+  "………………っ→": "…………nngh→",
+  "やめておく→": "Better not→",
+  "乗る": "Go along with it",
+  "乗らない": "Turn it down",
+  "{W0}ムラムラゲージ-30{W1}": "{W0}Horny Gauge -30{W1}",
+  "{W0}絶頂ゲージ-30{W1}": "{W0}Climax Gauge -30{W1}",
+  "マッサージを受ける": "Get a massage",
+  "やめておく": "Better not",
+  "ハイパーになる": "Go hyper",
+  "チャンスは逃がさない": "Don't miss the chance",
+  "様子をうかがう": "Wait and see",
+  "発生済み環境ウィル": "Env. Wills Triggered",
+  "{W0}お尻を叩かれた！{W1}": "{W0}Your ass got spanked!{W1}",
+  "{W0}絶頂ゲージ+30{W1}": "{W0}Climax Gauge +30{W1}",
+  "{W0}ムラムラゲージ+30{W1}": "{W0}Horny Gauge +30{W1}",
+  "{W0}アクメした！{W1}": "{W0}You came!{W1}",
+  "{W0}ムラムラレベルダウン！{W1}": "{W0}Horny Level down!{W1}",
+  "援助成功！": "Handout received!",
+  "乳首を見せる": "Show your nipples",
+  "援助失敗……": "No handout……",
+  "淫乱度が足りないようだ！": "Your Lewdness isn't high enough!",
+  "オナネタを提供する": "Offer him fap material",
+  "ムラムラレベルが足りないようだ！": "Your Horny Level isn't high enough!",
+  "騎士服": "Knight Garb",
+  "ケツマンコ{W2}": "Ass-pussy{W2}",
+  "気分じゃない": "Not in the mood",
+  "所持金+100": "Gold +100",
+  "→つきあう": "→Go with him",
+  "→やめておく": "→Better not",
+  "所持金+200": "Gold +200",
+  "→アフターへ{W2}": "→Go to the after-party{W2}",
+  "→さようなら": "→Say goodbye",
+  "負けてない": "I haven't lost",
+  "負けました": "I lost",
+  "→ムラムラが止まらない": "→I can't stop being horny",
+  "→終わりにする": "→End it here",
+  "我慢できない": "Can't hold back",
+  "我慢する": "Hold back",
+  "{W0}ムラムラゲージが上昇した{W1}": "{W0}Horny Gauge rose{W1}",
+  "ムラムラが止まらない": "Can't stop being horny",
+  "飛距離を見せつけてプライドをへし折ろう！": "Show off your driving distance and shatter his pride!",
+  "アフターに誘う": "Invite him out after",
+  "終わる": "End it",
+  "わからせる": "Teach him a lesson",
+  "にげる": "Run",
+  "襲う": "Jump him",
+  "腰を振る": "Move your hips",
+  "なにもしない": "Stay still",
+  "犯す": "Fuck him",
+  "犯さない": "Don't fuck him",
+  "所持金+300": "Gold +300",
+  "誘いに乗る": "Accept the offer",
+  "断る": "Decline",
+  "ムラムラ発散する{W2}": "Work off the horniness{W2}",
+  "気持ちよくなる{W2}": "Feel good{W2}",
+  "我慢する{W2}": "Hold back{W2}",
+  "責任をとる{W2}": "Take responsibility{W2}",
+  "……断る{W2}": "……Decline{W2}",
+  "オナニーする": "Masturbate",
+  "セックス{W2}": "Sex{W2}",
+  "ある": "Yes, I have",
+  "ない": "No, I haven't",
+  "ミルク×3を入手した！": "Got Milk ×3!",
+  "{W0}ムラムラゲージ+{W1}": "{W0}Horny Gauge +{W1}",
+  "無理！": "No way!",
+  "脱出する": "Escape",
+  "マゾおねだりする": "Beg like a masochist",
+  "誇りを取り戻す": "Reclaim your pride",
+  "抜け出す": "Slip out",
+  "抜け出さない": "Stay put",
+  "持たざる者": "The Have-Not",
+  "「媚毒に犯されたとはいえ……み、淫らな行いなど決してしない！\n　騎士として、愛する領民の模範として毅然として対応してみせる！」": "\"Ravaged by the aphrodisiac poison or not... I-I will never do anything lewd!\n As a knight, as a model for the people I love, I will face this with dignity!\"",
+  "「媚毒の汚染は想像以上のようだね……\n　どこへ行っても、み、淫らな行為が…………っ\n　だ、だが私は決して屈したりはしない！」": "\"The aphrodisiac contamination is worse than I imagined...\n Everywhere I go, l-lewd acts............ngh\n B-but I will never give in!\"",
+  "「あ、あまりいい傾向ではない……っ\n　エッチな言葉もたくさん覚えてしまった……\n　行為もエスカレートしてきて……こ、こんなはずじゃ……っ」": "\"Th-this is not a good trend...ngh\n I've learned far too many dirty words...\n And the acts keep escalating... th-this wasn't how it was supposed to go...\"",
+  "「ふーっ{W2}　ふーっ{W2}　すっかりエッチになってしまった……{W2}\n　おっぱいで男を誘って{W2}　私好みのプレイをさせて……{W2}\n　ドスケベ生活、最高だ{W2}」": "\"Haah{W2} haah{W2} I've turned completely lewd...{W2}\n Luring men in with my tits{W2} making them play just how I like...{W2}\n This filthy horny life is the best{W2}\"",
+  "「いずれ私も……とは考えているが、あまり実感がわかないな\n　どんな殿方と結ばれるのだろうか」": "\"Someday I too... or so I think, though it doesn't feel real.\n I wonder what sort of gentleman I'll be joined with.\"",
+  "「このような形で性行為を経験するとは夢にも思わなかった\n　過ぎたことは仕方ないが……しかし、モヤモヤが残るね」": "\"I never dreamed I'd experience sex in a form like this.\n What's done is done, but... it still leaves a knot in my chest.\"",
+  "「お、多くの者と交わってしまった……っ\n　エッチは神聖な行為のはずなのに、不特定多数と……」": "\"I-I've coupled with so many men...ngh\n Sex is supposed to be a sacred act, and yet with countless strangers...\"",
+  "「誰と寝たかなど忘れていくものばかりだと思っていたが\n　ふふ……案外物覚えがいいらしいな私は{W2}\n　誰がどんなおちんぽだったか、すぐ思い出せるよ{W2}」": "\"I used to think one forgets who one has slept with,\n but hehe... it seems I have a rather good memory{W2}\n I can recall exactly whose cock was whose{W2}\"",
+  "「せ、性交は……愛する伴侶と子を成す神聖な行為だ……っ\n　快感を享受するためだけの動機など、間違っている」": "\"S-sexual intercourse is... a sacred act to bear children with a beloved spouse...ngh\n Doing it purely to enjoy the pleasure is simply wrong.\"",
+  "「性行為は……神聖な行いなのに……っ\n　ど、どこの誰かとも知れない者と……私は……っ」": "\"Sex is... supposed to be a sacred act...ngh\n A-and with men whose names I don't even know... I...\"",
+  "「じゃ、弱点を共有されているのか……\n　おまんこの弱い所みんなに知られて、好き放題されてる……っ\n　セックスでもっ、負け続けるなんてイヤだぁ」": "\"S-so they've been sharing my weak spots...\n Everyone knows where my pussy is weak and they do whatever they like...ngh\n I hate it, losing over and over at sex too...\"",
+  "「ドスケベセックス最高だ……{W2}\n　なぜ今まで避けて生きてきたのだろうか{W2}」": "\"Filthy, dirty sex is the best...{W2}\n Why did I spend my whole life avoiding it{W2}\"",
+  "「えっ？　な、なんでお尻の穴で……？　そういうのもあるのか？」": "\"Huh? W-why in the hole in my ass...? Is that even a thing?\"",
+  "「まさか本当にお尻での行為があるとは……\n　しかも、よ、よりにもよって私自身が体験などと……っ」": "\"To think acts done in the ass really exist...\n And of all people, that I would be the one to experience it...ngh\"",
+  "「す、すっかりアナルでアクメできるようになってしまった……\n　おまんことも違う独特な心地で……だ、ダメだっ！\n　これ以上は……も、戻れなくなる……っ」": "\"I-I can climax from anal completely now...\n It's a peculiar feeling, different from my pussy... n-no, stop!\n Any further and... I-I won't be able to go back...\"",
+  "「ケツマンコセックスに夢中になってしまった……{W2}\n　突かれるのももちろん好きだが、個人的には抜かれるときが……{W2}\n　思い出すだけでも疼いてくるね{W2}」": "\"I'm hooked on ass-pussy sex now...{W2}\n Being pounded is lovely of course, but personally the pull-out is...{W2}\n Just remembering it makes me ache{W2}\"",
+  "「どうしてち、乳首を他の者に見せる必要があるのだ……」": "\"Why on earth must I show my n-nipples to anyone else...\"",
+  "「す、好きで乳首をさらしているわけではないっ\n　そうでもしないと……っ、び、媚毒の影響で余計に……っ」": "\"I-it isn't as if I bare my nipples because I want to!\n If I don't...ngh, the aphrodisiac poison only gets worse...ngh\"",
+  "「す、好きで乳首を見せているわけではないのだが\n　たしかに、勘違いされる私にも責はある……\n　なにをされても、言い返せなくなってきた……」": "\"I-it isn't that I like showing my nipples,\n but it's true that part of the blame for the misunderstanding is mine...\n Whatever they do to me, I can no longer talk back...\"",
+  "「乳首チラ見せしてオスを誘惑するのにハマっている{W2}\n　血走った目で乳首見てきて……{W2}\n　積極的な殿方はそのまま襲ってきてくれるんだ{W2}」": "\"I'm hooked on flashing my nipples to tempt the males{W2}\n They stare at them with bloodshot eyes...{W2}\n and the forward gentlemen just go ahead and jump me{W2}\"",
+  "「ここへ来てからはないが\n　…………嗜みとしては、人並だと思う」": "\"Not since I arrived here, but...\n ......as a private indulgence, I'd say I'm about average.\"",
+  "「……どこかで発散させないと落ち着かない\n　わかってはいるが……こうも……っ」": "\"...I can't settle unless I let it out somewhere.\n I know that, but... even so...ngh\"",
+  "「ま、マズイ……ムラついたらすぐオナニーしてしまう\n　身体になってしまった……っ\n　我慢しなきゃいけないのに、む、ムラムラが止まらなくて……っ」": "\"Th-this is bad... the instant I get horny I masturbate.\n My body has become like that...ngh\n I have to hold back, but m-my arousal won't stop...ngh\"",
+  "「大きな声でオナニーするの気持ちいい……{W2}\n　下品な言葉で自分を鼓舞してムラムラ解消{W2}\n　気が付けばオナニーしているな{W2}」": "\"Masturbating out loud feels so good...{W2}\n Egging myself on with filthy words to work off the heat{W2}\n Before I notice, I'm already masturbating{W2}\"",
+  "「セクハラなど……決して許されるものではない！\n　見つけ次第厳しく取り締まるつもりだ！」": "\"Sexual harassment is... absolutely unforgivable!\n I intend to crack down hard the moment I find it!\"",
+  "「くっ……！　隙を見せるとすぐセクハラされてしまう……っ\n　なんとかしなければ、エスカレートしていくばかりだ」": "\"Guh...! The instant I drop my guard I get groped...ngh\n I must do something, or it will only escalate.\"",
+  "「息をするようにセクハラされるようになってしまった……っ\n　私の身体はエッチな玩具じゃないのに……\n　エッチな、お、玩具…………………………{W2}」": "\"I get harassed as easily as breathing now...ngh\n My body isn't some lewd toy, and yet...\n A lewd... t-toy........................{W2}\"",
+  "「私のエッチな身体のせいで余計ムラムラさせてしまい\n　結果セクハラをさせてしまったことを申し訳ないと思っている{W2}\n　セクハラしてスッキリするならどんどんイジって欲しい{W2}」": "\"Because my lewd body gets them even hornier,\n I feel sorry that it drives them to harass me{W2}\n If groping me clears their heads, they should fondle me all they like{W2}\"",
+  "「売春だと？　バカにしているのかい？\n　そのようなことこの私がするわけないだろう！」": "\"Prostitution? Are you mocking me?\n As if I of all people would ever do such a thing!\"",
+  "「自分とは関係ないとばかり思っていたが\n　自らの身体で、お金を稼ぐことになるとは……恥じるばかりだ」": "\"I always assumed it had nothing to do with me,\n yet here I am earning money with my own body... I'm nothing but ashamed.\"",
+  "「こんなに稼げるとは思わなかった\n　たしかに、これなら生業として選ぶのも……\n　しかし、やはりこのような形でお金を稼ぎ続けるのは……っ」": "\"I never imagined I could earn this much.\n True, at this rate, choosing it as a trade...\n But still, going on earning money this way is...\"",
+  "「売春行為は褒められたものでないと考えていたが……{W2}\n　エッチなことしてくれたうえでお金を貰えるなんて\n　こんな夢のようなことが他にあるのだろうか{W2}」": "\"I used to think prostitution was nothing to be proud of...{W2}\n but being paid on top of getting lewd things done to me,\n could anything else in the world be this dreamy{W2}\"",
+  "「せ、精液か……そういえば見たこともないな」": "\"S-semen, is it... come to think of it, I've never even seen any.\"",
+  "「精液……聞いたとおり、白濁として酷い臭いだ……っ」": "\"Semen... just as I heard, cloudy white with an awful smell...ngh\"",
+  "「ザーメンにも慣れてしまった……\n　よく観察すれば十人十色というか濃さも臭いも、あ、味も……」": "\"I've gotten used to cum as well...\n Look closely and every man differs: the thickness, the smell, a-and the taste...\"",
+  "「たぁ～くさんザーメンを搾り取ってきたが……飽きないな{W2}\n　膣内に注がれるのも、ぶっかけられるのも……ふふ{W2}\n　これからもたくさんコキ捨ててもらおうか{W2}」": "\"I've squeezed out looooads of cum, but I never tire of it{W2}\n Poured inside me, splattered over me... hehe{W2}\n I'll have plenty more jerked out onto me from here on{W2}\"",
+  "「ふふふ……{W2}　百戦錬磨のドスケベアナルに\n　お預け処女まんこ嫉妬してるな……{W2}\n　さて、どんなおちんぽに処女を奉げるか……{W2}」": "\"Hehehe...{W2} My battle-hardened, filthy asshole has\n my kept-waiting virgin pussy jealous...{W2}\n Now then, to which cock shall I offer my virginity...{W2}\"",
+  "優しそう": "Seems kind",
+  "助けてくれそう": "Seems helpful",
+  "打率一割": "Batting .100",
+  "物乞いとかしなさそう": "Not the begging type",
+  "売春とかしなさそう": "Not the whoring type",
+  "【名前】：スカーレット\n  淫乱度：{W58}\n  経験人数：{W64}\n  膣交回数：{W65}\n  尻穴回数：{W62}\n  乳首チラ見せ回数：{W66}\n  自慰回数：{W67}\n  セクハラ回数：{W68}\n  売春回数：{W69}\n  搾精量：{W70} ml": "[Name]: Scarlet\n  Lewdness: {W58}\n  Partners: {W64}\n  Vaginal: {W65}\n  Anal: {W62}\n  Nipple flashes: {W66}\n  Masturbation: {W67}\n  Harassment: {W68}\n  Prostitution: {W69}\n  Semen drained: {W70} ml",
+  "【スカーレット】\n {W71}": "[Scarlet]\n {W71}",
+  "領民からの評判": "Townsfolk Opinion",
+  "{W0}淫乱度+{W1}": "{W0}Lewdness +{W1}",
+  "{W0}経験回数+{W1}": "{W0}Sex count +{W1}",
+  "{W0}膣交回数+{W1}": "{W0}Vaginal count +{W1}",
+  "{W0}尻交回数+{W1}": "{W0}Anal count +{W1}",
+  "{W0}乳首チラ見せ回数+{W1}": "{W0}Nipple flash count +{W1}",
+  "{W0}自慰回数+{W1}": "{W0}Masturbation count +{W1}",
+  "{W0}セクハラ回数+{W1}": "{W0}Harassment count +{W1}",
+  "{W0}売春回数+{W1}": "{W0}Prostitution count +{W1}",
+  "{W0}搾精量+{W1}": "{W0}Semen drained +{W1}",
+  "ゴムから精液があふれ出した！": "Semen overflowed out of the condom!",
+  "ムラムラゲージ+": "Horny Gauge +",
+  "技を閃いた！": "A new skill came to you in a flash!",
+  "の攻撃！": "attacks!",
+  "味方一人のHPを回復": "Restores HP to one ally",
+  "はヒールを唱えた！": "casts Heal!",
+  "味方全員のHPを回復": "Restores HP to all allies",
+  "はヒールレインを唱えた！": "casts Heal Rain!",
+  "敵一体に炎の魔法攻撃": "Fire magic attack on one enemy",
+  "はファイアーボールを唱えた！": "casts Fireball!",
+  "敵全体に火柱で魔法攻撃": "Magic attack on all enemies with pillars of flame",
+  "はフレイムピラーを唱えた！": "casts Flame Pillar!",
+  "敵一体に強力な氷刃攻撃": "Powerful ice-blade attack on one enemy",
+  "はアイスエッジを唱えた！": "casts Ice Edge!",
+  "ランダムな敵３体に岩を落として攻撃": "Drops boulders on 3 random enemies",
+  "はストーンフォールを唱えた！": "casts Stone Fall!",
+  "敵一体に強烈な稲妻攻撃": "Fierce lightning attack on one enemy",
+  "はライトニングを唱えた！": "casts Lightning!",
+  "敵一体に無属性攻撃": "Non-elemental attack on one enemy",
+  "はエネルギーボルトを唱えた！": "casts Energy Bolt!",
+  "敵一体に神聖攻撃": "Holy attack on one enemy",
+  "はホーリーを唱えた！": "casts Holy!",
+  "敵一体に防御無視の最強神聖攻撃": "Strongest holy attack on one enemy, ignores defense",
+  "は神の裁きを下した！": "brought down divine judgment!",
+  "敵一体に威力の変動が大きい暗黒攻撃": "Dark attack on one enemy with wildly varying power",
+  "はダークスフィアを唱えた！": "casts Dark Sphere!",
+  "ランダムな敵一体に無属性の大ダメージ": "Heavy non-elemental damage to one random enemy",
+  "はスターフォールを唱えた！": "casts Star Fall!",
+  "敵全体の魔法系技能を封印する": "Seals magic skills on all enemies",
+  "はサイレンスを唱えた！": "casts Silence!",
+  "には効果がなかった！": "was unaffected!",
+  "敵一体をマヒさせる": "Paralyzes one enemy",
+  "はパラライズを唱えた！": "casts Paralyze!",
+  "敵一体を命中率低下": "Lowers one enemy's accuracy",
+  "はイリュージョンを唱えた！": "casts Illusion!",
+  "敵全体を毒にする": "Poisons all enemies",
+  "はポイズンミストを唱えた！": "casts Poison Mist!",
+  "敵一体の防御力をダウンさせる": "Lowers one enemy's defense",
+  "はガードブレイクを唱えた！": "casts Guard Break!",
+  "味方一人の攻撃力を上昇させる": "Raises one ally's attack",
+  "はパワーアップを唱えた！": "casts Power Up!",
+  "味方一人の、敵から受ける物理ダメージを半減": "Halves the physical damage one ally takes",
+  "はオーラシールドを唱えた！": "casts Aura Shield!",
+  "味方一人の速度・回避率を上昇させる": "Raises one ally's speed and evasion",
+  "はスピードアップを唱えた！": "casts Speed Up!",
+  "敵のダメージを数ターン1/4にする。": "Cuts damage from enemies to 1/4 for several turns.",
+  "は身を守っている！": "is defending!",
+  "力を溜めて、次の攻撃の威力を増す。": "Charges up to boost the next attack's power.",
+  "威力が低めの全体攻撃を行う。": "A lower-power attack that hits all enemies.",
+  "の全体攻撃！": "attacks all enemies!",
+  "隠れることで、敵からの単体攻撃を受けなくなる。": "Hide so single-target enemy attacks can't reach you.",
+  "は隠れた！": "hid!",
+  "は迎撃の構えを取った！": "took a counter stance!",
+  "威力の高い攻撃。": "A high-power attack.",
+  "の強斬り！": "uses Power Slash!",
+  "には当たらなかった！": "wasn't hit!",
+  "は舌でレロレロした！": "licked and slurped with her tongue!",
+  "はパイズリをかました！": "laid on a titfuck!",
+  "は乳首をチラ見せした！": "flashed a nipple!",
+  "はオナニーの構えをとった！": "took a masturbation stance!",
+  "状態異常を回復する。": "Cures status ailments.",
+  "はキュアを唱えた！": "casts Cure!",
+  "HPを回復し、攻撃力をアップさせる。": "Restores HP and raises attack.",
+  "はヒールアップを唱えた！": "casts Heal Up!",
+  "威力の高い斬り攻撃。": "A high-power slashing attack.",
+  "の烈・強斬り！": "uses Fierce Power Slash!",
+  "白旗を上げて降参する。": "Raise a white flag and surrender.",
+  "はマジックミラーを展開した！": "deployed Magic Mirror!",
+  "は不快にうねった！": "writhed unpleasantly!",
+  "攻撃力・防御力・俊敏性を上昇させる": "Raises attack, defense and agility",
+  "のステータスが上昇した！": "'s stats rose!",
+  "伝説の腹パン。SPを20消費する。": "The legendary gut punch. Costs 20 SP.",
+  "のハラパンツァー！": "uses Gut Panzer!",
+  "はデストラクションを発動した！": "unleashed Destruction!",
+  "は催眠をかけた！": "cast hypnosis!",
+  "はイドを展開した！": "unfolded the Id!",
+  "のドグマロード！": "uses Dogma Road!",
+  "は炎獄を放った！": "unleashed Flame Hell!",
+  "知恵を捨てて突撃する技。": "A charge that throws all wisdom away.",
+  "のチェスト！": "lets out a CHESTO and charges!",
+  "不快なノックで相手のステータスを数ターン下げる。": "An unpleasant knock lowers the target's stats for several turns.",
+  "はノックした！": "knocked!",
+  "はマグロタイムに突入した！": "plunged into Tuna Time!",
+  "味方一人のHPを30回復できる薬草": "An herb that restores 30 HP to one ally",
+  "味方一人のHPを100回復させる水": "Water that restores 100 HP to one ally",
+  "SPを30回復させることができる水": "Water that restores 30 SP",
+  "HPとMPを全快させる薬": "Medicine that fully restores HP and MP",
+  "戦闘不能になった味方一人をHP半分で回復させる薬": "Medicine that revives one downed ally at half HP",
+  "戦闘中に飲むと、しばらく攻撃力が上昇する": "Drink it in battle to raise attack for a while",
+  "は興奮剤を使った！": "used a stimulant!",
+  "火傷を負わせる巻物": "A scroll that inflicts burns",
+  "ヒールレインを発動する巻物": "A scroll that casts Heal Rain",
+  "敵一体に聖なる裁きを下す巻物": "A scroll that brings holy judgment down on one enemy",
+  "処女の証。": "Proof of virginity.",
+  "精液をもふきとる万能アイテム。": "An all-purpose item that wipes up even semen.",
+  "経験値を400上昇する。": "Grants 400 EXP.",
+  "白旗を上げて負けを認めるアイテム": "An item that raises a white flag and admits defeat",
+  "は白旗を上げた！": "raised a white flag!",
+  "街民をしばき回った証": "Proof of beating townsfolk senseless",
+  "最近街民の持ち物が紛失するらしい……。": "Lately the townsfolk's belongings keep going missing……",
+  "ミルク。たしかな味わい。": "Milk. A dependable flavor.",
+  "攻撃力が1上昇する実": "A fruit that raises attack by 1",
+  "防御力が1上昇する実": "A fruit that raises defense by 1",
+  "魔力が1上昇する実": "A fruit that raises magic by 1",
+  "魔防御が1上昇する実": "A fruit that raises magic defense by 1",
+  "俊敏性が1上昇する実": "A fruit that raises agility by 1",
+  "クリティカル率が1上昇する実": "A fruit that raises critical rate by 1",
+  "ミルクと使用済みゴムを調合ババアに渡す。": "Hand milk and a used rubber to the mixing hag.",
+  "使用済みゴム。ばっちぃ。": "A used rubber. Icky.",
+  "釣りキチ愛用の竿。": "The rod favored by the fishing nut.",
+  "はディープキスを食べた！": "ate the Deep Kiss!",
+  "はデカフグを食べた！": "ate the Big Puffer!",
+  "はクッサバを食べた！": "ate the Stinkerel!",
+  "はマグロを食べた！": "ate the Tuna!",
+  "大通り宿屋前の花壇を調べると……。": "Search the flowerbed in front of the main street inn and...",
+  "大通りのチャラ男と3回セックスすると称号ゲット。": "Fuck the main street playboy 3 times to get a title.",
+  "大通りのお誘いおじさんの勝負下着は黒。": "The main street pickup guy's lucky underwear is black.",
+  "大通りにある樽のいずれかを調べると……。": "Search one of the barrels on the main street and...",
+  "エンシェントブレードとマグロを調合ババアのもとへ持っていくと……。": "Take the Ancient Blade and a Tuna to the mixing hag and...",
+  "ビーチにいる怪しい商人への合言葉が書かれている。": "The password for the shady merchant on the beach is written here.",
+  "伝説の薬草っぽい草。異常状態を回復する。": "A weed that looks like the legendary herb. Cures status ailments.",
+  "ねずみショップの一番右にある箱を調べると……。": "Search the rightmost box in the rat shop and...",
+  "ビーチに生えているヤシの木のいずれかの根元を調べると……。": "Search the base of one of the palm trees on the beach and...",
+  "海酒場のトイレを調べると……。": "Search the toilet in the seaside tavern and...",
+  "地下街酒場での求人募集。人外でも可。": "Help wanted at the underground district tavern. Non-humans welcome.",
+  "下町のテント前の容器を調べると……。": "Search the container in front of the downtown tent and...",
+  "とある魔法陣についての情報が書かれている。": "Information about a certain magic circle is written here.",
+  "宿屋＆ショップの暖炉の横を調べると……。": "Search beside the fireplace in the inn & shop and...",
+  "処女じゃなくても処女を名乗れる。": "Lets you call yourself a virgin even if you aren't one.",
+  "淫乱度が50上がる。": "Raises Lewdness by 50.",
+  "淫乱度が50下がる。": "Lowers Lewdness by 50.",
+  "ムラムラレベルが5になる。": "Sets Horny Level to 5.",
+  "ムラムラレベルが0になる。": "Sets Horny Level to 0.",
+  "絶頂値を限界ギリギリにする。": "Pushes the Climax value right to the brink.",
+  "絶頂値を0にする。": "Sets the Climax value to 0.",
+  "今世紀最高の打者に与えられる称号。": "Title given to the greatest batter of the century.",
+  "バカな装備を揃えて戦うと……。": "Fight with a full set of idiot gear and...",
+  "鎧→服→クマ→樽": "Armor→Clothes→Bear→Barrel",
+  "樽→鎧→植木": "Barrel→Armor→Potted plant",
+  "短剣。攻撃力が10上がる。": "A dagger. Raises attack by 10.",
+  "短めの剣。攻撃力が5上がる。": "A shortish sword. Raises attack by 5.",
+  "短めの槍。攻撃力が6上がる。": "A shortish spear. Raises attack by 6.",
+  "短弓、攻撃力が14上がる。敏捷も上がる。": "A short bow. Raises attack by 14. Also raises agility.",
+  "木の杖。攻撃力が7、精神攻撃力が10上がる。": "A wooden staff. Raises attack by 7 and magic attack by 10.",
+  "長剣。攻撃力が10上がる。": "A long sword. Raises attack by 10.",
+  "長い槍。攻撃力が36上がる。": "A long spear. Raises attack by 36.",
+  "長い弓、攻撃力が25上がる。敏捷も上がる。": "A long bow. Raises attack by 25. Also raises agility.",
+  "鉄の杖。攻撃力が15、精神攻撃力が20上がる。": "An iron staff. Raises attack by 15 and magic attack by 20.",
+  "左手にも装備できる銀の短剣。": "A silver dagger that can also go in the off hand.",
+  "大きな剣。攻撃力が15上がる。": "A big sword. Raises attack by 15.",
+  "大きな槍。攻撃力が50上がる。": "A big spear. Raises attack by 50.",
+  "巨大な弓、攻撃力が40上がる。敏捷も上がる。": "A giant bow. Raises attack by 40. Also raises agility.",
+  "太古のロマンを一身に背負った剣。": "A sword that carries all the romance of antiquity.",
+  "太古のロマン、ご期待ください。": "Ancient romance. Coming soon.",
+  "ドラゴンの装飾が施された一品。": "A piece adorned with dragon ornamentation.",
+  "バカの剣。": "Idiot's sword.",
+  "処女厨愛用の剣。非処女でも扱える。": "The sword of choice for virgin freaks. Non-virgins can use it too.",
+  "純金の剣。高値で売れそう。": "A solid gold sword. Looks like it would sell high.",
+  "なめし革で作られた小手。防御力が3上がる。": "Gauntlets made of tanned leather. Raises defense by 3.",
+  "生地が薄い服。防御力が3上昇。": "Clothes of thin cloth. Raises defense by 3.",
+  "なめし革で作られた鎧。防御力が5上がる。": "Armor made of tanned leather. Raises defense by 5.",
+  "鉄で作られた小手。防御力が7上がる。": "Gauntlets made of iron. Raises defense by 7.",
+  "生地が厚い服。防御力が8上昇。": "Clothes of thick cloth. Raises defense by 8.",
+  "鉄で作られた鎧。防御力が18上がる。": "Armor made of iron. Raises defense by 18.",
+  "銀で作られた小手。防御力が13上がる。": "Gauntlets made of silver. Raises defense by 13.",
+  "軍人が着る服。防御力が15上昇。": "Clothes worn by soldiers. Raises defense by 15.",
+  "騎士のために作られた鎧。防御力が28上がる。": "Armor made for knights. Raises defense by 28.",
+  "付けると攻撃力が5上がる装飾品。": "An accessory that raises attack by 5 when worn.",
+  "付けると敏捷が30上がる装飾品。": "An accessory that raises agility by 30 when worn.",
+  "付けるとクリティカル率が20％上がる装飾品。": "An accessory that raises critical rate by 20% when worn.",
+  "付けると回避率が30％上がる装飾品。": "An accessory that raises evasion by 30% when worn.",
+  "麻痺耐性を50上げるグローブ。防御力も3上がる。": "Gloves that raise paralysis resistance by 50. Also raises defense by 3.",
+  "熱いお鍋もなんのその。炎攻撃に少し強くなり防御力が5上がる。": "Hot pots are no trouble at all. Slightly stronger against fire attacks and raises defense by 5.",
+  "火傷注意。氷攻撃に少し強くなり防御力が5上がる。": "Caution: burn hazard. Slightly stronger against ice attacks and raises defense by 5.",
+  "闇を払う聖なる光を放つ。闇攻撃に少し強くなり防御力が5上がる。": "Gives off a holy light that sweeps away darkness. Slightly stronger against dark attacks and raises defense by 5.",
+  "光がキツイときにはこれ。光攻撃に少し強くなり防御力が5上がる。": "For when the light is too much. Slightly stronger against light attacks and raises defense by 5.",
+  "ドラゴンの装飾が施された一品。炎攻撃に強くなり防御力が上がる。": "A piece adorned with dragon ornamentation. Stronger against fire attacks and raises defense.",
+  "バカの盾。": "Idiot's shield.",
+  "バカの鎧。": "Idiot's armor.",
+  "バカの指輪。攻撃力が30上がるが防御力と魔防力が下がる。": "Idiot's ring. Raises attack by 30 but lowers defense and magic defense.",
+  "大人げない大人に与えられる称号。": "Title given to an adult who acts anything but.",
+  "処女厨御用達の盾。非処女でも扱える。": "The shield of choice for virgin freaks. Non-virgins can use it too.",
+  "処女厨御用達の鎧。非処女でも扱える。": "The armor of choice for virgin freaks. Non-virgins can use it too.",
+  "処女厨御用達の指輪。非処女でも扱える。": "The ring of choice for virgin freaks. Non-virgins can use it too.",
+  "処女じゃなくても処女を名乗れる免許証。": "A license that lets you call yourself a virgin even if you aren't one.",
+  "普通に攻撃": "Attack normally",
+  "アイテムを選択します": "Select an item",
+  "スキルを選択します": "Select a skill",
+  "次ターンの攻撃力を高める。連続使用で超アップ": "Raises next turn's attack. Stacks hugely if used repeatedly",
+  "敵からのダメージを1/4にする": "Cuts damage taken to 1/4",
+  "身を隠して、敵から狙われなくなる": "Hide so enemies can no longer target you",
+  "HPを10消費して、威力の高い攻撃を行う": "Spends 10 HP for a high-power attack",
+  "敵から攻撃を受けたとき、反撃を行う": "Counterattacks when struck by an enemy",
+  "は立ち上がった！": "got back up!",
+  "は眠ってしまった！": "fell asleep!",
+  "は眠っている。": "is asleep.",
+  "は目を覚ました！": "woke up!",
+  "は毒にかかった！": "was poisoned!",
+  "の毒が抜けた！": "'s poison wore off!",
+  "は魔法を封印された！": "'s magic was sealed!",
+  "は魔法が封印されている！": "'s magic is sealed!",
+  "の封印が解けた！": "'s seal was broken!",
+  "は動けなくなった！": "can no longer move!",
+  "は動くことができない！": "cannot move!",
+  "は行動可能になった！": "can act again!",
+  "の受けるダメージが1/4になった！": "'s damage taken dropped to 1/4!",
+  "は敵に狙われなくなった！": "can no longer be targeted by enemies!",
+  "の次ターンの攻撃力が2倍になった！": "'s attack next turn doubled!",
+  "の次ターンの攻撃力が5倍になった！": "'s attack next turn went up 5x!",
+  "の次ターンの攻撃力が10倍になった！": "'s attack next turn went up 10x!",
+  "は力のためすぎで爆発した！": "charged up too much and exploded!",
+  "は反撃した！": "counterattacked!",
+  "は敵の目を引きつけた！": "drew the enemies' attention!",
+  "の最大HPが1.5倍になった！": "'s max HP went up 1.5x!",
+  "の最大HPが元に戻った！": "'s max HP returned to normal!",
+  "は攻撃力が減少した！": "'s attack fell!",
+  "の攻撃力が元に戻った！": "'s attack returned to normal!",
+  "の防御力が減少した！": "'s defense fell!",
+  "の防御力が元に戻った！": "'s defense returned to normal!",
+  "の命中率が下がった！": "'s accuracy fell!",
+  "の命中率が元に戻った！": "'s accuracy returned to normal!",
+  "の攻撃力が上がった！": "'s attack rose!",
+  "の防御力が上がった！": "'s defense rose!",
+  "の速度・回避率が上がった！": "'s speed and evasion rose!",
+  "の速度・回避率が元に戻った！": "'s speed and evasion returned to normal!",
+  "の精神攻撃・精神防御が上がった！": "'s magic attack and magic defense rose!",
+  "の精神攻撃・精神防御が元に戻った！": "'s magic attack and magic defense returned to normal!",
+  "は暴走した！": "went berserk!",
+  "の暴走が治った！": "'s berserk state wore off!",
+  "は魔法を反射した！": "reflected the magic!",
+  "は不快な気持ちになった！": "felt sick to the stomach!",
+  "の不快な気持ちが晴れた！": "'s queasiness cleared up!",
+  "は催眠にかかってしまった！攻撃力と魔力が大幅ダウン！": "fell under hypnosis! Attack and magic plummeted!",
+  "はイドに落ちた！ステータスが大きく下がり毒になった！": "fell into the Id! Stats crashed and poison set in!",
+  "は火傷した！": "was burned!",
+  "の火傷が治った！": "'s burn healed!",
+  "セーブしたいデータを選んで下さい。": "Choose a slot to save to.",
+  "ロードしたいデータを選んで下さい。": "Choose a slot to load.",
+  "は逃げ出した！": "fled!",
+  "敵一体に防御無視の神聖攻撃": "Holy attack on one enemy that ignores defense",
+  "敵全体に、威力の変動が大きい暗黒攻撃": "Dark attack on all enemies with wildly varying power",
+  "威力の高い斬り攻撃。HPを10消費する。": "A high-power slashing attack. Costs 10 HP.",
+  "さらに威力の高い斬り攻撃。HPを20消費する。": "An even higher-power slashing attack. Costs 20 HP.",
+  "通り魔の矜持が消滅した！": "The street slasher's pride vanished!",
+  "デカパイ自慢しやがって{W2}": "Showing those huge tits off{W2}",
+  "歩くポルノ{W2}": "Walking porn{W2}",
+  "ザーメン狩りに来たのかよ{W2}": "Here on a cum hunt, huh{W2}",
+  "このデカパイに税をかけろ": "Tax those huge tits",
+  "許されざるデカパイ{W2}": "Unforgivable huge tits{W2}",
+  "デカパイ感謝{W2}": "Thanks for the huge tits{W2}",
+  "夢のようなデカパイ{W2}": "Tits out of a dream{W2}",
+  "どうしようもないデカパイ{W2}": "Hopeless huge tits{W2}",
+  "すぐアクメキメる雑魚乳首{W2}": "Weak nipples, instant orgasm{W2}",
+  "確実に誘ってる": "She's definitely asking for it",
+  "我慢するのがバカらしい{W2}": "Holding back feels stupid{W2}",
+  "考えられないほど弱いおっぱい{W2}": "Unbelievably weak tits{W2}",
+  "すぐ触らせてくれる変態{W2}": "Perv who lets you grope her{W2}",
+  "弱すぎて心配になる": "So weak it's worrying",
+  "ちょっと触っただけでアクメした{W2}": "Came from one little touch{W2}",
+  "ムラついたら触らせてくれる神{W2}": "Lets you grope her when horny{W2}",
+  "呆れた感度": "Absurd sensitivity",
+  "ぷにぷにでたまらん{W2}": "So squishy I can't stand it{W2}",
+  "見ててチンコイラつく{W2}": "Watching her makes my dick ache{W2}",
+  "デカパイガン見バレた{W2}": "Got caught staring at her tits{W2}",
+  "マゾっぽいよな": "She seems like a masochist",
+  "存在がポルノ": "Her whole existence is porn",
+  "ザーメンぶっかけてぇ": "Wanna bukkake her",
+  "いつか絶対襲う": "Gonna jump her one day for sure",
+  "いつもムラムラしてる{W2}": "Always horny{W2}",
+  "チンコガン見姉貴{W2}": "Big sis who stares at your dick{W2}",
+  "性的視線に興奮してそう{W2}": "Probably gets off on lewd stares{W2}",
+  "どこでもオナニーしてそう{W2}": "Probably jerks off anywhere{W2}",
+  "確実にチンコ求めてるよな{W2}": "She's definitely after dick{W2}",
+  "媚毒が悪化するわ{W2}": "Worsens my aphrodisiac poison{W2}",
+  "なにしても喜びそう{W2}": "Seems like she'd enjoy anything{W2}",
+  "チンコ見て話すな！目を見ろ！": "Don't talk to my dick! Look me in the eye!",
+  "おっぱいで挑発してきた！": "She taunted me with her tits!",
+  "本気で許せない{W2}": "Seriously unforgivable{W2}",
+  "いつでも歓迎ってエロ顔{W2}": "Lewd face that says anytime{W2}",
+  "ただの変態マゾ{W2}": "Just a perverted masochist{W2}",
+  "急に殴りかかってきそう": "Looks like she'd swing at you out of nowhere",
+  "暴君の予感": "I sense a tyrant coming",
+  "スカーレットを許すな": "Never forgive Scarlet",
+  "笑顔で殴ってきそう": "Looks like she'd punch you smiling",
+  "なに言っても響かなそう": "Nothing you say would get through",
+  "命乞い聞かなさそう": "Wouldn't hear out your begging",
+  "狂気を感じる": "I sense madness",
+  "悲しきモンスター": "A tragic monster",
+  "マジにいかれてる": "Seriously unhinged",
+  "暴君誕生": "A tyrant is born",
+  "デカパイに騙された！": "Fooled by those huge tits!",
+  "反逆してぇ～～～～！": "I wanna revoooolt!",
+  "スカーレット様最高！": "Lady Scarlet is the best!",
+  "スカーレット様最強！": "Lady Scarlet is the strongest!",
+  "スカーレット様こそ至高！": "Lady Scarlet alone is supreme!",
+  "スカーレット様万能！": "Lady Scarlet can do anything!",
+  "スカーレット様幸せ！": "Lady Scarlet is bliss!",
+  "スカーレット様無敵！": "Lady Scarlet is invincible!",
+  "この人持ち物盗んでるんじゃ……": "Isn't she stealing people's stuff...",
+  "エロ水着に騙された": "Fooled by that lewd swimsuit",
+  "なぜこんなことを？": "Why would she do this?",
+  "昏睡させられた": "She knocked me out cold",
+  "盗人か？": "A thief, is she?",
+  "治療と抜かして昏睡女": "Calls it treatment, then knocks you out",
+  "エロ水着にいつも騙される": "Always fooled by that lewd swimsuit",
+  "エロ水着着てくれてるからOK": "She wears the lewd swimsuit, so it's fine",
+  "いつもムラムラしてるi[126]": "Always horny i[126]",
+  "エロ水着最高": "The lewd swimsuit is the best",
+  "落とし物を見逃さない女": "Never misses a dropped item",
+  "ぷっくり乳首丸見え感謝{W2}": "Thanks for the plump nipples on show{W2}",
+  "デカパイだから許されてる": "She gets away with it for the tits",
+  "センスを感じる": "She's got a feel for it",
+  "シーズン10本が限界": "Ten homers a season is her ceiling",
+  "守備がね……": "The fielding, though...",
+  "おっぱい大きいのはポジ": "Big tits are a plus",
+  "まぁまぁの飛距離": "Decent distance on it",
+  "代打起用安定か？": "Solid as a pinch hitter?",
+  "打撃センスたまらん": "Her batting instincts are killer",
+  "感度も抜群でポジ": "Great sensitivity too, big plus",
+  "アーチスト": "Long-ball artist",
+  "永久欠番": "Retired number",
+  "天才": "Genius",
+  "宝石のような打者": "A gem of a batter",
+  "哀れなデカパイに恵んだわ": "Gave alms to those pitiful tits",
+  "デカパイでお小遣い稼ぎ": "Making pocket money off her tits",
+  "デカパイ物乞い女{W2}": "Big-titted beggar woman{W2}",
+  "おねだり女{W2}": "Woman who begs for it{W2}",
+  "オカズゲット……{W2}": "Got new fap material...{W2}",
+  "今夜のおかず{W2}": "Tonight's fap material{W2}",
+  "チップ払うだけで乳首{W2}": "Nipples for the price of a tip{W2}",
+  "乳首のコスパが最高{W2}": "Best value nipples going{W2}",
+  "使用済みゴム似合ってる{W2}": "Used rubbers suit her{W2}",
+  "オカズに困らない{W2}": "Never short on fap material{W2}",
+  "サービス精神の塊{W2}": "Pure fanservice spirit{W2}",
+  "グラビアエロ女{W2}": "Pin-up slut{W2}",
+  "デカパイコスパ良すぎる{W2}": "Those tits are too good a deal{W2}",
+  "この夏買いたいデカパイ{W2}": "Tits I want to buy this summer{W2}",
+  "色んなことやってくれる{W2}": "Does all sorts of things for you{W2}",
+  "商売上手{W2}": "Good at business{W2}",
+  "金でなんでもしてくれる{W2}": "Money makes her do anything{W2}",
+  "アンアン啼いて可愛い{W2}": "Cute the way she moans{W2}",
+  "デカパイ満足度高い{W2}": "High satisfaction from those tits{W2}",
+  "庶民の味方{W2}": "Friend of the common man{W2}",
+  "デカパイ増税{W2}": "Raise the tit tax{W2}",
+  "デカパイ買いすぎて金がない": "Bought so much tit I'm broke",
+  "ビッチ{W2}": "Bitch{W2}",
+  "欲深おっぱい{W2}": "Greedy tits{W2}",
+  "の特性ボーナスアップ！": "'s trait bonus is up!",
+  "街の大通り。ショップなどがある。": "The town's main street. Shops and the like here.",
+  "クローサリアの街のビーチ": "The beach of the town of Clossaria",
+  "ビーチからたどり着ける謎のビーチ": "A mysterious beach reachable from the beach",
+  "クローサリアの下町": "Clossaria's downtown",
+  "伝説の薬草が生えている山": "The mountain where the legendary herb grows",
+  "封じられていた謎の遺跡": "Mysterious ruins that had been sealed away",
+  "エロシーンの回想ができる部屋。": "A room where you can replay lewd scenes.",
+  "ああああああああ": "Aaaaaaaa",
+  "騎紅士スカーレット": "Crimson Knight Scarlet",
+  "力になる": "Lend a hand",
+  "無視する": "Ignore it",
+  "痴安+": "Perv Order +",
+  "言う通りにする": "Do as told",
+  "いったん退く": "Back off for now",
+  "働いてもらう{W2}": "Put them to work{W2}",
+  "赤": "Red",
+  "青": "Blue",
+  "緑": "Green",
+  "紫": "Purple",
+  "黒": "Black",
+  "ベージュ": "Beige",
+  "金": "Gold",
+  "ピンク": "Pink",
+  "おちんちんびろーん{W2}": "Weenie woooong{W2}",
+  "もろちんぽろろん{W2}": "Full-frontal ding-a-ling{W2}",
+  "きんたままんとひひ{W2}": "Ballsack baboon{W2}",
+  "おちんぽれぼりゅーしょん{W2}": "Cock revoluuution{W2}",
+  "たまたまそりゅーしょん{W2}": "Ballsy soluuution{W2}",
+  "おちんちんかくのうこ{W2}": "Weenie hangar{W2}",
+  "きんたまころがし{W2}": "Ball roller{W2}",
+  "おちんちんはりけーん{W2}": "Weenie hurricaaane{W2}",
+  "ノーコメント": "No comment",
+  "精液が付着した！": "Splattered with semen!",
+  "使い捨てコンドームを拾った！": "Picked up a disposable condom!",
+  "覚悟ならある": "I'm ready for it",
+  "突入！": "Charge in!",
+  "食べちゃう{W2}": "Eat it up{W2}",
+  "パイズリする": "Give him a titfuck",
+  "しょうがない{W2}": "No helping it{W2}",
+  "ダメ": "No, don't",
+  "泊まる": "Stay the night",
+  "予約する": "Make a reservation",
+  "使用する": "Use it",
+  "セックスする{W2}": "Have sex{W2}",
+  "受ける": "Accept",
+  "その通り{W2}": "Exactly{W2}",
+  "浮気": "Cheat on him",
+  "試してみるか？{W2}": "Shall we try it?{W2}",
+  "処女だ": "I'm a virgin",
+  "処女じゃない": "I'm not a virgin",
+  "極論": "That's extreme",
+  "参加する": "Join in",
+  "{W0}精液{W1}が付着した！": "Splattered with {W0}semen{W1}!",
+  "{W0}ムラムラゲージ{W1}が上昇した": "The {W0}Horny Gauge{W1} rose",
+  "パイズリする{W2}": "Give him a titfuck{W2}",
+  "フェラする{W2}": "Suck him off{W2}",
+  "はじめから": "New Game",
+  "つづきから": "Continue",
+  "オプション": "Options",
+  "挑戦する": "Take the challenge",
+  "ムラムラゲージが上昇した": "The Horny Gauge rose",
+  "入る": "Go in",
+  "入らない": "Don't go in",
+  "{W0}精液が付着した！{W1}": "{W0}Splattered with semen!{W1}",
+  "思い出作り{W2}": "Make a memory{W2}",
+  "働く": "Work",
+  "……使わせる": "...Let him use it",
+  "使わせる": "Let him use it",
+  "わかった": "Understood",
+  "罠だな": "It's a trap",
+  "イヤだ": "I refuse",
+  "下級": "Novice",
+  "中級": "Intermediate",
+  "上級": "Advanced",
+  "興味ある": "I'm interested",
+  "痴安度+1": "Perv Order +1",
+  "貸す": "Lend it",
+  "力が入らない": "No strength left",
+  "振り払う": "Shake it off",
+  "カリカリさせる{W2}": "Let him rub it{W2}",
+  "カリカリさせない": "Don't let him rub it",
+  "カリカリさせる": "Let him rub it",
+  "フェラする": "Suck him off",
+  "サウナに入る": "Enter the sauna",
+  "温泉に入る": "Enter the hot spring",
+  "綺麗": "Clean",
+  "汚い": "Dirty",
+  "そうだ": "That's right",
+  "違う": "That's wrong",
+  "好きじゃない": "I don't like it",
+  "好き": "I like it",
+  "済ます": "Get it over with",
+  "おっぱいを乗せる": "Rest your tits on it",
+  "挑む": "Take it on",
+  "通る": "Pass through",
+  "一緒に飲む": "Drink with them",
+  "やる": "Do it",
+  "する": "Go ahead",
+  "はじめる\nつづきから\nおしまい": "Start\nContinue\nQuit",
+  "もちろん{W2}": "Of course{W2}",
+  "セックスする": "Have sex",
+  "お茶する": "Get tea",
+  "処されたい{W2}": "Punish me{W2}",
+  "{W85}入る": "{W85}Go in",
+  "では頑張ってくれ": "Do your best, then",
+  "諦めずにコツコツ頑張れ": "Don't give up, keep plugging away",
+  "シナリオをクリアした！": "Scenario cleared!",
+  "乳を搾る": "Squeeze out the milk",
+  "鑑定する": "Appraise it",
+  "リセットする": "Reset it",
+  "スタート": "Start",
+  "コンティニュー": "Continue Game",
+  "ゲーム終了": "Quit Game",
+  "物理攻撃を受けると受けるダメージ軽減させ反撃する。\r\n自分が受けるダメージが0の場合反撃は発動しない。": "Reduces damage from physical attacks and counters.\nNo counter triggers if the damage taken is 0.",
+  "敵をエロ舌で舐めてゾクゾクダメージを与える。\r\n敵は初恋の味を思い出し麻痺するときもある。SPを10消費する。": "Licks the enemy with a lewd tongue for shivering damage.\nThe enemy may recall the taste of first love and be paralyzed. Costs 10 SP.",
+  "自慢のデカパイで相手のチンポを圧殺する技。\r\nほどよい圧迫感でたまに眠ってしまう。消費SP30。": "Crushes the target's cock with her prized huge tits.\nThe agreeable pressure sometimes puts them to sleep. Costs 30 SP.",
+  "戦闘中に乳首をチラ見せする技。\r\n敵は乳首を見てムッツリになり呪文が唱えられなくなる。消費SP5。": "Flashes a nipple in mid-battle.\nEnemies who see it turn secretly lewd and can't cast spells. Costs 5 SP.",
+  "あの安心感で攻撃力が少しアップし次の攻撃の威力が増す\r\n無防備なため防御力は下がる": "That comforting feeling raises attack a little and boosts the next attack\nDefense drops because she is wide open",
+  "2ターン物理攻撃を受けると受けるダメージ軽減させ反撃する。\r\n自分が受けるダメージが0の場合反撃は発動しない。": "For 2 turns, reduces damage from physical attacks and counters.\nNo counter triggers if the damage taken is 0.",
+  "魔法を受けると受けるダメージ軽減させ跳ね返す鏡を張る。\r\n自分が受けるダメージが0の場合反撃は発動しない。": "Raises a mirror that reduces incoming magic damage and reflects it back.\nNo counter triggers if the damage taken is 0.",
+  "2ターン魔法を受けると受けるダメージ軽減させ跳ね返す鏡を張る。\r\n自分が受けるダメージが0の場合反撃は発動しない。": "For 2 turns, raises a mirror that reduces incoming magic damage and reflects it back.\nNo counter triggers if the damage taken is 0.",
+  "所持金をすべて投げつける技。\r\n所持金が多いほどダメージ上昇。": "Hurls every last coin you own at the enemy.\nThe more gold you carry, the more damage.",
+  "オナニーの呼吸一の型『妄想』。\r\nまずはムラムラすることから。二の型へ続く。": "Masturbation Breathing, First Form: \"Fantasy\".\nIt all starts with getting horny. Leads into the Second Form.",
+  "オナニーの呼吸二の型『オカズ探し』。\r\nお気に入りのオカズを探そう（脳内妄想でも可）。三の型に続く。": "Masturbation Breathing, Second Form: \"Fap Material Hunt\".\nFind your favorite material (imagination counts). Leads into the Third Form.",
+  "オナニーの呼吸三の型『我慢』。\r\n我慢した方が達成感があるよ。四の型へ続く。": "Masturbation Breathing, Third Form: \"Endurance\".\nHolding back makes the payoff sweeter. Leads into the Fourth Form.",
+  "オナニーの呼吸四の型『加速』。\r\n動きを激しくしよう。五の型へ続く。": "Masturbation Breathing, Fourth Form: \"Acceleration\".\nMake the motion rougher. Leads into the Fifth Form.",
+  "オナニーの呼吸五の型『ラストスパート』。\r\n最後の追い上げだ。技能に『デストラクション』が追加される。": "Masturbation Breathing, Fifth Form: \"Final Sprint\".\nThe last push. Adds \"Destruction\" to your skills.",
+  "賢者にのみ許されし術式。\r\n強大な闇の力で敵を破壊する。": "A formula permitted only to sages.\nDestroys the enemy with immense dark power.",
+  "古代のロマンに浸りながらマグロを食べることで\r\nステータスが3ターン上昇し1ターン反撃に備える。（専用技）": "Eating tuna while basking in ancient romance\nraises stats for 3 turns and readies a counter for 1 turn. (Unique skill)",
+  "エロナオシ山への魔法陣のロックを解除するための鍵。\r\nロックを解除するには鍵が四本必要。": "A key for unlocking the magic circle to Mt. Eronaoshi.\nFour keys are needed to unlock it.",
+  "年季を感じつつもしっかりと手入れをされているバッチ。言葉が刻まれている。\r\n「僕たちはずっと友達っちゅ！　なにがあってもずっと！」": "A badge that shows its years yet is carefully maintained. Words are engraved on it.\n\"We'll be friends forever, chu! No matter what happens, forever!\"",
+  "『処女』を所有している場合、攻撃力を5上昇させる。\r\n先行体験版では効果がない。": "Raises attack by 5 while you hold \"Virginity\".\nNo effect in the early-access demo.",
+  "『処女』を所有していない場合、防御力を5上昇させる。\r\n先行体験版では効果がない。": "Raises defense by 5 while you do NOT hold \"Virginity\".\nNo effect in the early-access demo.",
+  "オナニー回数が100を超えた者へと贈られる称号。\r\nオナニーのやりすぎには気を付けましょう。攻撃力+1。": "A title awarded to those who pass 100 masturbations.\nDo take care not to overdo it. Attack +1.",
+  "牛神から搾ったミルク。\r\n淫乱度が大きく上昇する。": "Milk squeezed from the Cow God.\nGreatly raises Lewdness.",
+  "チンコの傷を一瞬で治す薬。\r\n女性には効果がない。": "Medicine that instantly heals cock wounds.\nNo effect on women.",
+  "まかないと侮るなかれ。\r\n全パラメーターが1上昇する。": "Don't sneer at staff meals.\nRaises every stat by 1.",
+  "よくわからない古い物。\r\n鑑定してもらおう。": "Some old thing you can't identify.\nGet it appraised.",
+  "深いところに住むキス。\r\n淡白な味わいによりHPが50回復する。": "A sillago that lives in deep water.\nIts light flavor restores 50 HP.",
+  "毒に目をつぶれば高級魚。\r\n毒になってしまうが戦闘中クリティカル率が数ターン上昇する。": "A delicacy, if you overlook the poison.\nPoisons you, but raises critical rate for several turns in battle.",
+  "くっせぇサバ。やみつきになる美味。\r\n戦闘中クリティカル率が数ターン上昇する。": "A reeking mackerel. Addictively tasty.\nRaises critical rate for several turns in battle.",
+  "ご期待ください。武器にもなるとの噂。\r\n戦闘中攻撃力と防御力とクリティカル率が数ターン上昇する。": "Coming soon. Rumored to double as a weapon.\nRaises attack, defense and critical rate for several turns in battle.",
+  "落書きの施された盗撮写真。\r\n使用するとエロステータスの背景が変わる。": "A peeping shot with graffiti scrawled on it.\nUse it to change the lewd status background.",
+  "落書きの施されたサービス写真。\r\n使用するとエロステータスの背景が変わる。": "A fanservice shot with graffiti scrawled on it.\nUse it to change the lewd status background.",
+  "落書きの施された営業写真。\r\n使用するとエロステータスの背景が変わる。": "A promo shot with graffiti scrawled on it.\nUse it to change the lewd status background.",
+  "スカーレットの写真。\r\n使用するとエロステータスの背景が変わる。": "A photo of Scarlet.\nUse it to change the lewd status background.",
+  "騎紅士の極意。\r\n所持しているとクリティカル率が10上がる。": "The secrets of the Crimson Knight.\nRaises critical rate by 10 while held.",
+  "シーセーバーの極意。\r\n所持していると回避率が10上がる。": "The secrets of the Sea Saver.\nRaises evasion by 10 while held.",
+  "カオスハンターの極意。\r\n所持していると魔力と魔防御が10上がる。": "The secrets of the Chaos Hunter.\nRaises magic and magic defense by 10 while held.",
+  "マネーノドラゴンの極意。\r\n所持していると戦闘終了後500Gを手に入れる。": "The secrets of the Money Dragon.\nEarn 500G after each battle while held.",
+  "すごく短い剣。\r\n攻撃力が1上がる。": "A very short sword.\nRaises attack by 1.",
+  "左手にも装備できる短剣、\r\n攻撃力が8上昇、防御力も上がる。": "A dagger that can also go in the off hand.\nRaises attack by 8 and defense too.",
+  "魔術師の杖。\r\n攻撃力が25、精神攻撃力が40上がる。": "A sorcerer's staff.\nRaises attack by 25 and magic attack by 40.",
+  "怪しいさ満点の剣。\r\n斬りつけた相手を毒状態にする。": "A sword that reeks of shadiness.\nPoisons whoever it cuts.",
+  "伝説のスケベソード。\r\n戦闘開始時なにかが起こる。": "The legendary Lewd Sword.\nSomething happens at the start of battle.",
+  "なめし革で作られた盾。\r\n防御力が4上がり、回避率も10％アップ。": "A shield made of tanned leather.\nRaises defense by 4 and evasion by 10%.",
+  "綿でできたローブ。\r\n防御力が5あがり、精神防御も5上がる。": "A robe made of cotton.\nRaises defense by 5 and magic defense by 5.",
+  "鉄で作られた盾。\r\n防御力が8上がり、回避率も5％アップ。": "A shield made of iron.\nRaises defense by 8 and evasion by 5%.",
+  "術士が着るローブ。\r\n防御力が10あがり、精神防御も14上がる。": "A robe worn by mages.\nRaises defense by 10 and magic defense by 14.",
+  "騎士のために作られた盾。\r\n防御力が15上がり、回避率も15％アップ。": "A shield made for knights.\nRaises defense by 15 and evasion by 15%.",
+  "高い地位を持つ者が着るローブ。\r\n防御力が20あがり、精神防御も35上がる。": "A robe worn by those of high rank.\nRaises defense by 20 and magic defense by 35.",
+  "一度装備すると外せない服。\r\nしかし性能は高く、防御力が25上がる。": "Clothes that can't be removed once equipped.\nBut they perform well: raises defense by 25.",
+  "付けると精神攻撃・精神防御が\r\n20ずつ上がる装飾品。": "An accessory that raises magic attack and\nmagic defense by 20 each when worn.",
+  "赤い勇気がほとばしるブレスレット。\r\n乳首がバレた経験が君に勇気を与える。攻撃力+{W0}{W72}{W1}/2": "A bracelet gushing with red courage.\nEvery time your nipples were spotted gives you courage. Attack +{W0}{W72}{W1}/2",
+  "肉便器に与えられる称号。\r\n最大HPが50上がる。": "Title given to a cumdump.\nRaises max HP by 50.",
+  "通り魔に与えられる称号。\r\n攻撃力が20上がる。": "Title given to a street slasher.\nRaises attack by 20.",
+  "麗しい騎士に与えられる称号。\r\n攻撃力が5上がる。": "Title given to a lovely knight.\nRaises attack by 5.",
+  "浜辺の痴安を守る者に与えられる称号。\r\n魔防御が5上がる。": "Title given to the keeper of the beach's perv order.\nRaises magic defense by 5.",
+  "闇を狩る者に与えられる称号。\r\n魔力が5上がる。": "Title given to one who hunts the dark.\nRaises magic by 5.",
+  "一攫千金を目指す者に与えられる称号。\r\n防御力が5上がる。": "Title given to one chasing a quick fortune.\nRaises defense by 5.",
+  "麻酔のプロに与えられる称号。\r\n麻痺にならなくなる。": "Title given to an anesthesia pro.\nMakes you immune to paralysis.",
+  "スラッガーに与えられる称号。\r\n魔力が20上がる。": "Title given to a slugger.\nRaises magic by 20.",
+  "セフレに与えられる称号。\r\n最大HPが20上がり、防御力が5上がる。": "Title given to a fuckbuddy.\nRaises max HP by 20 and defense by 5.",
+  "装備中はオナニーバスターズがやってこないと思い込んでしまう。\r\n攻撃力が2上がる。": "While equipped, you convince yourself the Masturbation Busters won't show up.\nRaises attack by 2.",
+  "隠れ忍ぶオナニストに与えられる称号。\r\n回避率が15上がる。": "Title given to a stealth masturbator.\nRaises evasion by 15.",
+  "井戸の王に与えられる称号。\r\nステータスが大きく上がる。": "Title given to the King of the Well.\nGreatly raises stats.",
+  "ドスケベなマッサージ師に与えられる称号。\r\n最大HPが50上がり、防御力が5上がる。": "Title given to a filthy-minded masseuse.\nRaises max HP by 50 and defense by 5.",
+  "荒ぶる番頭を討ちとったエロ客に与えられる称号。\r\n攻撃力が40上がる。": "Title given to the horny customer who slew the Raging Manager.\nRaises attack by 40.",
+  "乞食女に与えられる称号。\r\n魔防御が20上がる。": "Title given to a begging woman.\nRaises magic defense by 20.",
+  "ヤリマンに与えられる称号。\r\n攻撃力と防御力が10上がる。": "Title given to a slut.\nRaises attack and defense by 10.",
+  "オナニストに与えられる称号。\r\n攻撃力が5上がり回避率が10上がる。": "Title given to a masturbator.\nRaises attack by 5 and evasion by 10.",
+  "ビッチに与えられる称号。\r\n最大HPが40上がり、防御力が10上がる。": "Title given to a bitch.\nRaises max HP by 40 and defense by 10.",
+  "アナル狂いに与えられる称号。\r\n最大MPが60上がる。": "Title given to an anal addict.\nRaises max MP by 60.",
+  "乳首をチラ見せしまくった変態に与えられる称号。\r\n最大MPが40上がり、魔力が10上がる。": "Title given to a pervert who flashed her nipples nonstop.\nRaises max MP by 40 and magic by 10.",
+  "スケベな目に遭いまくってる者に与えられる称号。\r\n攻撃力、防御力、魔力、魔防御が5上がる。": "Title given to one who keeps landing in lewd situations.\nRaises attack, defense, magic and magic defense by 5.",
+  "身体を売りまくった者に与えられる称号。\r\n最大HPと最大MPが25上がる。": "Title given to one who sold her body nonstop.\nRaises max HP and max MP by 25.",
+  "ザーメンタンクに与えられる称号。\r\n防御力と魔防御が10上がる。": "Title given to a cum tank.\nRaises defense and magic defense by 10.",
+  "最強の敵を倒した者に与えられる称号。\r\n到達時間：{W73}時間{W74}分{W75}秒。": "Title given to one who felled the strongest enemy.\nClear time: {W73}h {W74}m {W75}s.",
+  "今世紀最高の打者に与えられる称号。\r\n攻撃力が50上がり、クリティカル率が15上がる。": "Title given to the greatest batter of the century.\nRaises attack by 50 and critical rate by 15.",
+  "言わずと知れた絶縁体。\r\n雷攻撃に少し強くなり防御力が5上がる。": "The insulator that needs no introduction.\nSlightly stronger against lightning attacks and raises defense by 5.",
+  "海の安全を密かに守る水着の騎士\r\nジョブアクション：NPCを昏睡させる": "A swimsuit knight who secretly guards the safety of the sea.\nJob Action: knock an NPC out cold",
+  "アウトローの装いに身を包む闇の騎士\r\nジョブアクション：NPCを脅す": "A dark knight clad in outlaw garb.\nJob Action: threaten an NPC",
+  "媚びを売り銭を稼ぐ装い。お金大事。\r\nジョブアクション：NPCからお金をもらう": "An outfit for flattering your way to coin. Money matters.\nJob Action: get money from an NPC",
+  "下町から入れる洞窟\r\nアナル・リザードには注意しよう": "A cave you can enter from downtown.\nWatch out for the Anal Lizards",
+  "縦割り洞窟を抜けた先の開けた場所\r\n一件の家から紳士の気配がする": "An open area beyond the Vertical Cave.\nA gentleman's presence radiates from a lone house",
+  "地下に作られたアウトローたちの街\r\nエッチで危険": "An outlaws' town built underground.\nLewd and dangerous",
+  "悪のマッサージ団の基地\r\n荒ぶるリンパを信仰しているようだ": "Base of the evil massage gang.\nThey seem to worship the Raging Lymph",
+  "触手がいる洞窟\r\n触手は狭い所が大好き": "A cave with tentacles in it.\nTentacles love tight places",
+  "ゴブリンが住んでいる洞窟\r\n女性はひとりで入っちゃダメ": "A cave where goblins live.\nWomen must not go in alone",
+  "催眠術を操る集団のたまり場\r\n捕まったら催眠にかかってしまうので注意": "Hangout of a group that wields hypnosis.\nGet caught and you'll be hypnotized, so watch out",
+  "狂った搾乳おじさんが闊歩する地獄の牧場\r\n捕まったら乳牛にされてしまうので注意": "A hellish ranch where mad milking men stride about.\nGet caught and you'll be made a dairy cow, so watch out"
+ },
+ "do_not_translate": [
+  "Data\\",
+  "[ｼｽﾃﾑ]カーソル移動",
+  "[ｼｽﾃﾑ]キャンセル音",
+  "[ｼｽﾃﾑ]決定音",
+  "おっぱい揉み",
+  "しゃきーん！",
+  "びりびり",
+  "めろめろ",
+  "もわわ～ん",
+  "アイテムゲット",
+  "アラーム",
+  "イキ声",
+  "カメラ",
+  "バイブ",
+  "バット",
+  "バット無音",
+  "ビンタ",
+  "ピストン",
+  "ピストン速",
+  "不正解",
+  "回復",
+  "射精",
+  "打撃音",
+  "正解",
+  "絶頂",
+  "3ｐ",
+  "3ｐ大",
+  "オホ声",
+  "吐息",
+  "吐息2",
+  "喘ぎ大",
+  "喘ぎ大2",
+  "喘ぎ小",
+  "かっこいい",
+  "エロシーン",
+  "ダンジョン",
+  "ボス",
+  "システム基本設定",
+  "用語基本設定",
+  "画像/音声基本設定",
+  "基本設定",
+  "メイン設定",
+  "初期位置",
+  "ウィンドウのみ",
+  "ウィンドウ表示なし",
+  "※全体の適応値",
+  "<R>",
+  "<C>"
+ ]
+}

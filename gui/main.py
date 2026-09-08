@@ -875,6 +875,7 @@ from gui.translation_tab import TranslationTab
 from gui.image_manager import ImageManager
 from gui.version_update_tab import VersionUpdateTab
 from gui.skills_tab import SkillsTab
+from gui.len_translation_tab import LenTranslationTab
 from gui.batch_tab import BatchTab
 from gui.evaluation_tab import EvaluationTab
 
@@ -890,6 +891,7 @@ class DazedMTLGUI(QMainWindow):
     PAGE_SKILLS = 6
     PAGE_CONFIG = 7
     PAGE_EVALUATION = 8
+    PAGE_LEN_TRANSLATION = 9
 
     def __init__(self):
         super().__init__()
@@ -1247,6 +1249,12 @@ class DazedMTLGUI(QMainWindow):
         )
         sidebar_layout.addWidget(btn_evaluation)
         self.nav_buttons.append(btn_evaluation)
+
+        btn_len = self.create_nav_button("🧭", "Len’s Method")
+        btn_len.setToolTip("Len’s Method - translate whole games with skills and engine-specific tools")
+        btn_len.clicked.connect(lambda: self.switch_page(self.PAGE_LEN_TRANSLATION))
+        sidebar_layout.insertWidget(2, btn_len)
+        self.nav_buttons.append(btn_len)
         
         sidebar_layout.addStretch()
 
@@ -1355,6 +1363,9 @@ class DazedMTLGUI(QMainWindow):
         # Translation Evaluation Tab (index 8)
         self.evaluation_tab = EvaluationTab(self)
         self.content_stack.addWidget(self.evaluation_tab)
+
+        self.len_translation_tab = LenTranslationTab(self, settings=self.settings)
+        self.content_stack.addWidget(self.len_translation_tab)
 
     def _create_workflow_container(self) -> QWidget:
         """Wrap the RPGMaker and Wolf guided workflows behind an engine selector."""

@@ -20,7 +20,7 @@ guided workflows; the Translation page provides adapters for the other formats.
 ## Requirements
 
 - Python 3.12, 3.13, or 3.14
-- An API key for at least one supported translation provider
+- An API key for provider-based translation, or access to a coding assistant for Len’s Method
 - Windows, Linux, or macOS
 
 Download Python from [python.org](https://www.python.org/downloads/). On Windows,
@@ -41,7 +41,13 @@ python -V
      prompted.
 3. Open **Configuration** and add a provider, API key, and model.
 4. Open **Guide**, then choose the RPG Maker or WOLF workflow for a guided
-   project, or use **Translation** for another supported format.
+   project, **Len’s Method** for skill-driven whole-game translation with your
+   coding assistant, or **Translation** for another supported format.
+
+For Len’s Method with direct assistant translation, skip provider configuration.
+Choose the game and scope, click **Copy starting prompt**, and paste it into your
+coding assistant. That one prompt includes setup and the selected task.
+See **Guide → What Other Tabs Do** for the full steps.
 
 The launchers create a virtual environment and install missing dependencies.
 Advanced users may configure the same settings in a private `.env` copied from
@@ -53,6 +59,7 @@ Advanced users may configure the same settings in a private `.env` copied from
 |---|---|
 | **Guide** | Built-in setup, workflow, recovery, and playtesting documentation |
 | **Workflow** | Guided RPG Maker and WOLF project translation |
+| **Len’s Method** | Whole-game translation with your AI assistant, using Workflow’s shared glossary, skills and references |
 | **Images** | Extract, edit, review, and safely patch translatable images |
 | **Translation** | Direct translation with engine-specific adapters |
 | **Batches** | Submit and resume supported provider batch jobs |

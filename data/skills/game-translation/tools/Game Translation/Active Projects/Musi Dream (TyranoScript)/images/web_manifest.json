@@ -1,0 +1,212 @@
+[
+  {
+    "path": "data/bgimage/ev_Ytube.jpg",
+    "source_sha256": "36f8b768d4bfcc3b351a4dff20ee93c99932c97edabef085191e3848b7dfe2ef",
+    "output_sha256": "63d101cacbec1eda917d18087e265ba2bb079358caaf6c9c4be5e655ed75cd9f",
+    "width": 2880,
+    "height": 1620,
+    "mode": "RGB",
+    "source_format": "JPEG",
+    "output_format": "PNG",
+    "status": "rendered",
+    "reviewed": true,
+    "changed_pixels": 247866,
+    "outside_mask_changes": 0,
+    "regions": [
+      [
+        2510,
+        25,
+        2740,
+        89
+      ],
+      [
+        125,
+        805,
+        660,
+        866
+      ],
+      [
+        1197,
+        805,
+        1850,
+        867
+      ],
+      [
+        2014,
+        805,
+        2840,
+        867
+      ],
+      [
+        125,
+        1495,
+        910,
+        1557
+      ],
+      [
+        1070,
+        1495,
+        1850,
+        1557
+      ],
+      [
+        2055,
+        1495,
+        2630,
+        1557
+      ],
+      [
+        22,
+        609,
+        833,
+        775
+      ],
+      [
+        1000,
+        652,
+        1177,
+        770
+      ],
+      [
+        1190,
+        680,
+        1288,
+        766
+      ],
+      [
+        1284,
+        660,
+        1550,
+        774
+      ],
+      [
+        1550,
+        681,
+        1607,
+        772
+      ],
+      [
+        1607,
+        659,
+        1840,
+        778
+      ],
+      [
+        2220,
+        383,
+        2510,
+        759
+      ],
+      [
+        17,
+        945,
+        440,
+        1260
+      ],
+      [
+        803,
+        959,
+        906,
+        1391
+      ],
+      [
+        1317,
+        944,
+        1580,
+        1062
+      ],
+      [
+        1067,
+        1328,
+        1572,
+        1451
+      ],
+      [
+        1938,
+        941,
+        2238,
+        1010
+      ],
+      [
+        1945,
+        1090,
+        2143,
+        1298
+      ]
+    ]
+  },
+  {
+    "path": "data/bgimage/ev_sakuzyo.jpg",
+    "source_sha256": "db51279ea5af024ad49e18b7f61ef708bb3c78347820e61943134704ab2ccf3d",
+    "output_sha256": "cc79084fc9279af6624940c67c5563f04633fe98ca4cc908c72edf5afa5b6183",
+    "width": 2880,
+    "height": 1620,
+    "mode": "RGB",
+    "source_format": "JPEG",
+    "output_format": "PNG",
+    "status": "rendered",
+    "reviewed": true,
+    "changed_pixels": 200430,
+    "outside_mask_changes": 0,
+    "regions": [
+      [
+        2510,
+        25,
+        2740,
+        89
+      ],
+      [
+        189,
+        1495,
+        1130,
+        1557
+      ],
+      [
+        883,
+        312,
+        1440,
+        525
+      ],
+      [
+        291,
+        1154,
+        1388,
+        1415
+      ],
+      [
+        823,
+        688,
+        1910,
+        988
+      ]
+    ]
+  },
+  {
+    "path": "data/fgimage/default/ev_baby8.jpg",
+    "source_sha256": "7591c86f2eb48e4d655c49948745f6a440cd2acfbec2371b9f3e3bd4f2f6e494",
+    "output_sha256": "bacd231909799626bf353839bbfeea6ef6e80fb261cbada2b05e3bcafba1a264",
+    "width": 2880,
+    "height": 1620,
+    "mode": "RGB",
+    "source_format": "JPEG",
+    "output_format": "PNG",
+    "status": "rendered",
+    "reviewed": true,
+    "changed_pixels": 123622,
+    "outside_mask_changes": 0,
+    "regions": [
+      [
+        2510,
+        25,
+        2740,
+        89
+      ],
+      [
+        45,
+        1495,
+        1900,
+        1560
+      ]
+    ]
+  }
+]

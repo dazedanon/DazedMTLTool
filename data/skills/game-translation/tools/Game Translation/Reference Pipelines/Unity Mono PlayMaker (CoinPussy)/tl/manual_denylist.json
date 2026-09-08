@@ -1,0 +1,11 @@
+{
+  "_comment": [
+    "Strings that must NEVER be translated, on top of the auto-derived engine-key",
+    "denylist. Hand-maintained; `tl.py package` merges these into denylist.json.",
+    "Each entry records WHY, so a future run does not 'fix' it back."
+  ],
+  "strings": {
+    "ギブアップ": "Pause-menu button. Translating it makes the button render COMPLETELY BLANK (not clipped, not tofu). Proven by A/B: with the text hook off the button reads ギブアップ; with it on and this string translated the button is empty; denylisting it restores the label. Ruled out: empty translation, non-dynamic font, missing Latin glyphs (font is dynamic keifont/haranyan with full Latin), dynamic-atlas timing, OnEnable rebuild timing, and Wrap+Truncate overflow (Unity reports preferredWidth within the rect). It is also a PlayMaker STATE NAME (toState/name/value in Event.unity + Hscene.unity), so a display/key collision is the likely mechanism. Japanese label is legible enough to ship; revisit if the mechanism is ever pinned down.",
+    "さいかいする": "Pause-menu button, same failure and same evidence as ギブアップ. Unlike it, this string appears only as m_Text in the scenes, so a pure state-name collision does not explain it."
+  }
+}

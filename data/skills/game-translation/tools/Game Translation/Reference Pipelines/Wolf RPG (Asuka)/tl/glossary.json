@@ -1,0 +1,504 @@
+{
+  "meta": {
+    "game": "明日香ヴァージンアイドルデビュー (Asuka Virgin Idol Debut) v2.260",
+    "source": "Hand-built from WolfDawn extraction (batch.json speakers, CDataBase character sheet, SysDatabase place names, dialogue sampling).",
+    "note": "Name order is surname-first (Kagami Asuka) and honorifics are kept. Gender field drives pronoun resolution. Never overwrite by automation."
+  },
+  "names": {
+    "明日香": {
+      "en": "Asuka",
+      "gender": "female",
+      "role": "Protagonist. First-year idol student (Year 1, Sakura Class) at Angel Star Academy; the 'virgin idol' of the title. Full name Kagami Asuka.",
+      "register": "Genki, earnest, casual feminine (だよ/うん/〜ね). Flustered and innocent about anything lewd early on; bolder in corrupted routes.",
+      "aliases": ["鏡 明日香", "鏡明日香"],
+      "note": "4,668 dialogue lines. Her AV stage name かぐや is a SEPARATE entry - do NOT merge name boxes."
+    },
+    "かぐや": {
+      "en": "Kaguya",
+      "gender": "female",
+      "role": "Asuka's AV-actress stage name, used on porn shoots and adult TV segments. Same person as Asuka, but the game deliberately switches the name box.",
+      "register": "Bubbly, elongated ero-service voice (～/♡, いや～ん♡).",
+      "aliases": [],
+      "note": "Do NOT merge with 明日香 - keep Kaguya wherever the JP says かぐや."
+    },
+    "桃花": {
+      "en": "Momoka",
+      "gender": "female",
+      "role": "Asuka's classmate and best friend, fellow idol candidate. Stage name 桃花, real name 鈴木桃香 (Suzuki Momoka) - every spelling is the same girl.",
+      "register": "Friendly, casual, upbeat (〜だってさ/〜じゃない/よろしく！).",
+      "aliases": ["桃香", "鈴木 桃花", "鈴木桃花", "鈴木 桃香", "鈴木桃香"],
+      "note": "1,541 lines. Also appears as ？？？ before her introduction scene."
+    },
+    "マリア": {
+      "en": "Maria",
+      "gender": "female",
+      "role": "Reigning top idol at the academy; elegant onee-san senpai. Secretly supernatural - her light burns youma.",
+      "register": "Refined, confident feminine (〜かしら/〜わよ/〜わね). Never crude.",
+      "aliases": [],
+      "note": "1,522 lines."
+    },
+    "グローリア": {
+      "en": "Gloria",
+      "gender": "female",
+      "role": "Year 3, Yuri Class. The academy's star senior idol; stage name means 'glory'. Real name 木崎未来 (Kizaki Miku) - that form has its own entry, do not swap one for the other.",
+      "register": "Ultra-refined keigo, ojou-sama (ごきげんよう/〜と思います/ご一緒).",
+      "aliases": [],
+      "note": "681 lines."
+    },
+    "木崎 未来": {
+      "en": "Kizaki Miku",
+      "gender": "female",
+      "role": "Gloria's real name, used in formal/civilian contexts (roll calls, reveals). Same person as グローリア but keep the real name where JP uses it.",
+      "register": "Same voice as Gloria.",
+      "aliases": ["木崎未来"],
+      "note": "Reading confirmed female idol; render surname-first as Kizaki Miku."
+    },
+    "クリス": {
+      "en": "Chris",
+      "gender": "female",
+      "role": "Foreign idol candidate from the Norris family, a vampire-hunter lineage; connected to the Holy Knight Chris legend. Full name Christie (クリスティ, own entry).",
+      "register": "Polite, slightly formal and knightly (私/父上/です・ます).",
+      "aliases": [],
+      "note": "Trust dialogue over the boyish nickname - she is female."
+    },
+    "クリスティ": {
+      "en": "Christie",
+      "gender": "female",
+      "role": "Chris's full name, used at dramatic reveals (the President recognizes her as クリスティ). Same person as クリス.",
+      "register": "Same voice as Chris.",
+      "aliases": [],
+      "note": "Keep Christie where JP says クリスティ, Chris where it says クリス."
+    },
+    "カノン": {
+      "en": "Kanon",
+      "gender": "female",
+      "role": "Street-live (busking) idol; real name 虹咲奏 (Nijisaki Kanon). Her father appears as カノンの父.",
+      "register": "Gentle and polite (です・ます + ね), soft giggles (ふふふ).",
+      "aliases": ["虹咲 奏", "虹咲奏"],
+      "note": "594 lines."
+    },
+    "莉奈": {
+      "en": "Rina",
+      "gender": "female",
+      "role": "Asuka's friend and classmate.",
+      "register": "Casual, energetic (あ、明日香ー！こっちー！).",
+      "aliases": [],
+      "note": ""
+    },
+    "美琴": {
+      "en": "Mikoto",
+      "gender": "female",
+      "role": "Actress who co-stars with Asuka in drama work; introduces her to sugar dating.",
+      "register": "Composed, adult feminine (〜よ/〜でしょう？).",
+      "aliases": [],
+      "note": ""
+    },
+    "ミクル": {
+      "en": "Mikuru",
+      "gender": "female",
+      "role": "Veteran ex-idol acquaintance, now in the AV industry; recognizes Asuka as 'Kaguya'.",
+      "register": "Mature, knowing feminine (〜わ/あら).",
+      "aliases": [],
+      "note": "Distinct from 木崎未来 (Miku) - do NOT merge."
+    },
+    "乃亜": {
+      "en": "Noa",
+      "gender": "male",
+      "role": "Famous composer, pen name NOA (studio.NOA); wrote 'Shiny Days'. Also appears unnamed as 子供の父親 (Child's Father) before his reveal.",
+      "register": "Warm older-male speech (〜かね/ははは).",
+      "aliases": ["NOA"],
+      "note": "Name box 子供の父親 translates literally as Child's Father."
+    },
+    "社長": {
+      "en": "President",
+      "gender": "male",
+      "role": "Sleazy president of the Super-Lewd Pervert Agency; gateway to the AV route. DB parameter label ドスケベ変態社長 is the same man.",
+      "register": "Vulgar, rough masculine (うるせえ/〜しな/仕方ねえ). Blunt about sex and money.",
+      "aliases": ["ドスケベ変態社長"],
+      "note": "697 lines."
+    },
+    "学園長": {
+      "en": "Headmistress",
+      "gender": "female",
+      "role": "Head of Angel Star Academy. Warm but shrewd; sends Asuka to auditions and NOA.",
+      "register": "Soft feminine (〜なの/〜ね/励んでね) under formal speech. Trust dialogue over the gender-neutral title.",
+      "aliases": [],
+      "note": "Dialogue clearly female (feminine sentence-final particles)."
+    },
+    "裏戸": {
+      "en": "Urato",
+      "gender": "male",
+      "role": "Homeroom teacher and professional stage director; androgynous looks, popular with students. Runs stage-battle lessons.",
+      "register": "Formal lecturing polite (です・ます, 〜するように), a little condescending.",
+      "aliases": ["裏戸先生"],
+      "note": ""
+    },
+    "志木": {
+      "en": "Shiki",
+      "gender": "male",
+      "role": "Sinister man who turns out to be a youma; burned by Maria's light.",
+      "register": "Low, ominous.",
+      "aliases": [],
+      "note": ""
+    },
+    "長谷・園三郎": {
+      "en": "Hase Sonosaburo",
+      "gender": "male",
+      "role": "Veteran kayoukai (pop-music world) singer; comic relief obsessed with ochazuke.",
+      "register": "Grandiose old-master speech (〜かね/ふっ/若いな).",
+      "aliases": ["長谷"],
+      "note": "Name box uses an interpunct: 長谷・園三郎."
+    },
+    "小沢": {
+      "en": "Ozawa",
+      "gender": "male",
+      "role": "IT company president; sugar-dating (papakatsu) client.",
+      "register": "Casual wealthy adult male.",
+      "aliases": [],
+      "note": ""
+    },
+    "ヴォーゼングレム": {
+      "en": "Vosengrem",
+      "gender": "male",
+      "role": "Theatrical youma villain in the supernatural arc.",
+      "register": "Mock-polite theatrical (です・ます with a drawled ねェ).",
+      "aliases": [],
+      "note": ""
+    },
+    "ダークマター総帥": {
+      "en": "Dark Matter Supreme Leader",
+      "gender": "male",
+      "role": "Boss of the villain organization Dark Matter.",
+      "register": "Imperious.",
+      "aliases": [],
+      "note": ""
+    },
+    "なでしこTV社長": {
+      "en": "Nadeshiko TV President",
+      "gender": "male",
+      "role": "President of the Nadeshiko TV station; one of the gallery's remembered partners.",
+      "register": "Middle-aged executive.",
+      "aliases": [],
+      "note": ""
+    },
+    "司会": {
+      "en": "MC",
+      "gender": "male",
+      "role": "Event/ceremony host at academy and TV events.",
+      "register": "Announcer polite.",
+      "aliases": [],
+      "note": ""
+    },
+    "監督": {
+      "en": "Director",
+      "gender": "male",
+      "role": "Film/AV shoot director.",
+      "register": "Brisk, commanding.",
+      "aliases": [],
+      "note": "Keep distinct from ディレクター (TV Director)."
+    },
+    "ディレクター": {
+      "en": "TV Director",
+      "gender": "male",
+      "role": "TV program director.",
+      "register": "Brisk industry speech.",
+      "aliases": [],
+      "note": "Keep distinct from 監督 (Director)."
+    },
+    "スタッフ": {
+      "en": "Staff",
+      "gender": "unknown",
+      "role": "Generic crew member at shoots/events.",
+      "register": "Neutral polite.",
+      "aliases": [],
+      "note": ""
+    },
+    "店長": {
+      "en": "Manager",
+      "gender": "male",
+      "role": "Store manager (part-time job scenes).",
+      "register": "Casual boss.",
+      "aliases": [],
+      "note": ""
+    },
+    "ストーカー": {
+      "en": "Stalker",
+      "gender": "male",
+      "role": "Obsessive fan who targets Asuka.",
+      "register": "Creepy, muttering.",
+      "aliases": [],
+      "note": ""
+    },
+    "チンピラ": {
+      "en": "Thug",
+      "gender": "male",
+      "role": "Generic street punk.",
+      "register": "Crude slang.",
+      "aliases": [],
+      "note": ""
+    },
+    "巫女": {
+      "en": "Shrine Maiden",
+      "gender": "female",
+      "role": "Shrine maiden at festival/shrine scenes.",
+      "register": "Serene polite.",
+      "aliases": [],
+      "note": ""
+    },
+    "カノンの父": {
+      "en": "Kanon's Father",
+      "gender": "male",
+      "role": "Kanon's father.",
+      "register": "Gruff parental.",
+      "aliases": [],
+      "note": ""
+    },
+    "子供の父親": {
+      "en": "Child's Father",
+      "gender": "male",
+      "role": "Pre-reveal name box for Noa when met as a father in town.",
+      "register": "Warm older-male.",
+      "aliases": [],
+      "note": "Same person as 乃亜/Noa; keep the literal descriptor as shown."
+    },
+    "竿役男子": {
+      "en": "Stud",
+      "gender": "male",
+      "role": "Male porn performer on AV shoots (竿役 = the 'rod role').",
+      "register": "Blunt, professional about sex.",
+      "aliases": [],
+      "note": ""
+    },
+    "原住民": {
+      "en": "Islander",
+      "gender": "male",
+      "role": "'Native islander' characters in the AV deserted-island film settings.",
+      "register": "Broken/simple speech.",
+      "aliases": [],
+      "note": ""
+    },
+    "ハンター": {
+      "en": "Hunter",
+      "gender": "unknown",
+      "role": "Battle/animation unit in the supernatural arc.",
+      "register": "Neutral.",
+      "aliases": [],
+      "note": ""
+    },
+    "男": {
+      "en": "Man",
+      "gender": "male",
+      "role": "Generic unnamed man.",
+      "register": "Neutral male.",
+      "aliases": [],
+      "note": "男A → Man A, 男B → Man B."
+    },
+    "男A": {
+      "en": "Man A",
+      "gender": "male",
+      "role": "Generic unnamed man.",
+      "register": "Neutral male.",
+      "aliases": [],
+      "note": ""
+    },
+    "男B": {
+      "en": "Man B",
+      "gender": "male",
+      "role": "Generic unnamed man.",
+      "register": "Neutral male.",
+      "aliases": [],
+      "note": ""
+    },
+    "悪漢": {
+      "en": "Ruffian",
+      "gender": "male",
+      "role": "Beach thug leader who harasses the girls.",
+      "register": "Leering slang.",
+      "aliases": [],
+      "note": ""
+    },
+    "悪漢B": {
+      "en": "Ruffian B",
+      "gender": "male",
+      "role": "Beach thug.",
+      "register": "Leering slang.",
+      "aliases": [],
+      "note": ""
+    },
+    "悪漢C": {
+      "en": "Ruffian C",
+      "gender": "male",
+      "role": "Beach thug.",
+      "register": "Leering slang.",
+      "aliases": [],
+      "note": ""
+    },
+    "先生": {
+      "en": "Teacher",
+      "gender": "unknown",
+      "role": "Generic academy teacher name box (not Urato).",
+      "register": "Polite teacher speech.",
+      "aliases": [],
+      "note": ""
+    },
+    "父": {
+      "en": "Dad",
+      "gender": "male",
+      "role": "Asuka's father, seen at events in her hometown arc.",
+      "register": "Warm fatherly casual.",
+      "aliases": [],
+      "note": "Distinct from カノンの父 (Kanon's Father)."
+    },
+    "女性の声": {
+      "en": "Woman's Voice",
+      "gender": "female",
+      "role": "Off-screen voice name box.",
+      "register": "Neutral.",
+      "aliases": [],
+      "note": ""
+    },
+    "？？？": {
+      "en": "???",
+      "gender": "unknown",
+      "role": "Pre-reveal name box (used for several characters before introduction, often Momoka early on).",
+      "register": "Match whoever is actually speaking in context.",
+      "aliases": [],
+      "note": "Always render exactly as ???"
+    },
+    "魚善": {
+      "en": "Uozen",
+      "gender": "male",
+      "role": "Fishmonger in the shopping street; shop name doubles as his name box.",
+      "register": "Boisterous merchant.",
+      "aliases": [],
+      "note": ""
+    },
+    "八百竹": {
+      "en": "Yaotake",
+      "gender": "male",
+      "role": "Greengrocer in the shopping street.",
+      "register": "Boisterous merchant.",
+      "aliases": [],
+      "note": ""
+    },
+    "肉坊": {
+      "en": "Nikubo",
+      "gender": "male",
+      "role": "Butcher shop in the shopping street.",
+      "register": "Boisterous merchant.",
+      "aliases": [],
+      "note": ""
+    },
+    "珍々堂": {
+      "en": "Chinchindo",
+      "gender": "male",
+      "role": "Shopping-street shop; the name is a dick pun (chinchin) - keep it romanized.",
+      "register": "Sly merchant.",
+      "aliases": [],
+      "note": ""
+    },
+    "伊藤ミート": {
+      "en": "Ito Meat",
+      "gender": "male",
+      "role": "Meat shop; also a remembered-partner label.",
+      "register": "Merchant.",
+      "aliases": [],
+      "note": ""
+    },
+    "鶴の湯": {
+      "en": "Tsuru-no-Yu",
+      "gender": "male",
+      "role": "Public bathhouse; name box for its keeper.",
+      "register": "Old-town friendly.",
+      "aliases": [],
+      "note": ""
+    },
+    "ひまわり整骨院": {
+      "en": "Himawari Clinic",
+      "gender": "male",
+      "role": "Osteopathic clinic; name box for its practitioner (massage scenes).",
+      "register": "Professional, then lecherous.",
+      "aliases": [],
+      "note": ""
+    }
+  },
+  "terms": {
+    "エンジェルスター学園": "Angel Star Academy",
+    "ステージバトル": "Stage Battle",
+    "タレントツリー": "Talent Tree",
+    "オーディション": "audition",
+    "フリーオーディション": "open audition",
+    "キャンペーンガール": "campaign girl",
+    "CDデビュー": "CD debut",
+    "シャイニーデイズ": "Shiny Days",
+    "路上ライブ": "street live",
+    "芸名": "stage name",
+    "本名": "real name",
+    "なでしこTV": "Nadeshiko TV",
+    "ハメ撮りドットコム": "Hamedori.com",
+    "ドスケベ変態事務所": "Super-Lewd Pervert Agency",
+    "記憶チンポ": "Cock Memories",
+    "竿役": "stud",
+    "AV女優": "AV actress",
+    "デリヘル": "escort service",
+    "パパ活": "sugar dating",
+    "中出し": "creampie",
+    "ハメ撮り": "POV filming",
+    "手コキ": "handjob",
+    "凌辱": "rape",
+    "媚薬": "aphrodisiac",
+    "処女": "virgin",
+    "妖魔": "youma",
+    "妖魔ハンター": "Youma Hunter",
+    "ヴァンパイアハンター": "vampire hunter",
+    "聖騎士": "Holy Knight",
+    "ノリス家": "the Norris family",
+    "トランシルバニア": "Transylvania",
+    "ダークマター": "Dark Matter",
+    "1年 桜組": "Year 1, Sakura Class",
+    "桜組": "Sakura Class",
+    "百合組": "Yuri Class",
+    "学食「くろゆり」": "Kuroyuri Cafeteria",
+    "ネオンモール": "Neon Mall",
+    "駅前商店街": "Station Shopping Street",
+    "商店街": "Shopping Street",
+    "うぃんぐロード": "Wing Road",
+    "Tマート": "T-Mart",
+    "繁華街": "downtown",
+    "繫華街": "downtown",
+    "駅前ラブホ": "Station Love Hotel",
+    "カジノ船": "Casino Ship",
+    "学生寮": "Student Dorm",
+    "学園長室": "Headmistress's Office",
+    "講堂": "Auditorium",
+    "音楽室": "Music Room",
+    "校庭": "Schoolyard",
+    "学園控室": "Academy Waiting Room",
+    "TV局控室": "TV Station Waiting Room",
+    "県民運動センター": "Prefectural Sports Center",
+    "スポーツセンター": "Sports Center",
+    "新港満瀬区": "Shinko Mitsuse Ward",
+    "鶴の湯": "Tsuru-no-Yu",
+    "日の出鉱泉": "Hinode Hot Spring",
+    "白濁温泉": "Hakudaku Hot Spring",
+    "月神島": "Tsukigami Island",
+    "神域の森": "Sacred Forest",
+    "古の祭壇": "Ancient Altar",
+    "城址公園": "Castle Ruins Park",
+    "無人島": "Deserted Island",
+    "ゴールドミスト空間": "Gold Mist Zone",
+    "ワールドマップ": "World Map",
+    "明日香の部屋": "Asuka's Room",
+    "マリアの部屋": "Maria's Room",
+    "NOA氏の家": "Mr. NOA's House",
+    "studio.NOA": "studio.NOA",
+    "お茶漬け": "ochazuke",
+    "歌謡界": "the music world"
+  },
+  "do_not_translate": [
+    "v2.260",
+    "(188)バトル処理DB",
+    "(188)バトル処理DB特殊",
+    "studio.NOA"
+  ]
+}

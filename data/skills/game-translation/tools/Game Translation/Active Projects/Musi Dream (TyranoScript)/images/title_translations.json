@@ -1,0 +1,26 @@
+{
+  "path": "data/bgimage/ev_title.jpg",
+  "method": "Manual translation and local PIL lettering; no translation API.",
+  "blocks": [
+    {
+      "source": "虫ドリーム",
+      "target": "BUG DREAM",
+      "region": [
+        1574,
+        91,
+        2741,
+        480
+      ]
+    },
+    {
+      "source": "寝落ちYtuberとバズの夜",
+      "target": "A Sleeping Ytuber's Viral Night",
+      "region": [
+        1712,
+        493,
+        2519,
+        567
+      ]
+    }
+  ]
+}

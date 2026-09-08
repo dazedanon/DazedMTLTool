@@ -1,0 +1,20 @@
+{
+  "outsidePanelMaxPixelDelta": 0,
+  "titleAndOtherPixelsPreserved": true,
+  "before": {
+    "map": 9,
+    "x": 9,
+    "y": 13,
+    "actor": "Shizuka Utsugi"
+  },
+  "after": {
+    "map": 9,
+    "x": 9,
+    "y": 13,
+    "actor": "Shizuka Utsugi"
+  },
+  "saveUi": true,
+  "loadUi": true,
+  "engineError": "",
+  "pass": true
+}

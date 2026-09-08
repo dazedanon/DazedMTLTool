@@ -5,10 +5,11 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtCore import QEvent, QObject, QUrl, Qt
+from PyQt5.QtCore import QEvent, QObject, QSettings, QUrl, Qt
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import QApplication, QLabel, QWidget
 
@@ -70,8 +71,6 @@ class GUIUXContractTests(unittest.TestCase):
         self.assertEqual(stage.objectName(), "workflowStageCard")
         self.assertTrue(disclosure.content.isVisibleTo(disclosure))
         self.assertEqual(show_filter.shown, [])
-
-    def test_status_updates_text_and_semantic_state_together(self):
         status = QLabel()
 
         set_status_text(status, "Could not load files", "error")
@@ -79,6 +78,99 @@ class GUIUXContractTests(unittest.TestCase):
         self.assertEqual(status.text(), "Could not load files")
         self.assertEqual(status.objectName(), "appStatusText")
         self.assertEqual(status.property("state"), "error")
+
+    def test_len_handoff_tracks_selected_game_and_scope(self):
+        from gui.len_translation_tab import LenTranslationTab
+        from util.len_translation import load_project, request_context
+        from util.reference_games import load_registry
+        from util.vocab import read_game_vocab
+        from tests.test_len_translation import guidance_fixture, make_skill
+
+        with tempfile.TemporaryDirectory() as raw, guidance_fixture(Path(raw)):
+            root = Path(raw)
+            game = root / "game"
+            game.mkdir()
+            second_game = root / "second-game"
+            second_game.mkdir()
+            settings = QSettings(str(root / "settings.ini"), QSettings.IniFormat)
+            tab = LenTranslationTab(settings=settings, skill_root=make_skill(root / "skill"))
+            try:
+                tab.game_edit.setText(str(game))
+                tab._load_game()
+                tab.images_check.setChecked(False)
+                self.assertFalse((game / ".dazedtl/len-method").exists())
+                self.assertFalse(tab.guidance_section.toggle.isChecked())
+                self.assertTrue(tab.copy_button.isEnabled(), tab.status.text())
+                tab.copy_button.click()
+                self.assertEqual(self.app.clipboard().text(), tab.preview.toPlainText())
+                saved = load_project(game)
+                self.assertFalse(saved.include_images)
+                self.assertEqual(self.app.clipboard().text(), (saved.workspace / "handoff.md").read_text())
+                self.assertTrue((saved.workspace / "setup.md").is_file())
+                tab.guidance_section.toggle.click()
+                tab.review_button.click()
+                self.assertTrue(tab._context_dialog.copy_setup_button.isHidden())
+                editors = tab._context_dialog.editors
+                editors.vocab_editor.setPlainText("# Game Terms\n鍵 (Key)\n")
+                editors._save_vocab()
+                editors.quirks_editor.setPlainText("Keep pauses.")
+                editors._save_quirks()
+                self.assertIn("鍵 (Key)", read_game_vocab(game))
+                self.assertIn("Keep pauses.", request_context(saved, ["鍵"])["system"])
+                tab._context_dialog.close()
+                tab.references_button.click()
+                references = tab._references_dialog
+                jp, en = root / "jp", root / "en"
+                jp.mkdir()
+                en.mkdir()
+                (jp / "Text.json").write_text(json.dumps({"line": "鍵"}))
+                (en / "Text.json").write_text(json.dumps({"line": "Old Key"}))
+                with (
+                    patch("gui.reference_games_dialog.QFileDialog.getExistingDirectory", side_effect=[str(jp), str(en)]),
+                    patch("gui.reference_games_dialog.QInputDialog.getText", return_value=("Earlier Game", True)),
+                ):
+                    references._add_pair()
+                self.assertEqual(references.references.count(), 1, references.status.text())
+                self.assertEqual(len(load_registry(game)["references"]), 1)
+                self.assertIn("鍵", request_context(saved, ["鍵"])["reference_translations"]["matches"])
+                references.close()
+                (saved.workspace / "status.md").write_text("Needs in-game verification.")
+                tab._refresh_progress()
+                self.assertEqual(tab.progress_text.toPlainText(), "Needs in-game verification.")
+                tab.stage_combo.setCurrentIndex(tab.stage_combo.findData("qa"))
+                self.assertTrue(tab.copy_button.isEnabled())
+                self.assertEqual(tab.preview.toPlainText(), "")
+                tab.copy_button.click()
+                self.assertEqual(load_project(game).stage, "qa")
+                current = json.loads((saved.workspace / "context.json").read_text())
+                self.assertIn("Keep pauses.", current["system"])
+                self.assertEqual(len(current["references"]["references"]), 1)
+                copied = self.app.clipboard().text()
+                with patch("gui.len_translation_tab.prepare_project", side_effect=ValueError("Invalid guidance")):
+                    tab.copy_button.click()
+                self.assertEqual(self.app.clipboard().text(), copied)
+                self.assertEqual(tab.preview.toPlainText(), "")
+                tab.game_edit.setText(str(second_game))
+                self.assertFalse(tab.copy_button.isEnabled())
+                tab._load_game()
+                editors.vocab_editor.setPlainText("stale edit")
+                editors._save_vocab()
+                self.assertFalse((second_game / ".dazedtl/glossary.txt").exists())
+                self.assertEqual(references.references.count(), 0)
+                self.assertTrue(tab.copy_button.isEnabled())
+                self.assertEqual(tab.preview.toPlainText(), "")
+                self.assertEqual(tab.progress_text.toPlainText(), "")
+                self.assertTrue(tab.images_check.isChecked())
+                tab.game_edit.setText(str(game))
+                tab._load_game()
+                self.assertFalse(tab.images_check.isChecked())
+                self.assertEqual(tab.stage_combo.currentData(), "qa")
+                tab.references_button.click()
+                references.references.setCurrentRow(0)
+                references._remove()
+                self.assertEqual(load_registry(game)["references"], [])
+            finally:
+                tab.close()
 
     def test_guide_navigation_and_bundled_images(self):
         with tempfile.TemporaryDirectory() as raw:

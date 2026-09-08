@@ -1,0 +1,28 @@
+{
+  "reference": "C:\\Users\\sw\\Desktop\\Tools\\Game Translation\\Reference Pipelines\\RPG Maker MZ (Gakuen)\\PIPELINE.md",
+  "reused": [
+    {
+      "local": "vendor/fileio.py",
+      "source": "C:\\Users\\sw\\Desktop\\Tools\\Game Translation\\Reference Pipelines\\RPG Maker MZ (Gakuen)\\mztl\\fileio.py",
+      "source_sha256": "6e97af69b30633fff5e7f5202d5b1115eff34a40da71dd4c7e86097fde73bab7",
+      "local_sha256": "6e97af69b30633fff5e7f5202d5b1115eff34a40da71dd4c7e86097fde73bab7",
+      "adaptation": "Copied unchanged."
+    },
+    {
+      "local": "vendor/codes.py",
+      "source": "C:\\Users\\sw\\Desktop\\Tools\\Game Translation\\Reference Pipelines\\RPG Maker MZ (Gakuen)\\mztl\\codes.py",
+      "source_sha256": "30e600106e86767877d601a00ca6a44356de03f3a088e347f4e752ebf33afe95",
+      "local_sha256": "0ae5d622bcd3e240db69733338c3c488f3a3dbf0b3dc2c8e8a1ee9808f6a6d94",
+      "adaptation": "Mask numbered LL_StandingPicture codes and nested variable arguments; only masking/restoration helpers are used, not Gakuen speaker or text-cleaning rules."
+    },
+    {
+      "local": "vendor/js_strings.py",
+      "source": "C:\\Users\\sw\\Desktop\\Tools\\Game Translation\\Reference Pipelines\\RPG Maker MZ (Gakuen)\\tools\\js_strings.py",
+      "source_sha256": "cd6fb43fc5420387b82154552f7289de7ed2fbfffa95b9b9b3eec0fad86362e4",
+      "local_sha256": "cd6fb43fc5420387b82154552f7289de7ed2fbfffa95b9b9b3eec0fad86362e4",
+      "adaptation": "Copied unchanged."
+    }
+  ],
+  "additional_reference": "C:\\Users\\sw\\Desktop\\Tools\\Game Translation\\DazedTL\\modules\\rpgmakermvmz.py",
+  "api_modules_copied": false
+}

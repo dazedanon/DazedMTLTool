@@ -1,0 +1,789 @@
+{
+  "format_version": 1,
+  "original_archive_sha256": "0427999aee3dd5e6e6cc995eca1f6cf7a1a94bdc43222a247bc103a99a12b524",
+  "assets": [
+    {
+      "id": 402,
+      "path": "data/image/config/label_cg.png",
+      "source_sha256": "d073ee69ae95f3256c84d7f256a022e64c5b78253f777df35026cb989cea472d",
+      "output_sha256": "bbfeee483751fe2e2dc07a39b41420c0cf3fd5aa1e8e0f31c764b00c7f5a8ea8",
+      "width": 390,
+      "height": 112,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 7270,
+        "zone_mask": "qa/controls/402_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "CG鑑賞モード",
+          "target": "CG Gallery",
+          "box": [
+            14,
+            91,
+            387,
+            112
+          ],
+          "erase_method": "clear",
+          "erased_pixels": 1892,
+          "font": "arialbd",
+          "font_size": 14,
+          "line_widths": [
+            73
+          ]
+        }
+      ]
+    },
+    {
+      "id": 403,
+      "path": "data/image/config/label_config.png",
+      "source_sha256": "880ce28450d1bfde99ad738972157fb3a187fb163ad701134571688382e29eca",
+      "output_sha256": "25ff5231aca7874c2a1fce779587fa17f4791def5633d1e90cc7fc98c0005b1b",
+      "width": 339,
+      "height": 112,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 6448,
+        "zone_mask": "qa/controls/403_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "コンフィグ",
+          "target": "Settings",
+          "box": [
+            14,
+            91,
+            336,
+            112
+          ],
+          "erase_method": "clear",
+          "erased_pixels": 1410,
+          "font": "arialbd",
+          "font_size": 14,
+          "line_widths": [
+            57
+          ]
+        }
+      ]
+    },
+    {
+      "id": 404,
+      "path": "data/image/config/label_recollection.png",
+      "source_sha256": "4077e7e7af552c8365465cc6dfe9e20cd0277e98d3731475acdc1036a19e6093",
+      "output_sha256": "85c1f0044b577e9b869cb704b76169d11e45d98824972aa91489323dd4bb9557",
+      "width": 592,
+      "height": 112,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 11581,
+        "zone_mask": "qa/controls/404_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "回想モード",
+          "target": "Scene Replay",
+          "box": [
+            14,
+            91,
+            589,
+            112
+          ],
+          "erase_method": "clear",
+          "erased_pixels": 1437,
+          "font": "arialbd",
+          "font_size": 14,
+          "line_widths": [
+            93
+          ]
+        }
+      ]
+    },
+    {
+      "id": 410,
+      "path": "data/image/title/button_cg.gif",
+      "source_sha256": "e379bfefea0e4ad01ef1a94c5952ecf2b9f46c6bb2fb2e738f15fadc232698f4",
+      "output_sha256": "28d86a81b096849b31744855401e393d5d727289a21d8602ee3fc98758f97170",
+      "width": 250,
+      "height": 50,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "GIF",
+      "output_format": "GIF",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2494,
+        "zone_mask": "qa/controls/410_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "CGモード",
+          "target": "CG Gallery",
+          "box": [
+            24,
+            9,
+            228,
+            42
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1189,
+          "font": "arialbd",
+          "font_size": 22,
+          "line_widths": [
+            113
+          ]
+        }
+      ]
+    },
+    {
+      "id": 411,
+      "path": "data/image/title/button_config.gif",
+      "source_sha256": "95bd8877528e293b367a7cae1af0136dc0d370da6f2204961f73a683ee634940",
+      "output_sha256": "00f4d4abcda16fe4c49e7f3e15c5e162eb0f994b5d97479bc470aebaf7eefe36",
+      "width": 250,
+      "height": 50,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "GIF",
+      "output_format": "GIF",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2467,
+        "zone_mask": "qa/controls/411_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "コンフィグ",
+          "target": "Config",
+          "box": [
+            24,
+            9,
+            228,
+            42
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1416,
+          "font": "arialbd",
+          "font_size": 22,
+          "line_widths": [
+            68
+          ]
+        }
+      ]
+    },
+    {
+      "id": 412,
+      "path": "data/image/title/button_load.gif",
+      "source_sha256": "11bf2ea503734dea86ac6624627fd81df2a4aa688fe4538a0f04303c90c9d7bb",
+      "output_sha256": "1b0c4c39f8e27f808d48c4f47221100f41e70dc2108870b8e419876cd8f7e160",
+      "width": 250,
+      "height": 50,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "GIF",
+      "output_format": "GIF",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2230,
+        "zone_mask": "qa/controls/412_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "つづきから",
+          "target": "Continue",
+          "box": [
+            24,
+            9,
+            228,
+            42
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1750,
+          "font": "arialbd",
+          "font_size": 22,
+          "line_widths": [
+            93
+          ]
+        }
+      ]
+    },
+    {
+      "id": 413,
+      "path": "data/image/title/button_replay.gif",
+      "source_sha256": "2daf329f3026ff2fbc48779ca6492f767caca5ba6d170e472739766a34daaced",
+      "output_sha256": "78f9775fc7f079244beca379bc74e96785dc77c9e6e0fd2ec6de96af1603d54a",
+      "width": 250,
+      "height": 50,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "GIF",
+      "output_format": "GIF",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2991,
+        "zone_mask": "qa/controls/413_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "回想モード",
+          "target": "Scene Replay",
+          "box": [
+            24,
+            9,
+            228,
+            42
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1709,
+          "font": "arialbd",
+          "font_size": 22,
+          "line_widths": [
+            141
+          ]
+        }
+      ]
+    },
+    {
+      "id": 414,
+      "path": "data/image/title/button_start.gif",
+      "source_sha256": "5553b71019de5d31f38f2ec2f4331590a59912287ec8f8af85496b2e11af33be",
+      "output_sha256": "00af4e8e760441b0f30e63a5ae7d53b8f9e80b5e3e405d590107500479508165",
+      "width": 250,
+      "height": 50,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "GIF",
+      "output_format": "GIF",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2456,
+        "zone_mask": "qa/controls/414_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "はじめから",
+          "target": "New Game",
+          "box": [
+            24,
+            9,
+            228,
+            42
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1905,
+          "font": "arialbd",
+          "font_size": 22,
+          "line_widths": [
+            112
+          ]
+        }
+      ]
+    },
+    {
+      "id": 415,
+      "path": "data/image/ui_btn_hayai.png",
+      "source_sha256": "3a32689d572574e15709e9e2a47b8cefc4fc6a104a913aa735e5c7bef9077ae2",
+      "output_sha256": "33c93451e4f62c910e1d802d2c7707d1b7c3695ac6b0f2d9faee2aa125663bc7",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1041,
+        "zone_mask": "qa/controls/415_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "はやい",
+          "target": "Fast",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 636,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            52
+          ]
+        }
+      ]
+    },
+    {
+      "id": 416,
+      "path": "data/image/ui_btn_hutuu.png",
+      "source_sha256": "4b0731ed119b6bea9e029754a3ebc33754aceddf407994da400dcd35ff541d3d",
+      "output_sha256": "04671a94d0730ff1e2d3f75d12bb52b62dd8cdffaa22d839301119c8382ec0fc",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1363,
+        "zone_mask": "qa/controls/416_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "ふつう",
+          "target": "Normal",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 518,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            84
+          ]
+        }
+      ]
+    },
+    {
+      "id": 417,
+      "path": "data/image/ui_btn_insert.png",
+      "source_sha256": "0759e0ab522efa40c5b7da9c5afe89ae03df372c0ed7960dc7367d01a0f13334",
+      "output_sha256": "30bb52fa419be1f53190ac8845054fd7ffba8fe3e6c96ad337bbd0ec2f13d491",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1314,
+        "zone_mask": "qa/controls/417_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "挿れる",
+          "target": "Insert",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 842,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            75
+          ]
+        }
+      ]
+    },
+    {
+      "id": 418,
+      "path": "data/image/ui_btn_load.png",
+      "source_sha256": "aade904d18a1e5419adcebdfa6c9d0affc48b4dee8d3e18c8d3240ffdd4f1973",
+      "output_sha256": "15a92fcbb79a09af61fdea370e848e2cab90f550f47bb9cac312cdfcfb88f104",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1708,
+        "zone_mask": "qa/controls/418_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "つづきから",
+          "target": "Continue",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 947,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            97
+          ]
+        }
+      ]
+    },
+    {
+      "id": 419,
+      "path": "data/image/ui_btn_start.png",
+      "source_sha256": "89736b381c9e4c3eb879e8ddb09a7e578cf2d63805a09c18940fd5588c8b5180",
+      "output_sha256": "16bdc1f8c68ef1312d04f3a485ccdb9386c71b7b0a45da59e835eafec8ae5bc4",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2053,
+        "zone_mask": "qa/controls/419_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "はじめから",
+          "target": "New Game",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 1150,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            120
+          ]
+        }
+      ]
+    },
+    {
+      "id": 420,
+      "path": "data/image/ui_btn_stop.png",
+      "source_sha256": "75708b6a43d5ba91194d558bed05b3e4ffecdce7649172a1879b56e71a9b26b4",
+      "output_sha256": "8b72f58a256e7e390c074d0df0b4777ab687f2a534902022c1af3ce3dab7cd92",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1153,
+        "zone_mask": "qa/controls/420_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "止まる",
+          "target": "Stop",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 708,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            54
+          ]
+        }
+      ]
+    },
+    {
+      "id": 421,
+      "path": "data/image/ui_btn_yukkuri.png",
+      "source_sha256": "0fa4d855d6673697894eab70bc94dc46563eee490a7fa6057e222782e54525df",
+      "output_sha256": "9bda33197e9b5d4d472950dff424f2ae2fdec776b6f08f160a5f9c2a56cf8625",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1236,
+        "zone_mask": "qa/controls/421_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "ゆっくり",
+          "target": "Slow",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 697,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            54
+          ]
+        }
+      ]
+    },
+    {
+      "id": 422,
+      "path": "data/others/plugin/individual_image/kobetu.png",
+      "source_sha256": "f4d57d52db49a9674b6701ea02cba712c800df9e775ff7737eeee39a96fb16f4",
+      "output_sha256": "d64af36449594b01b6ebc3ffcaf6b4d82e8188651b60e4332121b1bed85c4756",
+      "width": 960,
+      "height": 640,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 36870,
+        "zone_mask": "qa/controls/422_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "個別画像表示・消去 プラグイン",
+          "target": "Show / Hide Individual Images\nPlugin",
+          "box": [
+            122,
+            397,
+            831,
+            579
+          ],
+          "erased_pixels": 32188,
+          "erase_method": "flat",
+          "lines": [
+            {
+              "font": "arialbd",
+              "font_size": 48,
+              "line_widths": [
+                684
+              ],
+              "box": [
+                124,
+                405,
+                830,
+                486
+              ]
+            },
+            {
+              "font": "arialbd",
+              "font_size": 75,
+              "line_widths": [
+                230
+              ],
+              "box": [
+                124,
+                485,
+                830,
+                574
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 471,
+      "path": "data/others/plugin/theme_kopanda_16/preview.png",
+      "source_sha256": "3d90fb87933011254b233252fb72807cacf05a6e10566b298b4b2b5115b09714",
+      "output_sha256": "206aa4a9511565ae155986ddc3d4220637718f430060a6530ce8fd50788069cc",
+      "width": 1280,
+      "height": 720,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 15104,
+        "zone_mask": "qa/controls/471_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "ガイド",
+          "target": "Guide",
+          "box": [
+            791,
+            259,
+            841,
+            279
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 624,
+          "font": "arialbd",
+          "font_size": 11,
+          "line_widths": [
+            32
+          ]
+        },
+        {
+          "source": "一括テーマ変換です。",
+          "target": "This changes the entire theme.",
+          "box": [
+            744,
+            292,
+            916,
+            316
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1419,
+          "font": "arial",
+          "font_size": 10,
+          "line_widths": [
+            144
+          ]
+        },
+        {
+          "source": "どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。",
+          "target": "I have no idea where I was born.\nAll I remember is mewing in some dark, damp place.",
+          "box": [
+            181,
+            646,
+            553,
+            676
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 4831,
+          "font": "arial",
+          "font_size": 9,
+          "line_widths": [
+            137,
+            220
+          ]
+        },
+        {
+          "source": "ガイド：一括テーマ変換です。",
+          "target": "Guide: This changes the entire theme.",
+          "box": [
+            859,
+            489,
+            1082,
+            504
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 866,
+          "font": "arial",
+          "font_size": 7,
+          "line_widths": [
+            123
+          ]
+        },
+        {
+          "source": "まだ、保存されているデータがありません。",
+          "target": "There is no saved data yet.",
+          "box": [
+            859,
+            554,
+            1084,
+            570
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1722,
+          "font": "arial",
+          "font_size": 7,
+          "line_widths": [
+            88
+          ]
+        },
+        {
+          "source": "まだ、保存されているデータがありません。",
+          "target": "There is no saved data yet.",
+          "box": [
+            859,
+            620,
+            1084,
+            636
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1306,
+          "font": "arial",
+          "font_size": 7,
+          "line_widths": [
+            88
+          ]
+        },
+        {
+          "source": "縮小された同じ画面",
+          "target": "Translated demonstration screen thumbnail",
+          "box": [
+            763,
+            476,
+            837,
+            516
+          ],
+          "erase_method": "paste translated matching screen"
+        }
+      ]
+    }
+  ]
+}

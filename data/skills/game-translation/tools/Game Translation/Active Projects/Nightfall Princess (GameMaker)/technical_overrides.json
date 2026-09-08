@@ -1,0 +1,148 @@
+{
+  "source_sha256": "2c22ad3c7dd540f4e870c195935a206eeafc58665c458673c88c3acb9a5ab611",
+  "status": "planned_not_applied",
+  "help_lookup_sites": [
+    {
+      "id": "CODE:28:4",
+      "source": "魔法爆発",
+      "planned_text": "Magic Blast",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:4",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:15",
+      "source": "カウント",
+      "planned_text": "Timer",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:8",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:26",
+      "source": "遠謀",
+      "planned_text": "Tactic",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:12",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:37",
+      "source": "一時的",
+      "planned_text": "Temporary",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:16",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:48",
+      "source": "会心",
+      "planned_text": "Critical Hit",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:20",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:59",
+      "source": "吹き飛ばし",
+      "planned_text": "Launch",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:24",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:70",
+      "source": "斬撃波",
+      "planned_text": "Slash Wave",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:28",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:81",
+      "source": "キル数",
+      "planned_text": "Kill Count",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:32",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:92",
+      "source": "跳弾",
+      "planned_text": "Ricochet",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:36",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:103",
+      "source": "破甲",
+      "planned_text": "Armor Break",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:40",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:114",
+      "source": "束縛",
+      "planned_text": "Bind",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:44",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:125",
+      "source": "播種",
+      "planned_text": "Seed",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:48",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:136",
+      "source": "大爆発",
+      "planned_text": "Mega Blast",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:52",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:147",
+      "source": "聖痕",
+      "planned_text": "Holy Mark",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:56",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:158",
+      "source": "減速",
+      "planned_text": "Slow",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:60",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:169",
+      "source": "聖光柱",
+      "planned_text": "Holy Pillar",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:64",
+      "status": "planned_not_applied"
+    },
+    {
+      "id": "CODE:28:180",
+      "source": "光の領域",
+      "planned_text": "Light Field",
+      "source_ref": "source/gml/gml_GlobalScript_scr_text_talent_down.gml:68",
+      "status": "planned_not_applied"
+    }
+  ],
+  "supplemental_punctuation_sites": [
+    {
+      "id": "CODE:225:324",
+      "string_id": 1197,
+      "source": "、",
+      "code_index": 225,
+      "instruction_index": 324,
+      "code_name": "gml_Object_obj_hall_Step_0",
+      "context": [
+        "321: cmp.i.v NEQ",
+        "322: bf 00448",
+        "323: push.v self.geo_stage_text",
+        "324: Push.String:STRING \"、\"",
+        "325: add.s.v",
+        "326: pop.v.v self.geo_stage_text",
+        "327: push.v local.tmp_i"
+      ],
+      "planned_text": ", ",
+      "status": "planned_not_applied",
+      "reason": "Enemy-list delimiter; outside CJK-letter census."
+    }
+  ],
+  "validation_rule": "For every assembled skill/equipment description at every rank, compare the set of helper keys detected in source with the canonical English keys detected in target. No missing or accidental extra matches. Dormant Ricochet key may be kept prepared but does not prove its help is reachable."
+}

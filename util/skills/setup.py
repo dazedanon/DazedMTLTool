@@ -29,6 +29,7 @@ _INVESTIGATION_PHASE_MARKERS = (
     "<!-- /investigation-phase -->",
 )
 _INVESTIGATION_PHASE_PLACEHOLDER = "{{LOCALIZATION_INVESTIGATION_PHASE}}"
+_CHARACTER_IDENTITY_PLACEHOLDER = "{{CHARACTER_IDENTITY_RULES}}"
 
 _SPEAKER_CROSSCHECK = {
     "rpgmaker": "Actors.json and dialogue across the full event corpus",
@@ -136,6 +137,7 @@ def load_project_setup(engine: str = "rpgmaker", *, prepend: str = "") -> str:
         _INVESTIGATION_PHASE_MARKERS,
     )
     body = body.replace(_INVESTIGATION_PHASE_PLACEHOLDER, investigation)
+    body = _embed_identity_rules(body)
     marker_list = ", ".join(
         f"`{marker}`" for marker in sorted(SUPPORTED_CODE408_MARKERS)
     )
@@ -199,9 +201,21 @@ def load_generic_project_setup(game_root: str | Path) -> str:
         raise ValueError(
             f"Generic setup skill must contain exactly one {placeholder} placeholder"
         )
+    if prompt.count(_INVESTIGATION_PHASE_PLACEHOLDER) != 1:
+        raise ValueError("Generic setup must contain exactly one investigation phase placeholder")
+    investigation = _extract_required_section(
+        _read_skill_file(_LOCALIZATION_INVESTIGATION_FILENAME), _INVESTIGATION_PHASE_MARKERS,
+    )
+    prompt = _embed_identity_rules(prompt.replace(_INVESTIGATION_PHASE_PLACEHOLDER, investigation))
     return prompt.replace(
         placeholder, str(Path(root).expanduser().resolve())
     ).strip() + "\n"
+
+
+def _embed_identity_rules(prompt: str) -> str:
+    if prompt.count(_CHARACTER_IDENTITY_PLACEHOLDER) != 1:
+        raise ValueError("Setup skill must contain exactly one character identity placeholder")
+    return prompt.replace(_CHARACTER_IDENTITY_PLACEHOLDER, _read_skill_file("character_identity.md").strip())
 
 
 def load_rpgmaker_qa_skill(focus: str) -> str:

@@ -1,0 +1,431 @@
+{
+  "game_root": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事",
+  "engine": "RPG Maker MZ",
+  "version": "1.9.0",
+  "files": {
+    "css/game.css": {
+      "size": 2188,
+      "sha256": "8e5e86cbbcb404236ac17015538fd2e0a2b64467bf0a30dca2603def0d67c1ac"
+    },
+    "data/Actors.json": {
+      "size": 2071,
+      "sha256": "2841a28b93fc6387a68f3cf9237e218a4fc54293adec36038a276db9c9465c12"
+    },
+    "data/Animations.json": {
+      "size": 70963,
+      "sha256": "ef89f3d5b0b824d10322f7a651477e7cd78f0e38b2b814c39bbaca19d6d28442"
+    },
+    "data/Armors.json": {
+      "size": 174,
+      "sha256": "db66a0eb9a5bc33e422809ea578454151abcff112efe24e6cc810af271a74a47"
+    },
+    "data/Classes.json": {
+      "size": 6223,
+      "sha256": "a57d05e25d5bc676cffcc408508216ecea2e021476de9e009179e800ba144691"
+    },
+    "data/CommonEvents.json": {
+      "size": 605736,
+      "sha256": "037acbe30e5f1f2b5774a630178e345fac7b55880765cda24724e5258d94e145"
+    },
+    "data/Enemies.json": {
+      "size": 1626,
+      "sha256": "8b62122fc374b138896b6e31b042548adfb5b563ea2820cfd7afd403f6689954"
+    },
+    "data/Items.json": {
+      "size": 18394,
+      "sha256": "26fd0d7bb6f834be4be5d7493029f11cbb9961bb9e7670ad5099476dd84c4c53"
+    },
+    "data/Map001.json": {
+      "size": 552687,
+      "sha256": "f0f1fe2ba11c9d473f572fec40c93f942ca89c5f1c496064ee902701f7a1858d"
+    },
+    "data/Map002.json": {
+      "size": 4142,
+      "sha256": "f542794244250a44c5ffe902c1bf6f3dfbd0d162b6e62f08ea3cd26d1b46fcc5"
+    },
+    "data/Map003.json": {
+      "size": 7533,
+      "sha256": "d9a17f6c1f13818be75743d8c6257d9a3f6d73553644a528c5f0c16c6b44fa6c"
+    },
+    "data/Map004.json": {
+      "size": 5285,
+      "sha256": "3ad07505266c91bcc630119a2b6713842ddfd26b2f96efc297f1b8cfe2abf6d7"
+    },
+    "data/Map005.json": {
+      "size": 39116,
+      "sha256": "c5dccf0971fb9a9d3e3ffc186e4450412098090a3fcdea0f6852c7bb6315f209"
+    },
+    "data/Map006.json": {
+      "size": 4066,
+      "sha256": "1b1e6efd24fefe48fcaed7af1c8e8013b5aaf4bd0e9b69c6c6c5c6b30c0c6b88"
+    },
+    "data/Map007.json": {
+      "size": 32236,
+      "sha256": "9282cc7503c033ed207a7a1ad3374d6b58c610661c57f039aa41e6c1eae2bda5"
+    },
+    "data/Map008.json": {
+      "size": 3139,
+      "sha256": "ba82d379756808bc5fdae1f5e77492bbadd59770f65f706e5b557fc990d7ede5"
+    },
+    "data/Map009.json": {
+      "size": 66281,
+      "sha256": "1596fe765d935c1a99b7d23e4a974bfd948ccdd91683f4beb44bf61c21cb6d1d"
+    },
+    "data/Map010.json": {
+      "size": 1470440,
+      "sha256": "92dc695f91b64489d6bd3cc1a93a406583cf163880fc89c7626656b2a98f4ff9"
+    },
+    "data/Map011.json": {
+      "size": 109970,
+      "sha256": "47f4ed18a50d77a17d9171d3bb067510fdcce95476263b7fa98410fdc75f518c"
+    },
+    "data/Map012.json": {
+      "size": 45880,
+      "sha256": "902dc1dd71e2cd81a4f64c8c8518b8bc2383fb30f4074f99d2659064aaf09376"
+    },
+    "data/Map013.json": {
+      "size": 4915,
+      "sha256": "cabbabd1e6be038f1c36fcee6287f1cb90fd7e47f176ecb878f3945fe11e26ba"
+    },
+    "data/Map014.json": {
+      "size": 5286,
+      "sha256": "4bc493d7c097ad7b6f19495dab9349917c94d47e6f637e62bfa8d3994ae23b62"
+    },
+    "data/MapInfos.json": {
+      "size": 1975,
+      "sha256": "80c95f7206496fc77cc6e06dd5465bb1e29bb4ed3ccc8d79e7b697c68b57db64"
+    },
+    "data/Skills.json": {
+      "size": 9285,
+      "sha256": "653ea859a7e978ee142a5d6667e88e429cdb59c0efbed09610b48565cf188782"
+    },
+    "data/States.json": {
+      "size": 8508,
+      "sha256": "0a59ef82ea01e02ce324f673690fdd5bf65a37d374882921c1f943d2b898dd48"
+    },
+    "data/System.json": {
+      "size": 12468,
+      "sha256": "4b7c366e0f3d3d2b9f4358ddb960aab62e373dfa75ed8ee8177fb6c86b04e4dc"
+    },
+    "data/Tilesets.json": {
+      "size": 117065,
+      "sha256": "4eada04485e264c675cb7a2473314bc356d29d198cb1fba116680b5c73b083bc"
+    },
+    "data/Troops.json": {
+      "size": 1232,
+      "sha256": "d24c9f787cd800b176833175509560eddc8690a733a19a743bd4d977832eaf46"
+    },
+    "data/Weapons.json": {
+      "size": 291,
+      "sha256": "1844be9a6e763ed6e37e86e14081f8be376cad8362216a7646151e01cf913688"
+    },
+    "fonts/mplus-1m-regular.woff": {
+      "size": 1007484,
+      "sha256": "1adedeac5f6046e2495613a3b1b37fab280354df2f2c4ae059fd36ebd106d841"
+    },
+    "fonts/mplus-2p-bold-sub.woff": {
+      "size": 7020,
+      "sha256": "60a94f57ffffe1f5e518affe72f376a64e7777d702f752620b59c2b94aa88d03"
+    },
+    "img/system/RecollectionModeMZData.json": {
+      "size": 9625,
+      "sha256": "769bc2151f0631c9511a905b0cb0575668d140db0bd95945793280f48d390cdd"
+    },
+    "index.html": {
+      "size": 766,
+      "sha256": "989ecf1a9a9e75bf31299b5b47fe14af4602e3cc3b0d4b0889fefbce18997943"
+    },
+    "js/libs/effekseer.min.js": {
+      "size": 194297,
+      "sha256": "49d8f79328495bfd9f47fce8378aa7d898adfb4238c36abc5801c78586d11dc9"
+    },
+    "js/libs/effekseer.wasm": {
+      "size": 1202770,
+      "sha256": "7f144a3cc4cae65c4e2b9806483e565cc3b7123448c4b2311ece33b15f3f653d"
+    },
+    "js/libs/localforage.min.js": {
+      "size": 29512,
+      "sha256": "1ff66c1e32922549d0c824076703e69fb5535857934c8faa8023f51a4881f732"
+    },
+    "js/libs/pako.min.js": {
+      "size": 45988,
+      "sha256": "29cfa0542b9864b6640cfdcc8f15b184db6431b532db2702a3ce97e5f2a7fc1c"
+    },
+    "js/libs/pixi.js": {
+      "size": 1547800,
+      "sha256": "9cf328099f50e4ceca874d875abd3065e8189133e01e5f054bf7627eb6a960e6"
+    },
+    "js/libs/vorbisdecoder.js": {
+      "size": 81324,
+      "sha256": "5024fbb4606a89caeeedcd57c94e7f633fba40277d4c1d1b2277ee7d60905498"
+    },
+    "js/main.js": {
+      "size": 4984,
+      "sha256": "4c290e83eceb0d52f6f620a637d4ea8b7cced0124e77dfd8862b088be3c5f49a"
+    },
+    "js/plugins/ARTM_PlayerSensorMZ.js": {
+      "size": 156542,
+      "sha256": "20213b0276e095dd2179cebde8e0d788f972ea846b06f1762aed5f8f17fdcce2"
+    },
+    "js/plugins/ChangeSurpriseRateByDirMZ.js": {
+      "size": 4619,
+      "sha256": "2434cc51d8e6a0a5bc5d51431590d4b5a73f89cc33e3fd2905077c9398df50f1"
+    },
+    "js/plugins/CharacterPictureManager.js": {
+      "size": 66267,
+      "sha256": "a92622fd769d57f7ae7231b3be29c41fc0be99f9d80eece737db830c1aa190c9"
+    },
+    "js/plugins/CustomizeFailureMessage.js": {
+      "size": 5047,
+      "sha256": "77982cf0906c3bd3de7bcc9591bf28b994e306b32fc7ca5a12db02087de97bf5"
+    },
+    "js/plugins/DarkPlasma_CGGallery.js": {
+      "size": 6509,
+      "sha256": "12432fb8fe0bb8108948e0891d65cd76c962da3ddbc23477157f5ad565b040e5"
+    },
+    "js/plugins/DashDisableSwitch.js": {
+      "size": 2332,
+      "sha256": "ca879c4985f619ed5096cf2e4f19d0ce4743816bb56982676614a4ba09002b62"
+    },
+    "js/plugins/debug.js": {
+      "size": 2508,
+      "sha256": "f24cd6cf3766871275ed29d2fd79b007f3d7e78206c5d4fbb491520d2480954a"
+    },
+    "js/plugins/DRS_MessageTextExtractor.js": {
+      "size": 10022,
+      "sha256": "0ecc772fa6dbf58b86cb581d8de4beab6cbc7d5bbf5dd9dd3b088c5a601c94bc"
+    },
+    "js/plugins/EventCommandByCode.js": {
+      "size": 17733,
+      "sha256": "28ff4598a3040d0ee1c35ffcacc8c4da804ed84ef257e14c6a2fbcf47ea1b046"
+    },
+    "js/plugins/EventReSpawn.js": {
+      "size": 41020,
+      "sha256": "5a63a9502db0fac48d7afef0d8aeba42e7f45430dda947f16b92b6bed1a6976d"
+    },
+    "js/plugins/ExtraGauge.js": {
+      "size": 54249,
+      "sha256": "7d02b8d36f1785c53d196aa94496c321cead17f82a4f17f8443d7d648fc0a97e"
+    },
+    "js/plugins/GOStateUnderEnemy.js": {
+      "size": 3972,
+      "sha256": "9d1d7c91c8214e5e2fa9200c99999fea471e1f9de47c8a3b451327f25c2c393f"
+    },
+    "js/plugins/Keke_PredictionSystem.js": {
+      "size": 130552,
+      "sha256": "539d2c792d8cf0c7208d9d1ac2721657a5104bfc7e96e510f0b6cc5ba0d7d4ed"
+    },
+    "js/plugins/Keke_VariableActorCommand.js": {
+      "size": 39232,
+      "sha256": "f51209a76c9848f3d38516f0069a4ef2b3f3b222262dd73b3e5566ce94e8d64e"
+    },
+    "js/plugins/LL_InfoPopupWIndow.js": {
+      "size": 13422,
+      "sha256": "b411d41ce298a70d40f7eb470721e37d251ec3efc4a751350cef39863815540c"
+    },
+    "js/plugins/LL_SprashScreen.js": {
+      "size": 14228,
+      "sha256": "ccc2b4835b89ae8012085067c6a9f0463ec3d6d0dfdc995eeb663abb74a40ca1"
+    },
+    "js/plugins/LL_StandingPicture.js": {
+      "size": 59619,
+      "sha256": "b1947d91a24e597ccf415ad55b9fe109dd5bb0d0b3a5fef33c0645b5d92fb9e6"
+    },
+    "js/plugins/LL_StandingPictureBattle.js": {
+      "size": 85698,
+      "sha256": "cd3480667dd70d8003a85d46390f47b3526072ac8921892183c2fc372241d298"
+    },
+    "js/plugins/LL_VariableWindow.js": {
+      "size": 13132,
+      "sha256": "d1f7f4de49e55356449d4fd3992a2bfa47cc4832862b7015ff697c4d45dc08fb"
+    },
+    "js/plugins/Mano_InputConfig.js": {
+      "size": 178065,
+      "sha256": "865f5b461586e702e05f197b8cbf1b0351323c34021b84da67381a01f6e16de7"
+    },
+    "js/plugins/MAT_Battlecontractor.js": {
+      "size": 1988,
+      "sha256": "088f1e607350dfe80204b75967287432844ed20fa89cd0f8173643f3e77fa4b4"
+    },
+    "js/plugins/MaterialBase.js": {
+      "size": 19528,
+      "sha256": "3add3daa3e4d514e845bfe7cce0ba2e9dacd2d9c80446c2eac676c22dff95fe4"
+    },
+    "js/plugins/MessageSkip.js": {
+      "size": 43231,
+      "sha256": "ecf16e4b94cdf3ea742f5ca291dbd3e090774100b8ce547e66ad6eb1ed1a2aa6"
+    },
+    "js/plugins/MessageWindowHidden.js": {
+      "size": 15226,
+      "sha256": "62af5d0098c346a25351b9dfcb4c4b769594e727c2927f3acf053306176a2084"
+    },
+    "js/plugins/MKR_PlayerMoveForbid.js": {
+      "size": 7563,
+      "sha256": "6f342e5639e40a6f93ec2dcd93043f83a8e13cbf89a504b8fe7d8a0672c3dd58"
+    },
+    "js/plugins/MNKR_TMSoloMenuSimple.js": {
+      "size": 5300,
+      "sha256": "36fc81fbb6c55d3c44e809327a9c2b9d7b00fc468a1aad92a364e5a407f2abeb"
+    },
+    "js/plugins/MOG_BattleHud.js": {
+      "size": 181457,
+      "sha256": "51446c0b22878a1d63d45708206514e09f62d1cfdad06110cea8572dc6c29e30"
+    },
+    "js/plugins/MOG_TitleCommands.js": {
+      "size": 26032,
+      "sha256": "2e50e5696608335894e120683bc40975d3fc90b5caaf82e22dd194447ea7b087"
+    },
+    "js/plugins/MouseInvalidate.js": {
+      "size": 2523,
+      "sha256": "9201e62053a3008cdf654ad1e9f7ed55fdbabd5780031f358c44e04c629d8de0"
+    },
+    "js/plugins/NovelGameUI.js": {
+      "size": 116236,
+      "sha256": "f2f266266fa4d2ae6efa92b7136fe53fe39472dc18870fb0544030563652be2d"
+    },
+    "js/plugins/NRP_BushEX.js": {
+      "size": 50617,
+      "sha256": "7fdff39458249f988258a5513ac66ad6fc69ce698bbe2f826ac7209deb9636cb"
+    },
+    "js/plugins/NRP_ChangeCharacterSpeed.js": {
+      "size": 27279,
+      "sha256": "5e4a51dc0f52c8498cade242de215aa53dd75786952dd222060b71f25b8282af"
+    },
+    "js/plugins/NRP_EquipSlot.js": {
+      "size": 47231,
+      "sha256": "bb530ce0e4233fc25350b3cfb604d560fc7481a8ad049956d40fb677113401d3"
+    },
+    "js/plugins/NRP_MessageWindow.js": {
+      "size": 39752,
+      "sha256": "34ec5a84b3358f8145080c7370e1f3c90433693704083fb8cbda5105c7aea9ef"
+    },
+    "js/plugins/NRP_OverpassTile.js": {
+      "size": 37361,
+      "sha256": "4b28f1acf25fcaa95ae211a4703830a6830b5ba11a80889d679233071b9091e8"
+    },
+    "js/plugins/NRP_StopSelfMovement.js": {
+      "size": 9037,
+      "sha256": "f1c03af70c663c6440fa96eb29292da25f2952cb2573eefa213fe463c447a55a"
+    },
+    "js/plugins/NUUN_Base.js": {
+      "size": 28388,
+      "sha256": "8a43fcf62ec0eeda450ce78aa036ce4463239a946317b0293b2204e1615ac8b1"
+    },
+    "js/plugins/NUUN_ItemCategory.js": {
+      "size": 22092,
+      "sha256": "dc384a21d3f6808cb42e0166afc6c5dc49d0e68044300c935e5a906f773c4e7d"
+    },
+    "js/plugins/option_delete.js": {
+      "size": 1517,
+      "sha256": "20a018a9963b5d45aed003219402b5d38cba5dd570cdb3ea09946bd7508fd685"
+    },
+    "js/plugins/PANDA_ControlSelfSwitches.js": {
+      "size": 10280,
+      "sha256": "f7c8a8444004c9575e11006117d1aad4385a7f895de6b0bc36c39f18e2548fbb"
+    },
+    "js/plugins/PANDA_DisableFastForward.js": {
+      "size": 4384,
+      "sha256": "5087e1426fa3db9ea63d46bdeb4b02766854682e96e0d082b3183c20f913f9b6"
+    },
+    "js/plugins/PANDA_RubyText.js": {
+      "size": 16065,
+      "sha256": "dfb0777c84e3a87e296255b97690442f01a187e73516ebb088c86abbeeb06229"
+    },
+    "js/plugins/PicturePriorityCustomize.js": {
+      "size": 12609,
+      "sha256": "3a6ad97a124416d6737bf9627c47f58c3787376bc65f343f0765f81b1e97a309"
+    },
+    "js/plugins/PluginCommonBase.js": {
+      "size": 20025,
+      "sha256": "bd3043f6988e86cdee2a764aeca17c9751155587b6c21a74a060985f2cac0096"
+    },
+    "js/plugins/PreventEventTouchThroughWall.js": {
+      "size": 4097,
+      "sha256": "1dcc190f50015e78fbbfb11f7a313dca892a5ec8d7bc48d659384676aad7c4a5"
+    },
+    "js/plugins/QuestSystem.js": {
+      "size": 130225,
+      "sha256": "9e3634d74c9424ab3a72b8d5548315e21c6bf3c12e11a4f52b3944fe04f2867f"
+    },
+    "js/plugins/Recollection_event.js": {
+      "size": 4009,
+      "sha256": "9559ac2d023a8ad4d65cb7b01eb9f52487f177f6353fad371726c5f7b5d627f5"
+    },
+    "js/plugins/RecollectionModeMZ.js": {
+      "size": 44512,
+      "sha256": "80debc57ebc868e7b49cf4aa88a1d945ca602d69f57e83fbb7389eb7b956d33d"
+    },
+    "js/plugins/SceneCustomMenu.js": {
+      "size": 119419,
+      "sha256": "8b6a8d718ce5ff872ed3b1f1d39d62e00c3fd3c29ea3f97f4286c8b4043c1bdb"
+    },
+    "js/plugins/SilvStamina.js": {
+      "size": 64954,
+      "sha256": "877d3cd623f4d4d15e9f2140363e11e6586abe8f9f633dbea33115fc77f55926"
+    },
+    "js/plugins/SkipAlreadyReadMessage.js": {
+      "size": 13728,
+      "sha256": "e9d1857fcc1c412ca542d22fb55e2b0b2dfb3f970c59d700738b5ce6df9f3fee"
+    },
+    "js/plugins/TextPicture.js": {
+      "size": 3940,
+      "sha256": "4ec28b5df38b26c358b0b0b618f13800f2ed232c5a44daf7afaeeecd2ae33908"
+    },
+    "js/plugins/TimerControl.js": {
+      "size": 3568,
+      "sha256": "c4a2898064625fe198d39e543bc2e7c13308e9d61126f08dab7c8cde61de51c9"
+    },
+    "js/plugins/TorigoyaMZ_Achievement2.js": {
+      "size": 43437,
+      "sha256": "258ad48edabe65b4f403149a8eb14a22319eb7a4e5dcce0e5dbc95bd264f770b"
+    },
+    "js/plugins/TorigoyaMZ_AddStateSkill.js": {
+      "size": 6258,
+      "sha256": "60e46471d9832a28e704b64ce20a34b5b64135cf4605e4fcfd7334f296a39ca6"
+    },
+    "js/plugins/TorigoyaMZ_EasyStaffRoll.js": {
+      "size": 27754,
+      "sha256": "725761eb31334b7a240fdde22bb7d2b2fac51d88b83ef100ef027820b109447a"
+    },
+    "js/plugins/TorigoyaMZ_EnemyHpBar.js": {
+      "size": 15995,
+      "sha256": "719b04a4e0929bbbea910e3d0e33bce4921a2b690157346426260fcd4a5c77c6"
+    },
+    "js/plugins/TriggerExtension_MZ.js": {
+      "size": 19634,
+      "sha256": "7616a0745110169e24b176287c26705f6e151103dc3bc9fdd9cd450cfa28b050"
+    },
+    "js/plugins.js": {
+      "size": 231385,
+      "sha256": "ba2e95d94a710c2b4f8a1355c0c2533b191f5e5cf186c93054bed4c57f3d55d6"
+    },
+    "js/rmmz_core.js": {
+      "size": 175056,
+      "sha256": "0006024b7eeba9114ff26262bb337171f885afe9443f9d93316fd9bba54fe085"
+    },
+    "js/rmmz_managers.js": {
+      "size": 83389,
+      "sha256": "cd54fc219a62b6c9d6ed2b68286b5f19e7380802b8c75aa0d2cd1e4d425cd7d8"
+    },
+    "js/rmmz_objects.js": {
+      "size": 305528,
+      "sha256": "9e62c5e9082ec18553db57ff9b8d2d7b714da997ad595e494a8eb71839545206"
+    },
+    "js/rmmz_scenes.js": {
+      "size": 108998,
+      "sha256": "361d512421186b419d4a98bd4cf500457a8b521df914dd2443c692e03f3bf999"
+    },
+    "js/rmmz_sprites.js": {
+      "size": 105219,
+      "sha256": "86074e02c0b25d6cf7a70a99d58cbc8c05116b6cb72a83440c27a6bf8fa6bd16"
+    },
+    "js/rmmz_windows.js": {
+      "size": 196408,
+      "sha256": "5763bdb227c0bd134c4b439ca974a1a7a76a9991c1ebf7316210409574f62c5f"
+    },
+    "package.json": {
+      "size": 408,
+      "sha256": "ce4cd50b6541f04f95f2d89459694471e82d5a6c0996ff156bf6aa2a36e02449"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+*keys*.txt
+operation.lock
+source/
+catalog.json
+runs/
+qa/
+reports/sample_request.json

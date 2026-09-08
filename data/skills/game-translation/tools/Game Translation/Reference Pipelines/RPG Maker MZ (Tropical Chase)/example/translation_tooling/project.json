@@ -1,0 +1,46 @@
+{
+  "engine": "RPG Maker MZ",
+  "engine_version": "1.9.0",
+  "node": "node",
+  "mode": "manual English translation; no API",
+  "plugin_commands": {
+    "LL_InfoPopupWIndow": {
+      "showMessage": [
+        "messageText"
+      ]
+    },
+    "TextPicture": {
+      "set": [
+        "text"
+      ]
+    }
+  },
+  "display_variables": [
+    86,
+    102
+  ],
+  "script_display_variables": [
+    125
+  ],
+  "drawn_note_tags": [
+    "FailureMessage",
+    "失敗メッセージ"
+  ],
+  "layout": {
+    "font": "fonts/mplus-1m-regular.woff",
+    "font_size": 26,
+    "message_width_px": 780,
+    "message_height_variable": 103,
+    "message_window_heights": [
+      144,
+      192
+    ],
+    "message_rows_conservative": 3,
+    "message_rows_tall": 4,
+    "line_height": 36,
+    "window_padding": 12,
+    "status_label_width_px": 120,
+    "status_window_width_px": 200,
+    "status": "native MZ measured: outer 808x144, visible inner 784x120, startX 4, 26px M+ font and 36px rows. Three four-row tutorial blocks explicitly use height 192. NRP's oversized contents bitmap is not the visible clipping bound."
+  }
+}

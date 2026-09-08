@@ -1,0 +1,43 @@
+{
+  "meta": {"game": "Tropical Chase!", "source": "Shipped MZ database, native nameplates, dialogue and reviewed image wording", "mode": "manual; no API"},
+  "names": {
+    "空木静香": {"en": "Shizuka Utsugi", "gender": "female", "role": "Adult police detective pursuing George", "register": "Composed, direct and professional; terse inner thoughts; increasingly shaken under pressure", "aliases": ["空木 静香 ｳﾂｷﾞｼｽﾞｶ", "空木", "静香", "ミス・ウツギ"]},
+    "ジョージ・コロッサル": {"en": "George Colossal", "gender": "male", "role": "Adult internationally wanted fugitive nicknamed Big Dick", "register": "Crude, arrogant and taunting", "aliases": ["ジョージ", "ビッグディック"]},
+    "署長": {"en": "Police Chief", "gender": "male", "role": "Local police chief speaking to Shizuka by phone", "register": "Measured and formal; explains jurisdiction and offers offshore support", "aliases": []},
+    "管理人": {"en": "Caretaker", "gender": "male", "role": "Beach caretaker and tutorial guide", "register": "Exuberantly cheerful, elongated endings, breezy jokes even about danger", "aliases": []},
+    "男": {"en": "Man", "gender": "male", "role": "Generic adult beach visitor; distinct people across encounters", "register": "Casual, crude, scene-specific", "aliases": []},
+    "男A": {"en": "Man A", "gender": "male", "role": "First man within a group encounter", "register": "Casual and crude", "aliases": []},
+    "男B": {"en": "Man B", "gender": "male", "role": "Second man within a group encounter", "register": "Casual and crude", "aliases": []},
+    "男C": {"en": "Man C", "gender": "male", "role": "Third man within a group encounter", "register": "Casual and crude", "aliases": []},
+    "？？？": {"en": "???", "gender": "unknown", "role": "Unrevealed speaker; preserve the reveal", "register": "Use surrounding scene", "aliases": []}
+  },
+  "terms": {
+    "とろぴかる・ちぇいす！": "Tropical Chase!",
+    "豪放磊落": "Goho Rairaku",
+    "回想モード": "Gallery",
+    "設定": "Options",
+    "オプション": "Options",
+    "実績": "Achievements",
+    "エナジードリンク": "Energy Drink",
+    "スタミナドリンク": "Stamina Drink",
+    "バッテリー": "Battery",
+    "スタンガン": "stun gun",
+    "スタミナ": "Stamina",
+    "現在地": "You are here",
+    "絶頂回数": "Orgasms",
+    "膣内射精": "Vaginal creampie",
+    "肛内射精": "Anal creampie",
+    "状態": "Condition",
+    "通常": "Normal",
+    "もよおし": "Need to Pee",
+    "発情": "Aroused",
+    "ポイントショップ": "Point Shop",
+    "特殊警棒": "Police Baton",
+    "ブレスレット型スタンガン": "Stun Gun Bracelet",
+    "車のキー": "Car Key",
+    "メガネ": "Glasses",
+    "シュノーケル": "Snorkel",
+    "サイフ": "Wallet"
+  },
+  "do_not_translate": ["Asset paths and filenames", "Plugin and parameter keys", "Event labels and jump targets", "Switch and variable editor names", "Numeric IDs", "Control-code payloads"]
+}

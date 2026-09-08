@@ -1,0 +1,21 @@
+'use strict';
+const assert = require('assert/strict');
+const {create} = require('./mz_health.js');
+(async () => {
+  const env = {Graphics: {frameCount: 1, _errorPrinter: {textContent: ''}, _app: {ticker: {started: true}}}, SceneManager: {_scene: {constructor: {name: 'Scene_Title'}}}, setTimeout};
+  const health = create(env);
+  assert.equal(health.snapshot().scene, 'Scene_Title');
+  env.Graphics._errorPrinter.textContent = "Cannot read properties of undefined (reading 'pages')";
+  assert.throws(() => health.assertHealthy(), /caught an engine error/);
+  env.Graphics._errorPrinter.textContent = '';
+  env.Graphics._app.ticker.started = false;
+  assert.throws(() => health.assertHealthy(), /ticker is stopped/);
+  env.Graphics._app.ticker.started = true;
+  await assert.rejects(health.assertAdvancing(5), /did not advance/);
+  env.setTimeout = (callback, delay) => setTimeout(() => {env.Graphics.frameCount++; callback();}, delay);
+  assert.equal((await health.assertAdvancing(5)).after.frame, 2);
+  await health.waitFor(() => env.Graphics.frameCount >= 3, {timeout: 20, poll: 1});
+  await assert.rejects(health.waitFor(() => false, {timeout: 5, poll: 1}), /Timed out/);
+  assert.throws(() => create({}).snapshot(), /not ready/);
+  console.log('MZ caught-error, ticker, stalled-frame and consumer-wait tests passed (simulated engine).');
+})().catch(error => {console.error(error); process.exitCode = 1;});

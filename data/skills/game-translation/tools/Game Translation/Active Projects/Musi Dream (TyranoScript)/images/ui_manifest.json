@@ -1,0 +1,1029 @@
+{
+  "format_version": 1,
+  "mode": "manual offline",
+  "toolkit": "imgtl.py",
+  "source_identity": "current-game original ASAR",
+  "assets": [
+    {
+      "id": 356,
+      "path": "data/fgimage/default/ui_hint_kosuri.png",
+      "source_sha256": "715c4394cd4b5156436ecfa593c45c032fc1cb8530cd80b9d54af2fa2d7c499c",
+      "output_sha256": "4c16365148e64a72ae957c753145b8fc95b3897445bc289046d2d3c8a9448337",
+      "width": 423,
+      "height": 258,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 356,
+        "path": "data/fgimage/default/ui_hint_kosuri.png",
+        "source": "虫をクリックして 尻を割れ目に擦ろう",
+        "target": "Click the bug to rub its rear against her slit.",
+        "lines": [
+          "Click the bug",
+          "to rub its rear",
+          "against her slit."
+        ]
+      },
+      "changed_pixels": 12266,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "box": [
+            32,
+            107,
+            394,
+            235
+          ],
+          "erase_pixels": 10547,
+          "fill": [
+            247,
+            242,
+            236,
+            255
+          ]
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "Click the bug"
+          ],
+          "box": [
+            45,
+            113,
+            253,
+            156
+          ],
+          "font": "arialbd",
+          "point_size": 32,
+          "requested_size": 32,
+          "fit": "requested",
+          "max_width": 204,
+          "row_height": 29
+        },
+        {
+          "lines": [
+            "to rub its rear",
+            "against her slit."
+          ],
+          "box": [
+            35,
+            161,
+            392,
+            239
+          ],
+          "font": "arialbd",
+          "point_size": 32,
+          "requested_size": 32,
+          "fit": "requested",
+          "max_width": 238,
+          "row_height": 29
+        }
+      ]
+    },
+    {
+      "id": 357,
+      "path": "data/fgimage/default/ui_hint_undress.png",
+      "source_sha256": "e9946e4bcd9c84c4feedc7b75daae500ad5d57b0d906d00b60d3519ba2634326",
+      "output_sha256": "16ddcac2fd437a051c2ecaf72f75799aad4eb2848c97110581cec4a71ba822f9",
+      "width": 423,
+      "height": 258,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 357,
+        "path": "data/fgimage/default/ui_hint_undress.png",
+        "source": "ヒマリィを起こさず 服を脱がそう 服をクリック",
+        "target": "Undress Himarii without waking her. Click her clothes.",
+        "lines": [
+          "Undress Himarii",
+          "without waking her.",
+          "Click her clothes"
+        ]
+      },
+      "changed_pixels": 14363,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "box": [
+            33,
+            102,
+            394,
+            236
+          ],
+          "erase_pixels": 12646,
+          "fill": [
+            247,
+            242,
+            236,
+            255
+          ]
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "Undress Himarii",
+            "without waking her."
+          ],
+          "box": [
+            35,
+            103,
+            391,
+            181
+          ],
+          "font": "arialbd",
+          "point_size": 32,
+          "requested_size": 32,
+          "fit": "requested",
+          "max_width": 303,
+          "row_height": 29
+        },
+        {
+          "lines": [
+            "Click her clothes"
+          ],
+          "box": [
+            39,
+            187,
+            296,
+            229
+          ],
+          "font": "arialbd",
+          "point_size": 30,
+          "requested_size": 30,
+          "fit": "requested",
+          "max_width": 240,
+          "row_height": 22
+        }
+      ]
+    },
+    {
+      "id": 358,
+      "path": "data/fgimage/default/ui_icon_danger.png",
+      "source_sha256": "ef67441f12a5d756c656a1907da69e7f8431efe9defd8119153e262499ff5fd9",
+      "output_sha256": "44ab99feff0df148ba1e2d023aca461c8d7b0c776ba538d146a3c9bb96ea3f0f",
+      "width": 283,
+      "height": 250,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 358,
+        "path": "data/fgimage/default/ui_icon_danger.png",
+        "source": "キケン",
+        "target": "DANGER"
+      },
+      "changed_pixels": 5600,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "components": [
+            2,
+            3,
+            4
+          ],
+          "erase_pixels": 5261
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "DANGER"
+          ],
+          "box": [
+            130,
+            185,
+            283,
+            241
+          ],
+          "font": "comicbd",
+          "point_size": 35,
+          "requested_size": 35,
+          "fit": "requested",
+          "max_width": 151,
+          "row_height": 34
+        }
+      ]
+    },
+    {
+      "id": 359,
+      "path": "data/fgimage/default/ui_icon_hetare.png",
+      "source_sha256": "34e9a3c1e8959ea4482c94d76e5b04c4f496292f7e0b41ecca9641fd027b206a",
+      "output_sha256": "f75e030b1fefd9b0e47e56361e001cd6bb2df51e715b820bd805192238b289e9",
+      "width": 202,
+      "height": 138,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 359,
+        "path": "data/fgimage/default/ui_icon_hetare.png",
+        "source": "ヘタレ",
+        "target": "WIMP"
+      },
+      "changed_pixels": 2703,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "components": [
+            2,
+            3
+          ],
+          "erase_pixels": 2615
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "WIMP"
+          ],
+          "box": [
+            101,
+            84,
+            202,
+            127
+          ],
+          "font": "comicbd",
+          "point_size": 30,
+          "requested_size": 30,
+          "fit": "requested",
+          "max_width": 93,
+          "row_height": 29
+        }
+      ]
+    },
+    {
+      "id": 345,
+      "path": "data/fgimage/default/ev_insert_explain.jpg",
+      "source_sha256": "9b965070f3a06fa5c44a2e4af839ecc976db1da8064aefa2d6b5c137ef5bc604",
+      "output_sha256": "16f826854d6efdfa02a31b952233df83fde49d2aa7e41eade2724cd9c508cbd4",
+      "width": 2880,
+      "height": 1620,
+      "mode": "RGB",
+      "source_mode": "RGB",
+      "output_mode": "RGB",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 345,
+        "path": "data/fgimage/default/ev_insert_explain.jpg",
+        "blocks": [
+          {
+            "source": "挿入ゲーム",
+            "target": "INSERTION GAME"
+          },
+          {
+            "source": "ヒマリィの顔を見て、",
+            "target": "Watch Himarii's face."
+          },
+          {
+            "source": "「挿れる」か「止まる」か判断せよ！",
+            "target": "Choose \"Insert\" or \"Stop\"!"
+          },
+          {
+            "source": "判断ミスが続くとゲームオーバー！",
+            "target": "Repeated mistakes = Game Over!"
+          },
+          {
+            "source": "８割以上挿入できてたらクリア！",
+            "target": "Reach 80% insertion to clear!"
+          },
+          {
+            "source": "リロード",
+            "target": "Reload"
+          },
+          {
+            "source": "挿れる",
+            "target": "Insert"
+          },
+          {
+            "source": "止まる",
+            "target": "Stop"
+          },
+          {
+            "source": "キケン",
+            "target": "DANGER"
+          },
+          {
+            "source": "ヘタレ",
+            "target": "WIMP"
+          }
+        ]
+      },
+      "changed_pixels": 259386,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "box": [
+            210,
+            122,
+            660,
+            222
+          ],
+          "core_pixels": 10847,
+          "erase_pixels": 17125
+        },
+        {
+          "box": [
+            275,
+            365,
+            738,
+            555
+          ],
+          "core_pixels": 20579,
+          "erase_pixels": 32673
+        },
+        {
+          "box": [
+            275,
+            750,
+            738,
+            1040
+          ],
+          "core_pixels": 36875,
+          "erase_pixels": 59555
+        },
+        {
+          "box": [
+            90,
+            1435,
+            1385,
+            1535
+          ],
+          "core_pixels": 31642,
+          "erase_pixels": 51526
+        },
+        {
+          "box": [
+            1480,
+            1435,
+            2780,
+            1535
+          ],
+          "core_pixels": 31999,
+          "erase_pixels": 52544
+        },
+        {
+          "box": [
+            175,
+            1364,
+            310,
+            1430
+          ],
+          "core_pixels": 467,
+          "erase_pixels": 3833,
+          "method": "red-brown seed + 12px measured halo"
+        },
+        {
+          "box": [
+            345,
+            1295,
+            475,
+            1355
+          ],
+          "core_pixels": 451,
+          "erase_pixels": 3514,
+          "method": "red-brown seed + 12px measured halo"
+        },
+        {
+          "box": [
+            1048,
+            711,
+            1134,
+            744
+          ],
+          "erase_pixels": 2016,
+          "fill": [
+            214,
+            194,
+            183,
+            255
+          ]
+        },
+        {
+          "box": [
+            1048,
+            827,
+            1134,
+            860
+          ],
+          "erase_pixels": 1559,
+          "fill": [
+            214,
+            194,
+            183,
+            255
+          ]
+        },
+        {
+          "box": [
+            950,
+            245,
+            1014,
+            266
+          ],
+          "erase_pixels": 1344,
+          "fill": [
+            239,
+            239,
+            239,
+            255
+          ]
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "INSERTION GAME"
+          ],
+          "box": [
+            140,
+            113,
+            744,
+            223
+          ],
+          "font": "ariblk",
+          "point_size": 61,
+          "requested_size": 64,
+          "fit": "measured shrink",
+          "max_width": 600,
+          "row_height": 46
+        },
+        {
+          "lines": [
+            "Watch",
+            "Himarii's face."
+          ],
+          "box": [
+            222,
+            358,
+            748,
+            558
+          ],
+          "font": "ariblk",
+          "point_size": 66,
+          "requested_size": 66,
+          "fit": "requested",
+          "max_width": 520,
+          "row_height": 49
+        },
+        {
+          "lines": [
+            "Choose",
+            "\"Insert\"",
+            "or \"Stop\"!"
+          ],
+          "box": [
+            260,
+            743,
+            745,
+            1044
+          ],
+          "font": "ariblk",
+          "point_size": 72,
+          "requested_size": 72,
+          "fit": "requested",
+          "max_width": 380,
+          "row_height": 67
+        },
+        {
+          "lines": [
+            "Repeated mistakes = Game Over!"
+          ],
+          "box": [
+            96,
+            1438,
+            1385,
+            1532
+          ],
+          "font": "ariblk",
+          "point_size": 70,
+          "requested_size": 70,
+          "fit": "requested",
+          "max_width": 1280,
+          "row_height": 65
+        },
+        {
+          "lines": [
+            "Reach 80% insertion to clear!"
+          ],
+          "box": [
+            1480,
+            1438,
+            2780,
+            1532
+          ],
+          "font": "ariblk",
+          "point_size": 70,
+          "requested_size": 70,
+          "fit": "requested",
+          "max_width": 1133,
+          "row_height": 52
+        },
+        {
+          "lines": [
+            "DANGER"
+          ],
+          "box": [
+            175,
+            1364,
+            312,
+            1425
+          ],
+          "font": "comicbd",
+          "point_size": 29,
+          "requested_size": 29,
+          "fit": "requested",
+          "max_width": 129,
+          "row_height": 31
+        },
+        {
+          "lines": [
+            "WIMP"
+          ],
+          "box": [
+            327,
+            1292,
+            465,
+            1342
+          ],
+          "font": "comicbd",
+          "point_size": 34,
+          "requested_size": 34,
+          "fit": "requested",
+          "max_width": 108,
+          "row_height": 34
+        },
+        {
+          "lines": [
+            "Insert"
+          ],
+          "box": [
+            1048,
+            711,
+            1134,
+            744
+          ],
+          "font": "comicbd",
+          "point_size": 25,
+          "requested_size": 25,
+          "fit": "requested",
+          "max_width": 77,
+          "row_height": 20
+        },
+        {
+          "lines": [
+            "Stop"
+          ],
+          "box": [
+            1048,
+            827,
+            1134,
+            860
+          ],
+          "font": "comicbd",
+          "point_size": 25,
+          "requested_size": 25,
+          "fit": "requested",
+          "max_width": 55,
+          "row_height": 27
+        },
+        {
+          "lines": [
+            "Reload"
+          ],
+          "box": [
+            950,
+            245,
+            1014,
+            266
+          ],
+          "font": "arial",
+          "point_size": 14,
+          "requested_size": 14,
+          "fit": "requested",
+          "max_width": 45,
+          "row_height": 10
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "path": "data/bgimage/ev_insert_explain.jpg",
+      "source_sha256": "ce913f87af52089eed7ff0c6b66651cb3fa0e9cb8ab119f29836c8755d42c939",
+      "output_sha256": "4222d604d7ea81cd9666db2b97a1b638545c942680c335bc8a9aab0dd7f1fca0",
+      "width": 2880,
+      "height": 1620,
+      "mode": "RGB",
+      "source_mode": "RGB",
+      "output_mode": "RGB",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 17,
+        "path": "data/bgimage/ev_insert_explain.jpg",
+        "blocks": [
+          {
+            "source": "挿入ゲーム",
+            "target": "INSERTION GAME"
+          },
+          {
+            "source": "ヒマリィの顔を見て、",
+            "target": "Watch Himarii's face."
+          },
+          {
+            "source": "「挿れる」か「止まる」か判断せよ！",
+            "target": "Choose \"Insert\" or \"Stop\"!"
+          },
+          {
+            "source": "間違えると、危険度が上がります。一定以上になるとゲームオーバー。",
+            "target": "Wrong choices raise danger. Too much danger means Game Over."
+          },
+          {
+            "source": "リロード",
+            "target": "Reload"
+          },
+          {
+            "source": "挿れる",
+            "target": "Insert"
+          },
+          {
+            "source": "止まる",
+            "target": "Stop"
+          },
+          {
+            "source": "キケン",
+            "target": "DANGER"
+          }
+        ]
+      },
+      "changed_pixels": 212380,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "box": [
+            210,
+            122,
+            660,
+            222
+          ],
+          "core_pixels": 10892,
+          "erase_pixels": 17156
+        },
+        {
+          "box": [
+            175,
+            500,
+            650,
+            691
+          ],
+          "core_pixels": 20511,
+          "erase_pixels": 32592
+        },
+        {
+          "box": [
+            175,
+            888,
+            650,
+            1175
+          ],
+          "core_pixels": 36832,
+          "erase_pixels": 59531
+        },
+        {
+          "box": [
+            875,
+            1295,
+            2210,
+            1490
+          ],
+          "core_pixels": 67898,
+          "erase_pixels": 110073
+        },
+        {
+          "box": [
+            2395,
+            1300,
+            2590,
+            1385
+          ],
+          "core_pixels": 1333,
+          "erase_pixels": 7163,
+          "method": "red-brown seed + 12px measured halo"
+        },
+        {
+          "box": [
+            951,
+            847,
+            1037,
+            880
+          ],
+          "erase_pixels": 1077,
+          "fill": [
+            214,
+            194,
+            183,
+            255
+          ]
+        },
+        {
+          "box": [
+            951,
+            963,
+            1037,
+            996
+          ],
+          "erase_pixels": 863,
+          "fill": [
+            214,
+            194,
+            183,
+            255
+          ]
+        },
+        {
+          "box": [
+            853,
+            381,
+            917,
+            402
+          ],
+          "erase_pixels": 1344,
+          "fill": [
+            239,
+            239,
+            239,
+            255
+          ]
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "INSERTION GAME"
+          ],
+          "box": [
+            140,
+            113,
+            744,
+            223
+          ],
+          "font": "ariblk",
+          "point_size": 61,
+          "requested_size": 64,
+          "fit": "measured shrink",
+          "max_width": 600,
+          "row_height": 46
+        },
+        {
+          "lines": [
+            "Watch",
+            "Himarii's face."
+          ],
+          "box": [
+            135,
+            498,
+            651,
+            693
+          ],
+          "font": "ariblk",
+          "point_size": 65,
+          "requested_size": 66,
+          "fit": "measured shrink",
+          "max_width": 513,
+          "row_height": 49
+        },
+        {
+          "lines": [
+            "Choose",
+            "\"Insert\"",
+            "or \"Stop\"!"
+          ],
+          "box": [
+            150,
+            885,
+            640,
+            1178
+          ],
+          "font": "ariblk",
+          "point_size": 72,
+          "requested_size": 72,
+          "fit": "requested",
+          "max_width": 380,
+          "row_height": 67
+        },
+        {
+          "lines": [
+            "Wrong choices raise danger.",
+            "Too much danger means Game Over."
+          ],
+          "box": [
+            867,
+            1292,
+            2220,
+            1490
+          ],
+          "font": "ariblk",
+          "point_size": 66,
+          "requested_size": 70,
+          "fit": "measured shrink",
+          "max_width": 1330,
+          "row_height": 62
+        },
+        {
+          "lines": [
+            "DANGER"
+          ],
+          "box": [
+            2400,
+            1305,
+            2590,
+            1370
+          ],
+          "font": "comicbd",
+          "point_size": 39,
+          "requested_size": 39,
+          "fit": "requested",
+          "max_width": 171,
+          "row_height": 39
+        },
+        {
+          "lines": [
+            "Insert"
+          ],
+          "box": [
+            951,
+            847,
+            1037,
+            880
+          ],
+          "font": "comicbd",
+          "point_size": 25,
+          "requested_size": 25,
+          "fit": "requested",
+          "max_width": 77,
+          "row_height": 20
+        },
+        {
+          "lines": [
+            "Stop"
+          ],
+          "box": [
+            951,
+            963,
+            1037,
+            996
+          ],
+          "font": "comicbd",
+          "point_size": 25,
+          "requested_size": 25,
+          "fit": "requested",
+          "max_width": 55,
+          "row_height": 27
+        },
+        {
+          "lines": [
+            "Reload"
+          ],
+          "box": [
+            853,
+            381,
+            917,
+            402
+          ],
+          "font": "arial",
+          "point_size": 14,
+          "requested_size": 14,
+          "fit": "requested",
+          "max_width": 45,
+          "row_height": 10
+        }
+      ]
+    },
+    {
+      "id": 346,
+      "path": "data/fgimage/default/ev_mission.jpg",
+      "source_sha256": "260924587f72bc78d4850eef528574e591e67b7a9290930ecfe39dc5b2d70d21",
+      "output_sha256": "e3a32f1a8f6609423e1d4b285e93e9c27a021e0d1a590f6b90612587a5936d75",
+      "width": 2880,
+      "height": 1620,
+      "mode": "RGB",
+      "source_mode": "RGB",
+      "output_mode": "RGB",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 346,
+        "path": "data/fgimage/default/ev_mission.jpg",
+        "blocks": [
+          {
+            "source": "ミッション",
+            "target": "MISSION"
+          },
+          {
+            "source": "ネットの海に漂っている、ヒマリィの産卵動画を見つけてください。",
+            "target": "Find Himarii's egg-laying video adrift in the sea of the internet."
+          }
+        ]
+      },
+      "changed_pixels": 132140,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "box": [
+            1208,
+            472,
+            1630,
+            563
+          ],
+          "core_pixels": 8092,
+          "erase_pixels": 13843
+        },
+        {
+          "box": [
+            1025,
+            775,
+            1920,
+            875
+          ],
+          "core_pixels": 23349,
+          "erase_pixels": 37839
+        },
+        {
+          "box": [
+            680,
+            907,
+            2270,
+            1005
+          ],
+          "core_pixels": 42390,
+          "erase_pixels": 67864
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "MISSION"
+          ],
+          "box": [
+            1150,
+            467,
+            1710,
+            567
+          ],
+          "font": "ariblk",
+          "point_size": 90,
+          "requested_size": 90,
+          "fit": "requested",
+          "max_width": 435,
+          "row_height": 66
+        },
+        {
+          "lines": [
+            "Find Himarii's egg-laying video",
+            "adrift in the sea of the internet."
+          ],
+          "box": [
+            655,
+            767,
+            2280,
+            1010
+          ],
+          "font": "ariblk",
+          "point_size": 78,
+          "requested_size": 78,
+          "fit": "requested",
+          "max_width": 1341,
+          "row_height": 72
+        }
+      ]
+    }
+  ],
+  "total": 7,
+  "review_status": "reviewed"
+}

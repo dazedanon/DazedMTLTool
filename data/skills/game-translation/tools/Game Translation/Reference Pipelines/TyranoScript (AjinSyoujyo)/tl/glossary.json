@@ -1,0 +1,133 @@
+{
+  "names": {
+    "ココ": {
+      "en": "Koko",
+      "gender": "female",
+      "role": "the heroine; a wounded demi-human girl the protagonist takes in and lives with",
+      "register": "polite です/ます, heavy stutter and trailing ellipses at first, warmer and franker as affection rises",
+      "aliases": [
+        "ココちゃん"
+      ]
+    },
+    "ネロ": {
+      "en": "Nero",
+      "gender": "male",
+      "role": "default name of the player character, a lone scavenger; the player may rename him, so the name arrives through a variable",
+      "register": "first person 僕, understated, self-deprecating",
+      "aliases": []
+    },
+    "セレナ": {
+      "en": "Serena",
+      "gender": "female",
+      "role": "black-market trader; buys scrap, hands out material fetch-quests, sexually forward and teasing",
+      "register": "casual, drawn-out playful vowels (呼んだ～?), pushy",
+      "aliases": [
+        "セレナさん"
+      ]
+    },
+    "ガノーザ": {
+      "en": "Ganoza",
+      "gender": "female",
+      "role": "Koko's mother; a mature demi-human, meek and easily flustered",
+      "register": "timid, apologetic, whimpering fillers (ふぇえぇ)",
+      "aliases": [
+        "ガノーザさん"
+      ]
+    },
+    "ネモ": {
+      "en": "Nemo",
+      "gender": "unknown",
+      "role": "the second black-market trader, alongside Serena",
+      "register": "",
+      "aliases": []
+    },
+    "島守匠海": {
+      "en": "Shimamori Takumi",
+      "gender": "male",
+      "role": "easter-egg name the player can enter; grants a survival-skill bonus",
+      "register": "",
+      "aliases": [
+        "島守",
+        "匠海",
+        "拓海",
+        "匠",
+        "たくみ"
+      ]
+    },
+    "佐藤久雄": {
+      "en": "Satou Hisao",
+      "gender": "male",
+      "role": "easter-egg name the player can enter",
+      "register": "",
+      "aliases": []
+    },
+    "ガスター": {
+      "en": "Gaster",
+      "gender": "unknown",
+      "role": "easter-egg name; entering it closes the game",
+      "register": "",
+      "aliases": [
+        "がすたー",
+        "がすた"
+      ]
+    },
+    "ママ": {
+      "en": "Mom",
+      "gender": "female",
+      "role": "Ganoza referred to as mother in dialogue",
+      "register": "timid",
+      "aliases": []
+    }
+  },
+  "terms": {
+    "亜人": "demi-human",
+    "異能": "extranormal",
+    "同棲": "living together",
+    "親密度": "Affection",
+    "好感度": "Affection",
+    "淫乱度": "Lewdness",
+    "精力": "Stamina",
+    "射精回数": "Loads",
+    "カルマ": "Karma",
+    "所持金": "Money",
+    "日目": "Day",
+    "闇市": "black market",
+    "商人": "trader",
+    "探索": "Scavenge",
+    "資材": "materials",
+    "素材": "materials",
+    "廃品": "Scrap",
+    "ジャンク置き場": "junkyard",
+    "拠点": "hideout",
+    "倉庫": "Storage",
+    "制作": "Crafting",
+    "醸造機": "Still",
+    "栽培": "Garden",
+    "演算機": "Terminal",
+    "浴槽": "Bath",
+    "ベンチプレス": "Bench Press",
+    "情報": "Intel",
+    "扉": "Door",
+    "要望": "Requests",
+    "着替え": "Change Clothes",
+    "回想": "Replay",
+    "おまけ": "Extras",
+    "コンフィグ": "Config",
+    "研究所": "Research Lab",
+    "市街地": "City",
+    "埠頭": "Docks",
+    "森林場": "Forest",
+    "郊外": "Outskirts",
+    "断面図": "cross-section view",
+    "淫語": "lewd word",
+    "サキュバス": "succubus"
+  },
+  "notes": [
+    "The protagonist's name reaches dialogue through a variable, so it arrives as a sentinel. Never write 'Nero' into a line that has a sentinel standing for his name.",
+    "Trust the dialogue over the name when deciding gender. Ganoza and Serena are both women despite the unfamiliar readings.",
+    "Koko and Ganoza are daughter and mother. Ganoza is 'the mother' / 'Mom' in the three-way scenes, never a sister.",
+    "The five lewd-word arrays (f.ingo_tinko / _jyoseiki / _anal / _samen / _zettyou) are a five-rung ladder from coy to degrading. Translate them as a set, not line by line, and keep each entry short enough to splice mid-sentence.",
+    "'同棲' + a number + '日目' is assembled at run time into the day counter. Render the pair so the whole thing reads naturally in English, e.g. '同棲' -> 'Day ' and '日目' -> ' together'.",
+    "Honorific policy: drop -san/-chan in prose ('Ganoza-san' -> 'Ganoza'), but keep a bare 'Miss' only where the deference is the point. Do not romanise honorifics into the middle of English sentences."
+  ]
+}

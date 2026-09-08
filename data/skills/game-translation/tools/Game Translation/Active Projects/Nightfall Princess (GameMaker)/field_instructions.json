@@ -1,0 +1,20 @@
+{
+  "name.character": "Return only the locked English name from the glossary. Do not add a title, biography or sentence. Titles are not aliases for the person's name.",
+  "name.equipment": "Return only the locked equipment label. Different equipment records may intentionally share the same name; do not invent a qualifier to distinguish them.",
+  "name.skill": "Return only the locked skill label, with title capitalization. Consult the paired description for meaning; do not turn the label into a description.",
+  "name.enemy": "Return only the enemy or actor label. Preserve meaningful species, rank and explicit gender distinctions. Do not invent a personal name for a generic actor.",
+  "name.quest": "Return only the quest title. Keep numbered sibling quests parallel and preserve the distinction between participant counts and a title's sequence number.",
+  "name.stat": "Return only the locked stat label. Distinguish pleasure recovery, pleasure limit and HP. Keep the existing CD abbreviation when supplied.",
+  "description.skill": "Translate this skill description. Preserve every protected numeric marker and all static values. Use the paired skill name and exact required helper keywords. Tactic, Timer and Kill Count measure different trigger conditions. Apply the unit's verified_correction only where supplied; it corrects four source frequency reversals from traced runtime behavior.",
+  "description.equipment": "Translate this equipment description. Use its paired name and preserve all markers, values, units, probability, duration and cooldown semantics. Two markers may hold the same runtime value and must both remain.",
+  "fragment.equipment_target": "Translate a target noun phrase substituted into equipment 46's Bind description. Use the complete template and all three ranks together for context; output only this phrase. Rank 2 targets the nearest enemy in front and the nearest enemy behind. The template owns boundary spaces.",
+  "description.stat": "Translate this stat explanation. Preserve whether a higher value is beneficial and whether recovery raises or lowers the gauge. Do not assume every stat is a conventional RPG stat.",
+  "description.help": "Translate this expanded combat-help entry. Use the exact canonical helper keyword in its heading and preserve mathematical meaning. Bracketed Attack formulas are displayed explanations, not expressions to execute.",
+  "description.quest": "Translate this quest's description with its title, heroine and progression group as context. Preserve objective, warning, agency and participant counts; do not convert third-person briefing into spoken dialogue.",
+  "scene.narration": "Translate the supplied third-person scene-caption unit. The focus character is not the speaker. Keep the source tense/aspect, agency and referents; do not invent dialogue, reactions or events. Neighboring independent captions are alternatives, not sequential conversation.",
+  "dialogue.merchant": "Translate the merchant's introduction to the princess as courteous direct speech. Keep sentence continuity across the four source records. Translate direct-address 王女様 as Your Highness. Do not invent the merchant's gender.",
+  "ui.label": "Return a short functional interface label. Use an imperative for an action and a noun for a category. Follow the glossary; do not add explanatory prose.",
+  "ui.notice": "Translate a concise on-screen notice or mission instruction. Preserve its warning/negation, keys, count and duration. Do not add control instructions not in the unit.",
+  "ui.fragment": "Translate only this marked fragment of the complete supplied expression. Make the assembled English read naturally around the runtime value, including boundary spaces. Do not duplicate neighboring text or output the stand-in variable. Preserve a non-empty fragment.",
+  "ui.statistic": "Return a concise history/statistics label, not a sentence describing a new event. Preserve what is counted, the affected body/statistic and the protected line break that aligns this label with its numeric column."
+}

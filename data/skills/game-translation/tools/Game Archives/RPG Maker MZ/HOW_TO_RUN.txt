@@ -1,0 +1,37 @@
+RPGM dump tools
+
+Requirements:
+- Node.js
+- Game folder path
+- Run these commands from the tools folder
+
+Setup:
+
+$game = "C:\Path\To\Game"
+cd "C:\Path\To\tools"
+
+1. Decrypt data:
+
+node .\decrypt_rpgmz_data.js --game $game --out decrypted_data --pretty
+
+Output:
+<game>\decrypted_data
+
+2. Dump images:
+
+node .\run_runtime_image_dump.js --game $game
+
+Output:
+<game>\runtime_dump_assets\img
+
+3. Decrypt audio:
+
+node .\decrypt_rpgmz_audio.js --game $game --out runtime_dump_assets
+
+Output:
+<game>\runtime_dump_assets\audio
+
+Notes:
+- Run data first.
+- The image dumper launches Game.exe.
+- The image dumper creates package.json.bak, restores package.json, and removes its temporary dump page when it exits.

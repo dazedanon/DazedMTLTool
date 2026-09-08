@@ -1,0 +1,152 @@
+# Provenance
+
+Authoritative workflow loaded for this task:
+`C:/Users/sw/.claude/skills/game-translation/SKILL.md`.
+References read: `references/engine-tyranoscript.md`, relevant glossary/prompt and
+text-fitting guidance, and the Tools catalog's Tyrano section. The subsequent
+user-requested image work also loaded `references/image-translation.md` and the
+shared image toolkit's README.
+
+Reusable source:
+`C:/Users/sw/Desktop/Tools/Game Translation/Reference Pipelines/TyranoScript (AjinSyoujyo)`.
+Read its README before adaptation. Copied only the local ASAR reader and
+`tyranotl` modules `__init__`, `codes`, `kslex`, `jsstr`, `sites`, `store`,
+`extract`, and `inject`. No API drivers, credentials, provider configuration,
+reference translations, game-specific glossary, or loader shim were copied.
+
+Image tooling was later copied separately from
+`C:/Users/sw/Desktop/Tools/Game Translation/Image Translation/imgtl.py` after
+the user explicitly requested image text translation. Its pixel probes, masks,
+background repair and lettering helpers are reused by this game's image scripts;
+no other game's images or translation records were copied.
+
+The upstream modules remain recognizable to simplify comparison. Their comments
+may describe the old reference game; the project adapter, current reports, and
+VALIDATION_PLAN own all rulings for musi_dream. Do not invoke the old generic
+extract.run directly; use tl.py, which applies the project rules and source guards.
+
+Changes for this game:
+
+- Actual runtime dependency discovery includes plugin-loaded configuration sample
+  text and HTML templates, and excludes unreferenced previews/editor metadata.
+- Separate dialogue occurrences, explicit #speaker handling, frozen registered
+  character IDs, and separate translation of literal nameplates.
+- Full-file JS comment handling, scoped vendor/3D/console exclusions, and engine
+  `{ name }` formatting placeholders included in masking.
+- Removed reference NBSP substitution. Measured this game's shipped parser with
+  KeepSpaceInParameterValue=2 under Electron 24.8.8 / Node 18.14.0.
+- Manual packets and strict local imports, history, immutable source/store
+  identity, negative validation cases, and byte-identical no-op output.
+
+All extracted source files are the user's local game materials, retained solely
+as the immutable translation snapshot. This directory is a working project, not a patch
+distribution. No reference game's output or media is part of it.
+
+## Completed manual translation and review
+
+The four manually authored maps are `manual/ui.json`, `opening_endings.json`,
+`middle.json`, and `scene6.json`. They were written from this game's extracted
+Japanese and surrounding scene context; no translation API or external machine
+translation service was used. `scripts/import_manual.py` consolidates them into
+the complete packet/reply and imports all 509 units through the source-identity
+and placeholder validation gate. History preserves the replaced records.
+
+Independent review is documented in `manual/review_primary.json` (semantic and
+embedded-count fragment review), `coverage_audit.md` (runtime literal and speaker
+display coverage), and the related `unextracted_audit.json` and
+`ks_unextracted_audit.json` reports. The coverage audit used the game's available
+Esprima tokenizer to inspect individual literals on minified JavaScript lines.
+These are local source analyses, not translations copied from another project.
+
+## Runtime compatibility and installer
+
+Additional workflow references used during the full translation were
+`references/text-fitting.md`, `references/save-compatibility.md`, and
+`references/playtesting-and-release.md` under the authoritative skill directory.
+
+`manual/runtime_audit/AUDIT.md`, its binary evidence, and the actual-parser
+comparison harness record this build's Electron startup order, preload/IPC
+requirements, parser behavior, and measured layout. The shipped Electron 24
+runtime searches `resources/app.asar` before `resources/app`, so the patch uses a
+verified archive replacement while retaining the original startup and preload.
+The reference pipeline's loose-folder precedence claim was not carried forward.
+
+`release_tools/patch.cjs` adapts the streaming repacker and immutable source-offset
+approach from the same reference pipeline's `scripts/tyranotl/deploy.py`. It uses
+the actual shipped archive's pickle lengths, preserves untouched entry metadata
+and bytes, updates changed entries' SHA256 block hashes, verifies every rebuilt
+entry, and keeps an exact original backup. The PowerShell wrappers run the bundled
+runtime in Node mode and restore the environment afterward. No loader shim or
+additional runtime dependency is distributed. Installer fixtures and checks live
+under `release_tools/selftest*`; they are excluded from the player package.
+
+The legacy-save helper is authored for this game in
+`manual/runtime_audit/save_compat_runtime.template.js` and generated by
+`save_compat_generate.cjs` from the exact source/payload parser values and complete
+manual packet/reply. `scripts/build.py` appends the generated helper to the existing
+`kag.menu.js`. The helper refreshes cached display text when original saves load;
+it preserves scenario/tag indices and internal character identifiers. Its focused
+tests and parser comparisons are retained beside the generator.
+
+`scripts/build.py` also applies reviewed continuation spacing and layout edits,
+the configuration sample's scoped whitespace fix, and backlog display aliases.
+`reports/build.json` records each compatibility adjustment and payload checksum.
+`scripts/package.py` rebuilds from the current validated store before creating an
+allowlisted patch containing only the changed files and installer materials.
+
+## Local live QA
+
+`manual/cdp_client.py`, `launch_test.ps1`, `live_qa.py`, `play_route.py`, and
+`fit_audit.py` provide local browser inspection, rendered fit checks, and route/save
+testing through the game's loopback Chrome DevTools Protocol endpoint. These are
+development tools, not network translation clients or shipped game modifications.
+The final performed checks and limits belong in
+`reports/RELEASE_VALIDATION.json`; intermediate reports and screenshots do not by
+themselves establish a full playthrough.
+
+## Requested manual image update
+
+The completed image census visually audited all 517 original archive image
+entries, representing 448 distinct byte hashes. It includes animated frames,
+transparent character parts, tutorial inset screenshots, browser thumbnails,
+hover variants, and stock/editor assets. `images/inventory.json`, the two census
+records, `images/coverage.json`, and `images/runtime_map.md` retain the evidence
+and classifications.
+
+The four local renderers produced 28 translated images; the assembler copied two
+exact duplicate counterparts, for 30 replacement archive entries. Transcriptions,
+English wording and pixel placement were authored manually without OCR,
+translation, image-generation, or other network services. The lettering brief
+and supplemental terms are in `images/PROMPT.md` and `images/image_glossary.json`.
+Source images remain immutable under `images/source`; outputs and hash-bound
+visual approvals remain in the per-family workspace. The scripts retain canvas
+sizes, alpha, artwork, borders, original paths and click geometry. Some original
+JPEG paths receive PNG bytes to avoid recompressing untouched pixels.
+
+One image, `data/bgimage/ev_Hdouga.jpg`, contains sexual depictions explicitly
+labeled as minors and is excluded from image editing and the patch payload.
+Its unchanged status is recorded separately from translated image coverage.
+
+The completed image package contains 50 payload files and 56 package files.
+All 30 replacement images passed native-size decoding from the isolated game's
+actual ASAR URLs; `reports/image_decode.json` records encoded-byte hashes,
+dimensions, and decoded-pixel checks. The theme preview carries a Generic RGB
+ICC profile. Its expected pixels were independently converted to sRGB with
+LittleCMS and matched Chromium within one channel-value rounding difference.
+The decode check did not insert images into the visible game DOM.
+
+The image package is installed in the main game. Its archive matches the isolated
+QA archive, retains 1,005 entries, and contains 50 replacements. The previous
+patch was restored with its own package before installing this update. A restore
+test with the new package reproduced the exact original archive hash.
+
+`reports/image_runtime.json` records the completed image checks: 30 decoded
+replacements, 14 active scene assets visually checked in game, and 16 unused or
+template assets reviewed at native size. `reports/image_visible.json` records a
+fresh normal playthrough through all nine scenes back to the title, with no
+renderer exceptions. Targeted checks also covered both warning indicators, the
+final caption, browser removal/back/favorites, five menu screenshots and hover
+states, and legacy and English save/reload. All 442 measured text units fit without
+overflow. Not every alternate route was played individually. Current tested
+archive identities and the final scope are recorded in
+`reports/RELEASE_VALIDATION.json`.

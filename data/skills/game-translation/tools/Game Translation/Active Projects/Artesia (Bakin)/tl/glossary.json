@@ -1,0 +1,4425 @@
+{
+  "meta": {
+    "game": "執聖官アルテシア (Artesia) Ver1.06",
+    "source": "speakers harvested from the engine's own \\NPL[..] nameplate code - exact, not heuristic",
+    "note": "Hand-authored 2026-08. The top ~90 speakers by line count carry gender/role/register filled from the corpus itself; en is deliberately left empty for the separate names pass. Every one of the 465 harvested nameplate rows is preserved. Rows flagged DO NOT MERGE / SPELLING VARIANT / CHORUS in their note must be honoured by any alias-merging automation.",
+    "do_not_translate_note": "Literal strings only. Everything the model must do with control codes is handled by masking (it never sees a backslash) and stated once in BASE_RULES; the removed prose lived in the CACHED prefix at 665 tokens a request and naming raw codes invites the model to invent one. The full research is kept in tl/notes-do-not-translate.md, which is never sent."
+  },
+  "names": {
+    "アルテシア": {
+      "en": "Artesia",
+      "gender": "female",
+      "role": "Protagonist. A Holy Executor (執聖官) of the Imperial Orthodoxy, summoned to the Sofreiman Domain by a letter signed by her father Wolf, who is already dead when she arrives. She investigates his murder across six chapters and is the playable character in every H scene.",
+      "register": "私 + アンタ (never お前); commanding feminine enders 〜わ/〜わね/〜のよ/〜かしら/〜なさい, and 〜じゃない as a challenge. Blunt, sarcastic, quick to anger, zero keigo with strangers (\"捨てるなら捨てるとハッキリ伝えなさい\", \"見過ごすと思う窃盗を？\", \"アンタ、正真正銘最低のクズよ！\"). Deduction lines are inner monologue in （）. In H scenes the same voice collapses into slurred kana with dakuten and ♡ (\"お゛っ♡\", \"きもひいい\", \"イグっ！♡♡♡\"). Calls her father パパ, never 父.",
+      "aliases": [],
+      "lines": 42695,
+      "note": "42,695 lines / 973 scenes - 60% of the corpus. FEMALE, confirmed everywhere (デカパイ, おっぱい, おまんこ, 娘の私が). Her whole arc is stated by her: 「私はただ『納得』したかったの」. Note the item text 執政官の服(インナーのみ) uses 彼 for the INNER GARMENT, not for her - do not let that flip her pronoun."
+    },
+    "男": {
+      "en": "Man",
+      "gender": "male",
+      "role": "The single largest generic mob nameplate - a nameless man, reused for street NPCs, johns, gang rapists and H-scene aggressors across 73 scenes.",
+      "register": "俺/お前/てめぇ, 〜だぜ/〜だぞ/〜やがる. Crude and jeering, escalating to abuse in H scenes (\"お前の子宮に注がれるはずだった汁だぞ♡　ありがたく飲め♡\"). Occasionally chatty and harmless in town scenes (\"いやー……見たことないぜ\").",
+      "aliases": [],
+      "lines": 2286,
+      "note": "2,286 lines. Male on every count (俺 292, てめ 141, だぜ 136, zero female markers). Generic label - never invent a personal name. Distinct from 男A/男B/男C/男2/男たち, which are separate rows."
+    },
+    "オリヴィア": {
+      "en": "Olivia",
+      "gender": "female",
+      "role": "The Dragon Knight (龍騎士). Second lead. Chases 『龍』 - the Dragon that destroyed the Empire - out of duty to her island; drifts through part-time jobs for money and is repeatedly conned into erotic work. Bickers with Artesia the whole game and joins her in the final scene.",
+      "register": "REGISTER-GENDER TRAP. 私 (watashi) + 貴様/お前 + hard masculine plain form: 〜だ, 〜だぞ, 〜ではないか, 〜じゃないか, 任せておけ, いらん, すまない. Boastful ふふんっ, self-important のだ (\"私の依頼だと言っただろう？ ふふんっ！\"). Petty insults: 性悪女, あっち行け！ しっ！しっ！ Falls into stiff shop keigo (申し訳ございません) when on the job. In H scenes she slurs to わらひ.",
+      "aliases": [
+        "オリヴィア＆アルテシア",
+        "アルテシア＆オリヴィア"
+      ],
+      "lines": 1842,
+      "note": "1,842 lines. FEMALE despite an entirely masculine knight register (58 male markers vs 9 female). Hard evidence: 魔族の長 calls the pursuing 龍騎士「しつこい女め」, and she is groped/assaulted as a woman (おっぱい, 胸, 淫乱マンコ) in オリヴィア触手風呂 / オリヴィア乱交 / オリヴィア水着. She must be she/her in English with the swaggering knight voice kept intact. The ＆ rows are joint nameplates where both women speak in unison - not aliases of one person."
+    },
+    "客": {
+      "en": "Customer",
+      "gender": "male",
+      "role": "Generic \"Customer\" - patrons of the casino, the club, the bar, the massage parlour and the strip stage. 33 scenes.",
+      "register": "Splits two ways: a coarse 俺/てめぇ/だぜ bar-patron voice, and a smug 僕/君/〜だね/〜よ playboy voice (\"遅漏で有名な僕のチンコ相手に良い度胸だね♡\"). Both male.",
+      "aliases": [],
+      "lines": 1245,
+      "note": "1,245 lines. Male (俺 112, 僕 48; 4 stray female markers only). Distinct row from 客2 and 客たち - do not merge."
+    },
+    "触手": {
+      "en": "Tentacle",
+      "gender": "unknown",
+      "role": "Tentacles. A recurring enemy and H-scene participant in 触手の森, 触手風呂, 壁尻 and the tentacle church rite.",
+      "register": "NO WORDS AT ALL. Every one of its 879 lines is the same wet slithering SFX: しゅるしゅる♡ / しゅるるるるるるる！！！！♡♡♡. Render as an English slither sound of comparable length, one locked spelling, never as dialogue.",
+      "aliases": [],
+      "lines": 879,
+      "note": "879 lines / 43 scenes and zero pronouns or verbs. Genderless. Same treatment applies to イソギンチャク, スライム, ミミック (みみっくぅうう～), 怨霊 and ゴブリン."
+    },
+    "患者": {
+      "en": "Patient",
+      "gender": "male",
+      "role": "The \"Patient\" at the Fラン医院 / clinic, serviced by Artesia in the nurse costume. Also the 頭金玉病 (\"dick-brain disease\") gag patient.",
+      "register": "Two male voices: a smirking 俺/だぜ/へへへ regular, and a whiny 僕/〜の♡ one (\"僕のチンコ♡　普通の男のより、ずっと気持ちいいの♡\"). Calls Artesia 姉ちゃん.",
+      "aliases": [],
+      "lines": 771,
+      "note": "771 lines / 17 scenes. Male (僕 31, 俺 22, だぜ 28). 患者2/3/4 are separate individuals - DO NOT MERGE."
+    },
+    "見回り": {
+      "en": "Patrolman",
+      "gender": "male",
+      "role": "A patrolman / watchman in the slums and the ninja quarter. Blackmails Artesia into public masturbation (\"オナニー強要\") in exchange for looking the other way.",
+      "register": "俺/お前/てめぇ, 〜だぜ, オラオラ, imperative bullying (\"オラオラ！　手ぇ止まってんぞ！\"), then mock-reasonable (\"社会を知れよ。機嫌悪くしたら約束なんて反故されんだよ？\"). Sadistic but talkative.",
+      "aliases": [],
+      "lines": 589,
+      "note": "589 lines / 12 scenes. Male (俺 74, お前 60, てめ 40, zero female markers). 見回り2 and 見回り3 are separate patrolmen - DO NOT MERGE."
+    },
+    "チャラ男": {
+      "en": "Party Boy",
+      "gender": "male",
+      "role": "Flashy party-boy #1 of a beach/bar pickup crew. Buys women drinks and gang-rapes them; appears in the beach, the bunny bar and the Olivia gangbang.",
+      "register": "Modern gyaru-o slang: 俺, てめぇ, 〜だぜ♡, 〜的な？, マジ〜, calls both heroines ちゃん (オリヴィアちゃん, デカパイちゃん). Fake-friendly then instantly vicious (\"好きだぜそーゆーの♡\" -> \"しっかりマンコ締めてチンコにご奉仕しろっ！♡\").",
+      "aliases": [],
+      "lines": 426,
+      "note": "426 lines. Male. DO NOT MERGE with チャラ男2 or チャラ男3 - they are three separate men in the same crew and they talk to each other (see the joint plate チャラ男＆チャラ男2)."
+    },
+    "少年": {
+      "en": "the Boy",
+      "gender": "male",
+      "role": "The \"Boy\" - a runaway voyeur who spies on Artesia bathing in 触手の森 and masturbates. Calls himself 『逃亡者』/『家出少年』. A recurring gag: his scenes are told entirely from inside his head.",
+      "register": "UNIQUE SHAPE: almost every line is interior monologue in （　） written as pretentious literary third-person-flavoured prose with 僕 - \"（迷いなく落ちる清流が辛うじて妨げていた眠気も今や決壊寸前であった）\" - which then degenerates mid-sentence into ♡-laden filth (\"先遣汁が木と僕の仲を取り持ってくれて……おぉ゛！？♡\"). The contrast between the literary diction and the content IS the joke. Keep the register high and let it break.",
+      "aliases": [],
+      "lines": 420,
+      "note": "420 lines / 10 scenes, 129 uses of 僕 and no female marker. Male. Do NOT render his （）blocks as narration - they are his thoughts and must stay in parentheses."
+    },
+    "ソフィア": {
+      "en": "Sofia",
+      "gender": "female",
+      "role": "Holy Executor Sofia, rival to Artesia and the daughter of Lord Sofreiman. Investigates the same case under orders \"to judge the traitor\". Her father does not use her name - he calls her by the number 『0602』 (sixth wife, second child). Framed for his poisoning in Chapter 6.",
+      "register": "Stiff, brittle keigo: 私 + 貴女 (never アンタ) + 〜です/〜ます/〜ません, お父様. Formal even while screaming (\"私がッ！　なにをしたというのです！？\", \"黙りなさい！　貴女さえ、貴女さえ現れなければ！\"). Cracks into plain 〜の/〜なきゃ only when alone and broken (\"どうして私は、父を殺した者に感謝しなきゃいけないの……？\").",
+      "aliases": [],
+      "lines": 413,
+      "note": "413 lines / 17 scenes. FEMALE - 領主の娘, referred to as 彼女 by the Butler. Her 貴女 for Artesia is cold formality, not politeness; keep the frost."
+    },
+    "チャラ男2": {
+      "en": "Party Boy 2",
+      "gender": "male",
+      "role": "Flashy party-boy #2 of the same pickup crew. The nastiest of the three - runs the \"putting her in her place\" (わからせ) talk.",
+      "register": "Same slang base as チャラ男 but harsher: more てめぇ, more ぜってぇ, misogynist theorising (\"自分がどれだけいやらしいか理解してねぇメスをわからせるのもオスの役目だよな♡\"). Also the drinks-and-hotel pitch (\"俺たち近くの宿で部屋取ってんだけど\").",
+      "aliases": [],
+      "lines": 405,
+      "note": "405 lines. Male. DO NOT MERGE with チャラ男 / チャラ男3 - see the joint nameplate チャラ男＆チャラ男2, which proves they are two people in one scene."
+    },
+    "ガキ共": {
+      "en": "Bratty Kids",
+      "gender": "male",
+      "role": "The \"Brats\" - a pack of shota boys who assault Artesia in the massage scene, the sex-ed scene and the confession booth. Plural nameplate: they talk over each other.",
+      "register": "僕 + childish demands and 〜したい／〜して♡／〜くださいっ♡. Cheerful, greedy, no shame (\"次僕！♡　ケツマンコがいいっ！♡\", \"おっぱい星人の反撃っ！！？♡♡♡\"). Never threatening in tone even while doing the worst things.",
+      "aliases": [],
+      "lines": 372,
+      "note": "372 lines / 8 scenes. Male (僕 x12, no female marker). Plural - keep plural in English. ガキ (258 lines) is the singular counterpart and is a SEPARATE row."
+    },
+    "酒飲み": {
+      "en": "Drinker",
+      "gender": "male",
+      "role": "The \"Drinker\" - a bar drunk who assaults Artesia after she passes out drunk (泥酔エロ, 酒場).",
+      "register": "俺/お前/てめー, slurred へへへっ♡, obsessive possessive jealousy (\"俺以外のチンコ♡　このメス♡　マゾメス♡\"). Starts friendly (\"おい姉ちゃん！　一杯付き合ってくれよ！\") and turns.",
+      "aliases": [],
+      "lines": 347,
+      "note": "347 lines / 5 scenes. Male (俺 50, てめ 16). 酔っ払い and 酔っ払い2 are DIFFERENT drunks - do not merge."
+    },
+    "アナーヒタ頭領": {
+      "en": "Anahita Chief",
+      "gender": "male",
+      "role": "The Chief of Anahita, the boom-town that rivals the Lord himself in influence. Runs the auction house and the casino, hires Artesia to investigate the mana drought around the settlement, and explains 『龍脈』 to her. Dying of an unnamed illness by the epilogue.",
+      "register": "Grandiose showman. 吾輩 for himself, 君 for everyone else, and katakana sentence-final ネ！/ヨ！ everywhere (\"その場しのぎな苦し紛れの言葉ばかりだったネ\", \"吾輩が信じているのは君だヨ！\"). Auctioneer bellowing (決着か決着か！？　終わりなのかァー！？) and 〜たまえ imperatives (\"寝取り返してやりたまえ！\", \"今は熱に充てられたまえッ！\"). Warm and paternal under the noise.",
+      "aliases": [
+        "アナーヒタの頭領"
+      ],
+      "lines": 346,
+      "note": "346 + 32 lines. MALE (吾輩 47). アナーヒタの頭領 is the same person with a の inserted - safe alias merge. Keep the ネ/ヨ tics as a written mannerism (an exclamatory tag), not as broken English."
+    },
+    "倉庫番": {
+      "en": "Warehouseman",
+      "gender": "male",
+      "role": "The Warehouseman at the port storehouse where Artesia takes a part-time job. Assaults her over the \"hole she made in the wall\" gag.",
+      "register": "俺/お前/てめぇ, 〜だぜ/〜だぞ, grievance-driven ranting (\"人の仕事をバカにしやがってこの野郎……！♡\", \"溜りに溜まったイライラてめぇにぶつけてやんよぉっ！♡\"). Sarcastic false courtesy (\"俺なりに気を使っての結果ってやつだぜ♡\").",
+      "aliases": [],
+      "lines": 341,
+      "note": "341 lines / 6 scenes. Male (俺 54, てめ 44)."
+    },
+    "男B": {
+      "en": "Man B",
+      "gender": "male",
+      "role": "Man B. In Chapter 1 he is one of two rivals with a lot of cash who intend to settle things with each other over 夢見る女; elsewhere a mob in the おとり捜査 (decoy) scenes.",
+      "register": "俺/てめぇ, 〜ねぇかな, 〜じゃねーの. Casually lewd small talk (\"常識外れついでにおっぱい揉ませてもらえねぇかな？\").",
+      "aliases": [],
+      "lines": 323,
+      "note": "323 lines / 13 scenes. Male. DO NOT MERGE with 男A or 男C - the Chapter 1 information items 第一章　男Aの情報 and 第一章　男Bの情報 explicitly describe two different men who intend to kill each other."
+    },
+    "金持ち小僧": {
+      "en": "Rich Brat",
+      "gender": "male",
+      "role": "The \"Rich Brat\" - a wealthy shota who buys Artesia with pocket money (そく位, チャイナドレス scenes).",
+      "register": "僕 + wheedling child sing-song 〜だよ～♡/〜じゃんいいじゃんっ♡/お姉さん. Boasts about his money and his cock in the same breath (\"お金もたくさんあるからねっ♡\", \"ほらっ、おちんちんもでっかいでしょ！♡\"). Uses おちんちん, not チンコ - keep the childish word.",
+      "aliases": [],
+      "lines": 312,
+      "note": "312 lines / 4 scenes. Male (僕 44)."
+    },
+    "テント民": {
+      "en": "Tent Dweller",
+      "gender": "male",
+      "role": "The \"Tent Dwellers\" - slum squatters at the tent venue where Artesia and Olivia are made to perform. Plural jeering nameplate.",
+      "register": "てめぇ/お前ら + 〜ねぇ contractions, choral jeering (\"お前ら絶対許さねぇからなマジで覚悟しろオラぁあっ！♡♡♡\"). Group-chant register: keep the plural \"we/you lot\".",
+      "aliases": [],
+      "lines": 300,
+      "note": "300 lines / 8 scenes. Male (てめ 40, だぜ 20). Plural - matches ホームレスたち, 男たち, 催眠術師たち, VIPたち, チンコたち."
+    },
+    "トレーナー": {
+      "en": "Trainer",
+      "gender": "male",
+      "role": "The gym Trainer at マジタイプフィットネス24 who coaches Artesia through the squat scene while using her.",
+      "register": "Chirpy coach patter, 君 for her, 僕 for himself, imperative encouragement (\"さぁ！　スクワットを続けて！　コツはねぇ\") that flips into ♡-marked threats (\"調子に乗るな♡　お前俺を怒らせたぞ♡\", \"本気でわからせちゃうからね♡\"). Fitness jargon played straight against porn content.",
+      "aliases": [],
+      "lines": 292,
+      "note": "292 lines / 5 scenes. Male. Separate from コーチ and 指導員, who are different instructors - do not merge."
+    },
+    "酒客": {
+      "en": "Drinking Customer",
+      "gender": "male",
+      "role": "A \"Bar Patron\" in the 横ズリ scenes at the hostess bar.",
+      "register": "Light, breezy 俺 + ちゃん + 〜じゃん/〜ね♡. Casually cruel about smell and use (\"あ～っ♡　くっせ♡　めすくっせ♡♡\", \"ごめんごめん♡　クソビッチすぎて射精しちゃった♡\").",
+      "aliases": [],
+      "lines": 282,
+      "note": "282 lines / 4 scenes. Male (俺 20). Separate from 客 and 常連."
+    },
+    "常連": {
+      "en": "Regular",
+      "gender": "male",
+      "role": "The \"Regular\" at the bar - runs the 乳首当てゲーム (guess-the-nipple game) and the おっぱいトレイ game.",
+      "register": "Genteel game-show host register with 〜かい？/〜んだよ♡/お望みどおりに♡ and くふふふ♡/おほほ♡ laughter. Explains rules in mock-formal terms (\"おやぁ？　ルールを知らなかったのかい？♡\").",
+      "aliases": [],
+      "lines": 278,
+      "note": "278 lines / 4 scenes. Male, older/refined-sounding. Low pronoun count by design - keep the arch, ceremonious tone rather than a rough one."
+    },
+    "男A": {
+      "en": "Man A",
+      "gender": "male",
+      "role": "Man A. Chapter 1 rival of 男B, both flush with cash and both set on a lethal showdown over 夢見る女. Also reused as a mob elsewhere.",
+      "register": "俺/てめぇ, 〜ねぇぜ, aggrieved shouting (\"クソ……信じらんねぇぜ！　俺以外の男がいただなんてよぉ……！\", \"てめっ！　ざけてんじゃねぇぞオッラ！\").",
+      "aliases": [],
+      "lines": 274,
+      "note": "274 lines / 11 scenes. Male. DO NOT MERGE with 男B/男C. See also the joint plates 男A＆男B and 男A＆B."
+    },
+    "ドクター": {
+      "en": "the Doctor",
+      "gender": "male",
+      "role": "The Doctor of Heechka. Villain of the Chapter 3-4 arc: he runs the human experiments in the 危険域 lab on a 龍脈 site, abducts test subjects, and wants to master 『煉禁術』 and become a Dragon Knight himself. Distinct from the enemy ドクタースネーク.",
+      "register": "俺/お前/テメェ, 〜ねぇ/〜だッ with hard ッ stops. Contemptuous supremacist (\"調子に乗るなよ絶滅危惧種！　対等のつもりか、俺とお前たちがッ！？\", \"テメェらなんざが持っていい希望なんかねぇとな\"). Falls apart into ranting megalomania at the end (\"『煉禁術』を極め、龍の力を得るのはこの俺だッ！\").",
+      "aliases": [],
+      "lines": 266,
+      "note": "266 lines / 5 scenes. Male (俺 58). DO NOT MERGE with ドクタースネーク (a poisonous snake enemy) or 医師/弟子医者/院長."
+    },
+    "悪のマッサージ師": {
+      "en": "the Evil Masseur",
+      "gender": "male",
+      "role": "The \"Evil Masseur\" - front man of the 悪のマッサージ軍団 (evil massage syndicate) with a hideout, a branch manager and a redeemed後-state. Assaults clients under the cover of lymph treatment.",
+      "register": "REGISTER-GENDER TRAP. Entirely soft, obsequious salon keigo with ♡: 〜ですね♡/〜ますね～♡/〜でございますね♡/毎度ご利用ありがとうございます～♡, plus くくく……♡. Nothing masculine in the surface grammar, so a naive reading makes him a woman.",
+      "aliases": [],
+      "lines": 264,
+      "note": "264 lines / 6 scenes. MALE - he refers to his own erection (\"私のチンポジに乱れが生じてしまっただけのことです♡\"). 0 masculine pronouns in 264 lines: he MUST carry an explicit note or he ships as female. 元悪のマッサージ師 is the same man after his redemption arc, 悪のマッサージ師支店長 / 悪？のマッサージ師支店長 is his branch manager (a different man), 悪のマッサージおじさん is a third. Keep all four rows distinct."
+    },
+    "ガキ": {
+      "en": "Brat",
+      "gender": "male",
+      "role": "A single \"Brat\" - shota, the singular of ガキ共, in the ショタ押し倒し and かくれんぼ scenes.",
+      "register": "僕 + childish begging (\"おちんちんおっぱいにしてっ！♡♡♡\"), お姉さん for Artesia.",
+      "aliases": [],
+      "lines": 258,
+      "note": "258 lines / 4 scenes. Male. Separate row from ガキ共 (plural) and バチクソ失礼なガキ / マセメスガキ."
+    },
+    "お金持ち": {
+      "en": "Rich Person",
+      "gender": "male",
+      "role": "The \"Rich Man\" - a wealthy patron who pays for Artesia in the バック / chinadress scenes and treats her degradation as a connoisseur would.",
+      "register": "私 + 君 + refined masculine plain form 〜だぞ♡/〜のだ/ふふふ♡. Appraising, patronising affection (\"生意気な君も好きだが、無様にチンコに媚びを売る姿も好きだぞ♡\"). Never crude vocabulary - keep him articulate.",
+      "aliases": [],
+      "lines": 256,
+      "note": "256 lines / 4 scenes. Male (私 40, 君 44, だぞ 8). Distinct from 金持ち男, 金持ち女, 金持ち小僧, 成金, 元金持ち."
+    },
+    "指導員": {
+      "en": "Instructor",
+      "gender": "male",
+      "role": "The \"Instructor\" of a mountain training sect who withholds information until Artesia completes his \"training\" (祈りフェラ).",
+      "register": "貴様 as the drill-instructor second person, barked imperatives and 〜ぞ/〜だッ (\"修行せぬ者には不要の情報だッ！　修行をして貴様を一人前と認めたら情報をやろう！\"). Collapses instantly into ♡-slurred whining when serviced (\"言い訳っ♡　言い訳しおって～！♡\").",
+      "aliases": [],
+      "lines": 248,
+      "note": "248 lines / 4 scenes. Male. His 貴様 is martial, not aristocratic - render as a harsh \"you\", not \"thou\"."
+    },
+    "男たち": {
+      "en": "Men",
+      "gender": "male",
+      "role": "The \"Men\" - a plural mob nameplate for a group speaking at once (drinking-party Twister, gangbangs).",
+      "register": "俺/オレ, 〜だぜ, chanted taunts, ちゃん for Artesia. Choral - use plural voice.",
+      "aliases": [],
+      "lines": 248,
+      "note": "248 lines / 8 scenes. Male. Plural: never collapse to a single speaker."
+    },
+    "シスター": {
+      "en": "the Sister",
+      "gender": "female",
+      "role": "The Sister of 『龍を崇める会』, an old dragon-worship cult that resents the upstart Imperial Orthodoxy. She recruits Artesia as a \"joker\" to fix the sect finances and puts her on the tentacle-worship altar in front of a congregation.",
+      "register": "Immaculate church keigo - 〜ます/〜ません/誠にありがとうございます/くださいっ - which drops without warning into flat menace (\"殺すぞ。『龍を崇める会』は伝統ある宗教団体なんですよ\") and hard-sell patter (\"次回参加希望の方はこちらの入団届を記載した上で入団金を────\"). Also uses わよ/かしら when off-duty.",
+      "aliases": [],
+      "lines": 241,
+      "note": "241 lines / 8 scenes. FEMALE (28 feminine markers, zero masculine). The comedy is the keigo staying perfectly intact over cult extortion - do not flatten it into casual English."
+    },
+    "新人": {
+      "en": "Newcomer",
+      "gender": "male",
+      "role": "The \"Rookie\" masseur/trainee at the shower and stretching scenes - earnest, slow on the uptake, and doing exactly what he was told.",
+      "register": "僕 + polite 〜ますね♡/〜ください/〜ですか. Thinks in （）like the Boy but plainly, not literarily (\"（さっきからなんかえっちなんだよなぁ……おっぱいもデカだし、声エロ……っ）\"). Sincere; the horror is that he means it.",
+      "aliases": [],
+      "lines": 240,
+      "note": "240 lines / 4 scenes. Male (僕 20). Distinct from 生意気な新人."
+    },
+    "風紀委員": {
+      "en": "Public Morals Officer",
+      "gender": "male",
+      "role": "The Public Morals Officer at 風紀委員会 / スラム街・風紀処. Sends Artesia out on \"patrol\" and makes her report back on how many men groped her, trading information for the show.",
+      "register": "私 + 君 + arch academic 〜かね？/〜たまえ-adjacent/〜だがね, and ぐふふ♡/むふふ……♡ leering laughter. Prim bureaucratic wording over open perversion (\"な、何人ぐらいにセクハラさせられたのかね？\", \"むふふ……♡　報告会、楽しみにしてるよ♡\").",
+      "aliases": [],
+      "lines": 236,
+      "note": "236 lines / 5 scenes. Male. The 委員 title is a school-council word used for a municipal morals inspector - render as an office, not a student post."
+    },
+    "マッサージ屋": {
+      "en": "Massage Shop",
+      "gender": "male",
+      "role": "The \"Massage Shop\" attendant - the legitimate front-counter parlour, distinct from the evil syndicate.",
+      "register": "Sing-song service register with drawn-out vowels: はぁ～い/〜ですよ～/またのご来店をお待ちしております！. Never breaks character even when the massage stops being a massage (\"我慢我慢～、そのうち気持ちよくなりますよ～\").",
+      "aliases": [],
+      "lines": 231,
+      "note": "231 lines / 6 scenes. Male. Distinct from 悪のマッサージ師 and 街のマッサージ屋 (a map). Keep the drawled ～ as drawl, not as an ellipsis."
+    },
+    "情報屋": {
+      "en": "Information Broker",
+      "gender": "male",
+      "role": "The Information Broker. Sells leads; the \"price\" escalates into the 乳首舐め手コキ scene. A structural NPC of the investigation system.",
+      "register": "俺 + 君 + 〜だぜ/〜だろ, transactional and needling (\"おいおい、先に取引で無礼を働いたのはそっちだぜ？\"). Boasts about exclusive information (\"誰も知らない、俺だけが持ってる情報♡\").",
+      "aliases": [],
+      "lines": 230,
+      "note": "230 lines / 6 scenes. Male. Distinct from 売人 (the drug/poison dealer of Chapter 6) and 非物売り."
+    },
+    "ナンパ男": {
+      "en": "Pickup Man",
+      "gender": "male",
+      "role": "Pickup Artist #1 at the beach and the poolside, working the same crowd as チャラ男.",
+      "register": "俺 + へへへ……♡ + 〜じゃん/〜んだわ. Escalates from flattery to \"teaching her her place\" (\"立場をわからせねぇといけねぇな！♡　オラっ！♡　まずは一発だ！♡\").",
+      "aliases": [],
+      "lines": 230,
+      "note": "230 lines / 4 scenes. Male. DO NOT MERGE with ナンパ男2 or ナンパ先輩."
+    },
+    "センセイ": {
+      "en": "Sensei",
+      "gender": "unknown",
+      "role": "Artesia's former instructor in the Holy Executors, seven years back, and by his own account a man who spent a whole career 'brandishing authority as a Holy Executor with no judgement of good and evil, at whoever's command'. Terminally ill, under orders to arrest her, and the one who gives her the 『聖域』 speech that titles Chapter 5. Survives, and leaves on a holiday.",
+      "register": "Unfailing 〜です/〜ます with 私 and 貴女, dry humour delivered deadpan (\"はっはっはっ。今のは口が滑った、というやつですよ／故意ではありませんのでセーフです\"). Teacherly rhetorical questions, 我が弟子 for Artesia. Coughs mid-sentence (ごほっ！). The register never breaks even at 「気に入らなければ殺してでも修正する」.",
+      "aliases": [],
+      "lines": 228,
+      "note": "GENDER NOT ESTABLISHED IN TEXT - 228 lines with no 彼/彼女, no gendered pronoun, and no physical description found. 協力者 addresses him as 貴方. Elderly-mentor framing suggests male, but this is an INFERENCE, not evidence: prefer name/title over a pronoun where English allows, and flag if a later scene settles it. Distinct person from 『協力者』, who is a separate NPC in Taromatee (Artesia refers to that one as 彼)."
+    },
+    "異端審問官": {
+      "en": "Inquisitor",
+      "gender": "male",
+      "role": "The Inquisitor - interrogates Artesia over whether she really is a Holy Executor, using a lie-detecting slime in the アナルゼリー scene.",
+      "register": "俺 + アンタ (56 times - his signature second person) + 〜だぜ/〜な, and くくく……♡. Mock-judicial phrasing over pure sadism (\"さぁ、罪を告白しろ／お前は執聖官なんだろう？　帝国正教の犬なのだろう？\", \"はいふたつ♡　アンタはマゾ女♡\").",
+      "aliases": [],
+      "lines": 226,
+      "note": "226 lines / 4 scenes. Male. 異端審問官 = Inquisitor is a DIFFERENT office from 執聖官 = Holy Executor - keep the two English titles distinct or the scene stops making sense."
+    },
+    "教員": {
+      "en": "Teacher",
+      "gender": "male",
+      "role": "The \"Teacher\" who runs the 性教育 (sex-ed) class using Artesia as the live teaching material, with a class of boys.",
+      "register": "俺 + アンタ + 〜だぜ/〜だぞ/〜ろ♡, classroom-management imperatives applied to assault (\"よしよし♡　じゃあみんな手を洗って綺麗な状態で触るようにしろ♡\"). Whining excuses when caught out (\"ちげぇよぉ……俺、反省してっ！\").",
+      "aliases": [],
+      "lines": 224,
+      "note": "224 lines / 4 scenes. Male (だぜ 32, だぞ 30). The gag is didactic classroom register on top of gang assault - keep it pedagogical."
+    },
+    "セクハラ博徒": {
+      "en": "Harassing Gambler",
+      "gender": "male",
+      "role": "The \"Groping Gambler\" at the casino - one of a family of 博徒 (gambler) NPCs, all distinct.",
+      "register": "Mock-explorer narration of a woman's body as terrain (\"おぉっ♡　奥に進むにつれおっぱい洞窟が魔境になってくぅ♡\", \"湿度90％越えのエロガス充満おっぱいマンコぉ゛♡♡\"), plus a genteel 〜給え (\"これはチップだ。受け取り給え\"). The travelogue conceit is the joke.",
+      "aliases": [],
+      "lines": 216,
+      "note": "216 lines / 4 scenes. Male. Distinct from 負け博徒, 金なし博徒, マジメ博徒, 博徒 - four separate gamblers, DO NOT MERGE."
+    },
+    "引退退魔士": {
+      "en": "the Retired Exorcist",
+      "gender": "female",
+      "role": "The Retired Exorcist. Hires Artesia as bait to lure and beat up 怨霊 (vengeful spirits) for cash, and drags her to drinking parties.",
+      "register": "私 + アンタ + heavy feminine enders: 〜わよ/〜だわ/〜かしら/〜ちょうだい/〜のよ, plus a brash しゃあっ！ battle-cry (\"しゃあっ！　さっそく怨霊共をシバきにいくわよ！！\"). Money-obsessed and shameless (\"このご時世よ！　お金なんていくらあってもたりゃしないわ！\").",
+      "aliases": [],
+      "lines": 213,
+      "note": "213 lines / 9 scenes. FEMALE - 105 feminine markers, zero masculine. 退魔士 = exorcist, from 退魔の里; keep that term distinct from 執聖官 and 異端審問官."
+    },
+    "悩める子羊": {
+      "en": "the Troubled Lamb",
+      "gender": "male",
+      "role": "The \"Troubled Lamb\" - a parishioner who comes to Sister Artesia's confessional and pays a \"tip\" for a titfuck confession (パイズリ懺悔).",
+      "register": "Nervous stammering with polite forms: え、えと……ふ、ふへへっ♡, 〜させてくださいっ！♡, ですっ♡, あんた for her. Timid until he is not.",
+      "aliases": [],
+      "lines": 212,
+      "note": "212 lines / 4 scenes. MALE despite a gender-neutral pastoral nameplate - he has a cock and is serviced. Do not render \"Lamb\" as female; keep the biblical-flock flavour of the label."
+    },
+    "開発部": {
+      "en": "Development Dept.",
+      "gender": "male",
+      "role": "The \"Development Department\" of the Moo-Moo Town dairy company - runs the milking rig on Artesia in the cow costume and plans to mass-produce the outfit.",
+      "register": "The single crudest voice in the game: 俺/てめぇ, wall-to-wall オラッ！♡ imperatives and animal insults (獣がぁ……！♡♡, メス牛), business-plan megalomania played straight (\"人乳おっぱい帝国を完成させるのが俺の目的よ♡　その礎となれや！\").",
+      "aliases": [],
+      "lines": 210,
+      "note": "210 lines / 4 scenes. Male (俺 72, てめ 38). A department name used as a nameplate - render as a job label, not a personal name. Same for 広報部 and 宣伝担当."
+    },
+    "参拝者": {
+      "en": "Worshipper",
+      "gender": "male",
+      "role": "A \"Worshipper\" at the nipple-shrine gag (乳首筆, おどろ通り祠) - pays to \"worship\" and question Artesia.",
+      "register": "Country-shrine cheer: 〜かい？/〜んだよ♡/むほほ……♡, and a mock-liturgical framing of what he is doing (\"参拝者には質問権があるんだよ♡\", \"こりゃいい参拝になるなぁ……♡\").",
+      "aliases": [],
+      "lines": 208,
+      "note": "208 lines / 4 scenes. Male. Keep the shrine vocabulary (参拝 worship, 祠 shrine) - the joke is entirely in the religious register."
+    },
+    "広報部": {
+      "en": "PR Dept.",
+      "gender": "male",
+      "role": "The \"PR Department\" of the dairy company - shoots the flyer photos of Artesia in the cow costume and reports back on customer feedback.",
+      "register": "Ad-man breeziness: 君/バイトちゃん, 〜っぽい/〜だよね♡/〜って！, upbeat and money-minded (\"いやぁ助かった助かった♡　おかげでボロ儲けだよぉ～♡\"). Reads out obscene customer quotes in a normal work voice.",
+      "aliases": [],
+      "lines": 208,
+      "note": "208 lines / 3 scenes. Male. Department nameplate - job label, not a name."
+    },
+    "負け博徒": {
+      "en": "Losing Gambler",
+      "gender": "male",
+      "role": "The \"Losing Gambler\" - the one who has lost his money and takes it out on Artesia in the bunny costume (バニーセックス).",
+      "register": "俺/てめぇ/お前, snarling 〜ろオラッ！！！♡ imperatives and machine metaphors for her (オナホ女, 性処理機). Explicit that his anger is the point (\"俺はそれだけイライラしてんだよカスッ！♡\").",
+      "aliases": [],
+      "lines": 205,
+      "note": "205 lines / 6 scenes. Male (俺 62, てめ 46). DO NOT MERGE with セクハラ博徒 / 金なし博徒 / マジメ博徒 / 博徒 / 勝った男."
+    },
+    "上官": {
+      "en": "the Superior Officer",
+      "gender": "male",
+      "role": "The Superior Officer of the Peacekeeping Corps in the Lord's Town. Chapter 1 antagonist: he investigates Wolf's murder while blind drunk, frames a blind girl for it, and is exposed by Artesia. Stepfather to 上官の娘. His body is never recovered, which keeps Sofia's mission open into later chapters.",
+      "register": "Two-faced. Oily deference to Artesia in public (\"これは手厳しい。さすがは執聖官様、慧眼ですなぁ\", 私 + 〜ですな/〜ます), which shatters into shrieking plain form when cornered (\"負け犬の執聖官ごときに……邪魔されてっ、たまるか！\", \"わ、私は正常だった！　酒など飲んでない！\"). Self-loathing in the last scene (\"グズで！　バカで！　最低な、人殺しの私に！\").",
+      "aliases": [],
+      "lines": 200,
+      "note": "200 lines / 8 scenes. Male. DO NOT MERGE with 上官の娘 (his stepdaughter) or 看守 (the jailer, a different man in the same case)."
+    },
+    "ソフレイマン": {
+      "en": "Sofreiman",
+      "gender": "male",
+      "role": "Lord Sofreiman, ruler of the Sofreiman Domain and Sofia's father. Poured the domain's taxes into 『煉禁術』 research, kept Wolf imprisoned in the Taromatee institute for over a decade, and wants 『究極煉禁』 to become a god. Poisoned in Chapter 6; Sofia is framed for it.",
+      "register": "SIGNATURE TIC: he shouts 「絶頂！」 (\"Ecstasy!\") as a standalone interjection, mid-speech, dozens of times - it is his catchphrase, not a sexual line, and his goal is 『永遠絶頂』 (\"Eternal Ecstasy\"). Otherwise 私 + 貴様 + booming archaic-imperious plain form (〜であろう！？, 〜のだッ, おのれェ, フハハハハハ！). Cannot remember his own children's names and refers to them by number.",
+      "aliases": [
+        "領主"
+      ],
+      "lines": 196,
+      "note": "196 + 32 lines. MALE. 領主 (\"the Lord\") is the same man - the 領主 rows carry the identical 絶頂 tic and the 0602 numbering speech. TRAP: 絶頂 in his mouth = ecstasy/bliss as an exclamation; 絶頂 in every H scene = orgasm. Lock two different English words and never swap them."
+    },
+    "盗人": {
+      "en": "Thief",
+      "gender": "male",
+      "role": "The \"Thief\" - a bandit who blackmails Artesia into public masturbation for the 敗北媚薬野外オナニー scene.",
+      "register": "俺/お前/てめぇ, 〜だぜ, くくく……♡. Ironic honour code (\"くくく……♡　俺は約束は守る男♡\") used to make the coercion worse.",
+      "aliases": [],
+      "lines": 196,
+      "note": "196 lines / 4 scenes. Male (俺 60, てめ 32). Distinct from 盗賊 (an enemy Cast entry) and 売人."
+    },
+    "会員": {
+      "en": "Member",
+      "gender": "male",
+      "role": "A \"Member\" of the members-only gym / club where the shower scene happens.",
+      "register": "僕 + 君 + soft 〜だよ/〜しよっか♡, mild-mannered and entitled at once (\"あぁ、言わなくてもいいよ／君におっぱいを見てこんなになったんだ\"). Turns cold when refused (\"なんだと？♡　だったらおしゃぶりはなしだ♡\").",
+      "aliases": [],
+      "lines": 186,
+      "note": "186 lines / 4 scenes. Male (僕 18, 君 36)."
+    },
+    "怨霊": {
+      "en": "Vengeful Spirit",
+      "gender": "unknown",
+      "role": "Vengeful Spirits - the undead formed from human corpses that the Retired Exorcist hunts (パイフェラ悪霊退治, 淫霊誘い).",
+      "register": "NO WORDS. All 186 lines are moaning SFX (んおぉおお゛～～～～っ♡♡♡) or slither (しゅる！？). Render as English moans/sounds of matching length; never as speech.",
+      "aliases": [],
+      "lines": 186,
+      "note": "186 lines / 8 scenes, zero pronouns. Genderless. Artesia glosses them: 「人の死骸がモンスター化した成れの果て」."
+    },
+    "ナンパ男2": {
+      "en": "Pickup Man 2",
+      "gender": "male",
+      "role": "Pickup Artist #2, working the beach with ナンパ男.",
+      "register": "俺ら/てめぇ, 〜だぜ♡/〜のくせによぉ！♡. Directs traffic between the two victims (\"同じデカパイのオリヴィアちゃんの意見がまだだぜ♡\").",
+      "aliases": [],
+      "lines": 186,
+      "note": "186 lines / 4 scenes. Male. DO NOT MERGE with ナンパ男 - they alternate lines in the same scenes."
+    },
+    "処刑人": {
+      "en": "Executioner",
+      "gender": "male",
+      "role": "The Executioner - runs the public \"make an example of her\" show (敗北見せしめ) on a stage in front of a paying crowd.",
+      "register": "俺様 + てめぇ/お前, 〜オラ！！♡, 負け犬 and マゾ豚 as fixed epithets, くくく……♡. Showman-cruel: talks to the audience as much as to her (\"負け犬にもステージが用意されてるってのは嬉しいよなぁ♡\").",
+      "aliases": [],
+      "lines": 184,
+      "note": "184 lines / 4 scenes. Male (俺 32, てめ 36). His 俺様 is one notch above 俺 - keep the self-aggrandisement audible."
+    },
+    "宣伝担当": {
+      "en": "PR Rep",
+      "gender": "male",
+      "role": "The \"Promo Guy\" running the hot-spring photo shoot of Artesia (温泉撮影).",
+      "register": "君/ください + 〜よ～！/〜だね！, a harried freelancer keeping a shoot on schedule (\"ほらっ！　撮影を続けるよ！　リラックスリラックス！\"). Snaps when the client complains (\"逆だ！　ないからクレームが飛んできたんだ！\").",
+      "aliases": [],
+      "lines": 178,
+      "note": "178 lines / 4 scenes. Male. Job label, not a name. Distinct from 広報部 and イベント担当."
+    },
+    "ホームレスたち": {
+      "en": "Homeless People",
+      "gender": "male",
+      "role": "The \"Homeless Men\" of the slum tent quarter - the audience at the tent venue who masturbate at the performance and then join in.",
+      "register": "てめぇ/お前, 〜だろーがっ♡/〜んだよ♡. Blunt, unbothered self-justification (\"なにって……チンコだが？♡　こんな痴女相手にシコるなって方が無理筋だろーがっ♡\").",
+      "aliases": [],
+      "lines": 176,
+      "note": "176 lines / 5 scenes. Male. Plural. Separate rows exist for ホームレス (singular), 浮浪者, 浮浪G, 乞食, 元乞食 - all distinct."
+    },
+    "スポンサー": {
+      "en": "Sponsor",
+      "gender": "male",
+      "role": "The \"Sponsor\" - the rich backer of the Moo-Moo dairy promotion who samples the product personally (牛コスパイズリ).",
+      "register": "私 + 君 + くふふふ♡, wealthy-connoisseur diction (\"そうかそうか♡　金持ちだからね、叶えてしんぜよう♡\") and pointed grading of her performance (\"お礼が下手だね♡　次回までに改善しておくこと♡\"). Uses ざぁっこ♡ as a taunt.",
+      "aliases": [],
+      "lines": 172,
+      "note": "172 lines / 4 scenes. Male (私 16, 君 20). Distinct from お金持ち and 金持ち男."
+    },
+    "魔族の長": {
+      "en": "Chief of the Demons",
+      "gender": "male",
+      "role": "The Chief of the Demons (魔族). Wolf's partner in the escape plot: the demons investigated the domain for him and freed him in exchange for 『究極煉禁』, and Wolf then betrayed them. The last survivor of his people apart from one comrade in Heechka. Dies fighting Artesia in Taromatee.",
+      "register": "私 + 貴様/お前, terse clipped plain form with hard ッ (\"要件を言え。騒ぎを起こしたくはない\", \"虫唾が走るぞ。ウォフの娘ェ……ッ！\"). No jokes, no keigo. Bitter racial grievance (\"劣等種ごときが……ッ、愛だのなんだの……ッ！\"). Dignified in defeat (\"憐れむか、あぁ……勝者の特権……癪だな\").",
+      "aliases": [],
+      "lines": 168,
+      "note": "168 lines / 12 scenes. Male. DO NOT MERGE with 魔族 (his rank-and-file, a separate row) or with the Cast entry 魔族."
+    },
+    "コーチ": {
+      "en": "Coach",
+      "gender": "male",
+      "role": "The \"Coach\" of the bunny-bar hostess lessons (レッスン, バニー接客) - drills Artesia on service technique.",
+      "register": "僕 + 君 + 〜からね！/〜んだ, teacherly exasperation (\"なんて出来の悪い生徒なんだ……！　今回は徹底的にやるからね！\"). Frames assault as pedagogy.",
+      "aliases": [],
+      "lines": 162,
+      "note": "162 lines / 4 scenes. Male (僕 22, 君 24). Distinct from トレーナー, 指導員, 教員, 教材."
+    },
+    "魔族": {
+      "en": "Demon",
+      "gender": "male",
+      "role": "A rank-and-file Demon - the Chief's subordinates, and the demon seen behind the inn in the Chapter 3 witness reports.",
+      "register": "俺 + 貴様, 〜わん/〜だぞ, terse and hostile (\"早くしろ。こっちは済んだ\", \"敵対関係にあるのだ我々と憎きソフレイマンはッ！\"). Same clipped family as the Chief but lower-register.",
+      "aliases": [],
+      "lines": 160,
+      "note": "160 lines / 6 scenes. Male. Distinct from 魔族の長 and from the enemy Cast entry of the same name."
+    },
+    "神父": {
+      "en": "the Priest",
+      "gender": "male",
+      "role": "The Priest of the Lord's Town church, and the true culprit of the whole game. A failed classmate of Wolf who envied his and a third student's genius, took over Wolf's counselling for a decade, stole the cheques meant for Wolf's family, stabbed Wolf in the alley to harvest his corpse for a 魔石, then lured Artesia to the domain with a forged letter to extract the name of 『究極煉禁』, and murdered everyone who knew of it - the Lord and the Butler included. His seven diary telops in 教会地下 are the game's spine.",
+      "register": "Public register: mild, warm parish keigo with 貴女 (\"……えぇ。覚えていますよ／貴女はお父様をお探しになっていた\"). Cornered register: sarcastic lawyer's scorn (\"証拠を出せと言ったのに始まったのは推理ショーですか\"). Unmasked register: shrieking, staccato, self-deifying (\"私を神に！　全知全能の神に！！　世界の頂点に！！！！\", \"あっ、あっあっあっ！　身体がっ！\"). His written diaries are a fourth register - measured, self-congratulating, delusional.",
+      "aliases": [],
+      "lines": 159,
+      "note": "159 lines / 6 scenes plus the 教会地下 telop diaries. Male (私). The three spoken registers are the same man - do not smooth them into one voice. Distinct from 聖職者 and 教団の女."
+    },
+    "スラム看守": {
+      "en": "Slum Jailer",
+      "gender": "male",
+      "role": "The Slum Jailer at 更生牢 (the reform gaol). Hires \"Teacher Artesia\" to run jerk-off encouragement sessions for the inmates so they stop killing themselves.",
+      "register": "Bright, chipper social-worker enthusiasm with 君 and 〜かな！？ (\"アルテシア先生！　協力してくれるかな！？\", \"そうだ！　いいこと思いついた！\"), then a sudden てめぇ when the mask slips. Calls her 先生 throughout.",
+      "aliases": [],
+      "lines": 158,
+      "note": "158 lines / 3 scenes. Male. DO NOT MERGE with 看守 (the blind girl's father in Chapter 1) - different man, different case, opposite tone."
+    },
+    "執事": {
+      "en": "the Butler",
+      "gender": "male",
+      "role": "The Butler of Lord Sofreiman. Hires Artesia in her official capacity, releases Sofia from confinement, and confesses to poisoning the Lord to end his abuses. Found dead shortly after, which becomes evidence in Chapter 6.",
+      "register": "Perfect servant keigo throughout: 私 + 〜でございます/〜いたします/承知いたしました/貴女様, plus ソフィア様 and 領主ソフレイマン様 even when denouncing him (\"勘違いしないでいただきたい／私は、領主ソフレイマン様の名誉などは考えておりません\"). Quiet moral anger under flawless form (\"番号で呼んでいたのですよ。ソフィア様を……素敵なお名前なのに\").",
+      "aliases": [],
+      "lines": 152,
+      "note": "152 lines / 12 scenes. Male. The register never breaks - keep the honorific scaffolding (〜sama) in English rather than naturalising it away, because his politeness is the character."
+    },
+    "見張り": {
+      "en": "Watchman",
+      "gender": "male",
+      "role": "A \"Lookout\" for the morals patrol - takes Artesia's post-patrol groping report alongside 風紀委員.",
+      "register": "オレ (katakana) + お前/テメー, 〜っす mixed with 〜だろ (\"ずる過ぎんだろ♡　オレがぶちこみたかったっす♡\"). Junior, sloppy, deferential upward and abusive downward.",
+      "aliases": [],
+      "lines": 150,
+      "note": "150 lines / 4 scenes. Male (オレ 16). His katakana オレ plus 〜っす marks him as the low man in the unit. Distinct from 見張り隊員 and 監視."
+    },
+    "上官の娘": {
+      "en": "the Superior's Daughter",
+      "gender": "female",
+      "role": "The Superior Officer's stepdaughter, in the village. Once tried to become a Holy Executor and failed the written exam. Cooperates with Artesia against her own father, gives her the brooch found in the dragon's nest, and is engaged to 婚約者.",
+      "register": "私 + 〜です/〜ます/〜ません and アルテシアさん, softly formal and self-effacing (\"尊敬します。私は、実は選考筆記で落ちてしまって……\", \"……父が犯罪の片棒をかついでいたのなら／娘である私がアルテシアさんに協力しないわけにはいきません\"). Breaks into plain feminine 〜のよ/そ、そうよ！ under stress.",
+      "aliases": [],
+      "lines": 150,
+      "note": "150 lines / 9 scenes. FEMALE (娘である私, 6 feminine markers, zero masculine). DO NOT MERGE with 上官 or 婚約者. Her honorific \"アルテシアさん\" is the only -san Artesia gets from anyone - keep it."
+    },
+    "？？？": {
+      "en": "???",
+      "gender": "unknown",
+      "role": "The engine's pre-reveal nameplate. It masks SEVERAL DIFFERENT characters across 47 scenes: the Anahita Chief before his entrance, Sofreiman, Sensei, monsters, and off-screen shouts.",
+      "register": "Varies completely per scene - one row carries 吾輩 (the Anahita Chief), 貴女/〜ですね (Sensei), 貴様 (Sofreiman), and wordless ふーっ！♡ H-scene panting.",
+      "aliases": [],
+      "lines": 148,
+      "note": "DO-NOT-MERGE, HIGHEST PRIORITY. 148 lines across 47 scenes belonging to at least four different people. Never resolve ??? to a name, never carry a gender across scenes, and never let a later reveal leak backwards into an earlier ??? line. Keep the plate as ??? in English."
+    },
+    "洗い屋": {
+      "en": "Washer",
+      "gender": "male",
+      "role": "The \"Body Washer\" at the hot spring - washes customers, drunk, for money (温泉背面座位).",
+      "register": "俺 + てめぇ, 〜だぞ～♡/〜ぜ～～～♡ with drunken hiccups (ひっく♡) mid-line. Service patter degrading into abuse (\"さぁ～て、力も抜けたようだしっ♡　膣内も洗っちゃうぞ～♡　ひっく♡\").",
+      "aliases": [],
+      "lines": 144,
+      "note": "144 lines / 4 scenes. Male (俺 24, だぞ 20). Keep the ひっく hiccups where they fall."
+    },
+    "催眠術師たち": {
+      "en": "Hypnotists",
+      "gender": "male",
+      "role": "The \"Hypnotists\" - a plural group who use hypnosis on Artesia in the 敗北催眠パイズリ scenes.",
+      "register": "俺たち + てめぇ, 〜だぜ♡/〜じゃねぇか♡, choral taunting (\"この性欲モンスターが！♡♡♡　俺たちのこと性欲発散相手だと思ってたのかよ！♡♡♡\").",
+      "aliases": [],
+      "lines": 140,
+      "note": "140 lines / 4 scenes. Male, plural. Keep the \"we\" - they always speak as a group."
+    },
+    "見回り2": {
+      "en": "Patrolman 2",
+      "gender": "male",
+      "role": "Patrolman #2 - the second watchman, who walks in during 見回り's scenes and joins in.",
+      "register": "俺/オレ + お前, 〜だぞ. Reacts to noise (\"んっ！　どうした！？　なにか聞こえるぞ！\") then piles on (\"命乞いエアセックス無様すぎんだろ♡♡\").",
+      "aliases": [],
+      "lines": 134,
+      "note": "134 lines / 7 scenes. Male. DO NOT MERGE with 見回り or 見回り3 - all three appear together."
+    },
+    "酔っ払い": {
+      "en": "Drunk",
+      "gender": "male",
+      "role": "A \"Drunk\" in the group-groping scene (集団愛撫) - separate from 酒飲み.",
+      "register": "Loose, unfocused drunk-speak: 僕/私/君 mixed at random, 〜ね～♡/〜かね！？ and non-sequiturs (\"……よく聞こえない僕の声に価値ある？　声帯変えよっカナ？\"). Comic rather than menacing.",
+      "aliases": [],
+      "lines": 126,
+      "note": "126 lines / 4 scenes. Male. DO NOT MERGE with 酔っ払い2 or 酒飲み - the joint plate 酔っ払い＆酔っ払い2 proves two people."
+    },
+    "支配人": {
+      "en": "Manager",
+      "gender": "male",
+      "role": "The Manager of the tent venue / dance hall who contracts Artesia as a dancer and threatens her with damages if she refuses.",
+      "register": "私 + 君 + 〜だぞッ！/〜たまえ！, theatrical bellowing with stretched vowels (\"行けー守銭奴ッ！　踊るんだァーッ！！\", \"金持ちの賠償金は……デカいんだぞーッ！\"). Aphorisms about show business (\"そこがいいッ！　エンターテインメントは横暴なものさ\").",
+      "aliases": [],
+      "lines": 120,
+      "note": "120 lines / 4 scenes. Male. Distinct from 経営者, 店長, 店主, マネージャー, チーフ."
+    },
+    "イソギンチャク": {
+      "en": "Anemone",
+      "gender": "unknown",
+      "role": "A Sea Anemone - the hammock trap on the beach (水着ハンモック).",
+      "register": "NO WORDS. All 120 lines are しゅるるるるる～～～！！！！ - the same slither SFX family as 触手.",
+      "aliases": [],
+      "lines": 120,
+      "note": "120 lines / 5 scenes, zero pronouns. Genderless. Lock ONE English slither spelling shared with 触手 so the two creatures sound like the same kind of thing."
+    },
+    "スライム": {
+      "en": "Slime",
+      "gender": "unknown",
+      "role": "A Slime - a wandering enemy that swallows Artesia (敗北スライム).",
+      "register": "NO WORDS in the nameplate rows. The Cast description is neutral: 「ドロドロした粘液状態のモンスター。知性を持たない」 - explicitly non-sapient.",
+      "aliases": [],
+      "lines": 116,
+      "note": "116 lines / 4 scenes. Genderless. Related rows うるおいスライム, 乾きかけのスライム, スケベスライム, スライムラヴァ are separate creatures."
+    },
+    "爺": {
+      "en": "Old Man",
+      "gender": "male",
+      "role": "The \"Old Man\" who blackmails Artesia with photographs into the 肉便器 scenes.",
+      "register": "Fawning merchant keigo laced with menace: 〜ございましてね♡/〜ですからね♡/〜ですぜ♡ and the classic non-threat threat (\"もちろん強請ってるわけじゃありませんからね♡／お話、断ってもらっても結構ですよ♡\"). Calls her お姉さん.",
+      "aliases": [],
+      "lines": 114,
+      "note": "114 lines / 4 scenes. Male. Distinct from ジジイ, 出会い爺, 懐古爺, おさんぽジジイ, NTRジジイ, キノコ老人, 老人, 集落のジジイ - eight separate old men."
+    },
+    "隊員": {
+      "en": "Squad Member",
+      "gender": "male",
+      "role": "A Corpsman of the Peacekeeping Corps (治安維持隊), mostly in Heechka - the ones who beg Sofia and Artesia to take the serial-death case seriously.",
+      "register": "僕/俺/私 + 〜んです/〜ですよね, earnest and defeated (\"ダメ、ですよね。こんな治安の悪い僻地の事件なんか……\", \"通信魔術機が壊れたままなんです\"). Deferential (ソフィア様).",
+      "aliases": [],
+      "lines": 113,
+      "note": "113 lines / 11 scenes. Male. Around a dozen 〜隊員 variant rows exist (居眠り隊員, 事務隊員, 愚痴隊員, バイト隊員, 副業隊員, 転職希望隊員, 賢者隊員, 待てる隊員, 落ち着く隊員, 東口見回り隊員, 受付隊員, 見張り隊員, たっしょん隊員) - each is a separate joke NPC, DO NOT MERGE any of them."
+    },
+    "男C": {
+      "en": "Man C",
+      "gender": "male",
+      "role": "Man C - the ringleader in the おとり捜査 (decoy investigation) scenes; gives orders to the other men.",
+      "register": "俺 + お前ら/てめぇ, 〜だぞ♡/〜んだよ♡, くくく……♡. Controls the scene (\"てめぇ俺の許可なしになにイこうとしてんだよ♡\", \"くくく……決まりだな♡　行くぞお前ら♡\").",
+      "aliases": [],
+      "lines": 112,
+      "note": "112 lines / 3 scenes. Male. DO NOT MERGE with 男A / 男B / 男2."
+    },
+    "鍛冶屋": {
+      "en": "Blacksmith",
+      "gender": "male",
+      "role": "The Blacksmith - the weapon-upgrade shopkeeper, present in every town (Anal Volcano, Anahita, Taromatee, Heechka, Moo-Moo).",
+      "register": "Shopkeeper bluster: 〜だ！/〜だぜ！/〜かい！？, まいど！ (\"武器強化1回につき5000Gだ！　やってくかい！？\"). Short, repeated service lines - keep them terse and identical across towns.",
+      "aliases": [],
+      "lines": 101,
+      "note": "101 lines / 10 scenes, largely the same three strings reused per town. Male. Distinct from 伝説の鍛冶屋 and 道具屋."
+    },
+    "看守": {
+      "en": "the Jailer",
+      "gender": "male",
+      "role": "The Jailer of Chapter 1 - father of the blind girl framed for Wolf's murder. Has remarried; the new wife hates the girl. Abandons his daughter to keep his own life, and Artesia tears into him for it.",
+      "register": "私 + 〜です/〜ます, flat and exhausted (\"…………はい。娘に、視力はありません\", \"あの子を捨てなきゃ私が生きていけないから\"). One flare of anger (\"それ以上、あの子を侮辱しないでください……っ！\").",
+      "aliases": [],
+      "lines": 100,
+      "note": "100 lines / 5 scenes. Male (私 17). DO NOT MERGE with スラム看守 - completely different man, tone and chapter."
+    },
+    "野次馬A": {
+      "en": "Onlooker A",
+      "gender": "male",
+      "role": "Onlooker A - jeers from the crowd at the tentacle rite and other public scenes.",
+      "register": "俺 + てめぇ, 〜じゃん/〜だろ♡, spectator commentary (\"また触手と交尾かよ♡　催しでもなんでもねーじゃん♡\").",
+      "aliases": [],
+      "lines": 100,
+      "note": "100 lines / 4 scenes. Male. DO NOT MERGE with 野次馬B or 野次馬 - three separate hecklers."
+    },
+    "アルテシア＆オリヴィア": {
+      "en": "Artesia & Olivia",
+      "gender": "female",
+      "role": "Joint nameplate: Artesia and Olivia speaking in unison, in the scenes where both are used together.",
+      "register": "Two women in chorus. Both voices apply; when the line is a shared moan, treat it as a single doubled sound. Keep the ampersand plate as \"Artesia & Olivia\" in English.",
+      "aliases": [
+        "オリヴィア＆アルテシア"
+      ],
+      "lines": 100,
+      "note": "100 + 4 lines. Both FEMALE. This is a chorus plate, NOT an alias of either woman - do not resolve it to one of them. The same construction is used for 男A＆男B, 男A＆B, チャラ男＆チャラ男2, 客＆客2, 酔っ払い＆酔っ払い2, 媚薬蛇＆ポスターおじさん and 囚人ABCD."
+    },
+    "夢見る女": {
+      "en": "Dreaming Woman",
+      "gender": "female",
+      "role": "The \"Dreaming Woman\" of Chapter 1 - wants to open her own shop and lacks the money; two men (男A and 男B) are ready to kill each other over her. Artesia reads her as more calculating than she looks.",
+      "register": "私 + heavy feminine enders 〜の！/〜のね/〜わ (\"私自分の店を持ってみたいの！\", \"……ふふっ、面白いことを言うのね／小説家になることをオススメするわ\"). Pleading in public, cold in Artesia's private assessment (\"（想ったより都合のいい脳みそなのね……）\").",
+      "aliases": [],
+      "lines": 97,
+      "note": "97 lines / 5 scenes. FEMALE. Note the line 「小説家になることをオススメするわ」 is echoed almost verbatim by 神父 later - the same brush-off. Keep the echo audible."
+    },
+    "観客": {
+      "en": "Audience",
+      "gender": "male",
+      "role": "The \"Audience\" at the swimsuit contest and the stage shows - judges and jeers.",
+      "register": "俺/お前 + ちゃん, 〜だぜ♡/〜じゃん♡, catcalling (\"よおデカパイちゃん♡　審査しに来たぜ♡\", \"うわぁ……すっげぇ下品♡　乳がさぁ……わかってんの？♡\").",
+      "aliases": [],
+      "lines": 90,
+      "note": "90 lines / 6 scenes. Male. DO NOT MERGE with 観客2 or 会場."
+    },
+    "ゴブリン": {
+      "en": "Goblin",
+      "gender": "unknown",
+      "role": "A Goblin - wandering enemy and H-scene monster.",
+      "register": "NO ARTICULATE SPEECH in the nameplate rows - grunts and cries only. The Cast entry 強欲のトォリス glosses goblins as 「小柄な緑色の鬼」.",
+      "aliases": [],
+      "lines": 88,
+      "note": "88 lines / 4 scenes, zero pronouns. Genderless. ゴブリン2, ポイズンゴブリン, ボスゴブリン, スケベゴブリン, 有職ゴブリン, 無職ゴブリン are all separate - DO NOT MERGE."
+    },
+    "イベント担当": {
+      "en": "Event Staff",
+      "gender": "male",
+      "role": "The \"Event Organiser\" who runs the fan meet-and-greet (ファン交流会) after Artesia gets famous.",
+      "register": "僕 + 君 + 〜だよ/〜だね, an event manager keeping a queue from rioting (\"これ以上待たせちゃったら攻め込まれるところだったよ／さっ、行ってきて！\"). Coolly manipulative (\"……君、理解していないみたいだね\").",
+      "aliases": [],
+      "lines": 88,
+      "note": "88 lines / 2 scenes. Male. Job label. Distinct from 宣伝担当, 広報部, 司会, マネージャー."
+    },
+    "ミミック": {
+      "en": "Mimic",
+      "gender": "unknown",
+      "role": "A Mimic - the treasure-chest monster (敗北ミミック).",
+      "register": "NO WORDS. Every line is a variation on みみっくぅうう～～～っ！♡♡♡. Lock ONE English spelling of the cry and reuse it.",
+      "aliases": [],
+      "lines": 88,
+      "note": "88 lines / 4 scenes. Genderless. スケベミミック and 宝箱 are separate rows."
+    },
+    "婚約者": {
+      "en": "Fiancé",
+      "gender": "male",
+      "role": "The village fiancé of 上官の娘. Carries the Superior Officer's dying message to Artesia and leaves the village with his bride.",
+      "register": "俺 + アンタ, blunt rural plain form 〜だよな/〜んだ/〜からな！ (\"誓ってくれ。さっきのアンタの話に嘘偽りはないんだな？\"). Panicky when out of his depth (\"どーすんだよ！？　てかさっきからなんだったんだ！？　わけがわかんねぇーよっ！\"). Calls the Officer 義父殿.",
+      "aliases": [],
+      "lines": 87,
+      "note": "87 lines / 8 scenes. Male (俺 20). His 義父殿 (honoured father-in-law) is deliberately formal against an otherwise rough voice - keep the mismatch."
+    },
+    "案内人": {
+      "en": "Guide",
+      "gender": "male",
+      "role": "The \"Usher\" at the dance stage - explains the stage rules and relays customer feedback deadpan.",
+      "register": "Flat service register with 〜っす/うっす mixed into keigo (\"うっす。なによりです\", \"踊りが上達してきたら昇給あるんすよウチ\"), reading obscene complaints in a monotone (\"『もうちょっと遠距離セックス感が欲しかった』とのことです\").",
+      "aliases": [],
+      "lines": 86,
+      "note": "86 lines / 2 scenes. Male. The 〜っす register is the joke - keep it laconic and bored, never enthusiastic."
+    },
+    "観客2": {
+      "en": "Audience 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 84,
+      "note": "Separate audience group from 観客 and 会場. DO NOT MERGE. (auto-seeded from 84 nameplate lines)"
+    },
+    "刑事": {
+      "en": "Detective",
+      "gender": "male",
+      "role": "The Detective who repeatedly recruits Artesia as honeytrap bait (おとり捜査).",
+      "register": "俺 + お前, sheepish plain form, apologising while asking again (\"恥ずかしながらな……なぁ、今回も頼むよぉ／お前のハニトラが一番効果があったんだよ……\").",
+      "aliases": [],
+      "lines": 82,
+      "note": "82 lines / 2 scenes. Male."
+    },
+    "野次馬B": {
+      "en": "Onlooker B",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 80,
+      "note": "Separate heckler from 野次馬A and 野次馬. DO NOT MERGE. (auto-seeded from 80 nameplate lines)"
+    },
+    "審査員": {
+      "en": "Judge",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 78,
+      "note": "auto-seeded from 78 nameplate lines"
+    },
+    "囚人A": {
+      "en": "Prisoner A",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 76,
+      "note": "Inmates 囚人A/B/C/D are four separate men in the reform-gaol lecture scene; 囚人ABCD is their chorus plate and 囚人 is a generic. DO NOT MERGE any of them. (auto-seeded from 76 nameplate lines)"
+    },
+    "囚人B": {
+      "en": "Prisoner B",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 76,
+      "note": "See 囚人A - four separate inmates plus a chorus plate. DO NOT MERGE. (auto-seeded from 76 nameplate lines)"
+    },
+    "囚人C": {
+      "en": "Prisoner C",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 76,
+      "note": "See 囚人A - four separate inmates plus a chorus plate. DO NOT MERGE. (auto-seeded from 76 nameplate lines)"
+    },
+    "研究者": {
+      "en": "Researcher",
+      "gender": "male",
+      "role": "The Researcher running the paid drug trial (媚薬ガス) that Artesia signs up for.",
+      "register": "私 + 君 + detached clinical indifference (\"いや君のいつものオナニーは知らんけど……興味もないし／じゃあ相方くん、あとはよろしく。私は別室で計測してるから\", \"まぁ治験に差し支えなければどうでもいいんだが……\"). The flatness is the joke.",
+      "aliases": [],
+      "lines": 72,
+      "note": "72 lines / 2 scenes. Male. Distinct from 野良研究者, 12ポイントの研究者, 探究者."
+    },
+    "囚人D": {
+      "en": "Prisoner D",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 72,
+      "note": "See 囚人A - four separate inmates plus a chorus plate. DO NOT MERGE. (auto-seeded from 72 nameplate lines)"
+    },
+    "店員": {
+      "en": "Shop Clerk",
+      "gender": "female",
+      "role": "A shop/club Attendant, most often the club hostess who promotes Artesia to the VIP room and the casino floor staff.",
+      "register": "Casual friendly 〜じゃん/〜だよ/〜って！ with アルテシアちゃん (\"アルテシアちゃんも慣れてきたみたいだから／VIP部屋でも接客してほしいなって！\"). Also delivers a plot lead flatly (\"アンタの読み通りだよ。奴は『恋』してた\").",
+      "aliases": [],
+      "lines": 70,
+      "note": "70 lines / 14 scenes. Predominantly FEMALE by markers (9 feminine vs 1 masculine), but this plate is reused across several shops - check the scene before fixing a pronoun. 店員A/店員B (Cast), 恋人店員女, 恋人店員男, 痴女店員, 船乗り店員, 夢見る店員, NTR店員 are all separate rows."
+    },
+    "院長": {
+      "en": "the Director",
+      "gender": "male",
+      "role": "The Director of the orphanage / clinic who employs Artesia as a wet-nurse (授乳手コキ). A free information item calls him a man of character who funds the orphanage out of his own pocket.",
+      "register": "Elderly-gentleman register: ワシ + お主 + 〜じゃ/〜じゃからな～/ふぉっふぉっふぉっ！ (\"お主がええんじゃって\", \"お主の雇い主はワシじゃからな～\"). The only ワシ/じゃ speaker in the main cast.",
+      "aliases": [],
+      "lines": 70,
+      "note": "70 lines / 2 scenes. Male. His archaic ワシ/じゃ must not be flattened into the same voice as 爺 or ジジイ - keep him courtly and warm rather than leering."
+    },
+    "客2": {
+      "en": "Customer 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 68,
+      "note": "Separate customer from 客. The joint plate 客＆客2 proves two people in one scene. DO NOT MERGE. (auto-seeded from 68 nameplate lines)"
+    },
+    "弟子医者": {
+      "en": "Apprentice Doctor",
+      "gender": "male",
+      "role": "The Apprentice Doctor at the Fラン医院 - treats the invented ailment 『頭金玉病』 and requires his whole practice to wear see-through nurse uniforms.",
+      "register": "君 + 〜だぞ/〜のだ/〜かね！？, medical-authority bluster over nonsense (\"立派な医療行為だぞムッツリスケベ！　他に頼ってどうする！／あの病の解明には、我々の威信がかかっているんだッッ！\"). Shouts and then apologises.",
+      "aliases": [],
+      "lines": 65,
+      "note": "65 lines / 2 scenes. Male. Distinct from 医師, ドクター, 院長, 研究者."
+    },
+    "経営者": {
+      "en": "Owner",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 64,
+      "note": "auto-seeded from 64 nameplate lines"
+    },
+    "店長": {
+      "en": "Shopkeeper",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 64,
+      "note": "auto-seeded from 64 nameplate lines"
+    },
+    "女": {
+      "en": "Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 61,
+      "note": "auto-seeded from 61 nameplate lines"
+    },
+    "見回り3": {
+      "en": "Patrolman 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 60,
+      "note": "Third patrolman. 見回り / 見回り2 / 見回り3 appear together. DO NOT MERGE. (auto-seeded from 60 nameplate lines)"
+    },
+    "VIPたち": {
+      "en": "VIPs",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 60,
+      "note": "auto-seeded from 60 nameplate lines"
+    },
+    "イカルガ": {
+      "en": "Ikaruga",
+      "gender": "male",
+      "role": "Ikaruga, the other Dragon Knight - Olivia's counterpart, hired by the Anahita Chief. Outbids Lord Sofreiman for 『真実の指名者』 at the auction with a case full of cash and donates the remaining two hundred million. Names 『星を喰らう者』 for the party.",
+      "register": "俺 + 貴様/お前, terse, level, unhurried plain form: 〜だ/〜ぞ/〜な (\"心配するな。俺は『究極煉禁』とやらに興味はない／これはプライベートで使う\"). Dry, deadpan mockery instead of shouting (\"おかげで貴様の醜い顔で……ふっ、やっと笑うことができたぞ\"). Never raises his voice.",
+      "aliases": [],
+      "lines": 58,
+      "note": "58 lines / 5 scenes. MALE (俺 16). Distinct from オリヴィア, who is the other 龍騎士 and female. Both are Dragon Knights - keep the shared title and the opposite genders straight."
+    },
+    "社員": {
+      "en": "Employee",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 56,
+      "note": "auto-seeded from 56 nameplate lines"
+    },
+    "おじさん": {
+      "en": "Mister",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 52,
+      "note": "auto-seeded from 52 nameplate lines"
+    },
+    "アナウンス": {
+      "en": "Announcement",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 51,
+      "note": "auto-seeded from 51 nameplate lines"
+    },
+    "兵士": {
+      "en": "Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 50,
+      "note": "auto-seeded from 50 nameplate lines"
+    },
+    "酔っ払い2": {
+      "en": "Drunk 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 48,
+      "note": "Separate drunk from 酔っ払い. The joint plate 酔っ払い＆酔っ払い2 proves two people. DO NOT MERGE. (auto-seeded from 48 nameplate lines)"
+    },
+    "男2": {
+      "en": "Man 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 48,
+      "note": "男A/男B/男C/男2 are FOUR different men. DO NOT MERGE. (auto-seeded from 48 nameplate lines)"
+    },
+    "患者2": {
+      "en": "Patient 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 48,
+      "note": "Separate patient from 患者 / 患者3 / 患者4. DO NOT MERGE. (auto-seeded from 48 nameplate lines)"
+    },
+    "コンテストおじさん": {
+      "en": "Contest Mister",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 47,
+      "note": "auto-seeded from 47 nameplate lines"
+    },
+    "協力者": {
+      "en": "the Collaborator",
+      "gender": "male",
+      "role": "The 『協力者』 (the Collaborator) - the man in Taromatee whose trail Artesia follows through Chapter 5. Found out to have been on a masturbation-abstinence streak, to have had an impossible love, and to be someone nobody remembers the name of. He is the one who patches Sensei up at the end of the chapter.",
+      "register": "Ordinary, flustered civilian register: 〜です/〜ます, おぉ！, exasperated backchat with Sensei (\"ですから！　なにをしに行くかによるでしょうよ！\"). No affectation at all.",
+      "aliases": [],
+      "lines": 46,
+      "note": "46 lines / 3 scenes. MALE - Artesia refers to him as 彼 (\"……彼がどこへ出かけているのか情報を集めましょう\"). DO NOT MERGE with センセイ: they hold a two-way conversation in 協力者の家."
+    },
+    "チャラ男3": {
+      "en": "Party Boy 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 46,
+      "note": "Third member of the チャラ男 crew. チャラ男 / チャラ男2 / チャラ男3 are three separate men - the joint plate チャラ男＆チャラ男2 proves at least two speak in one scene. DO NOT MERGE. (auto-seeded from 46 nameplate lines)"
+    },
+    "浮浪者": {
+      "en": "Vagrant",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 42,
+      "note": "auto-seeded from 42 nameplate lines"
+    },
+    "メイド": {
+      "en": "Maid",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 41,
+      "note": "auto-seeded from 41 nameplate lines"
+    },
+    "司会": {
+      "en": "MC",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 40,
+      "note": "auto-seeded from 40 nameplate lines"
+    },
+    "通行人": {
+      "en": "Passerby",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 40,
+      "note": "auto-seeded from 40 nameplate lines"
+    },
+    "売れない作家": {
+      "en": "Unsuccessful Writer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 40,
+      "note": "auto-seeded from 40 nameplate lines"
+    },
+    "騎士の亡骸": {
+      "en": "Knight's Corpse",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 38,
+      "note": "auto-seeded from 38 nameplate lines"
+    },
+    "売人": {
+      "en": "Dealer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 37,
+      "note": "auto-seeded from 37 nameplate lines"
+    },
+    "宝箱": {
+      "en": "Treasure Chest",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 37,
+      "note": "auto-seeded from 37 nameplate lines"
+    },
+    "集落の長": {
+      "en": "Village Elder",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 36,
+      "note": "auto-seeded from 36 nameplate lines"
+    },
+    "元乞食": {
+      "en": "Ex-Beggar",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 36,
+      "note": "The SAME beggar as 乞食 after his curse lifts and he joins the Nameless Village. Keep both plates. (auto-seeded from 36 nameplate lines)"
+    },
+    "男A＆男B": {
+      "en": "Man A & Man B",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 35,
+      "note": "CHORUS plate for 男A and 男B speaking together. Not a third man. (auto-seeded from 35 nameplate lines)"
+    },
+    "船乗り": {
+      "en": "Sailor",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 35,
+      "note": "auto-seeded from 35 nameplate lines"
+    },
+    "ヤジ": {
+      "en": "Heckler",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 34,
+      "note": "auto-seeded from 34 nameplate lines"
+    },
+    "オタク": {
+      "en": "Otaku",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 34,
+      "note": "auto-seeded from 34 nameplate lines"
+    },
+    "宿屋": {
+      "en": "Inn",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 33,
+      "note": "auto-seeded from 33 nameplate lines"
+    },
+    "アナーヒタの頭領": {
+      "en": "Anahita Chief",
+      "gender": "male",
+      "role": "The Chief of Anahita - the same man as アナーヒタ頭領, with a の inserted into the plate.",
+      "register": "Identical to アナーヒタ頭領: 吾輩, 君, katakana ネ！/ヨ！ enders, 〜たまえ imperatives.",
+      "aliases": [
+        "アナーヒタ頭領"
+      ],
+      "lines": 32,
+      "note": "SPELLING VARIANT of アナーヒタ頭領 - same character, the dev typed the nameplate two ways. Must render as the SAME English string. 32 lines / 2 scenes. MALE (吾輩)."
+    },
+    "チンコ": {
+      "en": "Dick",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 32,
+      "note": "auto-seeded from 32 nameplate lines"
+    },
+    "ゴブリン2": {
+      "en": "Goblin 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 32,
+      "note": "Separate goblin from ゴブリン / ポイズンゴブリン / ボスゴブリン / スケベゴブリン / 有職ゴブリン / 無職ゴブリン. DO NOT MERGE. (auto-seeded from 32 nameplate lines)"
+    },
+    "領主": {
+      "en": "the Lord",
+      "gender": "male",
+      "role": "Nameplate \"the Lord\" - the same man as ソフレイマン, used in the inn flashback where he explains that he numbers his children (Sofia = sixth wife's second child = 0602) because he has too many to remember.",
+      "register": "Identical to ソフレイマン: the 「絶頂」 interjection, 私, booming plain form, casual admission of murder (\"殺した。私の絶頂を理解してくれなかったんでな\").",
+      "aliases": [
+        "ソフレイマン"
+      ],
+      "lines": 32,
+      "note": "32 lines / 2 scenes. MALE, and the SAME PERSON as ソフレイマン - the 領主 rows carry his identical 「絶頂」 tic and the 0602 child-numbering speech. This is a deliberate withheld-name plate, not a typo: keep the row, render it as the title (\"the Lord\"), and make sure the voice matches Sofreiman exactly."
+    },
+    "ファン": {
+      "en": "Fan",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 32,
+      "note": "auto-seeded from 32 nameplate lines"
+    },
+    "地雷男": {
+      "en": "Landmine Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 32,
+      "note": "auto-seeded from 32 nameplate lines"
+    },
+    "珍味ハンター": {
+      "en": "Delicacy Hunter",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 32,
+      "note": "auto-seeded from 32 nameplate lines"
+    },
+    "従業員": {
+      "en": "Employee",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 32,
+      "note": "auto-seeded from 32 nameplate lines"
+    },
+    "ムッツリデーモン": {
+      "en": "Broody Demon",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 30,
+      "note": "auto-seeded from 30 nameplate lines"
+    },
+    "看板": {
+      "en": "Signboard",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 29,
+      "note": "auto-seeded from 29 nameplate lines"
+    },
+    "伝説の鍛冶屋": {
+      "en": "Legendary Blacksmith",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 29,
+      "note": "auto-seeded from 29 nameplate lines"
+    },
+    "酔っ払い＆酔っ払い2": {
+      "en": "Drunk & Drunk 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 28,
+      "note": "CHORUS plate for 酔っ払い and 酔っ払い2 speaking together. (auto-seeded from 28 nameplate lines)"
+    },
+    "野次馬": {
+      "en": "Onlooker",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 28,
+      "note": "auto-seeded from 28 nameplate lines"
+    },
+    "ファン2": {
+      "en": "Fan 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 28,
+      "note": "Separate fan from ファン. DO NOT MERGE. (auto-seeded from 28 nameplate lines)"
+    },
+    "治安維持隊": {
+      "en": "Peacekeeping Corps",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 26,
+      "note": "auto-seeded from 26 nameplate lines"
+    },
+    "受付": {
+      "en": "Receptionist",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 26,
+      "note": "auto-seeded from 26 nameplate lines"
+    },
+    "夢見る調理人": {
+      "en": "Dreaming Cook",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 26,
+      "note": "auto-seeded from 26 nameplate lines"
+    },
+    "S級闘士": {
+      "en": "S-Rank Fighter",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 25,
+      "note": "auto-seeded from 25 nameplate lines"
+    },
+    "カクレニンジャ": {
+      "en": "Hidden Ninja",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 24,
+      "note": "auto-seeded from 24 nameplate lines"
+    },
+    "ドラゴン兄": {
+      "en": "Dragon's Older Brother",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 24,
+      "note": "auto-seeded from 24 nameplate lines"
+    },
+    "倍返シスト": {
+      "en": "Payback-ist",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 24,
+      "note": "auto-seeded from 24 nameplate lines"
+    },
+    "発明家": {
+      "en": "Inventor",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 23,
+      "note": "auto-seeded from 23 nameplate lines"
+    },
+    "語り部": {
+      "en": "Narrator",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 23,
+      "note": "auto-seeded from 23 nameplate lines"
+    },
+    "スケベポイント交換おじさん": {
+      "en": "Lewd Point Exchange Mister",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 23,
+      "note": "auto-seeded from 23 nameplate lines"
+    },
+    "処女虫": {
+      "en": "Virgin Bug",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 23,
+      "note": "auto-seeded from 23 nameplate lines"
+    },
+    "伝説の男": {
+      "en": "Legendary Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 23,
+      "note": "auto-seeded from 23 nameplate lines"
+    },
+    "元悪のマッサージ師": {
+      "en": "Ex-Evil Masseur",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 23,
+      "note": "The SAME man as 悪のマッサージ師, after his redemption arc - the 元 (former) prefix is a story state, so keep the plate distinct in English (\"Ex-...\"). Do not fold the two rows together and do not confuse either with 悪のマッサージ師支店長 (his branch manager) or 悪のマッサージおじさん. (auto-seeded from 23 nameplate lines)"
+    },
+    "店主": {
+      "en": "Shopkeeper",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 22,
+      "note": "auto-seeded from 22 nameplate lines"
+    },
+    "猫": {
+      "en": "Cat",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 22,
+      "note": "猫 / 猫B / ネコ / 無礼猫 / 謎の猫 are separate cats. DO NOT MERGE. (auto-seeded from 22 nameplate lines)"
+    },
+    "腹下シスト": {
+      "en": "Diarrhea-ist",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 22,
+      "note": "auto-seeded from 22 nameplate lines"
+    },
+    "高貴な女": {
+      "en": "Noble Lady",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 22,
+      "note": "auto-seeded from 22 nameplate lines"
+    },
+    "ホームレス": {
+      "en": "Homeless Person",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 22,
+      "note": "auto-seeded from 22 nameplate lines"
+    },
+    "冒険者": {
+      "en": "Adventurer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 21,
+      "note": "auto-seeded from 21 nameplate lines"
+    },
+    "早漏ニンジャ": {
+      "en": "Premature Ninja",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 21,
+      "note": "auto-seeded from 21 nameplate lines"
+    },
+    "勃起チンコ岩": {
+      "en": "Erect Dick Rock",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 21,
+      "note": "auto-seeded from 21 nameplate lines"
+    },
+    "チンコたち": {
+      "en": "Dicks",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 20,
+      "note": "auto-seeded from 20 nameplate lines"
+    },
+    "患者3": {
+      "en": "Patient 3",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 20,
+      "note": "Separate patient from 患者 / 患者2 / 患者4. DO NOT MERGE. (auto-seeded from 20 nameplate lines)"
+    },
+    "患者4": {
+      "en": "Patient 4",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 20,
+      "note": "Separate patient from 患者 / 患者2 / 患者3. DO NOT MERGE. (auto-seeded from 20 nameplate lines)"
+    },
+    "元犬": {
+      "en": "Ex-Dog",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 20,
+      "note": "A man who was turned INTO a dog and changed back - not the same entity as 犬 or 番犬. DO NOT MERGE. (auto-seeded from 20 nameplate lines)"
+    },
+    "監視": {
+      "en": "Watcher",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 19,
+      "note": "auto-seeded from 19 nameplate lines"
+    },
+    "ナリキン族": {
+      "en": "Nouveau Riche Tribe",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 19,
+      "note": "auto-seeded from 19 nameplate lines"
+    },
+    "オナキーン": {
+      "en": "Onakiin",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "オナキン"
+      ],
+      "lines": 19,
+      "note": "auto-seeded from 19 nameplate lines"
+    },
+    "サキュバス": {
+      "en": "Succubus",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 19,
+      "note": "auto-seeded from 19 nameplate lines"
+    },
+    "チャラ男＆チャラ男2": {
+      "en": "Party Boy & Party Boy 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 18,
+      "note": "CHORUS plate for チャラ男 and チャラ男2 speaking together. (auto-seeded from 18 nameplate lines)"
+    },
+    "荒ぶるサウナー": {
+      "en": "Raging Sauna Guy",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 18,
+      "note": "auto-seeded from 18 nameplate lines"
+    },
+    "謎の猫": {
+      "en": "Mysterious Cat",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 18,
+      "note": "Separate from 猫 / ネコ / 無礼猫. DO NOT MERGE. (auto-seeded from 18 nameplate lines)"
+    },
+    "金持ち男": {
+      "en": "Rich Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 18,
+      "note": "auto-seeded from 18 nameplate lines"
+    },
+    "金持ち女": {
+      "en": "Rich Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 18,
+      "note": "auto-seeded from 18 nameplate lines"
+    },
+    "生意気な新人": {
+      "en": "Cheeky Newbie",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 18,
+      "note": "auto-seeded from 18 nameplate lines"
+    },
+    "採掘系魔法少女": {
+      "en": "Mining Magical Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 17,
+      "note": "auto-seeded from 17 nameplate lines"
+    },
+    "旅商人": {
+      "en": "Traveling Merchant",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 17,
+      "note": "auto-seeded from 17 nameplate lines"
+    },
+    "遠い目の男": {
+      "en": "Distant-Eyed Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 16,
+      "note": "auto-seeded from 16 nameplate lines"
+    },
+    "愛好家": {
+      "en": "Enthusiast",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 16,
+      "note": "auto-seeded from 16 nameplate lines"
+    },
+    "キレてるネズミ": {
+      "en": "Furious Mouse",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 16,
+      "note": "auto-seeded from 16 nameplate lines"
+    },
+    "パリピサムライ": {
+      "en": "Party Samurai",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 16,
+      "note": "auto-seeded from 16 nameplate lines"
+    },
+    "バンチョー": {
+      "en": "Gang Boss",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 16,
+      "note": "auto-seeded from 16 nameplate lines"
+    },
+    "無礼猫": {
+      "en": "Rude Cat",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 16,
+      "note": "Separate from 猫 / ネコ / 謎の猫. DO NOT MERGE. (auto-seeded from 16 nameplate lines)"
+    },
+    "水夫": {
+      "en": "Sailor",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 16,
+      "note": "auto-seeded from 16 nameplate lines"
+    },
+    "元勇者": {
+      "en": "Ex-Hero",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 16,
+      "note": "auto-seeded from 16 nameplate lines"
+    },
+    "動物博士": {
+      "en": "Animal Doctor",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 16,
+      "note": "auto-seeded from 16 nameplate lines"
+    },
+    "童貞": {
+      "en": "Virgin",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 16,
+      "note": "auto-seeded from 16 nameplate lines"
+    },
+    "ババア": {
+      "en": "Old Hag",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 16,
+      "note": "auto-seeded from 16 nameplate lines"
+    },
+    "失礼なウナギ": {
+      "en": "Rude Eel",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 15,
+      "note": "auto-seeded from 15 nameplate lines"
+    },
+    "ジジイ": {
+      "en": "Old Geezer",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 15,
+      "note": "auto-seeded from 15 nameplate lines"
+    },
+    "子供": {
+      "en": "Child",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "筋トレオーク": {
+      "en": "Muscle-Training Orc",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "お金回収タイガー": {
+      "en": "Money-Collecting Tiger",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "パパラッチゾンビ": {
+      "en": "Paparazzi Zombie",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "ムラムラビット": {
+      "en": "Horny Rabbit",
+      "gender": "male",
+      "role": "Horny Rabbit - a joke monster who demands a nipple flash and then joins the Nameless Village.",
+      "register": "Shouty single-word demands: ムラムラ！　乳首！　乳首プリーズ！ Comic-broken register built from repetition and English loanwords.",
+      "aliases": [],
+      "lines": 14,
+      "note": "14 lines / 3 scenes. One of the recruitable Nameless Village monsters (カクレニンジャ, 無職ゴブリン, 荒ぶるサウナー, 元乞食 and others join the same way, each raising 威信 and 名声 by 1)."
+    },
+    "レッドウルフ": {
+      "en": "Red Wolf",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "クマ": {
+      "en": "Bear",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "限界男": {
+      "en": "Man at His Limit",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "案内立札": {
+      "en": "Signboard",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "べとべと女": {
+      "en": "Sticky Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "紳士": {
+      "en": "Gentleman",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "最速の男": {
+      "en": "Fastest Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "マナー女": {
+      "en": "Manners Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "シリトリスト": {
+      "en": "Shiritorist",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "BBQしたい男": {
+      "en": "Man Who Wants to BBQ",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "口笛おじさん": {
+      "en": "Whistling Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 14,
+      "note": "auto-seeded from 14 nameplate lines"
+    },
+    "物知り": {
+      "en": "Know-It-All",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 13,
+      "note": "auto-seeded from 13 nameplate lines"
+    },
+    "なにを言えばいいかわからない男": {
+      "en": "Tongue-Tied Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 13,
+      "note": "auto-seeded from 13 nameplate lines | shortened from \"Man Who Doesn't Know What to Say\" (434px) to fit the 360px nameplate"
+    },
+    "貴族": {
+      "en": "Noble",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "客たち": {
+      "en": "Customers",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "マネージャー": {
+      "en": "Manager",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "おねえさん": {
+      "en": "Miss",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "カップル": {
+      "en": "Couple",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "ポイズンゴブリン": {
+      "en": "Poison Goblin",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "博徒": {
+      "en": "Gambler",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "Generic gambler. 博徒 / セクハラ博徒 / 負け博徒 / 金なし博徒 / マジメ博徒 are five separate men. DO NOT MERGE. (auto-seeded from 12 nameplate lines)"
+    },
+    "大いなる一族": {
+      "en": "The Great Clan",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "感想待ちの男": {
+      "en": "Man Awaiting Feedback",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "感想待ち男"
+      ],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "勝った男": {
+      "en": "Man Who Won",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "論理派": {
+      "en": "Logic Type",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "平和主義者": {
+      "en": "Pacifist",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "出禁の男": {
+      "en": "Banned Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "出禁になった男"
+      ],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "かじかむ男": {
+      "en": "Shivering Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "居眠り隊員": {
+      "en": "Dozing Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "門番": {
+      "en": "Gatekeeper",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "落ちた男": {
+      "en": "Fallen Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "ヤバい男": {
+      "en": "Sketchy Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "先輩譲": {
+      "en": "Senpai",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 12,
+      "note": "auto-seeded from 12 nameplate lines"
+    },
+    "斜に構えた男": {
+      "en": "Cynical-Looking Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "斜めに構えた男",
+        "社に構えた男"
+      ],
+      "lines": 11,
+      "note": "auto-seeded from 11 nameplate lines"
+    },
+    "犬": {
+      "en": "Dog",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 11,
+      "note": "auto-seeded from 11 nameplate lines"
+    },
+    "ドクタースネーク": {
+      "en": "Doctor Snake",
+      "gender": "unknown",
+      "role": "Doctor Snake - a large venomous snake enemy (Cast description: 「猛毒を持つ大型の蛇」).",
+      "register": "Enemy nameplate; no articulate dialogue.",
+      "aliases": [],
+      "lines": 11,
+      "note": "11 lines / 2 scenes. DO-NOT-MERGE with ドクター, the human villain of Heechka. The English names must stay visibly different or a boss and a snake become one character."
+    },
+    "男A＆B": {
+      "en": "Man A & B",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 10,
+      "note": "CHORUS plate for 男A and 男B speaking together (shorter spelling of 男A＆男B). Not a third man. (auto-seeded from 10 nameplate lines)"
+    },
+    "会場": {
+      "en": "Venue",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 10,
+      "note": "auto-seeded from 10 nameplate lines"
+    },
+    "道具屋": {
+      "en": "Item Shop",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 10,
+      "note": "auto-seeded from 10 nameplate lines"
+    },
+    "ポスターおじさん": {
+      "en": "Poster Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 10,
+      "note": "auto-seeded from 10 nameplate lines"
+    },
+    "元荒ぶる婚活女": {
+      "en": "Ex-Husband-Hunter",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 10,
+      "note": "The SAME woman as 荒ぶる婚活女 after her arc. Keep both plates, mark the 元 as \"Ex-/Former\". (auto-seeded from 10 nameplate lines) | shortened from 'Ex-Wild Marriage-Hunting Woman' (407px) to fit the 360px nameplate"
+    },
+    "高速BBA": {
+      "en": "High-Speed Old Bag",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 10,
+      "note": "auto-seeded from 10 nameplate lines"
+    },
+    "太った男": {
+      "en": "Fat Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 10,
+      "note": "auto-seeded from 10 nameplate lines"
+    },
+    "青春男": {
+      "en": "Youthful Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 10,
+      "note": "auto-seeded from 10 nameplate lines"
+    },
+    "モンスター": {
+      "en": "Monster",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "医師": {
+      "en": "Doctor",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "Distinct from ドクター (the Heechka villain), 弟子医者, 院長. DO NOT MERGE. (auto-seeded from 9 nameplate lines)"
+    },
+    "考えるおじさん": {
+      "en": "Thinking Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "有職ゴブリン": {
+      "en": "Employed Goblin",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "負けた人": {
+      "en": "Loser",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "恋愛上級者": {
+      "en": "Love Expert",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "元・男の娘": {
+      "en": "Former Trap",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "職人": {
+      "en": "Craftsman",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "見張り隊員": {
+      "en": "Watch Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "商人": {
+      "en": "Merchant",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "東口見回り隊員": {
+      "en": "East Gate Patrolman",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "恋人店員女": {
+      "en": "Lovestruck Shop Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "聖職者": {
+      "en": "Cleric",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "船乗り店員": {
+      "en": "Sailor Shop Clerk",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 9,
+      "note": "auto-seeded from 9 nameplate lines"
+    },
+    "集落の男": {
+      "en": "Village Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "客＆客2": {
+      "en": "Customer & Customer 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "CHORUS plate for 客 and 客2 speaking together. (auto-seeded from 8 nameplate lines)"
+    },
+    "女の子": {
+      "en": "Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "メイド2": {
+      "en": "Maid 2",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "Separate maid from メイド. DO NOT MERGE. (auto-seeded from 8 nameplate lines)"
+    },
+    "囚人ABCD": {
+      "en": "Prisoners A-D",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "CHORUS plate for 囚人A+B+C+D speaking together, not a fifth inmate and not an alias of any one of them. (auto-seeded from 8 nameplate lines) | shortened from 'Prisoners A, B, C, D' (233px) to fit the 360px nameplate"
+    },
+    "デカニンジャ": {
+      "en": "Giant Ninja",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "乾きかけのスライム": {
+      "en": "Half-Dried Slime",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "視姦ラット": {
+      "en": "Peeping Rat",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "めんどくさい男": {
+      "en": "Troublesome Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "悩める男": {
+      "en": "Troubled Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "荒ぶる婚活女": {
+      "en": "Wild Husband-Hunter",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines | shortened from 'Wild Marriage-Hunting Woman' (368px) to fit the 360px nameplate"
+    },
+    "ボルケーノドラゴン": {
+      "en": "Volcano Dragon",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "スケベ山男": {
+      "en": "Lecherous Mountain Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "哲学少女": {
+      "en": "Philosophical Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "副業隊員": {
+      "en": "Side-Job Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "無垢おじさん": {
+      "en": "Innocent Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "限界兵士": {
+      "en": "Soldier at His Limit",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "ハッカマン": {
+      "en": "Hacker Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 8,
+      "note": "auto-seeded from 8 nameplate lines"
+    },
+    "猟師": {
+      "en": "Hunter",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "水着配りおじさん": {
+      "en": "Swimsuit-Handing Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "旅人": {
+      "en": "Traveler",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "早撃ちおじさん": {
+      "en": "Quick-Draw Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "観戦おじさん": {
+      "en": "Spectating Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "乞食": {
+      "en": "Beggar",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "テント暮らしの男": {
+      "en": "Man Living in a Tent",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "ムッツリ青年": {
+      "en": "Repressed Young Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "人間観察おじさん": {
+      "en": "People-Watching Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "主婦": {
+      "en": "Housewife",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "おさんぽおじさん": {
+      "en": "Strolling Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "店員おじさん": {
+      "en": "Shopkeep Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "恋人店員男": {
+      "en": "Lovestruck Shop Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "牛": {
+      "en": "Cow",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "ニンジャ": {
+      "en": "Ninja",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "風呂上がりの女": {
+      "en": "Woman Fresh From the Bath",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "鍛錬ババア": {
+      "en": "Training Old Hag",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "迷ってる男": {
+      "en": "Lost Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 7,
+      "note": "auto-seeded from 7 nameplate lines"
+    },
+    "成金未満男": {
+      "en": "Almost-Rich Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "農作業男": {
+      "en": "Farm Worker Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "病気の男": {
+      "en": "Sick Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "囚人": {
+      "en": "Prisoner",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "バーカンス": {
+      "en": "Bar-cation",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "チーフ": {
+      "en": "Chief",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "伝説の娼婦": {
+      "en": "Legendary Prostitute",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "バーテンダー": {
+      "en": "Bartender",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "純少年": {
+      "en": "Pure Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "生徒": {
+      "en": "Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "優等生": {
+      "en": "Honor Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "劣等生": {
+      "en": "Poor Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "熱き主婦": {
+      "en": "Passionate Housewife",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "静かな夫": {
+      "en": "Quiet Husband",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "肩までつかるおじさん": {
+      "en": "Man Soaking to His Shoulders",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "若者": {
+      "en": "Young Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "昼飲みおじさん": {
+      "en": "Daytime-Drinking Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "ひん剥かれた男": {
+      "en": "Stripped Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "ひん剝かれた男"
+      ],
+      "lines": 6,
+      "note": "SPELLING VARIANT of ひん剝かれた男 - same character/NPC, the dev typed the nameplate two ways in the same event. Must translate to the SAME English string as ひん剝かれた男. (auto-seeded from 6 nameplate lines)"
+    },
+    "ひん剝かれた男": {
+      "en": "Stripped Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "ひん剥かれた男"
+      ],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "無職ゴブリン": {
+      "en": "Unemployed Goblin",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "ザ・ドック": {
+      "en": "The Dock",
+      "gender": "unknown",
+      "role": "The Dog - a stray dog NPC in the Lord's Town and Salaam woodland; the plate is spelled both ザ・ドック and ザ・ドッグ.",
+      "register": "Barks only: わんわんっ！　きゅぅう～～～ん！ / がつがつっ！ Render as English dog noises, never as words.",
+      "aliases": [
+        "ザ・ドッグ"
+      ],
+      "lines": 6,
+      "note": "SPELLING VARIANT of ザ・ドッグ - dev typo (ドック \"dock\" for ドッグ \"dog\"), same animal, same events. Must render as the SAME English string. 6 lines each. Genderless in practice - the \"male\" tag is a default, nothing in the text sexes the dog."
+    },
+    "ザ・ドッグ": {
+      "en": "The Dock",
+      "gender": "unknown",
+      "role": "The Dog - a stray dog NPC. Same animal as ザ・ドック.",
+      "register": "Barks only: わんわんっ！　きゅぅう～～～ん！ / がつがつっ！",
+      "aliases": [
+        "ザ・ドック"
+      ],
+      "lines": 6,
+      "note": "6 lines / 3 scenes. Nothing in the text sexes the dog. ザ・ドック is the same animal with a dev typo - both plates must render to the same English string."
+    },
+    "エンシェントドラゴン": {
+      "en": "Ancient Dragon",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "落ち着く隊員": {
+      "en": "Calm Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "気品のあるおじさん": {
+      "en": "Refined Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "浮かれ女": {
+      "en": "Giddy Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "男漁り": {
+      "en": "Man Hunter",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "教団の女": {
+      "en": "Cult Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "治験の達人": {
+      "en": "Clinical Trial Master",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "バイト": {
+      "en": "Part-Timer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "クライマー": {
+      "en": "Climber",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "ハイなババア": {
+      "en": "High Old Hag",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "コック": {
+      "en": "Cook",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "穢れなき男": {
+      "en": "Pure-Hearted Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "小僧": {
+      "en": "Young Lad",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "非物売り": {
+      "en": "Non-Item Seller",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "インチキ商人": {
+      "en": "Shady Merchant",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "マセメスガキ": {
+      "en": "Bratty Slut",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "カモ": {
+      "en": "Mark",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "たっしょん隊員": {
+      "en": "Tension Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "カリカリ貴族": {
+      "en": "Prickly Noble",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "おじさん商人": {
+      "en": "Old Man Merchant",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "恋する少年": {
+      "en": "Boy in Love",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "恋する少女": {
+      "en": "Girl in Love",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "NTRジジイ": {
+      "en": "NTR Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "NTR店員": {
+      "en": "NTR Clerk",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "おっさん": {
+      "en": "Middle-Aged Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "怯える少年": {
+      "en": "Frightened Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "おさんぽジジイ": {
+      "en": "Strolling Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "元金持ち": {
+      "en": "Former Rich Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "事務兵士": {
+      "en": "Clerical Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "指導兵士": {
+      "en": "Instructing Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "力の男": {
+      "en": "Man of Strength",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "夢見る店員": {
+      "en": "Dreaming Clerk",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "闘技者": {
+      "en": "Fighter",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "転職希望隊員": {
+      "en": "Career-Change Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines | shortened from 'Soldier Wanting to Change Jobs' (384px) to fit the 360px nameplate"
+    },
+    "原罪のサジタリウス": {
+      "en": "Sagittarius of Original Sin",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "風呂上がりの男": {
+      "en": "Man Fresh From the Bath",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "auto-seeded from 6 nameplate lines"
+    },
+    "鍛錬ババア2": {
+      "en": "Training Old Hag 2",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 6,
+      "note": "Separate old woman from 鍛錬ババア. DO NOT MERGE. (auto-seeded from 6 nameplate lines)"
+    },
+    "立札": {
+      "en": "Signpost",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "auto-seeded from 5 nameplate lines"
+    },
+    "ふたり": {
+      "en": "The Two of Them",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "CHORUS plate (\"the two of them\"). Resolve who from the scene; never fix a single identity to this row. (auto-seeded from 5 nameplate lines)"
+    },
+    "ベッドおじさん": {
+      "en": "Bed Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "auto-seeded from 5 nameplate lines"
+    },
+    "うるおいスライム": {
+      "en": "Moist Slime",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "auto-seeded from 5 nameplate lines"
+    },
+    "体験版おじさん": {
+      "en": "Demo Version Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "auto-seeded from 5 nameplate lines"
+    },
+    "汗かきおじさん": {
+      "en": "Sweaty Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "auto-seeded from 5 nameplate lines"
+    },
+    "浮浪G": {
+      "en": "Vagrant G",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "auto-seeded from 5 nameplate lines"
+    },
+    "偉い奴": {
+      "en": "Big Shot",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "auto-seeded from 5 nameplate lines"
+    },
+    "達観おじさん": {
+      "en": "Enlightened Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "auto-seeded from 5 nameplate lines"
+    },
+    "バイト隊員": {
+      "en": "Part-Time Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "auto-seeded from 5 nameplate lines"
+    },
+    "老人": {
+      "en": "Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "auto-seeded from 5 nameplate lines"
+    },
+    "トレーニー": {
+      "en": "Trainee",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 5,
+      "note": "auto-seeded from 5 nameplate lines"
+    },
+    "買い物女": {
+      "en": "Shopping Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "金なし博徒": {
+      "en": "Broke Gambler",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "See 博徒 - five separate gamblers. DO NOT MERGE. (auto-seeded from 4 nameplate lines)"
+    },
+    "マジメ博徒": {
+      "en": "Serious Gambler",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "See 博徒 - five separate gamblers. DO NOT MERGE. (auto-seeded from 4 nameplate lines)"
+    },
+    "ウェイター": {
+      "en": "Waiter",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "集落の少年": {
+      "en": "Village Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "教材": {
+      "en": "Teaching Material",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "登山者": {
+      "en": "Climber",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "ドラゴン": {
+      "en": "Dragon",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "チラ見せ反応男": {
+      "en": "Flash-Reacting Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "VIP": {
+      "en": "VIP",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "雷": {
+      "en": "Thunder",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "オリヴィア＆アルテシア": {
+      "en": "Olivia & Artesia",
+      "gender": "female",
+      "role": "Joint nameplate: Olivia and Artesia speaking in unison (same construction as アルテシア＆オリヴィア, with the two names in the other order).",
+      "register": "Two women in chorus - both voices apply. Render as \"Olivia & Artesia\".",
+      "aliases": [
+        "アルテシア＆オリヴィア"
+      ],
+      "lines": 4,
+      "note": "CHORUS plate, NOT an alias of either woman and NOT a third character. 4 lines / 2 scenes. Both FEMALE. Same construction as アルテシア＆オリヴィア - keep both plates and keep the name order the source uses."
+    },
+    "偏見ジジイ": {
+      "en": "Prejudiced Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "裸男": {
+      "en": "Naked Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "気づいた人": {
+      "en": "Person Who Noticed",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "オナキン": {
+      "en": "Onakin",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "オナキーン"
+      ],
+      "lines": 4,
+      "note": "SPELLING VARIANT of オナキーン - same character/NPC, the dev typed the nameplate two ways in the same event. Must translate to the SAME English string as オナキーン. (auto-seeded from 4 nameplate lines)"
+    },
+    "感想待ち男": {
+      "en": "Man Awaiting Feedback",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "感想待ちの男"
+      ],
+      "lines": 4,
+      "note": "SPELLING VARIANT of 感想待ちの男 - same character/NPC, the dev typed the nameplate two ways in the same event. Must translate to the SAME English string as 感想待ちの男. (auto-seeded from 4 nameplate lines)"
+    },
+    "全開放おじさん": {
+      "en": "Full-Release Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "出会い爺": {
+      "en": "Encounter Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "auto-seeded from 4 nameplate lines"
+    },
+    "悪のマッサージ師支店長": {
+      "en": "Evil Masseur Branch Manager",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 4,
+      "note": "The BRANCH MANAGER - a different man from 悪のマッサージ師. 悪？のマッサージ師支店長 is the same manager with a sceptical ？ inserted by the dev. (auto-seeded from 4 nameplate lines)"
+    },
+    "先輩": {
+      "en": "Senpai",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "Distinct from ナンパ先輩 and 先輩譲 (which is itself a dev typo shape - keep as written). DO NOT MERGE. (auto-seeded from 3 nameplate lines)"
+    },
+    "セックス声": {
+      "en": "Sex Voice",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "疲れた人": {
+      "en": "Tired Person",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "振られた人": {
+      "en": "Dumped Person",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "気づいた男": {
+      "en": "Man Who Noticed",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "扉": {
+      "en": "Door",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "懐古男": {
+      "en": "Nostalgic Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "懐古爺": {
+      "en": "Nostalgic Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "回想部屋おじさん": {
+      "en": "Recollection Room Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "考える水夫": {
+      "en": "Pondering Sailor",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "考えている水夫"
+      ],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "考えている水夫": {
+      "en": "Pondering Sailor",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "考える水夫"
+      ],
+      "lines": 3,
+      "note": "SPELLING VARIANT of 考える水夫 - same character/NPC, the dev typed the nameplate two ways in the same event. Must translate to the SAME English string as 考える水夫. (auto-seeded from 3 nameplate lines)"
+    },
+    "夢見るボク": {
+      "en": "Dreaming Me",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "セクハラおじさん": {
+      "en": "Harassing Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "待てる隊員": {
+      "en": "Waiting Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "待てる男": {
+      "en": "Waiting Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "成金": {
+      "en": "Nouveau Riche",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "臭い水夫": {
+      "en": "Smelly Sailor",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "賢者隊員": {
+      "en": "Sage Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "風車": {
+      "en": "Windmill",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "復興おじさん": {
+      "en": "Reconstruction Guy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "元EDおじさん": {
+      "en": "Former ED Guy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "反骨少年": {
+      "en": "Rebellious Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "痴女店員": {
+      "en": "Slutty Clerk",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "事務隊員": {
+      "en": "Clerical Staff",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "愚痴隊員": {
+      "en": "Griping Staffer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "番台": {
+      "en": "Bath Attendant",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "寒がり": {
+      "en": "Cold-Sensitive Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 3,
+      "note": "auto-seeded from 3 nameplate lines"
+    },
+    "カジノ内": {
+      "en": "Casino Interior",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "集落のジジイ": {
+      "en": "Village Geezer",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "店番": {
+      "en": "Shopkeep",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "住民": {
+      "en": "Resident",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "声": {
+      "en": "Voice",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "父親": {
+      "en": "Father",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "ウォフ": {
+      "en": "Wolf",
+      "gender": "male",
+      "role": "Wolf, Artesia's father. Only 2 nameplate lines in the whole game - a childhood flashback - but he drives the entire plot. A genius researcher of 『煉禁術』, imprisoned for over a decade in the Taromatee institute by Lord Sofreiman, who completed 『究極煉禁』, engineered his own murder as revenge, and inscribed the formula's name where only his family could find it.",
+      "register": "The only lines he speaks are gentle and playful, to a small child: 「かけっこだアルテシア／はやくお家に帰った方の勝ちだぞ」. Everyone else describes him as 仏頂面 (sullen), 天才, hollow-eyed and mad by the end. Keep the two surviving lines warm - the contrast is the point.",
+      "aliases": [],
+      "lines": 2,
+      "note": "Only 2 lines / 2 scenes as a speaker, yet he is the game's centre. MALE (彼 used for him in the priest's diary telops). Also appears as a name inside 『ウォフ』 quotes 28 times."
+    },
+    "村人": {
+      "en": "Villager",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "ナンパ先輩": {
+      "en": "Pickup Senior",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "全員": {
+      "en": "Everyone",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "CHORUS plate (\"everyone\"). Resolve from the scene. (auto-seeded from 2 nameplate lines)"
+    },
+    "ポロリン": {
+      "en": "Porolin",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "12ポイントの研究者": {
+      "en": "12-Point Researcher",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "番犬": {
+      "en": "Guard Dog",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "中年の男": {
+      "en": "Middle-Aged Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "ウナギモドキ": {
+      "en": "Eel-Lookalike",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "記事①": {
+      "en": "Article ①",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "記事②": {
+      "en": "Article ②",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "記事③": {
+      "en": "Article ③",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "斜めに構えた男": {
+      "en": "Man Standing at an Angle",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "斜に構えた男"
+      ],
+      "lines": 2,
+      "note": "SPELLING VARIANT of 斜に構えた男 - same character/NPC, the dev typed the nameplate two ways in the same event. Must translate to the SAME English string as 斜に構えた男. (auto-seeded from 2 nameplate lines)"
+    },
+    "限界突破男": {
+      "en": "Limit-Breaking Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "売り子": {
+      "en": "Saleswoman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "キノコ老人": {
+      "en": "Mushroom Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "出禁になった男": {
+      "en": "Banned Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "出禁の男"
+      ],
+      "lines": 2,
+      "note": "SPELLING VARIANT of 出禁の男 - same character/NPC, the dev typed the nameplate two ways in the same event. Must translate to the SAME English string as 出禁の男. (auto-seeded from 2 nameplate lines)"
+    },
+    "ネコ": {
+      "en": "Cat",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "Separate from 猫 / 猫B / 無礼猫 / 謎の猫. DO NOT MERGE. (auto-seeded from 2 nameplate lines)"
+    },
+    "探究者": {
+      "en": "Seeker",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "受付隊員": {
+      "en": "Receptionist Staffer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "管理兵士": {
+      "en": "Supervising Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "老いた男": {
+      "en": "Aged Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 2,
+      "note": "auto-seeded from 2 nameplate lines"
+    },
+    "バチクソ失礼なガキ": {
+      "en": "Rudest Brat Alive",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "ボンボンスケベ": {
+      "en": "Rich Boy Pervert",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "作品名：うんこ": {
+      "en": "Artwork Title: Poop",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "中毒の男": {
+      "en": "Addicted Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "体験版おじさんハウス": {
+      "en": "Demo Version Old Man House",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "詳しい客": {
+      "en": "Well-Informed Customer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "拷問部屋": {
+      "en": "Torture Chamber",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "話を聞かない男": {
+      "en": "Man Who Won't Listen",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "憂いすら忘れた男": {
+      "en": "Man Who Forgot Even Sorrow",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "おしらせ": {
+      "en": "Notice",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "骸骨": {
+      "en": "Skeleton",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "注意看板": {
+      "en": "Warning Sign",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "処女中": {
+      "en": "Virgin Middle",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "媚薬蛇": {
+      "en": "Aphrodisiac Snake",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "媚薬蛇＆ポスターおじさん": {
+      "en": "Snake & Poster Guy",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "CHORUS plate for 媚薬蛇 and ポスターおじさん speaking together. (auto-seeded from 1 nameplate lines) | shortened from 'Aphrodisiac Snake & Poster Guy' (387px) to fit the 360px nameplate"
+    },
+    "野良研究者": {
+      "en": "Freelance Researcher",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "元雪だるま": {
+      "en": "Former Snowman",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "張り紙": {
+      "en": "Posted Notice",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "イキ急ぐ男": {
+      "en": "Man Rushing to Climax",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "警備スタッフ": {
+      "en": "Security Staff",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "おっぱいを解放しろおじさん": {
+      "en": "Free the Tits Guy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "良い歳の大人": {
+      "en": "Grown Adult",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "虫取り少年A": {
+      "en": "Bug-Catching Boy A",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "牛さん": {
+      "en": "Mr. Cow",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "悪口": {
+      "en": "Insult",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "モンスター2": {
+      "en": "Monster 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "Separate monster from モンスター. DO NOT MERGE. (auto-seeded from 1 nameplate lines)"
+    },
+    "案内看板": {
+      "en": "Info Sign",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "auto-seeded from 1 nameplate lines"
+    },
+    "悪？のマッサージ師支店長": {
+      "en": "Evil? Masseur Manager",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "lines": 1,
+      "note": "Same branch manager as 悪のマッサージ師支店長, with a ？ inserted into the plate for comic doubt. Keep the ？ in English. (auto-seeded from 1 nameplate lines) | shortened from 'Evil？ Masseur Branch Manager' (376px) to fit the 360px nameplate"
+    },
+    "社に構えた男": {
+      "en": "Man Standing at the Shrine",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [
+        "斜に構えた男"
+      ],
+      "lines": 1,
+      "note": "SPELLING VARIANT of 斜に構えた男 - same character/NPC, the dev typed the nameplate two ways in the same event. Must translate to the SAME English string as 斜に構えた男. (auto-seeded from 1 nameplate lines)"
+    }
+  },
+  "terms": {
+    "執聖官": "Holy Executor (the game-title office; church investigator-enforcer of the Imperial Orthodoxy who wields the 執聖官の戦斧 to punish sin) - NEVER \"Inquisitor\", which is 異端審問官",
+    "執政官": "Holy Executor - DEV TYPO for 執聖官, used on the costume items (執政官の服). Same English as 執聖官, never \"Consul\" or \"Magistrate\"",
+    "執聖官の戦斧": "Holy Executor's Battle Axe",
+    "執聖官の服": "Holy Executor's Habit (Artesia's work clothes and only outfit)",
+    "執政官の服": "Holy Executor's Habit - same item as 執聖官の服, dev typo; must render identically",
+    "黄金のシャフリーヴァル": "The Golden Shahrivar (game subtitle and Chapter 6 title; Shahrivar is Zoroastrian-Persian, matching Anahita / Taromatee / Salaam / Sofreiman)",
+    "帝国正教": "the Imperial Orthodoxy (Artesia's church; the Dragon cult calls it a 新参者, an upstart)",
+    "異端審問官": "Inquisitor",
+    "煉禁術": "the Forbidden Alchemy (Wolf's discipline: a high-output 術式 unlike ordinary magic, whose effect does not decay after casting; almost always written in 『』)",
+    "究極煉禁": "the Ultimate Forbidden Alchemy (Wolf's completed masterwork; warps causality so events bend to the caster's convenience. Its 術式名 is the MacGuffin of the whole plot)",
+    "術式": "spell formula",
+    "術式名": "formula name (speaking it is what activates a 魔石; Wolf inscribed it where only his family could find it)",
+    "魔術": "magic (ordinary magic, as opposed to 煉禁術)",
+    "魔力": "mana",
+    "魔石": "Magic Stone (formed from a monster corpse; single use; speaking the inscribed formula name makes it activate)",
+    "魔力石": "Mana Stone (the 火の魔力石 / 氷の魔力石 / 自然の魔力石 battle items) - keep distinct from 魔石",
+    "精霊石": "Spirit Stone",
+    "魔具": "magic implement",
+    "真実の指名者": "the Namer of Truth (the great mage's 魔具 auctioned in Anahita; Ikaruga outbids Sofreiman for it)",
+    "龍": "the Dragon (the creature that destroyed the Empire; written 『龍』 and treated as a proper noun)",
+    "龍騎士": "Dragon Knight (Olivia and Ikaruga hold this title)",
+    "龍脈": "Dragon Vein (a ley line where the mana circling the earth wells up like a geyser - the Anahita Chief's definition)",
+    "リュウリン": "Ryurin (the mana-fed plant whose glowing seeds are found at both murder scenes)",
+    "リュウリンの種": "Ryurin Seed",
+    "龍を崇める会": "the Dragon Worship Society (the old cult that predates and resents the Imperial Orthodoxy)",
+    "星を喰らう者": "the Star Eater (the causality-devouring tiger that came from the sea of stars; the Ultimate Forbidden Alchemy is redeveloped from its legacy)",
+    "退魔士": "exorcist",
+    "退魔の里": "the Exorcists' Village",
+    "怨霊": "vengeful spirit (a human corpse that has become a monster)",
+    "魔族": "demon / demonkind (a people, not a monster type - keep the noun consistent across 魔族 and 魔族の長)",
+    "魔族の長": "Chief of the Demons",
+    "劣等種": "inferior species (the demons' slur for humans - keep the contempt, do not soften to \"lesser people\")",
+    "治安維持隊": "the Peacekeeping Corps",
+    "隊舎": "Corps Barracks",
+    "風紀委員": "Public Morals Officer",
+    "風紀処": "the Morals Office",
+    "ソフレイマン領": "the Sofreiman Domain",
+    "領主": "the Lord (of the domain) - as a nameplate it is Sofreiman himself",
+    "領主街": "the Lord's Town",
+    "領道": "Domain Road (領道1号 = Domain Road No. 1, and so on through No. 14)",
+    "タロマティー": "Taromatee (the snowbound town and its research institute, where Wolf was held)",
+    "タロマティー研究所": "the Taromatee Institute",
+    "第零研究室": "Laboratory Zero",
+    "アナーヒタ": "Anahita (the boom town with the auction house and casino)",
+    "アナーヒタ集落": "the Anahita Settlement",
+    "ヒーチカ": "Heechka (the lawless frontier town with the 危険域 and the serial deaths)",
+    "危険域": "the Danger Zone (the quarantined district of Heechka holding the Doctor's laboratory)",
+    "サラーム村": "Salaam Village",
+    "サラーム山": "Mount Salaam",
+    "忘却の花園": "the Garden of Oblivion",
+    "モーモータウン": "Moo-Moo Town (the dairy town)",
+    "ホルスタイン村": "Holstein Village",
+    "ナリキン族": "the Nouveau Clan (成金 = new money; their halls are 黄金部屋 and ボロ)",
+    "名もなき村": "the Nameless Village (the settlement Artesia builds; each recruit raises 威信 and 名声 by 1 and she ends up 村長)",
+    "アナル火山": "Mount Anal (a volcano - the crude name is deliberate, keep it)",
+    "おどろ通り": "Odoro Street",
+    "毒湿原": "the Poison Marsh",
+    "黄泉沼": "the Yomi Bog",
+    "雷剣山": "Mount Raiken",
+    "氷山海峡": "the Iceberg Strait",
+    "龍の丘": "the Dragon's Hill",
+    "龍の試練": "the Dragon's Trial",
+    "龍の繭": "the Dragon's Cocoon",
+    "龍教会": "the Dragon Church",
+    "更生牢": "the Reform Gaol",
+    "回想部屋": "the Recollection Room (the scene-replay gallery; its scenes must read identically to their originals)",
+    "傲慢の回廊": "the Corridor of Pride",
+    "嫉妬の回廊": "the Corridor of Envy",
+    "強欲の回廊": "the Corridor of Greed",
+    "怠惰の回廊": "the Corridor of Sloth",
+    "憤怒の回廊": "the Corridor of Wrath",
+    "暴食の回廊": "the Corridor of Gluttony",
+    "色欲の回廊": "the Corridor of Lust",
+    "強欲のトォリス": "Taurus of Greed",
+    "嫉妬のヴィルゴ": "Virgo of Envy",
+    "傲慢のリオン": "Leo of Pride",
+    "怠惰のパイシーズ": "Pisces of Sloth (the Condition entry misspells it 怠惰のパイシース - same English)",
+    "憤怒のカプリコーン": "Capricorn of Wrath",
+    "色欲のアクエリアス": "Aquarius of Lust",
+    "暴食のカンケル": "Cancer of Gluttony",
+    "原罪のサジタリウス": "Sagittarius of Original Sin",
+    "絶頂": "TWO MEANINGS: Lord Sofreiman's catchphrase interjection = \"Ecstasy!\" (never sexual); everywhere else in an H scene = climax / orgasm. Never swap them",
+    "永遠絶頂": "Eternal Ecstasy (Sofreiman's stated goal)",
+    "納得": "closure - Artesia's codeword in 『納得』 for the acceptance she needs before she can move on (\"私はただ『納得』したかったの\"). Never \"agreement\" or \"consent\"",
+    "本命": "the True Target - Artesia's codeword in 『本命』 for the real case hiding behind the visible one",
+    "財産": "the Fortune - the codeword in 『財産』 for what the Doctor scrapped his laboratory to protect",
+    "協力者": "the Collaborator (『協力者』, the man Artesia tracks through Chapter 5)",
+    "聖域": "Sanctuary - Sensei's 『聖域』: the place no prestige, fame or money can enter, hers alone. Chapter 5 title",
+    "祈り": "prayer - the framing word of the whole game (\"これは『祈り』の物語\")",
+    "名声": "Fame (menu stat; rises when Artesia pays for information or charms people)",
+    "威信": "Prestige (menu stat; rises when she strong-arms information out of people)",
+    "淫乱度": "Lewdness (the main progression gauge; it goes UP, and scenes unlock at thresholds - \"淫乱度が足りない\" is an unmet requirement, not a penalty)",
+    "淫口": "Lewd Mouth (Job/stat family)",
+    "淫胸": "Lewd Breasts",
+    "淫膣": "Lewd Pussy",
+    "淫尻": "Lewd Ass",
+    "淫心": "Lewd Heart",
+    "開発": "training / development (of a body part) - 淫口開発 = Mouth Training, 淫尻開発レベル = Ass Training Level",
+    "スケベポイント": "Lewd Points (abbreviated SP in the item database; collected by the スケベポイント交換おじさん)",
+    "乳首チラ見せ": "Nipple Flash (the T-key field ability; gated on Lewdness)",
+    "見抜き": "watch-wank (a man masturbating to her in person rather than touching her) - 見抜き回数 = Watch-Wank Count",
+    "おっぱい回数": "Breast Count",
+    "フェラ回数": "Blowjob Count",
+    "パイズリ回数": "Titfuck Count",
+    "おまんこ回数": "Pussy Count",
+    "アナル回数": "Anal Count",
+    "オナニー回数": "Masturbation Count",
+    "露出回数": "Exposure Count",
+    "売春回数": "Prostitution Count",
+    "セクハラ回数": "Groping Count",
+    "輪姦回数": "Gangbang Count",
+    "戦闘エロ回数": "Battle Sex Count",
+    "敗北回数": "Defeat Count",
+    "誘惑回数": "Seduction Count",
+    "Hステータス": "H Status (the lewd stat screen)",
+    "着替えBOX": "Wardrobe Box",
+    "情報をつきつける！": "Present the evidence! (the deduction-system button)",
+    "〜の情報": "Intel on ... (every 情報 item is an evidence card - 第三章　龍脈の情報 = Chapter 3: Intel on the Dragon Vein). Keep the chapter prefix and the fixed word \"Intel\"",
+    "フリー": "Free (prefix on the optional, sellable intel items: フリー　勇気の情報 = Free: Intel on Courage)",
+    "※このイベントで淫乱度は上昇しません※": "*Lewdness does not rise in this event*",
+    "※淫乱度{N}以上でシーンが解放されます※": "*Scene unlocks at Lewdness {N} or higher*",
+    "媚薬": "aphrodisiac",
+    "媚毒": "aphrodisiac venom (the tentacles' and monsters' version)",
+    "発情": "In Heat (the Condition/status name; keep it terse as a status label)",
+    "アクメ": "climax (verb: to cum). ザコアクメ = \"a pathetic little climax\"",
+    "イく / イっちゃう": "I'm cumming / I'm gonna cum",
+    "膣内射精": "creampie",
+    "種付け": "breeding",
+    "孕み汁": "breeding juice",
+    "輪姦": "gangbang",
+    "肉便器": "cumdump",
+    "壁尻": "wall-ass (a woman fixed in a wall, rear exposed)",
+    "オナホ": "onahole / fleshlight (オナホ穴 = onahole-hole, オナホ女 = onahole bitch)",
+    "わからせ": "putting her in her place (the aggressors' fixed phrase, わからせてやる)",
+    "デカパイ": "huge tits (the single most common epithet for Artesia)",
+    "おっぱい": "tits / boobs",
+    "乳首": "nipples",
+    "オチンポ": "cock",
+    "チンコ": "dick",
+    "おちんちん": "willy (the shota characters' childish word - keep it childish)",
+    "ザーメン": "cum / spunk",
+    "カウパー": "precum",
+    "オマンコ": "pussy",
+    "ケツマンコ": "ass-pussy",
+    "マゾ": "masochist (マゾメス = masochist bitch, マゾ豚 = masochist pig)",
+    "メス": "bitch / female animal (メス牛 = cow, メス豚 = sow) - keep the animalising force",
+    "ビッチ": "slut",
+    "痴女": "pervert woman / slut",
+    "ムッツリ": "closet pervert",
+    "ドスケベ": "filthy / depraved (fixed intensifier: ドスケベおっぱい = filthy tits)",
+    "スケベ": "lewd / horny (the enemy-name prefix: スケベゴブリン = Lewd Goblin, スケベ触手 = Lewd Tentacle)",
+    "オナ禁": "NoFap / abstaining from masturbation (a running gag - オナ禁書目録, 『協力者』はオナ禁していた)",
+    "セクハラ": "sexual harassment / groping (セクハラ撲滅拳 = Anti-Groping Fist)",
+    "頭金玉病": "Dick-Brain Disease (the invented ailment at the Fラン医院)",
+    "Fラン医院": "the F-Rank Clinic (F-rank = bottom-tier, a Japanese university-ranking joke)",
+    "ボッキノコ": "Boner Shroom (ボッキノコ / フルボッキノコ = Full Boner Shroom; 守/魔/力 variants = DEF/MAG/ATK)",
+    "シコリーター三世": "Shikoritor III (the developer; appears in-game as the author of シコリーター三世の手紙)",
+    "G": "G (the currency suffix - keep the letter, e.g. 5000G)",
+    "腕力": "Strength",
+    "体力": "Vitality",
+    "素早さ": "Speed",
+    "会心率": "Critical Rate",
+    "属性攻撃力": "Element Attack",
+    "冥": "Dark (the element; 聖 = Holy, 冷気 = Ice in the attribute table, 自然 = Nature)",
+    "図鑑": "Bestiary",
+    "ファストトラベル": "Fast Travel"
+  },
+  "do_not_translate": [
+    "属性7",
+    "属性8",
+    "状態7",
+    "状態8",
+    "RPG Developer Bakin",
+    "SmileBoom Co.Ltd.",
+    "Effekseer",
+    "MonoGame",
+    "SharpDX",
+    "YamlDotNet",
+    "FreeType",
+    "libvorbis",
+    "libogg",
+    "libsimplewebm"
+  ]
+}

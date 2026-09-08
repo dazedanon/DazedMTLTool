@@ -1,0 +1,16 @@
+{
+  "model": "claude-sonnet-5",
+  "effort": "low",
+  "cache_ttl": "5m",
+  "units_per_request": 80,
+  "source_chars_per_request": 6500,
+  "max_output_tokens": 16384,
+  "output_ratio": 1.38,
+  "submission_budget_usd": 20,
+  "pricing": {
+    "checked": "2026-09-06",
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "batch_input_per_million": 1.0,
+    "batch_output_per_million": 5.0
+  }
+}

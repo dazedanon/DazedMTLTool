@@ -1,0 +1,530 @@
+[
+  {
+    "id": 402,
+    "path": "data/image/config/label_cg.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "CG鑑賞モード",
+        "target": "CG Gallery",
+        "box": [
+          14,
+          91,
+          387,
+          112
+        ],
+        "erase_method": "clear",
+        "erased_pixels": 1892,
+        "font": "arialbd",
+        "font_size": 14,
+        "line_widths": [
+          73
+        ]
+      }
+    ]
+  },
+  {
+    "id": 403,
+    "path": "data/image/config/label_config.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "コンフィグ",
+        "target": "Settings",
+        "box": [
+          14,
+          91,
+          336,
+          112
+        ],
+        "erase_method": "clear",
+        "erased_pixels": 1410,
+        "font": "arialbd",
+        "font_size": 14,
+        "line_widths": [
+          57
+        ]
+      }
+    ]
+  },
+  {
+    "id": 404,
+    "path": "data/image/config/label_recollection.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "回想モード",
+        "target": "Scene Replay",
+        "box": [
+          14,
+          91,
+          589,
+          112
+        ],
+        "erase_method": "clear",
+        "erased_pixels": 1437,
+        "font": "arialbd",
+        "font_size": 14,
+        "line_widths": [
+          93
+        ]
+      }
+    ]
+  },
+  {
+    "id": 410,
+    "path": "data/image/title/button_cg.gif",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "CGモード",
+        "target": "CG Gallery",
+        "box": [
+          24,
+          9,
+          228,
+          42
+        ],
+        "erase_method": "inpaint",
+        "erased_pixels": 1189,
+        "font": "arialbd",
+        "font_size": 22,
+        "line_widths": [
+          113
+        ]
+      }
+    ]
+  },
+  {
+    "id": 411,
+    "path": "data/image/title/button_config.gif",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "コンフィグ",
+        "target": "Config",
+        "box": [
+          24,
+          9,
+          228,
+          42
+        ],
+        "erase_method": "inpaint",
+        "erased_pixels": 1416,
+        "font": "arialbd",
+        "font_size": 22,
+        "line_widths": [
+          68
+        ]
+      }
+    ]
+  },
+  {
+    "id": 412,
+    "path": "data/image/title/button_load.gif",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "つづきから",
+        "target": "Continue",
+        "box": [
+          24,
+          9,
+          228,
+          42
+        ],
+        "erase_method": "inpaint",
+        "erased_pixels": 1750,
+        "font": "arialbd",
+        "font_size": 22,
+        "line_widths": [
+          93
+        ]
+      }
+    ]
+  },
+  {
+    "id": 413,
+    "path": "data/image/title/button_replay.gif",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "回想モード",
+        "target": "Scene Replay",
+        "box": [
+          24,
+          9,
+          228,
+          42
+        ],
+        "erase_method": "inpaint",
+        "erased_pixels": 1709,
+        "font": "arialbd",
+        "font_size": 22,
+        "line_widths": [
+          141
+        ]
+      }
+    ]
+  },
+  {
+    "id": 414,
+    "path": "data/image/title/button_start.gif",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "はじめから",
+        "target": "New Game",
+        "box": [
+          24,
+          9,
+          228,
+          42
+        ],
+        "erase_method": "inpaint",
+        "erased_pixels": 1905,
+        "font": "arialbd",
+        "font_size": 22,
+        "line_widths": [
+          112
+        ]
+      }
+    ]
+  },
+  {
+    "id": 415,
+    "path": "data/image/ui_btn_hayai.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "はやい",
+        "target": "Fast",
+        "box": [
+          8,
+          12,
+          134,
+          46
+        ],
+        "erase_method": "flat",
+        "erased_pixels": 636,
+        "font": "comicbd",
+        "font_size": 24,
+        "line_widths": [
+          52
+        ]
+      }
+    ]
+  },
+  {
+    "id": 416,
+    "path": "data/image/ui_btn_hutuu.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "ふつう",
+        "target": "Normal",
+        "box": [
+          8,
+          12,
+          134,
+          46
+        ],
+        "erase_method": "flat",
+        "erased_pixels": 518,
+        "font": "comicbd",
+        "font_size": 24,
+        "line_widths": [
+          84
+        ]
+      }
+    ]
+  },
+  {
+    "id": 417,
+    "path": "data/image/ui_btn_insert.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "挿れる",
+        "target": "Insert",
+        "box": [
+          8,
+          12,
+          134,
+          46
+        ],
+        "erase_method": "flat",
+        "erased_pixels": 842,
+        "font": "comicbd",
+        "font_size": 24,
+        "line_widths": [
+          75
+        ]
+      }
+    ]
+  },
+  {
+    "id": 418,
+    "path": "data/image/ui_btn_load.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "つづきから",
+        "target": "Continue",
+        "box": [
+          8,
+          12,
+          134,
+          46
+        ],
+        "erase_method": "flat",
+        "erased_pixels": 947,
+        "font": "comicbd",
+        "font_size": 24,
+        "line_widths": [
+          97
+        ]
+      }
+    ]
+  },
+  {
+    "id": 419,
+    "path": "data/image/ui_btn_start.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "はじめから",
+        "target": "New Game",
+        "box": [
+          8,
+          12,
+          134,
+          46
+        ],
+        "erase_method": "flat",
+        "erased_pixels": 1150,
+        "font": "comicbd",
+        "font_size": 24,
+        "line_widths": [
+          120
+        ]
+      }
+    ]
+  },
+  {
+    "id": 420,
+    "path": "data/image/ui_btn_stop.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "止まる",
+        "target": "Stop",
+        "box": [
+          8,
+          12,
+          134,
+          46
+        ],
+        "erase_method": "flat",
+        "erased_pixels": 708,
+        "font": "comicbd",
+        "font_size": 24,
+        "line_widths": [
+          54
+        ]
+      }
+    ]
+  },
+  {
+    "id": 421,
+    "path": "data/image/ui_btn_yukkuri.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "ゆっくり",
+        "target": "Slow",
+        "box": [
+          8,
+          12,
+          134,
+          46
+        ],
+        "erase_method": "flat",
+        "erased_pixels": 697,
+        "font": "comicbd",
+        "font_size": 24,
+        "line_widths": [
+          54
+        ]
+      }
+    ]
+  },
+  {
+    "id": 422,
+    "path": "data/others/plugin/individual_image/kobetu.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "個別画像表示・消去 プラグイン",
+        "target": "Show / Hide Individual Images\nPlugin",
+        "box": [
+          122,
+          397,
+          831,
+          579
+        ],
+        "erased_pixels": 32188,
+        "erase_method": "flat",
+        "lines": [
+          {
+            "font": "arialbd",
+            "font_size": 48,
+            "line_widths": [
+              684
+            ],
+            "box": [
+              124,
+              405,
+              830,
+              486
+            ]
+          },
+          {
+            "font": "arialbd",
+            "font_size": 75,
+            "line_widths": [
+              230
+            ],
+            "box": [
+              124,
+              485,
+              830,
+              574
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 471,
+    "path": "data/others/plugin/theme_kopanda_16/preview.png",
+    "status": "translated",
+    "blocks": [
+      {
+        "source": "ガイド",
+        "target": "Guide",
+        "box": [
+          791,
+          259,
+          841,
+          279
+        ],
+        "erase_method": "flat",
+        "erased_pixels": 624,
+        "font": "arialbd",
+        "font_size": 11,
+        "line_widths": [
+          32
+        ]
+      },
+      {
+        "source": "一括テーマ変換です。",
+        "target": "This changes the entire theme.",
+        "box": [
+          744,
+          292,
+          916,
+          316
+        ],
+        "erase_method": "inpaint",
+        "erased_pixels": 1419,
+        "font": "arial",
+        "font_size": 10,
+        "line_widths": [
+          144
+        ]
+      },
+      {
+        "source": "どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。",
+        "target": "I have no idea where I was born.\nAll I remember is mewing in some dark, damp place.",
+        "box": [
+          181,
+          646,
+          553,
+          676
+        ],
+        "erase_method": "inpaint",
+        "erased_pixels": 4831,
+        "font": "arial",
+        "font_size": 9,
+        "line_widths": [
+          137,
+          220
+        ]
+      },
+      {
+        "source": "ガイド：一括テーマ変換です。",
+        "target": "Guide: This changes the entire theme.",
+        "box": [
+          859,
+          489,
+          1082,
+          504
+        ],
+        "erase_method": "inpaint",
+        "erased_pixels": 866,
+        "font": "arial",
+        "font_size": 7,
+        "line_widths": [
+          123
+        ]
+      },
+      {
+        "source": "まだ、保存されているデータがありません。",
+        "target": "There is no saved data yet.",
+        "box": [
+          859,
+          554,
+          1084,
+          570
+        ],
+        "erase_method": "inpaint",
+        "erased_pixels": 1722,
+        "font": "arial",
+        "font_size": 7,
+        "line_widths": [
+          88
+        ]
+      },
+      {
+        "source": "まだ、保存されているデータがありません。",
+        "target": "There is no saved data yet.",
+        "box": [
+          859,
+          620,
+          1084,
+          636
+        ],
+        "erase_method": "inpaint",
+        "erased_pixels": 1306,
+        "font": "arial",
+        "font_size": 7,
+        "line_widths": [
+          88
+        ]
+      },
+      {
+        "source": "縮小された同じ画面",
+        "target": "Translated demonstration screen thumbnail",
+        "box": [
+          763,
+          476,
+          837,
+          516
+        ],
+        "erase_method": "paste translated matching screen"
+      }
+    ]
+  }
+]

@@ -1,0 +1,10 @@
+; pdh.dll proxy -- forward the 6 PDH functions the game imports to the real
+; (renamed) system DLL pdh_orig.dll, while our DllMain installs the TTS hook.
+LIBRARY pdh
+EXPORTS
+    PdhRemoveCounter            = pdh_orig.PdhRemoveCounter
+    PdhCollectQueryData         = pdh_orig.PdhCollectQueryData
+    PdhGetFormattedCounterValue = pdh_orig.PdhGetFormattedCounterValue
+    PdhEnumObjectItemsA         = pdh_orig.PdhEnumObjectItemsA
+    PdhOpenQueryA               = pdh_orig.PdhOpenQueryA
+    PdhAddCounterA              = pdh_orig.PdhAddCounterA

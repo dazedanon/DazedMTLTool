@@ -69,6 +69,8 @@ the full evidence hierarchy in Phase 2 before finalizing the Glossary. Keep comm
 eligible when multiple independent naming signals support them; otherwise use a conservative,
 naturalized player-facing spelling and record uncertainty.
 
+{{CHARACTER_IDENTITY_RULES}}
+
 ### Optional reference translations
 
 The copied setup instructions may include a `<reference_translations>` attachment pointing to

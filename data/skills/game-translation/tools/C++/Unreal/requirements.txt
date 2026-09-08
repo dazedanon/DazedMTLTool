@@ -1,0 +1,2 @@
+# Used by scripts/make_locres_override.py. Install in the project's environment.
+pylocres==0.1.9.2

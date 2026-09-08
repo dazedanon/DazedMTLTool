@@ -1,0 +1,10 @@
+const fs=require('fs'),path=require('path');
+const saveFile=path.resolve(__dirname,'../../test_game/musi_dream_tyrano_data.sav');
+const save=JSON.parse(unescape(fs.readFileSync(saveFile,'utf8')));
+console.log('SLOTS',JSON.stringify(save.data.map((s,i)=>({slot:i,scenario:s.stat&&s.stat.current_scenario,index:s.current_order_index,title:s.title}))));
+const slot=save.data[0];
+console.log('CAPTIONS',JSON.stringify({title:slot.title,current_save_str:slot.stat.current_save_str,current_message_str:slot.stat.current_message_str}));
+console.log('ROOT',Object.keys(save),'SLOT',Object.keys(slot));
+console.log('STAT',Object.keys(slot.stat));
+console.log('CURRENT',slot.stat.current_scenario,slot.current_order_index,slot.stat.current_line,slot.stat.current_message_str);
+console.log('LAYER',JSON.stringify(slot.layer,null,2));

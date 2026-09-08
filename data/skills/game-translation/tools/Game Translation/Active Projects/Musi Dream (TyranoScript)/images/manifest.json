@@ -1,0 +1,2156 @@
+{
+  "format_version": 1,
+  "original_archive_sha256": "0427999aee3dd5e6e6cc995eca1f6cf7a1a94bdc43222a247bc103a99a12b524",
+  "method": "Manual offline transcription, translation and local PIL lettering; no APIs.",
+  "inventory_status": "visually_reviewed_with_documented_exclusion",
+  "coverage_ref": "images/coverage.json",
+  "limitations": [
+    "One image, data/bgimage/ev_Hdouga.jpg, remains unchanged because it contains sexual depictions explicitly labeled as minors."
+  ],
+  "assets": [
+    {
+      "path": "data/bgimage/ev_Ytube.jpg",
+      "source_sha256": "36f8b768d4bfcc3b351a4dff20ee93c99932c97edabef085191e3848b7dfe2ef",
+      "output_sha256": "63d101cacbec1eda917d18087e265ba2bb079358caaf6c9c4be5e655ed75cd9f",
+      "width": 2880,
+      "height": 1620,
+      "mode": "RGB",
+      "source_format": "JPEG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "changed_pixels": 247866,
+      "outside_mask_changes": 0,
+      "regions": [
+        [
+          2510,
+          25,
+          2740,
+          89
+        ],
+        [
+          125,
+          805,
+          660,
+          866
+        ],
+        [
+          1197,
+          805,
+          1850,
+          867
+        ],
+        [
+          2014,
+          805,
+          2840,
+          867
+        ],
+        [
+          125,
+          1495,
+          910,
+          1557
+        ],
+        [
+          1070,
+          1495,
+          1850,
+          1557
+        ],
+        [
+          2055,
+          1495,
+          2630,
+          1557
+        ],
+        [
+          22,
+          609,
+          833,
+          775
+        ],
+        [
+          1000,
+          652,
+          1177,
+          770
+        ],
+        [
+          1190,
+          680,
+          1288,
+          766
+        ],
+        [
+          1284,
+          660,
+          1550,
+          774
+        ],
+        [
+          1550,
+          681,
+          1607,
+          772
+        ],
+        [
+          1607,
+          659,
+          1840,
+          778
+        ],
+        [
+          2220,
+          383,
+          2510,
+          759
+        ],
+        [
+          17,
+          945,
+          440,
+          1260
+        ],
+        [
+          803,
+          959,
+          906,
+          1391
+        ],
+        [
+          1317,
+          944,
+          1580,
+          1062
+        ],
+        [
+          1067,
+          1328,
+          1572,
+          1451
+        ],
+        [
+          1938,
+          941,
+          2238,
+          1010
+        ],
+        [
+          1945,
+          1090,
+          2143,
+          1298
+        ]
+      ]
+    },
+    {
+      "id": 17,
+      "path": "data/bgimage/ev_insert_explain.jpg",
+      "source_sha256": "ce913f87af52089eed7ff0c6b66651cb3fa0e9cb8ab119f29836c8755d42c939",
+      "output_sha256": "4222d604d7ea81cd9666db2b97a1b638545c942680c335bc8a9aab0dd7f1fca0",
+      "width": 2880,
+      "height": 1620,
+      "mode": "RGB",
+      "source_mode": "RGB",
+      "output_mode": "RGB",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 17,
+        "path": "data/bgimage/ev_insert_explain.jpg",
+        "blocks": [
+          {
+            "source": "挿入ゲーム",
+            "target": "INSERTION GAME"
+          },
+          {
+            "source": "ヒマリィの顔を見て、",
+            "target": "Watch Himarii's face."
+          },
+          {
+            "source": "「挿れる」か「止まる」か判断せよ！",
+            "target": "Choose \"Insert\" or \"Stop\"!"
+          },
+          {
+            "source": "間違えると、危険度が上がります。一定以上になるとゲームオーバー。",
+            "target": "Wrong choices raise danger. Too much danger means Game Over."
+          },
+          {
+            "source": "リロード",
+            "target": "Reload"
+          },
+          {
+            "source": "挿れる",
+            "target": "Insert"
+          },
+          {
+            "source": "止まる",
+            "target": "Stop"
+          },
+          {
+            "source": "キケン",
+            "target": "DANGER"
+          }
+        ]
+      },
+      "changed_pixels": 212380,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "box": [
+            210,
+            122,
+            660,
+            222
+          ],
+          "core_pixels": 10892,
+          "erase_pixels": 17156
+        },
+        {
+          "box": [
+            175,
+            500,
+            650,
+            691
+          ],
+          "core_pixels": 20511,
+          "erase_pixels": 32592
+        },
+        {
+          "box": [
+            175,
+            888,
+            650,
+            1175
+          ],
+          "core_pixels": 36832,
+          "erase_pixels": 59531
+        },
+        {
+          "box": [
+            875,
+            1295,
+            2210,
+            1490
+          ],
+          "core_pixels": 67898,
+          "erase_pixels": 110073
+        },
+        {
+          "box": [
+            2395,
+            1300,
+            2590,
+            1385
+          ],
+          "core_pixels": 1333,
+          "erase_pixels": 7163,
+          "method": "red-brown seed + 12px measured halo"
+        },
+        {
+          "box": [
+            951,
+            847,
+            1037,
+            880
+          ],
+          "erase_pixels": 1077,
+          "fill": [
+            214,
+            194,
+            183,
+            255
+          ]
+        },
+        {
+          "box": [
+            951,
+            963,
+            1037,
+            996
+          ],
+          "erase_pixels": 863,
+          "fill": [
+            214,
+            194,
+            183,
+            255
+          ]
+        },
+        {
+          "box": [
+            853,
+            381,
+            917,
+            402
+          ],
+          "erase_pixels": 1344,
+          "fill": [
+            239,
+            239,
+            239,
+            255
+          ]
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "INSERTION GAME"
+          ],
+          "box": [
+            140,
+            113,
+            744,
+            223
+          ],
+          "font": "ariblk",
+          "point_size": 61,
+          "requested_size": 64,
+          "fit": "measured shrink",
+          "max_width": 600,
+          "row_height": 46
+        },
+        {
+          "lines": [
+            "Watch",
+            "Himarii's face."
+          ],
+          "box": [
+            135,
+            498,
+            651,
+            693
+          ],
+          "font": "ariblk",
+          "point_size": 65,
+          "requested_size": 66,
+          "fit": "measured shrink",
+          "max_width": 513,
+          "row_height": 49
+        },
+        {
+          "lines": [
+            "Choose",
+            "\"Insert\"",
+            "or \"Stop\"!"
+          ],
+          "box": [
+            150,
+            885,
+            640,
+            1178
+          ],
+          "font": "ariblk",
+          "point_size": 72,
+          "requested_size": 72,
+          "fit": "requested",
+          "max_width": 380,
+          "row_height": 67
+        },
+        {
+          "lines": [
+            "Wrong choices raise danger.",
+            "Too much danger means Game Over."
+          ],
+          "box": [
+            867,
+            1292,
+            2220,
+            1490
+          ],
+          "font": "ariblk",
+          "point_size": 66,
+          "requested_size": 70,
+          "fit": "measured shrink",
+          "max_width": 1330,
+          "row_height": 62
+        },
+        {
+          "lines": [
+            "DANGER"
+          ],
+          "box": [
+            2400,
+            1305,
+            2590,
+            1370
+          ],
+          "font": "comicbd",
+          "point_size": 39,
+          "requested_size": 39,
+          "fit": "requested",
+          "max_width": 171,
+          "row_height": 39
+        },
+        {
+          "lines": [
+            "Insert"
+          ],
+          "box": [
+            951,
+            847,
+            1037,
+            880
+          ],
+          "font": "comicbd",
+          "point_size": 25,
+          "requested_size": 25,
+          "fit": "requested",
+          "max_width": 77,
+          "row_height": 20
+        },
+        {
+          "lines": [
+            "Stop"
+          ],
+          "box": [
+            951,
+            963,
+            1037,
+            996
+          ],
+          "font": "comicbd",
+          "point_size": 25,
+          "requested_size": 25,
+          "fit": "requested",
+          "max_width": 55,
+          "row_height": 27
+        },
+        {
+          "lines": [
+            "Reload"
+          ],
+          "box": [
+            853,
+            381,
+            917,
+            402
+          ],
+          "font": "arial",
+          "point_size": 14,
+          "requested_size": 14,
+          "fit": "requested",
+          "max_width": 45,
+          "row_height": 10
+        }
+      ]
+    },
+    {
+      "path": "data/bgimage/ev_sakuzyo.jpg",
+      "source_sha256": "db51279ea5af024ad49e18b7f61ef708bb3c78347820e61943134704ab2ccf3d",
+      "output_sha256": "cc79084fc9279af6624940c67c5563f04633fe98ca4cc908c72edf5afa5b6183",
+      "width": 2880,
+      "height": 1620,
+      "mode": "RGB",
+      "source_format": "JPEG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "changed_pixels": 200430,
+      "outside_mask_changes": 0,
+      "regions": [
+        [
+          2510,
+          25,
+          2740,
+          89
+        ],
+        [
+          189,
+          1495,
+          1130,
+          1557
+        ],
+        [
+          883,
+          312,
+          1440,
+          525
+        ],
+        [
+          291,
+          1154,
+          1388,
+          1415
+        ],
+        [
+          823,
+          688,
+          1910,
+          988
+        ]
+      ]
+    },
+    {
+      "path": "data/bgimage/ev_title.jpg",
+      "source_sha256": "f3f68039aa61bed8b61dfe86474edbc5425e907d9b60e903f22780ca1f43501c",
+      "output_sha256": "ce1343a37ad6433e63fea11fcc7ab0f5b143da581d8fba74e72ce52cb6542496",
+      "width": 2880,
+      "height": 1620,
+      "mode": "RGB",
+      "source_format": "JPEG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "regions": [
+        {
+          "source": "虫ドリーム",
+          "target": "BUG DREAM",
+          "region": [
+            1574,
+            91,
+            2741,
+            480
+          ]
+        },
+        {
+          "source": "寝落ちYtuberとバズの夜",
+          "target": "A Sleeping Ytuber's Viral Night",
+          "region": [
+            1712,
+            493,
+            2519,
+            567
+          ]
+        }
+      ],
+      "notes": "Pristine sleeping heroine and colored star artwork preserved. Purple gradient lettering; shared white title/central-star halo and occluded upper subtitle border reconstructed. Lower frame and play icon retained.",
+      "qa": {
+        "changed_pixels": 354735,
+        "outside_edit_mask_changes": 0,
+        "ornament_changes": 0,
+        "erased_ink_pixels": 369410,
+        "donor_control_box": [
+          1440,
+          0,
+          2880,
+          70
+        ],
+        "donor_control_max_channel_difference": 2,
+        "subtitle_font": "Arial Bold",
+        "subtitle_size": 50,
+        "subtitle_width": 737.9375,
+        "visual_review": "Reviewed source/output and erased image at 2x; central subtitle arc inspected at 5x and removed. No residual Japanese or clipping. Colorful star pixels and pixels outside the declared edit mask unchanged."
+      }
+    },
+    {
+      "path": "data/fgimage/default/ev_baby8.jpg",
+      "source_sha256": "7591c86f2eb48e4d655c49948745f6a440cd2acfbec2371b9f3e3bd4f2f6e494",
+      "output_sha256": "bacd231909799626bf353839bbfeea6ef6e80fb261cbada2b05e3bcafba1a264",
+      "width": 2880,
+      "height": 1620,
+      "mode": "RGB",
+      "source_format": "JPEG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "changed_pixels": 123622,
+      "outside_mask_changes": 0,
+      "regions": [
+        [
+          2510,
+          25,
+          2740,
+          89
+        ],
+        [
+          45,
+          1495,
+          1900,
+          1560
+        ]
+      ]
+    },
+    {
+      "id": 345,
+      "path": "data/fgimage/default/ev_insert_explain.jpg",
+      "source_sha256": "9b965070f3a06fa5c44a2e4af839ecc976db1da8064aefa2d6b5c137ef5bc604",
+      "output_sha256": "16f826854d6efdfa02a31b952233df83fde49d2aa7e41eade2724cd9c508cbd4",
+      "width": 2880,
+      "height": 1620,
+      "mode": "RGB",
+      "source_mode": "RGB",
+      "output_mode": "RGB",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 345,
+        "path": "data/fgimage/default/ev_insert_explain.jpg",
+        "blocks": [
+          {
+            "source": "挿入ゲーム",
+            "target": "INSERTION GAME"
+          },
+          {
+            "source": "ヒマリィの顔を見て、",
+            "target": "Watch Himarii's face."
+          },
+          {
+            "source": "「挿れる」か「止まる」か判断せよ！",
+            "target": "Choose \"Insert\" or \"Stop\"!"
+          },
+          {
+            "source": "判断ミスが続くとゲームオーバー！",
+            "target": "Repeated mistakes = Game Over!"
+          },
+          {
+            "source": "８割以上挿入できてたらクリア！",
+            "target": "Reach 80% insertion to clear!"
+          },
+          {
+            "source": "リロード",
+            "target": "Reload"
+          },
+          {
+            "source": "挿れる",
+            "target": "Insert"
+          },
+          {
+            "source": "止まる",
+            "target": "Stop"
+          },
+          {
+            "source": "キケン",
+            "target": "DANGER"
+          },
+          {
+            "source": "ヘタレ",
+            "target": "WIMP"
+          }
+        ]
+      },
+      "changed_pixels": 259386,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "box": [
+            210,
+            122,
+            660,
+            222
+          ],
+          "core_pixels": 10847,
+          "erase_pixels": 17125
+        },
+        {
+          "box": [
+            275,
+            365,
+            738,
+            555
+          ],
+          "core_pixels": 20579,
+          "erase_pixels": 32673
+        },
+        {
+          "box": [
+            275,
+            750,
+            738,
+            1040
+          ],
+          "core_pixels": 36875,
+          "erase_pixels": 59555
+        },
+        {
+          "box": [
+            90,
+            1435,
+            1385,
+            1535
+          ],
+          "core_pixels": 31642,
+          "erase_pixels": 51526
+        },
+        {
+          "box": [
+            1480,
+            1435,
+            2780,
+            1535
+          ],
+          "core_pixels": 31999,
+          "erase_pixels": 52544
+        },
+        {
+          "box": [
+            175,
+            1364,
+            310,
+            1430
+          ],
+          "core_pixels": 467,
+          "erase_pixels": 3833,
+          "method": "red-brown seed + 12px measured halo"
+        },
+        {
+          "box": [
+            345,
+            1295,
+            475,
+            1355
+          ],
+          "core_pixels": 451,
+          "erase_pixels": 3514,
+          "method": "red-brown seed + 12px measured halo"
+        },
+        {
+          "box": [
+            1048,
+            711,
+            1134,
+            744
+          ],
+          "erase_pixels": 2016,
+          "fill": [
+            214,
+            194,
+            183,
+            255
+          ]
+        },
+        {
+          "box": [
+            1048,
+            827,
+            1134,
+            860
+          ],
+          "erase_pixels": 1559,
+          "fill": [
+            214,
+            194,
+            183,
+            255
+          ]
+        },
+        {
+          "box": [
+            950,
+            245,
+            1014,
+            266
+          ],
+          "erase_pixels": 1344,
+          "fill": [
+            239,
+            239,
+            239,
+            255
+          ]
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "INSERTION GAME"
+          ],
+          "box": [
+            140,
+            113,
+            744,
+            223
+          ],
+          "font": "ariblk",
+          "point_size": 61,
+          "requested_size": 64,
+          "fit": "measured shrink",
+          "max_width": 600,
+          "row_height": 46
+        },
+        {
+          "lines": [
+            "Watch",
+            "Himarii's face."
+          ],
+          "box": [
+            222,
+            358,
+            748,
+            558
+          ],
+          "font": "ariblk",
+          "point_size": 66,
+          "requested_size": 66,
+          "fit": "requested",
+          "max_width": 520,
+          "row_height": 49
+        },
+        {
+          "lines": [
+            "Choose",
+            "\"Insert\"",
+            "or \"Stop\"!"
+          ],
+          "box": [
+            260,
+            743,
+            745,
+            1044
+          ],
+          "font": "ariblk",
+          "point_size": 72,
+          "requested_size": 72,
+          "fit": "requested",
+          "max_width": 380,
+          "row_height": 67
+        },
+        {
+          "lines": [
+            "Repeated mistakes = Game Over!"
+          ],
+          "box": [
+            96,
+            1438,
+            1385,
+            1532
+          ],
+          "font": "ariblk",
+          "point_size": 70,
+          "requested_size": 70,
+          "fit": "requested",
+          "max_width": 1280,
+          "row_height": 65
+        },
+        {
+          "lines": [
+            "Reach 80% insertion to clear!"
+          ],
+          "box": [
+            1480,
+            1438,
+            2780,
+            1532
+          ],
+          "font": "ariblk",
+          "point_size": 70,
+          "requested_size": 70,
+          "fit": "requested",
+          "max_width": 1133,
+          "row_height": 52
+        },
+        {
+          "lines": [
+            "DANGER"
+          ],
+          "box": [
+            175,
+            1364,
+            312,
+            1425
+          ],
+          "font": "comicbd",
+          "point_size": 29,
+          "requested_size": 29,
+          "fit": "requested",
+          "max_width": 129,
+          "row_height": 31
+        },
+        {
+          "lines": [
+            "WIMP"
+          ],
+          "box": [
+            327,
+            1292,
+            465,
+            1342
+          ],
+          "font": "comicbd",
+          "point_size": 34,
+          "requested_size": 34,
+          "fit": "requested",
+          "max_width": 108,
+          "row_height": 34
+        },
+        {
+          "lines": [
+            "Insert"
+          ],
+          "box": [
+            1048,
+            711,
+            1134,
+            744
+          ],
+          "font": "comicbd",
+          "point_size": 25,
+          "requested_size": 25,
+          "fit": "requested",
+          "max_width": 77,
+          "row_height": 20
+        },
+        {
+          "lines": [
+            "Stop"
+          ],
+          "box": [
+            1048,
+            827,
+            1134,
+            860
+          ],
+          "font": "comicbd",
+          "point_size": 25,
+          "requested_size": 25,
+          "fit": "requested",
+          "max_width": 55,
+          "row_height": 27
+        },
+        {
+          "lines": [
+            "Reload"
+          ],
+          "box": [
+            950,
+            245,
+            1014,
+            266
+          ],
+          "font": "arial",
+          "point_size": 14,
+          "requested_size": 14,
+          "fit": "requested",
+          "max_width": 45,
+          "row_height": 10
+        }
+      ]
+    },
+    {
+      "id": 346,
+      "path": "data/fgimage/default/ev_mission.jpg",
+      "source_sha256": "260924587f72bc78d4850eef528574e591e67b7a9290930ecfe39dc5b2d70d21",
+      "output_sha256": "e3a32f1a8f6609423e1d4b285e93e9c27a021e0d1a590f6b90612587a5936d75",
+      "width": 2880,
+      "height": 1620,
+      "mode": "RGB",
+      "source_mode": "RGB",
+      "output_mode": "RGB",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 346,
+        "path": "data/fgimage/default/ev_mission.jpg",
+        "blocks": [
+          {
+            "source": "ミッション",
+            "target": "MISSION"
+          },
+          {
+            "source": "ネットの海に漂っている、ヒマリィの産卵動画を見つけてください。",
+            "target": "Find Himarii's egg-laying video adrift in the sea of the internet."
+          }
+        ]
+      },
+      "changed_pixels": 132140,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "box": [
+            1208,
+            472,
+            1630,
+            563
+          ],
+          "core_pixels": 8092,
+          "erase_pixels": 13843
+        },
+        {
+          "box": [
+            1025,
+            775,
+            1920,
+            875
+          ],
+          "core_pixels": 23349,
+          "erase_pixels": 37839
+        },
+        {
+          "box": [
+            680,
+            907,
+            2270,
+            1005
+          ],
+          "core_pixels": 42390,
+          "erase_pixels": 67864
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "MISSION"
+          ],
+          "box": [
+            1150,
+            467,
+            1710,
+            567
+          ],
+          "font": "ariblk",
+          "point_size": 90,
+          "requested_size": 90,
+          "fit": "requested",
+          "max_width": 435,
+          "row_height": 66
+        },
+        {
+          "lines": [
+            "Find Himarii's egg-laying video",
+            "adrift in the sea of the internet."
+          ],
+          "box": [
+            655,
+            767,
+            2280,
+            1010
+          ],
+          "font": "ariblk",
+          "point_size": 78,
+          "requested_size": 78,
+          "fit": "requested",
+          "max_width": 1341,
+          "row_height": 72
+        }
+      ]
+    },
+    {
+      "id": 356,
+      "path": "data/fgimage/default/ui_hint_kosuri.png",
+      "source_sha256": "715c4394cd4b5156436ecfa593c45c032fc1cb8530cd80b9d54af2fa2d7c499c",
+      "output_sha256": "4c16365148e64a72ae957c753145b8fc95b3897445bc289046d2d3c8a9448337",
+      "width": 423,
+      "height": 258,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 356,
+        "path": "data/fgimage/default/ui_hint_kosuri.png",
+        "source": "虫をクリックして 尻を割れ目に擦ろう",
+        "target": "Click the bug to rub its rear against her slit.",
+        "lines": [
+          "Click the bug",
+          "to rub its rear",
+          "against her slit."
+        ]
+      },
+      "changed_pixels": 12266,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "box": [
+            32,
+            107,
+            394,
+            235
+          ],
+          "erase_pixels": 10547,
+          "fill": [
+            247,
+            242,
+            236,
+            255
+          ]
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "Click the bug"
+          ],
+          "box": [
+            45,
+            113,
+            253,
+            156
+          ],
+          "font": "arialbd",
+          "point_size": 32,
+          "requested_size": 32,
+          "fit": "requested",
+          "max_width": 204,
+          "row_height": 29
+        },
+        {
+          "lines": [
+            "to rub its rear",
+            "against her slit."
+          ],
+          "box": [
+            35,
+            161,
+            392,
+            239
+          ],
+          "font": "arialbd",
+          "point_size": 32,
+          "requested_size": 32,
+          "fit": "requested",
+          "max_width": 238,
+          "row_height": 29
+        }
+      ]
+    },
+    {
+      "id": 357,
+      "path": "data/fgimage/default/ui_hint_undress.png",
+      "source_sha256": "e9946e4bcd9c84c4feedc7b75daae500ad5d57b0d906d00b60d3519ba2634326",
+      "output_sha256": "16ddcac2fd437a051c2ecaf72f75799aad4eb2848c97110581cec4a71ba822f9",
+      "width": 423,
+      "height": 258,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 357,
+        "path": "data/fgimage/default/ui_hint_undress.png",
+        "source": "ヒマリィを起こさず 服を脱がそう 服をクリック",
+        "target": "Undress Himarii without waking her. Click her clothes.",
+        "lines": [
+          "Undress Himarii",
+          "without waking her.",
+          "Click her clothes"
+        ]
+      },
+      "changed_pixels": 14363,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "box": [
+            33,
+            102,
+            394,
+            236
+          ],
+          "erase_pixels": 12646,
+          "fill": [
+            247,
+            242,
+            236,
+            255
+          ]
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "Undress Himarii",
+            "without waking her."
+          ],
+          "box": [
+            35,
+            103,
+            391,
+            181
+          ],
+          "font": "arialbd",
+          "point_size": 32,
+          "requested_size": 32,
+          "fit": "requested",
+          "max_width": 303,
+          "row_height": 29
+        },
+        {
+          "lines": [
+            "Click her clothes"
+          ],
+          "box": [
+            39,
+            187,
+            296,
+            229
+          ],
+          "font": "arialbd",
+          "point_size": 30,
+          "requested_size": 30,
+          "fit": "requested",
+          "max_width": 240,
+          "row_height": 22
+        }
+      ]
+    },
+    {
+      "id": 358,
+      "path": "data/fgimage/default/ui_icon_danger.png",
+      "source_sha256": "ef67441f12a5d756c656a1907da69e7f8431efe9defd8119153e262499ff5fd9",
+      "output_sha256": "44ab99feff0df148ba1e2d023aca461c8d7b0c776ba538d146a3c9bb96ea3f0f",
+      "width": 283,
+      "height": 250,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 358,
+        "path": "data/fgimage/default/ui_icon_danger.png",
+        "source": "キケン",
+        "target": "DANGER"
+      },
+      "changed_pixels": 5600,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "components": [
+            2,
+            3,
+            4
+          ],
+          "erase_pixels": 5261
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "DANGER"
+          ],
+          "box": [
+            130,
+            185,
+            283,
+            241
+          ],
+          "font": "comicbd",
+          "point_size": 35,
+          "requested_size": 35,
+          "fit": "requested",
+          "max_width": 151,
+          "row_height": 34
+        }
+      ]
+    },
+    {
+      "id": 359,
+      "path": "data/fgimage/default/ui_icon_hetare.png",
+      "source_sha256": "34e9a3c1e8959ea4482c94d76e5b04c4f496292f7e0b41ecca9641fd027b206a",
+      "output_sha256": "f75e030b1fefd9b0e47e56361e001cd6bb2df51e715b820bd805192238b289e9",
+      "width": 202,
+      "height": 138,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "review_status": "reviewed",
+      "translations": {
+        "id": 359,
+        "path": "data/fgimage/default/ui_icon_hetare.png",
+        "source": "ヘタレ",
+        "target": "WIMP"
+      },
+      "changed_pixels": 2703,
+      "outside_allowed_pixels": 0,
+      "erase_probes": [
+        {
+          "components": [
+            2,
+            3
+          ],
+          "erase_pixels": 2615
+        }
+      ],
+      "layout": [
+        {
+          "lines": [
+            "WIMP"
+          ],
+          "box": [
+            101,
+            84,
+            202,
+            127
+          ],
+          "font": "comicbd",
+          "point_size": 30,
+          "requested_size": 30,
+          "fit": "requested",
+          "max_width": 93,
+          "row_height": 29
+        }
+      ]
+    },
+    {
+      "id": 402,
+      "path": "data/image/config/label_cg.png",
+      "source_sha256": "d073ee69ae95f3256c84d7f256a022e64c5b78253f777df35026cb989cea472d",
+      "output_sha256": "bbfeee483751fe2e2dc07a39b41420c0cf3fd5aa1e8e0f31c764b00c7f5a8ea8",
+      "width": 390,
+      "height": 112,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 7270,
+        "zone_mask": "qa/controls/402_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "CG鑑賞モード",
+          "target": "CG Gallery",
+          "box": [
+            14,
+            91,
+            387,
+            112
+          ],
+          "erase_method": "clear",
+          "erased_pixels": 1892,
+          "font": "arialbd",
+          "font_size": 14,
+          "line_widths": [
+            73
+          ]
+        }
+      ]
+    },
+    {
+      "id": 403,
+      "path": "data/image/config/label_config.png",
+      "source_sha256": "880ce28450d1bfde99ad738972157fb3a187fb163ad701134571688382e29eca",
+      "output_sha256": "25ff5231aca7874c2a1fce779587fa17f4791def5633d1e90cc7fc98c0005b1b",
+      "width": 339,
+      "height": 112,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 6448,
+        "zone_mask": "qa/controls/403_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "コンフィグ",
+          "target": "Settings",
+          "box": [
+            14,
+            91,
+            336,
+            112
+          ],
+          "erase_method": "clear",
+          "erased_pixels": 1410,
+          "font": "arialbd",
+          "font_size": 14,
+          "line_widths": [
+            57
+          ]
+        }
+      ]
+    },
+    {
+      "id": 404,
+      "path": "data/image/config/label_recollection.png",
+      "source_sha256": "4077e7e7af552c8365465cc6dfe9e20cd0277e98d3731475acdc1036a19e6093",
+      "output_sha256": "85c1f0044b577e9b869cb704b76169d11e45d98824972aa91489323dd4bb9557",
+      "width": 592,
+      "height": 112,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 11581,
+        "zone_mask": "qa/controls/404_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "回想モード",
+          "target": "Scene Replay",
+          "box": [
+            14,
+            91,
+            589,
+            112
+          ],
+          "erase_method": "clear",
+          "erased_pixels": 1437,
+          "font": "arialbd",
+          "font_size": 14,
+          "line_widths": [
+            93
+          ]
+        }
+      ]
+    },
+    {
+      "id": 410,
+      "path": "data/image/title/button_cg.gif",
+      "source_sha256": "e379bfefea0e4ad01ef1a94c5952ecf2b9f46c6bb2fb2e738f15fadc232698f4",
+      "output_sha256": "28d86a81b096849b31744855401e393d5d727289a21d8602ee3fc98758f97170",
+      "width": 250,
+      "height": 50,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "GIF",
+      "output_format": "GIF",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2494,
+        "zone_mask": "qa/controls/410_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "CGモード",
+          "target": "CG Gallery",
+          "box": [
+            24,
+            9,
+            228,
+            42
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1189,
+          "font": "arialbd",
+          "font_size": 22,
+          "line_widths": [
+            113
+          ]
+        }
+      ]
+    },
+    {
+      "id": 411,
+      "path": "data/image/title/button_config.gif",
+      "source_sha256": "95bd8877528e293b367a7cae1af0136dc0d370da6f2204961f73a683ee634940",
+      "output_sha256": "00f4d4abcda16fe4c49e7f3e15c5e162eb0f994b5d97479bc470aebaf7eefe36",
+      "width": 250,
+      "height": 50,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "GIF",
+      "output_format": "GIF",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2467,
+        "zone_mask": "qa/controls/411_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "コンフィグ",
+          "target": "Config",
+          "box": [
+            24,
+            9,
+            228,
+            42
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1416,
+          "font": "arialbd",
+          "font_size": 22,
+          "line_widths": [
+            68
+          ]
+        }
+      ]
+    },
+    {
+      "id": 412,
+      "path": "data/image/title/button_load.gif",
+      "source_sha256": "11bf2ea503734dea86ac6624627fd81df2a4aa688fe4538a0f04303c90c9d7bb",
+      "output_sha256": "1b0c4c39f8e27f808d48c4f47221100f41e70dc2108870b8e419876cd8f7e160",
+      "width": 250,
+      "height": 50,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "GIF",
+      "output_format": "GIF",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2230,
+        "zone_mask": "qa/controls/412_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "つづきから",
+          "target": "Continue",
+          "box": [
+            24,
+            9,
+            228,
+            42
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1750,
+          "font": "arialbd",
+          "font_size": 22,
+          "line_widths": [
+            93
+          ]
+        }
+      ]
+    },
+    {
+      "id": 413,
+      "path": "data/image/title/button_replay.gif",
+      "source_sha256": "2daf329f3026ff2fbc48779ca6492f767caca5ba6d170e472739766a34daaced",
+      "output_sha256": "78f9775fc7f079244beca379bc74e96785dc77c9e6e0fd2ec6de96af1603d54a",
+      "width": 250,
+      "height": 50,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "GIF",
+      "output_format": "GIF",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2991,
+        "zone_mask": "qa/controls/413_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "回想モード",
+          "target": "Scene Replay",
+          "box": [
+            24,
+            9,
+            228,
+            42
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1709,
+          "font": "arialbd",
+          "font_size": 22,
+          "line_widths": [
+            141
+          ]
+        }
+      ]
+    },
+    {
+      "id": 414,
+      "path": "data/image/title/button_start.gif",
+      "source_sha256": "5553b71019de5d31f38f2ec2f4331590a59912287ec8f8af85496b2e11af33be",
+      "output_sha256": "00af4e8e760441b0f30e63a5ae7d53b8f9e80b5e3e405d590107500479508165",
+      "width": 250,
+      "height": 50,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "GIF",
+      "output_format": "GIF",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2456,
+        "zone_mask": "qa/controls/414_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "はじめから",
+          "target": "New Game",
+          "box": [
+            24,
+            9,
+            228,
+            42
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1905,
+          "font": "arialbd",
+          "font_size": 22,
+          "line_widths": [
+            112
+          ]
+        }
+      ]
+    },
+    {
+      "id": 415,
+      "path": "data/image/ui_btn_hayai.png",
+      "source_sha256": "3a32689d572574e15709e9e2a47b8cefc4fc6a104a913aa735e5c7bef9077ae2",
+      "output_sha256": "33c93451e4f62c910e1d802d2c7707d1b7c3695ac6b0f2d9faee2aa125663bc7",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1041,
+        "zone_mask": "qa/controls/415_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "はやい",
+          "target": "Fast",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 636,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            52
+          ]
+        }
+      ]
+    },
+    {
+      "id": 416,
+      "path": "data/image/ui_btn_hutuu.png",
+      "source_sha256": "4b0731ed119b6bea9e029754a3ebc33754aceddf407994da400dcd35ff541d3d",
+      "output_sha256": "04671a94d0730ff1e2d3f75d12bb52b62dd8cdffaa22d839301119c8382ec0fc",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1363,
+        "zone_mask": "qa/controls/416_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "ふつう",
+          "target": "Normal",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 518,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            84
+          ]
+        }
+      ]
+    },
+    {
+      "id": 417,
+      "path": "data/image/ui_btn_insert.png",
+      "source_sha256": "0759e0ab522efa40c5b7da9c5afe89ae03df372c0ed7960dc7367d01a0f13334",
+      "output_sha256": "30bb52fa419be1f53190ac8845054fd7ffba8fe3e6c96ad337bbd0ec2f13d491",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1314,
+        "zone_mask": "qa/controls/417_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "挿れる",
+          "target": "Insert",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 842,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            75
+          ]
+        }
+      ]
+    },
+    {
+      "id": 418,
+      "path": "data/image/ui_btn_load.png",
+      "source_sha256": "aade904d18a1e5419adcebdfa6c9d0affc48b4dee8d3e18c8d3240ffdd4f1973",
+      "output_sha256": "15a92fcbb79a09af61fdea370e848e2cab90f550f47bb9cac312cdfcfb88f104",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1708,
+        "zone_mask": "qa/controls/418_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "つづきから",
+          "target": "Continue",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 947,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            97
+          ]
+        }
+      ]
+    },
+    {
+      "id": 419,
+      "path": "data/image/ui_btn_start.png",
+      "source_sha256": "89736b381c9e4c3eb879e8ddb09a7e578cf2d63805a09c18940fd5588c8b5180",
+      "output_sha256": "16bdc1f8c68ef1312d04f3a485ccdb9386c71b7b0a45da59e835eafec8ae5bc4",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 2053,
+        "zone_mask": "qa/controls/419_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "はじめから",
+          "target": "New Game",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 1150,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            120
+          ]
+        }
+      ]
+    },
+    {
+      "id": 420,
+      "path": "data/image/ui_btn_stop.png",
+      "source_sha256": "75708b6a43d5ba91194d558bed05b3e4ffecdce7649172a1879b56e71a9b26b4",
+      "output_sha256": "8b72f58a256e7e390c074d0df0b4777ab687f2a534902022c1af3ce3dab7cd92",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1153,
+        "zone_mask": "qa/controls/420_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "止まる",
+          "target": "Stop",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 708,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            54
+          ]
+        }
+      ]
+    },
+    {
+      "id": 421,
+      "path": "data/image/ui_btn_yukkuri.png",
+      "source_sha256": "0fa4d855d6673697894eab70bc94dc46563eee490a7fa6057e222782e54525df",
+      "output_sha256": "9bda33197e9b5d4d472950dff424f2ae2fdec776b6f08f160a5f9c2a56cf8625",
+      "width": 168,
+      "height": 61,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 1236,
+        "zone_mask": "qa/controls/421_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "ゆっくり",
+          "target": "Slow",
+          "box": [
+            8,
+            12,
+            134,
+            46
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 697,
+          "font": "comicbd",
+          "font_size": 24,
+          "line_widths": [
+            54
+          ]
+        }
+      ]
+    },
+    {
+      "id": 422,
+      "path": "data/others/plugin/individual_image/kobetu.png",
+      "source_sha256": "f4d57d52db49a9674b6701ea02cba712c800df9e775ff7737eeee39a96fb16f4",
+      "output_sha256": "d64af36449594b01b6ebc3ffcaf6b4d82e8188651b60e4332121b1bed85c4756",
+      "width": 960,
+      "height": 640,
+      "mode": "P",
+      "source_mode": "P",
+      "output_mode": "P",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 36870,
+        "zone_mask": "qa/controls/422_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "個別画像表示・消去 プラグイン",
+          "target": "Show / Hide Individual Images\nPlugin",
+          "box": [
+            122,
+            397,
+            831,
+            579
+          ],
+          "erased_pixels": 32188,
+          "erase_method": "flat",
+          "lines": [
+            {
+              "font": "arialbd",
+              "font_size": 48,
+              "line_widths": [
+                684
+              ],
+              "box": [
+                124,
+                405,
+                830,
+                486
+              ]
+            },
+            {
+              "font": "arialbd",
+              "font_size": 75,
+              "line_widths": [
+                230
+              ],
+              "box": [
+                124,
+                485,
+                830,
+                574
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 471,
+      "path": "data/others/plugin/theme_kopanda_16/preview.png",
+      "source_sha256": "3d90fb87933011254b233252fb72807cacf05a6e10566b298b4b2b5115b09714",
+      "output_sha256": "206aa4a9511565ae155986ddc3d4220637718f430060a6530ce8fd50788069cc",
+      "width": 1280,
+      "height": 720,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 15104,
+        "zone_mask": "qa/controls/471_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "ガイド",
+          "target": "Guide",
+          "box": [
+            791,
+            259,
+            841,
+            279
+          ],
+          "erase_method": "flat",
+          "erased_pixels": 624,
+          "font": "arialbd",
+          "font_size": 11,
+          "line_widths": [
+            32
+          ]
+        },
+        {
+          "source": "一括テーマ変換です。",
+          "target": "This changes the entire theme.",
+          "box": [
+            744,
+            292,
+            916,
+            316
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1419,
+          "font": "arial",
+          "font_size": 10,
+          "line_widths": [
+            144
+          ]
+        },
+        {
+          "source": "どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。",
+          "target": "I have no idea where I was born.\nAll I remember is mewing in some dark, damp place.",
+          "box": [
+            181,
+            646,
+            553,
+            676
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 4831,
+          "font": "arial",
+          "font_size": 9,
+          "line_widths": [
+            137,
+            220
+          ]
+        },
+        {
+          "source": "ガイド：一括テーマ変換です。",
+          "target": "Guide: This changes the entire theme.",
+          "box": [
+            859,
+            489,
+            1082,
+            504
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 866,
+          "font": "arial",
+          "font_size": 7,
+          "line_widths": [
+            123
+          ]
+        },
+        {
+          "source": "まだ、保存されているデータがありません。",
+          "target": "There is no saved data yet.",
+          "box": [
+            859,
+            554,
+            1084,
+            570
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1722,
+          "font": "arial",
+          "font_size": 7,
+          "line_widths": [
+            88
+          ]
+        },
+        {
+          "source": "まだ、保存されているデータがありません。",
+          "target": "There is no saved data yet.",
+          "box": [
+            859,
+            620,
+            1084,
+            636
+          ],
+          "erase_method": "inpaint",
+          "erased_pixels": 1306,
+          "font": "arial",
+          "font_size": 7,
+          "line_widths": [
+            88
+          ]
+        },
+        {
+          "source": "縮小された同じ画面",
+          "target": "Translated demonstration screen thumbnail",
+          "box": [
+            763,
+            476,
+            837,
+            516
+          ],
+          "erase_method": "paste translated matching screen"
+        }
+      ]
+    },
+    {
+      "id": 483,
+      "path": "tyrano/images/system/label_cg.png",
+      "source_sha256": "d073ee69ae95f3256c84d7f256a022e64c5b78253f777df35026cb989cea472d",
+      "output_sha256": "bbfeee483751fe2e2dc07a39b41420c0cf3fd5aa1e8e0f31c764b00c7f5a8ea8",
+      "width": 390,
+      "height": 112,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 7270,
+        "zone_mask": "qa/controls/402_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "CG鑑賞モード",
+          "target": "CG Gallery",
+          "box": [
+            14,
+            91,
+            387,
+            112
+          ],
+          "erase_method": "clear",
+          "erased_pixels": 1892,
+          "font": "arialbd",
+          "font_size": 14,
+          "line_widths": [
+            73
+          ]
+        }
+      ],
+      "duplicate_of": "data/image/config/label_cg.png"
+    },
+    {
+      "id": 485,
+      "path": "tyrano/images/system/label_config.png",
+      "source_sha256": "880ce28450d1bfde99ad738972157fb3a187fb163ad701134571688382e29eca",
+      "output_sha256": "25ff5231aca7874c2a1fce779587fa17f4791def5633d1e90cc7fc98c0005b1b",
+      "width": 339,
+      "height": 112,
+      "mode": "RGBA",
+      "source_mode": "RGBA",
+      "output_mode": "RGBA",
+      "source_format": "PNG",
+      "output_format": "PNG",
+      "status": "rendered",
+      "reviewed": true,
+      "qa": {
+        "outside_zone_changed_pixels": 0,
+        "changed_pixels": 6448,
+        "zone_mask": "qa/controls/403_zones.png"
+      },
+      "blocks": [
+        {
+          "source": "コンフィグ",
+          "target": "Settings",
+          "box": [
+            14,
+            91,
+            336,
+            112
+          ],
+          "erase_method": "clear",
+          "erased_pixels": 1410,
+          "font": "arialbd",
+          "font_size": 14,
+          "line_widths": [
+            57
+          ]
+        }
+      ],
+      "duplicate_of": "data/image/config/label_config.png"
+    }
+  ]
+}

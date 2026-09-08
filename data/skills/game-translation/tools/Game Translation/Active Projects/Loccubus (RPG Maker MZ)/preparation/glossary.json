@@ -1,0 +1,141 @@
+{
+  "meta": {
+    "game": "Loccubus v1.0",
+    "source_language": "zh-CN",
+    "reference_language": "ja",
+    "target_language": "en",
+    "source": "Shipped System.json, general MUUI screens, native speaker identities, and matching asset stems; no external claims",
+    "scope": "Nonsexual general UI preparation; name rows provide identity context only",
+    "status": "Initial reviewed terminology; targets remain blank"
+  },
+  "names": {
+    "露娜": {
+      "en": "Luna",
+      "gender": "female",
+      "role": "Named succubus character; source identifies her as a minor in excluded scenes",
+      "register": "Not characterized for excluded scenes; do not infer voice from name alone",
+      "aliases": [
+        "ルナ"
+      ],
+      "note": "Latin luna portrait stems support Luna; no authorization to translate excluded content"
+    },
+    "莱赫": {
+      "en": "Reich",
+      "gender": "male",
+      "role": "Researcher named in the narrative",
+      "register": "No scene-level register lock has been established in this UI preparation",
+      "aliases": [
+        "ライヒ"
+      ],
+      "note": "Provisional editorial spelling based on the shipped Japanese rendering; no creator-approved Latin spelling found in inspected text",
+      "status": "provisional"
+    }
+  },
+  "terms": {
+    "存档": "Save",
+    "保存": "Save",
+    "读档": "Load",
+    "读取": "Load",
+    "选项": "Options",
+    "设置": "Options",
+    "确定": "Confirm",
+    "确认": "Confirm",
+    "取消": "Cancel",
+    "返回": "Back",
+    "退出": "Exit",
+    "重新开始": "New Game",
+    "继续游戏": "Continue",
+    "回到标题": "Title Screen",
+    "游戏结束": "Game End",
+    "自动存档": "Autosave",
+    "自动保存": "Autosave",
+    "已存档": "Saved",
+    "空": "Empty",
+    "文件": "File",
+    "金币": "Gold",
+    "经验值": "EXP",
+    "等级": "Level",
+    "生命值": "HP",
+    "魔法值": "MP",
+    "特技值": "TP",
+    "最大生命值": "Max HP",
+    "最大魔法值": "Max MP",
+    "攻击力": "Attack",
+    "防御力": "Defense",
+    "魔法攻击": "M. Attack",
+    "魔法防御": "M. Defense",
+    "敏捷": "Agility",
+    "幸运": "Luck",
+    "命中率": "Hit Rate",
+    "回避率": "Evasion Rate",
+    "战斗": "Fight",
+    "逃跑": "Escape",
+    "攻击": "Attack",
+    "防御": "Guard",
+    "物品": "Items",
+    "技能": "Skills",
+    "装备": "Equip",
+    "状态": "Status",
+    "整队": "Formation",
+    "武器": "Weapons",
+    "防具": "Armor",
+    "重要物品": "Key Items",
+    "最强装备": "Optimize",
+    "清空": "Clear",
+    "购买": "Buy",
+    "销售": "Sell",
+    "持有数": "Possession",
+    "始终跑步": "Always Dash",
+    "记住指令": "Command Remember",
+    "触屏界面": "Touch UI",
+    "背景音乐音量": "BGM Volume",
+    "背景声音量": "BGS Volume",
+    "音效音量": "ME Volume",
+    "声效音量": "SE Volume",
+    "称号": "Title",
+    "更改名字": "Change Name",
+    "更改称号": "Change Title",
+    "上午": "Morning",
+    "白天": "Daytime",
+    "夜晚": "Night",
+    "中文": "Chinese",
+    "日文": "Japanese"
+  },
+  "do_not_translate": [
+    "Loccubus",
+    "MUUI",
+    "BY_Liv",
+    "GameFont",
+    "yuyang-W03",
+    "FontZK",
+    "Logo07",
+    "Cinema_VPP"
+  ],
+  "do_not_merge": [
+    [
+      "露娜",
+      "少女"
+    ],
+    [
+      "莱赫",
+      "我"
+    ],
+    [
+      "客人A",
+      "客人B"
+    ],
+    [
+      "路人A",
+      "路人B"
+    ],
+    [
+      "？？",
+      "露娜"
+    ]
+  ],
+  "notes": [
+    "Term mappings apply only to display text in reviewed fields, never to technical keys or substring matches.",
+    "Audio labels are keyed to System.terms.messages entries; custom MUUI audio controls require separate consumer checks.",
+    "Honorifics are not imported from Japanese into the Chinese-source project."
+  ]
+}

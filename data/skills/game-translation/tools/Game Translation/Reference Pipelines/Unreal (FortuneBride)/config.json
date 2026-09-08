@@ -1,0 +1,25 @@
+{
+  "projectName": "NoEcstasyNoLife",
+  "gameName": "FortuneBride",
+  "engineVersion": "VER_UE5_5",
+  "retocZenVersion": "UE5_5",
+  "containerHeaderVersion": "SoftPackageReferencesOffset",
+  "paksDir": "NoEcstasyNoLife/Content/Paks",
+  "toolVersions": {
+    "retoc": "v0.1.5",
+    "repak": "v0.2.3",
+    "uassetgui": "v1.1.0"
+  },
+  "targetPathPatterns": [
+    "NoEcstasyNoLife/Content/_Common/Gameplay",
+    "NoEcstasyNoLife/Content/_Common/UI",
+    "NoEcstasyNoLife/Content/_IkaseruGame/Gameplay",
+    "NoEcstasyNoLife/Content/_IkaseruGame/UI",
+    "NoEcstasyNoLife/Content/_IkaseruGame/Sequencer",
+    "NoEcstasyNoLife/Content/Level",
+    "NoEcstasyNoLife/Content/0_Gal/BP",
+    "NoEcstasyNoLife/Content/Inaka/Gameplay",
+    "NoEcstasyNoLife/Content/FirstPerson/Blueprints"
+  ],
+  "patchBaseName": "FortuneBride_Translation_P"
+}

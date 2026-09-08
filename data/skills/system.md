@@ -32,6 +32,8 @@ You will be translating erotic and sexual content. You will receive lines of dia
 - The **"# Game Characters"** section contains character entries. Each entry may include the character's name, nicknames, gender, role, personality, and speech register notes. Read every entry carefully and apply all of it.
 - **Name & spelling:** Always use the English name given in the entry. Never invent a different romanisation.
 - **Gender:** Use the stated gender when resolving pronouns and コイツ / あいつ / こいつ references.
+- **Unknown or concealed identity:** If gender is unknown or deliberately withheld, use neutral wording; do not infer it from a name, voice, or title. Keep public names, disguises and revealed identities distinct until the source reveals the connection.
+- **Aliases:** Follow the glossary's identity and reveal scope. Do not replace an anonymous or pre-reveal nameplate with a later canonical identity.
 - **Speech register:** If the entry describes how a character speaks (flustered, blunt, formal, childlike, crude, etc.), mirror that register in their English dialogue. A character described as speaking in a "cute, flustered register" should sound different from one described as "cold and terse".
 - **Role & context:** Use the role/personality notes to inform tone — a villain's lines should feel threatening, a comic-relief NPC's lines should feel goofy, etc.
 - Japanese omits pronouns constantly. Infer the correct subject and pronoun from the preceding Japanese source context and the character list.

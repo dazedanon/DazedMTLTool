@@ -110,6 +110,13 @@ class SkillsTab(QWidget):
             is_json=False,
         )
         self._add_file_page(
+            key="character_identity",
+            tab_title="Identity",
+            path=SKILLS_DIR / "character_identity.md",
+            hint="Shared Setup rules for recurring entities, unknown gender, reveal-sensitive aliases, and consistent terminology.",
+            is_json=False,
+        )
+        self._add_file_page(
             key="wrap_config",
             tab_title="Wrap Config",
             path=SKILLS_DIR / "wrap_config.md",

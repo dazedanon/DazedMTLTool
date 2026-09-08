@@ -1,0 +1,37 @@
+{
+  "code_to_column": {
+    "0": "byteData",
+    "1": "byteData",
+    "2": "byteData",
+    "3": "stringParams",
+    "5": "unityObjectParams",
+    "7": "byteData",
+    "12": "arrayParamSizes",
+    "15": "fsmFloatParams",
+    "16": "fsmIntParams",
+    "17": "fsmBoolParams",
+    "18": "fsmStringParams",
+    "19": "fsmGameObjectParams",
+    "20": "fsmOwnerDefaultParams",
+    "22": "byteData",
+    "23": "stringParams",
+    "24": "fsmObjectParams",
+    "25": "fsmColorParams",
+    "28": "fsmVector3Params",
+    "31": "fsmEventTargetParams",
+    "32": "fsmObjectParams",
+    "35": "fsmQuaternionParams",
+    "37": "fsmVector2Params",
+    "39": "fsmVarParams",
+    "41": "fsmArrayParams",
+    "42": "fsmEnumParams"
+  },
+  "report": {
+    "blocks": 117304,
+    "codes": 25,
+    "mapped": 25,
+    "unmapped": [],
+    "violations": [],
+    "ambiguous": {}
+  }
+}

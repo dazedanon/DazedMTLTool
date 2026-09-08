@@ -1,0 +1,63 @@
+{
+  "created_utc": "2026-09-07T18:12:08.566443+00:00",
+  "version": "1.0.1",
+  "translation_api_used": false,
+  "text_units": 2340,
+  "source_locations": 4002,
+  "dialogue_blocks": 1939,
+  "translated_images": 44,
+  "command_lists_preserved": 928,
+  "event_commands_preserved": 21383,
+  "results_fix": {
+    "reported_problem": "Numeric totals ran beyond the purple rectangle while the old checker only compared them with the viewport.",
+    "old_panel": [
+      185,
+      94,
+      624,
+      525
+    ],
+    "new_panel": [
+      88,
+      94,
+      728,
+      525
+    ],
+    "normal_font_size_preserved": true,
+    "only_changed_game_file": "js/plugins/TropicalChaseEnglish.js",
+    "scores_and_stored_picture_positions_unchanged": true,
+    "native_cases": 112,
+    "minimum_margins": {
+      "left": 24,
+      "right": 24,
+      "top": 28.889632107023417,
+      "bottom": 19
+    },
+    "previous_results_layout_signoff": "Superseded: the v1.0 results_validation check used the wrong bounds.",
+    "harness_correction": "QA now leaves the old map before loading isolated saves, following the normal Load-scene lifecycle; this avoids sensor plugins reading stale map events."
+  },
+  "limits": [
+    "Native width/height checks cover every dialogue block, but every story branch has not been played in-world.",
+    "Ending fixtures verify translated event flow, not combat balance or a legitimate complete route.",
+    "No external human beta playtest has been performed.",
+    "Older saves may show Japanese from a cached running event until that event ends."
+  ],
+  "scope": "Historical completed-session evidence, not a fresh native run of this reference.",
+  "final_qa_source_sha256": "a90f2832c39e4d6e0d4e05ce80d7a442c80315b27a56d06c8ac8ac6323bc4a96",
+  "archive": {
+    "archive": "Tropical_Chase_English_Patch.zip",
+    "sha256": "10f036be821972269534812218ba29b572bcf0ffa6e1c86eb8556e7630aba590",
+    "bytes": 9807449,
+    "entries": 71,
+    "game_files": 69
+  },
+  "roundtrip": {
+    "restore": {
+      "verified_original_or_english_files": 716,
+      "english": false
+    },
+    "reinstall": {
+      "verified_original_or_english_files": 716,
+      "english": true
+    }
+  }
+}

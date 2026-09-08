@@ -1,0 +1,478 @@
+{
+  "meta": {
+    "game": "Yume Yoshiwara no Ayakashi Giro",
+    "status": "seeded; minor readings need names pass"
+  },
+  "names": {
+    "夜見世客": {
+      "en": "Nighttime Customer",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "ホクサイ": {
+      "en": "Hokusai",
+      "gender": "unknown",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "高尾": {
+      "en": "Takao",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "お松": {
+      "en": "Omatsu",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "お鈴": {
+      "en": "Orin",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "甜瓜": {
+      "en": "Meron",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "姫乃": {
+      "en": "Himeno",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "凛風": {
+      "en": "Rinfa",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "ハク": {
+      "en": "Haku",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "初音": {
+      "en": "Hatsune",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "m_お鈴": {
+      "en": "m_Orin",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "m_甜瓜": {
+      "en": "m_Meron",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "m_姫乃": {
+      "en": "m_Himeno",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "m_凛風": {
+      "en": "m_Rinfa",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "m_ハク": {
+      "en": "m_Haku",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "m_初音": {
+      "en": "m_Hatsune",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "m_ホクサイ": {
+      "en": "m_Hokusai",
+      "gender": "unknown",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "m_お松": {
+      "en": "m_Omatsu",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "m_高尾": {
+      "en": "m_Takao",
+      "gender": "female",
+      "role": "principal character",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "男Ａ": {
+      "en": "Man A",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "男Ｂ": {
+      "en": "Man B",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "男": {
+      "en": "Man",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "鬼の遊女": {
+      "en": "Oni Courtesan",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "蜘蛛の遊女": {
+      "en": "Spider Courtesan",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "遊女": {
+      "en": "Courtesan",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "客": {
+      "en": "Customer",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "なじみ客": {
+      "en": "Regular Customer",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "使い": {
+      "en": "Messenger",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "お好み焼き屋": {
+      "en": "Okonomiyaki Vendor",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "まんじゅう屋": {
+      "en": "Manju Vendor",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "ラーメン屋": {
+      "en": "Ramen Vendor",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "雑貨屋": {
+      "en": "General Store Owner",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "男妖怪": {
+      "en": "Male Yokai",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "女妖怪": {
+      "en": "Female Yokai",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "飴屋": {
+      "en": "Candy Vendor",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "占い屋": {
+      "en": "Fortune Teller",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "楼主": {
+      "en": "Brothel Owner",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "トクガワ家使い": {
+      "en": "Tokugawa Messenger",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "遊女Ａ": {
+      "en": "Courtesan A",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "遊女Ｂ": {
+      "en": "Courtesan B",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "店員": {
+      "en": "Shopkeeper",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "かんざし屋": {
+      "en": "Hairpin Vendor",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "静芳": {
+      "en": null,
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "香蛾屋の主人": {
+      "en": null,
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "香蛾屋の遊女": {
+      "en": null,
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "陶": {
+      "en": null,
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "行灯売り": {
+      "en": "Lantern Vendor",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "泥棒": {
+      "en": "Thief",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "黒蛇": {
+      "en": null,
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "町人": {
+      "en": "Townsman",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "女": {
+      "en": "Woman",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "補陀落の下女": {
+      "en": "Fudaraku Maid",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "禿": {
+      "en": "Kamuro",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "女Ａ": {
+      "en": "Woman A",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "女Ｂ": {
+      "en": "Woman B",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "補陀落浄土の使い": {
+      "en": "Fudaraku Pure Land Messenger",
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    },
+    "玉菊": {
+      "en": null,
+      "gender": "unknown",
+      "role": "literal speaker label",
+      "register": "follow the source scene",
+      "aliases": [],
+      "evidence": "main/1_1.ks registration IDs; char_all_list.ks roster. Minor readings remain unresolved."
+    }
+  },
+  "terms": {
+    "夢吉原": "Yume Yoshiwara",
+    "妖怪": "yokai",
+    "妓楼": "brothel",
+    "両": "ryo"
+  },
+  "do_not_translate": [
+    "projectID",
+    "package.name",
+    "character IDs",
+    "state keys",
+    "asset paths",
+    "jump labels"
+  ]
+}

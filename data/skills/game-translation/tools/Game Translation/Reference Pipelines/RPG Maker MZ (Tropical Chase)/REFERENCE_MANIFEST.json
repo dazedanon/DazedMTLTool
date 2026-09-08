@@ -1,0 +1,317 @@
+{
+  "schema": 1,
+  "recorded": "2026-09-07",
+  "scope": "Curated code and historical native evidence; no game assets or saves.",
+  "files": {
+    "tools/mz_health.js": {
+      "after_sha256": "aea67a4fc094ec3911ded7c86bdbd12b7215f1b39291bb45df02d5732ad8e254",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\reference_updates\\new_tools\\mz_health.js",
+      "source_sha256": "aea67a4fc094ec3911ded7c86bdbd12b7215f1b39291bb45df02d5732ad8e254"
+    },
+    "tools/test_mz_health.cjs": {
+      "after_sha256": "b3ed91c0b2bca6242d12f5ec29dd2f1e7d345e6147c608c36ebc8d03c84ada6e",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\reference_updates\\new_tools\\test_mz_health.cjs",
+      "source_sha256": "b3ed91c0b2bca6242d12f5ec29dd2f1e7d345e6147c608c36ebc8d03c84ada6e"
+    },
+    "example/translation_tooling/tl.py": {
+      "after_sha256": "44dba4ce87c654ce9b7bda3cab8b2036faf24b0fe3dd154005f68219b1f4761a",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\tl.py",
+      "source_sha256": "44dba4ce87c654ce9b7bda3cab8b2036faf24b0fe3dd154005f68219b1f4761a"
+    },
+    "example/translation_tooling/inspect_game.py": {
+      "after_sha256": "f8f24c5d725ea3aedd10ef4720e8d7bd6b0de96a91a34b6b789b60497da20d98",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\inspect_game.py",
+      "source_sha256": "f8f24c5d725ea3aedd10ef4720e8d7bd6b0de96a91a34b6b789b60497da20d98"
+    },
+    "example/translation_tooling/js_probe.cjs": {
+      "after_sha256": "a10c1807d30bbb439c3aae287e24c03f400332575b5758e038559d2a2c8152c4",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\js_probe.cjs",
+      "source_sha256": "a10c1807d30bbb439c3aae287e24c03f400332575b5758e038559d2a2c8152c4"
+    },
+    "example/translation_tooling/runtime_probe.cjs": {
+      "after_sha256": "52536ec66c9d240500738a9b61aeeff38f36004401fc955cfe37fc37f7922c69",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\runtime_probe.cjs",
+      "source_sha256": "52536ec66c9d240500738a9b61aeeff38f36004401fc955cfe37fc37f7922c69"
+    },
+    "example/translation_tooling/selftest.py": {
+      "after_sha256": "fbc8a04f03e6da193d4430a06d3d8183502f90ae5fe52d7fae297d042016c940",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\selftest.py",
+      "source_sha256": "fbc8a04f03e6da193d4430a06d3d8183502f90ae5fe52d7fae297d042016c940"
+    },
+    "example/translation_tooling/source_corrections.json": {
+      "after_sha256": "da8f49cc4076d65af3b182d857b09839638d3304d6a3ba3b8eb8fdeb754aa59b",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\source_corrections.json",
+      "source_sha256": "da8f49cc4076d65af3b182d857b09839638d3304d6a3ba3b8eb8fdeb754aa59b"
+    },
+    "example/translation_tooling/requirements.txt": {
+      "after_sha256": "2c204e756d3667f38a254bdbb0edaf0135e87bc5b02efca3c8d7723e1819dc36",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\requirements.txt",
+      "source_sha256": "2c204e756d3667f38a254bdbb0edaf0135e87bc5b02efca3c8d7723e1819dc36"
+    },
+    "example/translation_tooling/manifest.json": {
+      "after_sha256": "b8f9044a393c4667d24711d3c062768144382982573d7f77e21d6d0bcb527d9f",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\manifest.json",
+      "source_sha256": "b8f9044a393c4667d24711d3c062768144382982573d7f77e21d6d0bcb527d9f"
+    },
+    "example/translation_tooling/PROVENANCE.json": {
+      "after_sha256": "721a576191715a6d835b6d9e3ba311249c1d68adebf69a55bec0d57dd4c5b5e4",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\PROVENANCE.json",
+      "source_sha256": "721a576191715a6d835b6d9e3ba311249c1d68adebf69a55bec0d57dd4c5b5e4"
+    },
+    "example/translation_tooling/glossary.json": {
+      "after_sha256": "c75de14f78e9572d171223f4f4cccc8aa696d4fcbe68a8960f8280abc20f444a",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\glossary.json",
+      "source_sha256": "c75de14f78e9572d171223f4f4cccc8aa696d4fcbe68a8960f8280abc20f444a"
+    },
+    "example/translation_tooling/game_prompt.md": {
+      "after_sha256": "ef1a2bf46068eeabc5ae46c96f20b7e76e0abdd67151476530ef23ea12edabfd",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\game_prompt.md",
+      "source_sha256": "ef1a2bf46068eeabc5ae46c96f20b7e76e0abdd67151476530ef23ea12edabfd"
+    },
+    "example/translation_tooling/quirks.md": {
+      "after_sha256": "fca358602b9f8d365ba6e82c64f70be4f11008475003885262f0235e58ce13fa",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\quirks.md",
+      "source_sha256": "fca358602b9f8d365ba6e82c64f70be4f11008475003885262f0235e58ce13fa"
+    },
+    "example/translation_tooling/CENSUS.md": {
+      "after_sha256": "9ee0dad8fec3620acee798ce113b190582740f4e7ee0fa472f1a48bd56a18f09",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\CENSUS.md",
+      "source_sha256": "9ee0dad8fec3620acee798ce113b190582740f4e7ee0fa472f1a48bd56a18f09"
+    },
+    "example/translation_tooling/vendor/codes.py": {
+      "after_sha256": "c0c0fe6b803e4b666c3427c23a0ff67cba74a07a0f6ca3191f7c9aa39dc70215",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\vendor\\codes.py",
+      "source_sha256": "0ae5d622bcd3e240db69733338c3c488f3a3dbf0b3dc2c8e8a1ee9808f6a6d94"
+    },
+    "example/translation_tooling/vendor/fileio.py": {
+      "after_sha256": "6e97af69b30633fff5e7f5202d5b1115eff34a40da71dd4c7e86097fde73bab7",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\vendor\\fileio.py",
+      "source_sha256": "6e97af69b30633fff5e7f5202d5b1115eff34a40da71dd4c7e86097fde73bab7"
+    },
+    "example/translation_tooling/vendor/js_strings.py": {
+      "after_sha256": "cd6fb43fc5420387b82154552f7289de7ed2fbfffa95b9b9b3eec0fad86362e4",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\vendor\\js_strings.py",
+      "source_sha256": "cd6fb43fc5420387b82154552f7289de7ed2fbfffa95b9b9b3eec0fad86362e4"
+    },
+    "example/translation_tooling/manual/work.py": {
+      "after_sha256": "2e6de526e28a4e9be28359b9f9712baebaeef21ca1490899b9c2c22709ca978d",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\manual\\work.py",
+      "source_sha256": "2e6de526e28a4e9be28359b9f9712baebaeef21ca1490899b9c2c22709ca978d"
+    },
+    "example/translation_tooling/manual/fit_audit.py": {
+      "after_sha256": "0d95784ce0bca7841d69bdf37ae30076d30d6c111861f0ada633545f7b30ddf8",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\manual\\fit_audit.py",
+      "source_sha256": "0d95784ce0bca7841d69bdf37ae30076d30d6c111861f0ada633545f7b30ddf8"
+    },
+    "example/translation_tooling/manual/prepare_text_qa.py": {
+      "after_sha256": "98ed0ae785a5ad8ec5c67169e5fa2ad6ac813061ee01a9741dd97d9103078407",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\manual\\prepare_text_qa.py",
+      "source_sha256": "98ed0ae785a5ad8ec5c67169e5fa2ad6ac813061ee01a9741dd97d9103078407"
+    },
+    "example/translation_tooling/image_review/rpgmv_crypt.py": {
+      "after_sha256": "4bed90ea4bff19392e4f3669f980e7621bf7d7704688c02c4e2455551d9f6f36",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\image_review\\rpgmv_crypt.py",
+      "source_sha256": "4bed90ea4bff19392e4f3669f980e7621bf7d7704688c02c4e2455551d9f6f36"
+    },
+    "example/translation_tooling/image_review/inventory.py": {
+      "after_sha256": "7a76bb5c48f71300aef5b7b9d5913f154159a586c591d1996f48df09fac3e11d",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\image_review\\inventory.py",
+      "source_sha256": "7a76bb5c48f71300aef5b7b9d5913f154159a586c591d1996f48df09fac3e11d"
+    },
+    "example/translation_tooling/image_review/usage_report.py": {
+      "after_sha256": "b059700e31b3e932c7b7440b9552435dd0c94fe97a897461c071df6aee023007",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\image_review\\usage_report.py",
+      "source_sha256": "b059700e31b3e932c7b7440b9552435dd0c94fe97a897461c071df6aee023007"
+    },
+    "example/translation_tooling/image_translation/render.py": {
+      "after_sha256": "f8187abfdbd7621c1baa23e9a92f6efab1347ed1822e5bd407fc559a12f8c9f7",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\image_translation\\render.py",
+      "source_sha256": "f8187abfdbd7621c1baa23e9a92f6efab1347ed1822e5bd407fc559a12f8c9f7"
+    },
+    "example/translation_tooling/image_translation/render_title.py": {
+      "after_sha256": "c322e20eb3e403508a89d9f39fb671ea137bd3396b84c98f80d4c271f0362939",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\image_translation\\render_title.py",
+      "source_sha256": "c322e20eb3e403508a89d9f39fb671ea137bd3396b84c98f80d4c271f0362939"
+    },
+    "example/translation_tooling/image_translation/imgtl.py": {
+      "after_sha256": "038f81fe1907ee5da5c1d6749e40a5540eac8722d55d50d05886dcc7958aace5",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\image_translation\\imgtl.py",
+      "source_sha256": "038f81fe1907ee5da5c1d6749e40a5540eac8722d55d50d05886dcc7958aace5"
+    },
+    "example/translation_tooling/image_translation/image_terms.json": {
+      "after_sha256": "871cb322659ae3b4854dece9a509f8a84a13e51967fa26e9c2649fea86da107a",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\image_translation\\image_terms.json",
+      "source_sha256": "871cb322659ae3b4854dece9a509f8a84a13e51967fa26e9c2649fea86da107a"
+    },
+    "example/translation_tooling/image_translation/runtime_decode.js": {
+      "after_sha256": "711817f9556d1a69de4249eabe0e1cfecf1bec4e13169a882d59d054adb50468",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\image_translation\\runtime_decode.js",
+      "source_sha256": "711817f9556d1a69de4249eabe0e1cfecf1bec4e13169a882d59d054adb50468"
+    },
+    "example/translation_tooling/text_translation/build_text.py": {
+      "after_sha256": "6daee4253db5f29161742126d069a6fedde85196ad36919824f334674a805521",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\build_text.py",
+      "source_sha256": "6daee4253db5f29161742126d069a6fedde85196ad36919824f334674a805521"
+    },
+    "example/translation_tooling/text_translation/audit_release.py": {
+      "after_sha256": "e7bb1445066914fb0d3e6ef3735821e0694dc08da0a745deac1398857c35d031",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\audit_release.py",
+      "source_sha256": "e7bb1445066914fb0d3e6ef3735821e0694dc08da0a745deac1398857c35d031"
+    },
+    "example/translation_tooling/text_translation/install_build.py": {
+      "after_sha256": "01875d8b8d2508e2b32e03936ae5264838e50e7eb73e317d1ffd7fc60c0077c5",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\install_build.py",
+      "source_sha256": "01875d8b8d2508e2b32e03936ae5264838e50e7eb73e317d1ffd7fc60c0077c5"
+    },
+    "example/translation_tooling/text_translation/refresh_release.py": {
+      "after_sha256": "4b096e9bb84a0a6ca5bda3774b189436120f9eefb88f3860c59ac0c034abf4bf",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\refresh_release.py",
+      "source_sha256": "4b096e9bb84a0a6ca5bda3774b189436120f9eefb88f3860c59ac0c034abf4bf"
+    },
+    "example/translation_tooling/text_translation/manage_patch.py": {
+      "after_sha256": "915a2cf4790dfb1f24e558b0c18593d5f41f2ac51e4156e2b7f5b1b27d397968",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\manage_patch.py",
+      "source_sha256": "915a2cf4790dfb1f24e558b0c18593d5f41f2ac51e4156e2b7f5b1b27d397968"
+    },
+    "example/translation_tooling/text_translation/finalize_results_fix.py": {
+      "after_sha256": "fc80241ea816b32daaa799d27e95a6d00c35c3de092a2c8038e9b1588cf69d01",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\finalize_results_fix.py",
+      "source_sha256": "fc80241ea816b32daaa799d27e95a6d00c35c3de092a2c8038e9b1588cf69d01"
+    },
+    "example/translation_tooling/text_translation/english_runtime.js": {
+      "after_sha256": "788b5965a9decfd02ade260d6d03530028affe87fc0e7189543186778aba844f",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\english_runtime.js",
+      "source_sha256": "788b5965a9decfd02ade260d6d03530028affe87fc0e7189543186778aba844f"
+    },
+    "example/translation_tooling/text_translation/runtime_host.js": {
+      "after_sha256": "58c78959bde6660d96b46937bacf42f98b1f4c3bd411da7741a35d35941b1e07",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\runtime_host.js",
+      "source_sha256": "58c78959bde6660d96b46937bacf42f98b1f4c3bd411da7741a35d35941b1e07"
+    },
+    "example/translation_tooling/text_translation/runtime_request.py": {
+      "after_sha256": "2090dcee05e85804a059fbc45cbaf661302ae27419a758725cf4bf523cadc62e",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\runtime_request.py",
+      "source_sha256": "2090dcee05e85804a059fbc45cbaf661302ae27419a758725cf4bf523cadc62e"
+    },
+    "example/translation_tooling/text_translation/launch_runtime.ps1": {
+      "after_sha256": "82921ea1a0e86b53a331ba40e95a4e80ba2809256c83973bded690080c4e90dd",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\launch_runtime.ps1",
+      "source_sha256": "82921ea1a0e86b53a331ba40e95a4e80ba2809256c83973bded690080c4e90dd"
+    },
+    "example/translation_tooling/text_translation/capture_window.py": {
+      "after_sha256": "e184d675625112c9930e8ceb137b6c54f9dcfa9151c51a8d926ab002954573dc",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\capture_window.py",
+      "source_sha256": "e184d675625112c9930e8ceb137b6c54f9dcfa9151c51a8d926ab002954573dc"
+    },
+    "example/translation_tooling/text_translation/cold_smoke.ps1": {
+      "after_sha256": "31822d757364dbec42348671cff01d2dcc4af7b6e78a5a6c634d3c167e1c6487",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\cold_smoke.ps1",
+      "source_sha256": "31822d757364dbec42348671cff01d2dcc4af7b6e78a5a6c634d3c167e1c6487"
+    },
+    "example/translation_tooling/text_translation/route_helpers.js": {
+      "after_sha256": "cd1e9bb89cf8e7bc034bd4d4f598e2d77d90e296115f0434be1ea7c822e42721",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\route_helpers.js",
+      "source_sha256": "cd1e9bb89cf8e7bc034bd4d4f598e2d77d90e296115f0434be1ea7c822e42721"
+    },
+    "example/translation_tooling/text_translation/walk_global.js": {
+      "after_sha256": "e4f9c1c2730e08ebe9f897a3261c0bfea32b1ce125765e7004fa71179a108160",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\walk_global.js",
+      "source_sha256": "e4f9c1c2730e08ebe9f897a3261c0bfea32b1ce125765e7004fa71179a108160"
+    },
+    "example/translation_tooling/text_translation/results_panel_check.js": {
+      "after_sha256": "1768cddb72e935a92c6a379c9349e7efe80f8697a656cda25cacea10722c3884",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\results_panel_check.js",
+      "source_sha256": "1768cddb72e935a92c6a379c9349e7efe80f8697a656cda25cacea10722c3884"
+    },
+    "example/translation_tooling/text_translation/results_fix_lifecycle.js": {
+      "after_sha256": "bac427c3c880383987c6aff5e68a46f7129d755818e162561706e86963476280",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\results_fix_lifecycle.js",
+      "source_sha256": "bac427c3c880383987c6aff5e68a46f7129d755818e162561706e86963476280"
+    },
+    "example/translation_tooling/text_translation/final_native_fit.js": {
+      "after_sha256": "7d8c8e901850696089ebbb84534264c4df54a16a31643199507f2e4618c2dd3f",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\final_native_fit.js",
+      "source_sha256": "7d8c8e901850696089ebbb84534264c4df54a16a31643199507f2e4618c2dd3f"
+    },
+    "example/translation_tooling/text_translation/final_ui_checks.js": {
+      "after_sha256": "c81966eb25de41121e7d7b283abbb9fbee36601204a3ce66b5f1af91780d958a",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\final_ui_checks.js",
+      "source_sha256": "c81966eb25de41121e7d7b283abbb9fbee36601204a3ce66b5f1af91780d958a"
+    },
+    "example/translation_tooling/text_translation/battle_check.js": {
+      "after_sha256": "04817c59f9f3ca16e12a32dc9f2f990bf339eaf29c623e3d5a3c3bb2e5d045b2",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\battle_check.js",
+      "source_sha256": "04817c59f9f3ca16e12a32dc9f2f990bf339eaf29c623e3d5a3c3bb2e5d045b2"
+    },
+    "example/translation_tooling/text_translation/legacy_check.js": {
+      "after_sha256": "84123d8a8b5983f990633e9af469c91d81c815c3ea945976f401aaa35070c875",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\legacy_check.js",
+      "source_sha256": "84123d8a8b5983f990633e9af469c91d81c815c3ea945976f401aaa35070c875"
+    },
+    "example/translation_tooling/text_translation/save_ui.js": {
+      "after_sha256": "b44f411b90f87c9867d184359cbd51be8379e1e193a6bef2a81a990f8c7e3d89",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\save_ui.js",
+      "source_sha256": "b44f411b90f87c9867d184359cbd51be8379e1e193a6bef2a81a990f8c7e3d89"
+    },
+    "example/translation_tooling/text_translation/tall_tutorial_check.js": {
+      "after_sha256": "8d22faecdc1be511bd9102948de3672caa3a1b333255ed37808e1c38d91dc080",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\text_translation\\tall_tutorial_check.js",
+      "source_sha256": "8d22faecdc1be511bd9102948de3672caa3a1b333255ed37808e1c38d91dc080"
+    },
+    "example/translation_tooling/project.json": {
+      "after_sha256": "2068901b0ab025ef9da93cb6ff12fe4af8884aab3ee533a1da5892373311734d",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\project.json",
+      "source_sha256": "2c91de30e631ad5bc115e46a24eafe28b5fc2f437784a7464c3116f7f8beb28f"
+    },
+    "evidence/results_panel_before.json": {
+      "after_sha256": "6b9e40f18655bb3626c9e3abe367a4aa24ebce74813c1de1f3292536453009b1",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\clean_game\\translation_tooling\\text_translation\\runtime\\results_panel_before.json",
+      "source_sha256": "6b9e40f18655bb3626c9e3abe367a4aa24ebce74813c1de1f3292536453009b1"
+    },
+    "evidence/results_panel_after.json": {
+      "after_sha256": "4e2cdc98b543db754c3c8800fa6ae16247eeb6853cf5bd1c4b4aa49a6865d781",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\clean_game\\translation_tooling\\text_translation\\runtime\\results_panel_after.json",
+      "source_sha256": "4e2cdc98b543db754c3c8800fa6ae16247eeb6853cf5bd1c4b4aa49a6865d781"
+    },
+    "evidence/results_fix_lifecycle.json": {
+      "after_sha256": "a93ef084d386acacb9ddbea605c28d0b3ae12503a2e56181e7992ab8b3b03851",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\clean_game\\translation_tooling\\text_translation\\runtime\\results_fix_lifecycle.json",
+      "source_sha256": "a93ef084d386acacb9ddbea605c28d0b3ae12503a2e56181e7992ab8b3b03851"
+    },
+    "evidence/screens/results_panel_before_4_reported_102.png": {
+      "after_sha256": "d1a3af1f165f00625d2471eeff37b17e4ab7b3393fb362a1e1721da9329ccc40",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\clean_game\\translation_tooling\\text_translation\\runtime\\screens\\results_panel_before_4_reported_102.png",
+      "source_sha256": "d1a3af1f165f00625d2471eeff37b17e4ab7b3393fb362a1e1721da9329ccc40"
+    },
+    "evidence/screens/results_panel_after_4_reported_102.png": {
+      "after_sha256": "2866f8e75c75fe1e59db86710b8785123815fa853dd73333d998e469618c8812",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\clean_game\\translation_tooling\\text_translation\\runtime\\screens\\results_panel_after_4_reported_102.png",
+      "source_sha256": "2866f8e75c75fe1e59db86710b8785123815fa853dd73333d998e469618c8812"
+    },
+    "evidence/screens/results_panel_after_14_five_digit_70.png": {
+      "after_sha256": "8aed9de2e0cf74cc49eb1855a4a8c54bfd019ab59e93e90e7cd17bcd25844c3f",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\clean_game\\translation_tooling\\text_translation\\runtime\\screens\\results_panel_after_14_five_digit_70.png",
+      "source_sha256": "8aed9de2e0cf74cc49eb1855a4a8c54bfd019ab59e93e90e7cd17bcd25844c3f"
+    },
+    "evidence/session_summary.json": {
+      "after_sha256": "b64ec5d8febe0ffb4ddab66faccf66116e3e474c25b2fdad530481fdb03887cc",
+      "source": null,
+      "source_sha256": null
+    },
+    "PIPELINE.md": {
+      "after_sha256": "7257f8917fa03ae86ce535ee5f282cc882e44f1372ea814713b1ea1792da120c",
+      "source": null,
+      "source_sha256": null
+    },
+    "tools/verify_reference.py": {
+      "after_sha256": "13cb6b3c649e3dda2809cceec4443fd5b3e37acaefb2a5ede17998f33ac81000",
+      "source": "C:\\Users\\sw\\Desktop\\Games\\とろぴかる・ちぇいす！長年追っていた指名手配犯をヌーディストビーチで発見したクール系女刑事\\translation_tooling\\reference_updates\\new_tools\\verify_reference.py",
+      "source_sha256": "13cb6b3c649e3dda2809cceec4443fd5b3e37acaefb2a5ede17998f33ac81000"
+    }
+  },
+  "shared_files": {
+    "Text Fitting/PAINTED-PANELS.md": "52598760086f56e92fa2b5573c27e31d75279a9c97ced3d275773fa792be0a17",
+    "Text Fitting/panel_bounds.cjs": "718db959a7f8b0d59ac57cea41db3f6a32c2aed2edd90f3a5534bcc5537f7591",
+    "Text Fitting/test_panel_bounds.cjs": "629de7e2a65d6799d29ea72ce0feed09f86d403cb531de439c7b950acbc16e8d"
+  }
+}

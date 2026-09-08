@@ -1,0 +1,26 @@
+{
+    "source_skill": "/home/dazed/DazedTranslations/Tools/Len TL Tools/SKILL.md",
+    "reference_pipeline": "/home/dazed/DazedTranslations/Tools/Len TL Tools/tools/Game Translation/Reference Pipelines/RPG Maker MZ (Tropical Chase)",
+    "files": {
+        "vendor/codes.py": {
+            "source": "/home/dazed/DazedTranslations/Tools/Len TL Tools/tools/Game Translation/Reference Pipelines/RPG Maker MZ (Tropical Chase)/example/translation_tooling/vendor/codes.py",
+            "source_sha256": "c0c0fe6b803e4b666c3427c23a0ff67cba74a07a0f6ca3191f7c9aa39dc70215",
+            "adaptation": "copied unchanged"
+        },
+        "vendor/fileio.py": {
+            "source": "/home/dazed/DazedTranslations/Tools/Len TL Tools/tools/Game Translation/Reference Pipelines/RPG Maker MZ (Tropical Chase)/example/translation_tooling/vendor/fileio.py",
+            "source_sha256": "6e97af69b30633fff5e7f5202d5b1115eff34a40da71dd4c7e86097fde73bab7",
+            "adaptation": "copied unchanged"
+        },
+        "js_probe.cjs": {
+            "source": "/home/dazed/DazedTranslations/Tools/Len TL Tools/tools/Game Translation/Reference Pipelines/RPG Maker MZ (Gakuen)/tools/js_literals_acorn.cjs",
+            "source_sha256": "370984e4f83259c7732e39f15a72de55de55201caa9f3a9b13f2e05a16467a77",
+            "adaptation": "copied unchanged"
+        },
+        "vendor/core.py": {
+            "source": "/home/dazed/DazedTranslations/Tools/Len TL Tools/tools/Game Translation/Reference Pipelines/RPG Maker MZ (Tropical Chase)/example/translation_tooling/tl.py",
+            "source_sha256": "44dba4ce87c654ce9b7bda3cab8b2036faf24b0fe3dd154005f68219b1f4761a",
+            "adaptation": "selected serialization/span helpers only"
+        }
+    }
+}

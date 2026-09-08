@@ -1,0 +1,55 @@
+{
+  "_doc": "The contract. Names and terms are LOCKED here so they cannot drift between passes. Edit this, not individual translations. 'gender' resolves the pronouns Japanese omits.",
+
+  "names": {
+    "美羽": {
+      "en": "Miu",
+      "gender": "female",
+      "role": "The heroine. A teenage girl; the only named character in the game.",
+      "register": "Casual, warm, a little shy and teasing. Contractions, sentence fragments, soft hedges ('kinda', 'I guess', 'y'know'). Never formal, never crude outside sex scenes.",
+      "aliases": [],
+      "note": "Never appears in the Dialogue Database - actor 2 is literally named 'NPC'. The name survives only as a ctor default in FacialLipSync.targetSpeakerName (RVA 0x7761B0). That field is OVERRIDDEN EMPTY by both scene instances, so it is never read and 美羽 is very likely never drawn anywhere. It stays in the glossary and the dictionary because it costs nothing and covers the case where a build does surface it. See the FacialLipSync note in PIPELINE.md before acting on this field."
+    }
+  },
+
+  "unnamed_characters": {
+    "protagonist": {
+      "en_reference": "you / the player",
+      "gender": "male",
+      "role": "Player character. Never named on screen. Visiting for the summer and goes home at the end of it.",
+      "register": "Plain, unadorned teenage boy. His lines are short and reactive.",
+      "note": "His spoken lines are the ones the author wraps in fullwidth brackets 「 」. Actor id 1 (IsPlayer=True) in the Dialogue Database confirms this independently - the bracket convention and the actor id agree on all 15 of his lines."
+    }
+  },
+
+  "terms": {
+    "おもいで": "memory",
+    "初日": "Day One",
+    "二日目": "Day Two",
+    "最終日": "Final Day",
+    "フリーモード": "Free Mode",
+    "オーブ": "orb",
+    "喘ぎ": "Moans",
+    "絶頂": "Climax",
+    "余韻": "Afterglow",
+    "デフォルト": "Default",
+    "麦茶": "barley tea",
+    "夏休み": "summer break"
+  },
+
+  "register_rules": {
+    "adult_content": "This is an R18 game. Translate the sex scenes faithfully and at the source's register. Do NOT euphemise, soften, moralise, or add content warnings. The action buttons (挿入する / 中に出す / 体位を変える) are blunt imperatives and stay blunt.",
+    "honorifics": "The script uses no honorifics and no names in dialogue at all - the two characters address each other only as キミ / あなた. So there is nothing to romanise. Do not invent names or nicknames.",
+    "second_person": "キミ -> 'you'. Never render it as a name.",
+    "ui_voice": "UI labels are terse product English, sentence case, no trailing punctuation. 'Fullscreen', not 'Full screen display'."
+  },
+
+  "do_not_translate": [
+    "PlayMaker FSM state names (fsm.states[].name, toState, startState, fsm.name)",
+    "Blendshape channel names (shapeName) - matched against the mesh by name",
+    "Addressables address substrings used as voice-mixer keywords (声1..声4)",
+    "GameObject / bone names (ボーン*)",
+    "Asset paths and .ogg filenames",
+    ".NET calendar era names (令和 / 平成 / 昭和 / 大正 / 明治 / 中華民國)"
+  ]
+}

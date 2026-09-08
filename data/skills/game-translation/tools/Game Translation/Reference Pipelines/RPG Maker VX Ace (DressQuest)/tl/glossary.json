@@ -1,0 +1,2070 @@
+{
+  "meta": {},
+  "names": {
+    "エリス": {
+      "en": "Eris",
+      "gender": "female",
+      "role": "heroine - knight-commander of Baron, titled the Knight of the White Lotus",
+      "register": "formal and commanding in public, first person 私; the formality cracks but never disappears when she is cornered",
+      "aliases": [],
+      "count": 4231,
+      "note": "Actors.rvdata2 #1 name"
+    },
+    "白蓮の騎士": {
+      "en": "Knight of the White Lotus",
+      "gender": "female",
+      "role": "Eris's title / nickname",
+      "register": "",
+      "aliases": [],
+      "count": 0,
+      "note": "Actors.rvdata2 #1 nickname"
+    },
+    "町人": {
+      "en": "Townsperson",
+      "gender": "unknown",
+      "role": "generic town NPC",
+      "register": "plain, unpolished",
+      "aliases": [],
+      "count": 1354,
+      "note": "\\NAME[] speaker"
+    },
+    "モンスター": {
+      "en": "Monster",
+      "gender": "unknown",
+      "role": "generic monster speaker",
+      "register": "guttural, leering, short sentences",
+      "aliases": [],
+      "count": 547,
+      "note": "\\NAME[] speaker"
+    },
+    "バロン王": {
+      "en": "King Baron",
+      "gender": "male",
+      "role": "the king of Baron",
+      "register": "regal, then vicious",
+      "aliases": [],
+      "count": 302,
+      "note": "\\NAME[] speaker"
+    },
+    "クリフ将軍": {
+      "en": "General Cliff",
+      "gender": "male",
+      "role": "Eris's second in command",
+      "register": "deferential to Eris, curt with his men",
+      "aliases": [],
+      "count": 288,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男": {
+      "en": "Village Man",
+      "gender": "male",
+      "role": "generic village NPC",
+      "register": "crude",
+      "aliases": [],
+      "count": 281,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者警備": {
+      "en": "Thug Guard",
+      "gender": "male",
+      "role": "bandit acting as a guard",
+      "register": "crude",
+      "aliases": [],
+      "count": 250,
+      "note": "\\NAME[] speaker"
+    },
+    "バロン兵": {
+      "en": "Baron Soldier",
+      "gender": "male",
+      "role": "rank-and-file soldier of Baron",
+      "register": "coarse to civilians, deferential to Eris",
+      "aliases": [],
+      "count": 184,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者": {
+      "en": "Thug",
+      "gender": "male",
+      "role": "bandit / rough",
+      "register": "crude street speech",
+      "aliases": [],
+      "count": 179,
+      "note": "\\NAME[] speaker"
+    },
+    "賭博受付": {
+      "en": "Betting Clerk",
+      "gender": "male",
+      "role": "arena betting counter",
+      "register": "brisk",
+      "aliases": [],
+      "count": 161,
+      "note": "\\NAME[] speaker"
+    },
+    "学者": {
+      "en": "Scholar",
+      "gender": "male",
+      "role": "researcher NPC",
+      "register": "wordy",
+      "aliases": [],
+      "count": 159,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族": {
+      "en": "Nobleman",
+      "gender": "male",
+      "role": "aristocrat",
+      "register": "oily formality",
+      "aliases": [],
+      "count": 149,
+      "note": "\\NAME[] speaker"
+    },
+    "マックス": {
+      "en": "Max",
+      "gender": "male",
+      "role": "arena/street fighter Eris repeatedly loses to",
+      "register": "",
+      "aliases": [],
+      "count": 133,
+      "note": "\\NAME[] speaker"
+    },
+    "シル": {
+      "en": "Syl",
+      "gender": "female",
+      "role": "the Black Dragon sage, real name シルフェイド (Sylpheid); humans call her a Great Sage. Gives Eris the dresses.",
+      "register": "",
+      "aliases": [
+        "シルフェイド",
+        "黒竜"
+      ],
+      "count": 131,
+      "note": "\\NAME[] speaker"
+    },
+    "足軽": {
+      "en": "Foot Soldier",
+      "gender": "male",
+      "role": "Zipang-region soldier",
+      "register": "samurai-drama diction",
+      "aliases": [],
+      "count": 114,
+      "note": "\\NAME[] speaker"
+    },
+    "大司教": {
+      "en": "Archbishop",
+      "gender": "male",
+      "role": "senior clergy",
+      "register": "grand, self-satisfied",
+      "aliases": [],
+      "count": 98,
+      "note": "\\NAME[] speaker"
+    },
+    "マッコリ": {
+      "en": "Makkori",
+      "gender": "male",
+      "role": "fixer who procures 'guests' for the nobles; addressed as マッコリさん / マッコリ様",
+      "register": "",
+      "aliases": [],
+      "count": 92,
+      "note": "\\NAME[] speaker"
+    },
+    "メイド": {
+      "en": "Maid",
+      "gender": "female",
+      "role": "servant",
+      "register": "polite",
+      "aliases": [],
+      "count": 88,
+      "note": "\\NAME[] speaker"
+    },
+    "子供": {
+      "en": "Child",
+      "gender": "unknown",
+      "role": "generic child NPC",
+      "register": "",
+      "aliases": [],
+      "count": 85,
+      "note": "\\NAME[] speaker"
+    },
+    "司会": {
+      "en": "Announcer",
+      "gender": "male",
+      "role": "arena announcer",
+      "register": "loud, showy",
+      "aliases": [],
+      "count": 84,
+      "note": "\\NAME[] speaker"
+    },
+    "性奴隷の少女": {
+      "en": "Slave Girl",
+      "gender": "female",
+      "role": "captive",
+      "register": "broken, frightened",
+      "aliases": [],
+      "count": 83,
+      "note": "\\NAME[] speaker"
+    },
+    "ウィーク": {
+      "en": "Weak",
+      "gender": "male",
+      "role": "arena fighter, announced as ウィーク選手; the ring name is ironic and stays ironic in English",
+      "register": "",
+      "aliases": [],
+      "count": 82,
+      "note": "\\NAME[] speaker"
+    },
+    "旅人": {
+      "en": "Traveler",
+      "gender": "unknown",
+      "role": "wandering NPC",
+      "register": "",
+      "aliases": [],
+      "count": 78,
+      "note": "\\NAME[] speaker"
+    },
+    "お菊": {
+      "en": "Okiku",
+      "gender": "female",
+      "role": "Zipang-region character, a Japanese given name",
+      "register": "",
+      "aliases": [],
+      "count": 77,
+      "note": "\\NAME[] speaker"
+    },
+    "シスター": {
+      "en": "Sister",
+      "gender": "female",
+      "role": "nun",
+      "register": "pious",
+      "aliases": [],
+      "count": 75,
+      "note": "\\NAME[] speaker"
+    },
+    "召使い": {
+      "en": "Servant",
+      "gender": "unknown",
+      "role": "servant",
+      "register": "polite",
+      "aliases": [],
+      "count": 73,
+      "note": "\\NAME[] speaker"
+    },
+    "シーラ": {
+      "en": "Sheila",
+      "gender": "female",
+      "role": "castle attendant close to the royal family",
+      "register": "",
+      "aliases": [],
+      "count": 71,
+      "note": "\\NAME[] speaker"
+    },
+    "情報屋": {
+      "en": "Informant",
+      "gender": "male",
+      "role": "sells information",
+      "register": "sly",
+      "aliases": [],
+      "count": 70,
+      "note": "\\NAME[] speaker"
+    },
+    "レイン": {
+      "en": "Rain",
+      "gender": "male",
+      "role": "slaver boss who imprisons Eris in Hoodlum; 俺様, sneering",
+      "register": "",
+      "aliases": [],
+      "count": 66,
+      "note": "\\NAME[] speaker"
+    },
+    "案内人": {
+      "en": "Guide",
+      "gender": "unknown",
+      "role": "arena / venue guide",
+      "register": "polite",
+      "aliases": [],
+      "count": 63,
+      "note": "\\NAME[] speaker"
+    },
+    "参加者": {
+      "en": "Contestant",
+      "gender": "male",
+      "role": "arena fighter",
+      "register": "",
+      "aliases": [],
+      "count": 63,
+      "note": "\\NAME[] speaker"
+    },
+    "クリフ": {
+      "en": "Cliff",
+      "gender": "male",
+      "role": "General Cliff, in casual reference",
+      "register": "",
+      "aliases": [],
+      "count": 60,
+      "note": "\\NAME[] speaker"
+    },
+    "サキュバス": {
+      "en": "Succubus",
+      "gender": "female",
+      "role": "monster",
+      "register": "teasing, dominant",
+      "aliases": [],
+      "count": 57,
+      "note": "\\NAME[] speaker"
+    },
+    "受付": {
+      "en": "Receptionist",
+      "gender": "unknown",
+      "role": "counter NPC",
+      "register": "polite",
+      "aliases": [],
+      "count": 57,
+      "note": "\\NAME[] speaker"
+    },
+    "ガロン": {
+      "en": "Garon",
+      "gender": "male",
+      "role": "monster lord",
+      "register": "",
+      "aliases": [],
+      "count": 56,
+      "note": "\\NAME[] speaker"
+    },
+    "旅の商人": {
+      "en": "Traveling Merchant",
+      "gender": "male",
+      "role": "shop NPC",
+      "register": "",
+      "aliases": [],
+      "count": 50,
+      "note": "\\NAME[] speaker"
+    },
+    "魔剤士": {
+      "en": "Apothecary",
+      "gender": "male",
+      "role": "the old potion-brewer of Emilion; elderly speech (じゃ / ぞい)",
+      "register": "",
+      "aliases": [],
+      "count": 49,
+      "note": "\\NAME[] speaker"
+    },
+    "メイド（村娘）": {
+      "en": "Maid (Village Girl)",
+      "gender": "female",
+      "role": "village girl in a maid's dress",
+      "register": "",
+      "aliases": [],
+      "count": 48,
+      "note": "\\NAME[] speaker"
+    },
+    "格闘家": {
+      "en": "Brawler",
+      "gender": "male",
+      "role": "arena fighter",
+      "register": "",
+      "aliases": [],
+      "count": 47,
+      "note": "\\NAME[] speaker"
+    },
+    "村長": {
+      "en": "Village Chief",
+      "gender": "male",
+      "role": "village elder",
+      "register": "",
+      "aliases": [],
+      "count": 45,
+      "note": "\\NAME[] speaker"
+    },
+    "アリス": {
+      "en": "Alice",
+      "gender": "female",
+      "role": "worshipped as 有神アリス様, a goddess figure and the antagonist behind the monster plague",
+      "register": "",
+      "aliases": [],
+      "count": 45,
+      "note": "\\NAME[] speaker"
+    },
+    "商人": {
+      "en": "Merchant",
+      "gender": "male",
+      "role": "shop NPC",
+      "register": "",
+      "aliases": [],
+      "count": 43,
+      "note": "\\NAME[] speaker"
+    },
+    "ポンチョ": {
+      "en": "Poncho",
+      "gender": "male",
+      "role": "rogue who breaks Eris out",
+      "register": "",
+      "aliases": [],
+      "count": 43,
+      "note": "\\NAME[] speaker"
+    },
+    "キメラ": {
+      "en": "Chimera",
+      "gender": "unknown",
+      "role": "monster",
+      "register": "",
+      "aliases": [],
+      "count": 41,
+      "note": "\\NAME[] speaker"
+    },
+    "支配人": {
+      "en": "Manager",
+      "gender": "male",
+      "role": "venue manager",
+      "register": "unctuous",
+      "aliases": [],
+      "count": 37,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール１": {
+      "en": "Troll 1",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 34,
+      "note": "\\NAME[] speaker"
+    },
+    "黒竜": {
+      "en": "Black Dragon",
+      "gender": "female",
+      "role": "Syl in dragon form - the same character as シル",
+      "register": "",
+      "aliases": [
+        "シル"
+      ],
+      "count": 34,
+      "note": "\\NAME[] speaker"
+    },
+    "女盗賊": {
+      "en": "Bandit Woman",
+      "gender": "female",
+      "role": "bandit",
+      "register": "rough",
+      "aliases": [],
+      "count": 32,
+      "note": "\\NAME[] speaker"
+    },
+    "ゴブリン": {
+      "en": "Goblin",
+      "gender": "male",
+      "role": "monster",
+      "register": "guttural",
+      "aliases": [],
+      "count": 31,
+      "note": "\\NAME[] speaker"
+    },
+    "旅行客": {
+      "en": "Tourist",
+      "gender": "unknown",
+      "role": "visitor NPC",
+      "register": "",
+      "aliases": [],
+      "count": 26,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族女性": {
+      "en": "Noblewoman",
+      "gender": "female",
+      "role": "aristocrat",
+      "register": "oily formality",
+      "aliases": [],
+      "count": 26,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者１": {
+      "en": "Thug 1",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 26,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール２": {
+      "en": "Troll 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 22,
+      "note": "\\NAME[] speaker"
+    },
+    "乞食": {
+      "en": "Beggar",
+      "gender": "male",
+      "role": "street NPC",
+      "register": "",
+      "aliases": [],
+      "count": 22,
+      "note": "\\NAME[] speaker"
+    },
+    "姫様": {
+      "en": "Princess",
+      "gender": "female",
+      "role": "form of address, not a name",
+      "register": "",
+      "aliases": [],
+      "count": 21,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール": {
+      "en": "Troll",
+      "gender": "male",
+      "role": "monster",
+      "register": "guttural",
+      "aliases": [],
+      "count": 21,
+      "note": "\\NAME[] speaker"
+    },
+    "神父": {
+      "en": "Priest",
+      "gender": "male",
+      "role": "clergy",
+      "register": "pious",
+      "aliases": [],
+      "count": 20,
+      "note": "\\NAME[] speaker"
+    },
+    "男１": {
+      "en": "Man 1",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 20,
+      "note": "\\NAME[] speaker"
+    },
+    "地獄の調教人": {
+      "en": "Hell's Trainer",
+      "gender": "unknown",
+      "role": "monster / tormentor",
+      "register": "cold",
+      "aliases": [],
+      "count": 20,
+      "note": "\\NAME[] speaker"
+    },
+    "酔っ払い": {
+      "en": "Drunk",
+      "gender": "male",
+      "role": "tavern NPC",
+      "register": "slurred",
+      "aliases": [],
+      "count": 19,
+      "note": "\\NAME[] speaker"
+    },
+    "子分": {
+      "en": "Underling",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 19,
+      "note": "\\NAME[] speaker"
+    },
+    "城主": {
+      "en": "Castellan",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 19,
+      "note": "\\NAME[] speaker"
+    },
+    "村の中年": {
+      "en": "Middle-Aged Villager",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 18,
+      "note": "\\NAME[] speaker"
+    },
+    "女スリ師": {
+      "en": "Female Pickpocket",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 18,
+      "note": "\\NAME[] speaker"
+    },
+    "兄貴": {
+      "en": "Boss",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 17,
+      "note": "\\NAME[] speaker"
+    },
+    "コック": {
+      "en": "Cook",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 17,
+      "note": "\\NAME[] speaker"
+    },
+    "戦士": {
+      "en": "Warrior",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 17,
+      "note": "\\NAME[] speaker"
+    },
+    "信徒": {
+      "en": "Believer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 17,
+      "note": "\\NAME[] speaker"
+    },
+    "魔剤士見習い": {
+      "en": "Apprentice Potion Mixer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 16,
+      "note": "\\NAME[] speaker"
+    },
+    "旅商人": {
+      "en": "Traveling Merchant",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 16,
+      "note": "\\NAME[] speaker"
+    },
+    "村娘": {
+      "en": "Village Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 14,
+      "note": "\\NAME[] speaker"
+    },
+    "城下町の飲んだくれ": {
+      "en": "Castle-Town Drunk",
+      "gender": "male",
+      "role": "tavern NPC",
+      "register": "slurred",
+      "aliases": [],
+      "count": 13,
+      "note": "\\NAME[] speaker"
+    },
+    "？？？": {
+      "en": "???",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 13,
+      "note": "\\NAME[] speaker"
+    },
+    "バーテン": {
+      "en": "Bartender",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 13,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男１": {
+      "en": "Village Man 1",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 13,
+      "note": "\\NAME[] speaker"
+    },
+    "牛頭": {
+      "en": "Ox-Head",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 13,
+      "note": "\\NAME[] speaker"
+    },
+    "馬頭": {
+      "en": "Horse-Head",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 13,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者２": {
+      "en": "Thug 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 12,
+      "note": "\\NAME[] speaker"
+    },
+    "調理場のおばちゃん": {
+      "en": "Kitchen Auntie",
+      "gender": "female",
+      "role": "castle cook",
+      "register": "warm, familiar",
+      "aliases": [],
+      "count": 11,
+      "note": "\\NAME[] speaker"
+    },
+    "村娘（メイド）": {
+      "en": "Village Girl (Maid)",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 11,
+      "note": "\\NAME[] speaker"
+    },
+    "マルコ": {
+      "en": "Marco",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 11,
+      "note": "\\NAME[] speaker"
+    },
+    "大臣": {
+      "en": "Minister",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 10,
+      "note": "\\NAME[] speaker"
+    },
+    "奴隷の少女": {
+      "en": "Slave Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 10,
+      "note": "\\NAME[] speaker"
+    },
+    "従業員": {
+      "en": "Employee",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 9,
+      "note": "\\NAME[] speaker"
+    },
+    "読書家": {
+      "en": "Bookworm",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 9,
+      "note": "\\NAME[] speaker"
+    },
+    "男２": {
+      "en": "Man 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 9,
+      "note": "\\NAME[] speaker"
+    },
+    "少女": {
+      "en": "Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 8,
+      "note": "\\NAME[] speaker"
+    },
+    "兵士": {
+      "en": "Soldier",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 8,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男５": {
+      "en": "Village Man 5",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 8,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男１": {
+      "en": "Noble Man 1",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 8,
+      "note": "\\NAME[] speaker"
+    },
+    "男３": {
+      "en": "Man 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 8,
+      "note": "\\NAME[] speaker"
+    },
+    "町人２": {
+      "en": "Townsperson 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 8,
+      "note": "\\NAME[] speaker"
+    },
+    "リザードナイト": {
+      "en": "Lizard Knight",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 8,
+      "note": "\\NAME[] speaker"
+    },
+    "バロン": {
+      "en": "Baron",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 8,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男３": {
+      "en": "Village Man 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 7,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男４": {
+      "en": "Village Man 4",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 7,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男６": {
+      "en": "Noble Man 6",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 7,
+      "note": "\\NAME[] speaker"
+    },
+    "ゴブリン２": {
+      "en": "Goblin 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 7,
+      "note": "\\NAME[] speaker"
+    },
+    "エインティン": {
+      "en": "Eintein",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 7,
+      "note": "\\NAME[] speaker"
+    },
+    "町人１": {
+      "en": "Townsperson 1",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 7,
+      "note": "\\NAME[] speaker"
+    },
+    "子分２号": {
+      "en": "Underling No. 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 6,
+      "note": "\\NAME[] speaker"
+    },
+    "ダボロス": {
+      "en": "Dabolos",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 6,
+      "note": "\\NAME[] speaker"
+    },
+    "町人７６８": {
+      "en": "Townsperson 768",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 6,
+      "note": "\\NAME[] speaker"
+    },
+    "怪しい男": {
+      "en": "Shady Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 5,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男２": {
+      "en": "Village Man 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 5,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男２": {
+      "en": "Noble Man 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 5,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男３": {
+      "en": "Noble Man 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 5,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男７": {
+      "en": "Noble Man 7",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 5,
+      "note": "\\NAME[] speaker"
+    },
+    "ゴブリン１": {
+      "en": "Goblin 1",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 5,
+      "note": "\\NAME[] speaker"
+    },
+    "ゴブリン３": {
+      "en": "Goblin 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 5,
+      "note": "\\NAME[] speaker"
+    },
+    "町人６０３": {
+      "en": "Townsperson 603",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 5,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク１": {
+      "en": "High Orc 1",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 5,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク２": {
+      "en": "High Orc 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 5,
+      "note": "\\NAME[] speaker"
+    },
+    "村の住人": {
+      "en": "Villager",
+      "gender": "unknown",
+      "role": "generic village NPC",
+      "register": "",
+      "aliases": [],
+      "count": 4,
+      "note": "\\NAME[] speaker"
+    },
+    "料理長": {
+      "en": "Head Chef",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 4,
+      "note": "\\NAME[] speaker"
+    },
+    "子分３号": {
+      "en": "Underling No. 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 4,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男９": {
+      "en": "Village Man 9",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 4,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男４": {
+      "en": "Noble Man 4",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 4,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男５": {
+      "en": "Noble Man 5",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 4,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者２０５": {
+      "en": "Thug 205",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 4,
+      "note": "\\NAME[] speaker"
+    },
+    "信徒１": {
+      "en": "Believer 1",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 4,
+      "note": "\\NAME[] speaker"
+    },
+    "信徒２": {
+      "en": "Believer 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 4,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク３": {
+      "en": "High Orc 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 4,
+      "note": "\\NAME[] speaker"
+    },
+    "小鬼１": {
+      "en": "Imp 1",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "店主": {
+      "en": "Shopkeeper",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男６": {
+      "en": "Village Man 6",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男３６": {
+      "en": "Village Man 36",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール１３": {
+      "en": "Troll 13",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男２２": {
+      "en": "Noble Man 22",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "ゴブリン４": {
+      "en": "Goblin 4",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "町人３": {
+      "en": "Townsperson 3",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "信徒３": {
+      "en": "Believer 3",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "信徒８０１": {
+      "en": "Believer 801",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "モンスター２": {
+      "en": "Monster 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "モンスター７": {
+      "en": "Monster 7",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 3,
+      "note": "\\NAME[] speaker"
+    },
+    "老人": {
+      "en": "Old Man",
+      "gender": "male",
+      "role": "generic elderly NPC",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "村の女性": {
+      "en": "Village Woman",
+      "gender": "female",
+      "role": "generic village NPC",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "オーク": {
+      "en": "Orc",
+      "gender": "male",
+      "role": "monster",
+      "register": "guttural",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "新米バロン兵": {
+      "en": "Rookie Baron Soldier",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "城下町の男性": {
+      "en": "Castle Town Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "忍": {
+      "en": "Ninja",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "捕われの女性達": {
+      "en": "Captive Women",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール３": {
+      "en": "Troll 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール４": {
+      "en": "Troll 4",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール４４": {
+      "en": "Troll 44",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール６３": {
+      "en": "Troll 63",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男９": {
+      "en": "Noble Man 9",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男１０": {
+      "en": "Noble Man 10",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "男４": {
+      "en": "Man 4",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "ゴブリン５": {
+      "en": "Goblin 5",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "ゴブリン７": {
+      "en": "Goblin 7",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者３": {
+      "en": "Thug 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者２０３": {
+      "en": "Thug 203",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者２０４": {
+      "en": "Thug 204",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者２０６": {
+      "en": "Thug 206",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "信徒４": {
+      "en": "Believer 4",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク４": {
+      "en": "High Orc 4",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク１２６": {
+      "en": "High Orc 126",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "バロン兵１": {
+      "en": "Baron Soldier 1",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "モンスター４": {
+      "en": "Monster 4",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "モンスター５": {
+      "en": "Monster 5",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "モンスター８": {
+      "en": "Monster 8",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 2,
+      "note": "\\NAME[] speaker"
+    },
+    "騎士団": {
+      "en": "Knights",
+      "gender": "unknown",
+      "role": "Eris's knight order, speaking in chorus",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "武器屋の奥さん": {
+      "en": "Weapon Shop Wife",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "魔導士": {
+      "en": "Mage",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "小鬼２": {
+      "en": "Imp 2",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "小鬼３": {
+      "en": "Imp 3",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "小鬼４": {
+      "en": "Imp 4",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "小鬼６": {
+      "en": "Imp 6",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "小鬼": {
+      "en": "Imp",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "小鬼７": {
+      "en": "Imp 7",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "小鬼８": {
+      "en": "Imp 8",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "奴隷少女": {
+      "en": "Slave Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "奴隷女性": {
+      "en": "Slave Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "女性": {
+      "en": "Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ドワーフ": {
+      "en": "Dwarf",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男Ｂ": {
+      "en": "Village Man B",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男７": {
+      "en": "Village Man 7",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男８": {
+      "en": "Village Man 8",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男２８": {
+      "en": "Village Man 28",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男１５": {
+      "en": "Village Man 15",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男２０": {
+      "en": "Village Man 20",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男３７": {
+      "en": "Village Man 37",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男３８": {
+      "en": "Village Man 38",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男１０": {
+      "en": "Village Man 10",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男１７": {
+      "en": "Village Man 17",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村の男１２": {
+      "en": "Village Man 12",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "審判": {
+      "en": "Referee",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ママ": {
+      "en": "Mama",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール８０": {
+      "en": "Troll 80",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール９１": {
+      "en": "Troll 91",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール２３": {
+      "en": "Troll 23",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "トロール７５": {
+      "en": "Troll 75",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "武闘家": {
+      "en": "Martial Artist",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男８": {
+      "en": "Noble Man 8",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "貴族の男２３": {
+      "en": "Noble Man 23",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ゴブリン６": {
+      "en": "Goblin 6",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ゴブリン８": {
+      "en": "Goblin 8",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "町人４": {
+      "en": "Townsperson 4",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "町人５": {
+      "en": "Townsperson 5",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者４": {
+      "en": "Thug 4",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者５": {
+      "en": "Thug 5",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ならず者６": {
+      "en": "Thug 6",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "信徒５": {
+      "en": "Believer 5",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "信徒９０４": {
+      "en": "Believer 904",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク５": {
+      "en": "High Orc 5",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク６": {
+      "en": "High Orc 6",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク７": {
+      "en": "High Orc 7",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク８": {
+      "en": "High Orc 8",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク９": {
+      "en": "High Orc 9",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク１０": {
+      "en": "High Orc 10",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク１２７": {
+      "en": "High Orc 127",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク１１": {
+      "en": "High Orc 11",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク１２": {
+      "en": "High Orc 12",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク１２８": {
+      "en": "High Orc 128",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク１３": {
+      "en": "High Orc 13",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "ハイオーク１４": {
+      "en": "High Orc 14",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "バロン兵２": {
+      "en": "Baron Soldier 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "モンスター１": {
+      "en": "Monster 1",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "モンスター６": {
+      "en": "Monster 6",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    },
+    "村人": {
+      "en": "Villager",
+      "gender": "unknown",
+      "role": "generic village NPC",
+      "register": "",
+      "aliases": [],
+      "count": 0,
+      "note": "pre-filled by hand"
+    },
+    "詐欺に遭ったじいさん": {
+      "en": "Swindled Old Man",
+      "gender": "male",
+      "role": "sidequest NPC",
+      "register": "",
+      "aliases": [],
+      "count": 0,
+      "note": "pre-filled by hand"
+    },
+    "エリス（村娘）": {
+      "en": "Eris (Village Girl)",
+      "gender": "female",
+      "role": "Eris disguised as a village girl",
+      "register": "",
+      "aliases": [],
+      "count": 0,
+      "note": "pre-filled by hand"
+    },
+    "バロン兵１・２": {
+      "en": "Baron Soldiers 1 & 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "count": 1,
+      "note": "\\NAME[] speaker"
+    }
+  },
+  "terms": {
+    "アンファンクアーマー": "Anfunk Armour",
+    "アンファンクアーマーＰ": "Anfunk Armour P",
+    "チャイナドレス": "China Dress",
+    "メイドドレス": "Maid Dress",
+    "巫女ドレス": "Shrine Maiden Dress",
+    "マジックドレス": "Magic Dress",
+    "シスタードレス": "Sister Dress",
+    "フィーラードレス": "Feeler Dress",
+    "ドレス": "dress",
+    "バロン": "Baron",
+    "王都バロン": "the Royal Capital of Baron",
+    "バロン城": "Baron Castle",
+    "コロン村": "Colon Village",
+    "マッスルーム": "Mussroom",
+    "レーゲンヘーレ": "Regenhere",
+    "エミリオン": "Emilion",
+    "デュッセルドルフ": "Dusseldorf",
+    "ジパング": "Zipang",
+    "鉄の騎士団": "the Iron Knights",
+    "騎士団": "the knight order",
+    "魔棺": "the Demon Coffin",
+    "結界": "barrier",
+    "聖水": "holy water",
+    "魔法薬": "magic potion",
+    "エクスカリバー（贋）": "Excalibur (Replica)",
+    "聖剣エクスカリバー": "the Holy Sword Excalibur",
+    "回想": "Recollection",
+    "周回プレイ": "New Game+",
+    "シルフェイド": "Sylpheid",
+    "有神": "Goddess",
+    "魔剤士": "Apothecary",
+    "魔気": "demonic aura"
+  },
+  "do_not_translate": []
+}

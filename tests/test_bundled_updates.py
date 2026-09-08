@@ -20,6 +20,23 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 # Shipped with tool updates from the git archive. Keep in sync with .gitignore
 # exceptions under data/ — ignored files never appear in update zips.
 _SHIPPED_DATA_FILES = (
+    "data/skills/game-translation/.gitignore",
+    "data/skills/game-translation/SKILL.md",
+    "data/skills/game-translation/references/glossary-and-prompts.md",
+    "data/skills/game-translation/scripts/check_tools.py",
+    "data/skills/game-translation/tools/Game Translation/GameMaker/vendor/manifest.json",
+    "data/skills/game-translation/tools/Game Translation/GameMaker/vendor/source-reference/LICENSE.txt",
+    "data/skills/game-translation/tools/Game Translation/Text QA and Glossary/build_vocab.py",
+    "data/skills/game-translation/tools/C++/Unreal/requirements.txt",
+    "data/skills/game-translation/tools/C++/Wolf/wolf_unpack/target/release/wolf_unpack.exe",
+    "data/skills/game-translation/tools/C++/Wolf/wolf_rpg_decode/target/release/wolf_rpg_decode.exe",
+    "data/skills/game-translation/tools/.NET/Il2CppDumper-ManualReg/Il2CppDumper/Libraries/Il2CppDummyDll.dll",
+    "data/skills/game-translation/tools/C++/Trois/tts_jp/pdh.dll",
+    "data/skills/game-translation/tools/Game Translation/Active Projects/Artesia (Bakin)/BakinTL/Program.cs",
+    "data/skills/game-translation/tools/Game Translation/Active Projects/KihoushiScarlet (Wolf)/images/oval.npy",
+    "data/skills/game-translation/tools/Game Translation/Reference Pipelines/SRPG Studio (Belphegor)/loosekit/probe.bin",
+    "data/skills/game-translation/tools/Game Translation/Reference Pipelines/RPG Maker MZ (Tropical Chase)/evidence/screens/results_panel_before_4_reported_102.png",
+    "data/skills/character_identity.md",
     "data/translation_contexts.json",
     "data/skills/system.md",
     "data/skills/project_setup.md",
@@ -102,50 +119,21 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
             with self.subTest(rel=rel):
                 self.assertFalse(UpdateThread.should_install(Path(rel)))
 
-    def test_preserves_archive_metadata_in_git_checkout(self):
+    def test_archive_metadata_tracks_checkout_type(self):
         from gui.main import UpdateThread
 
-        with tempfile.TemporaryDirectory() as raw:
-            root = Path(raw)
-            (root / ".git").mkdir()
-
-            self.assertFalse(
-                UpdateThread.should_install_to_root(
-                    Path(".git_archival.txt"),
-                    root,
+        for checkout in ("directory", "file", "archive"):
+            with self.subTest(checkout=checkout), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                if checkout == "directory":
+                    (root / ".git").mkdir()
+                elif checkout == "file":
+                    (root / ".git").write_text("gitdir: elsewhere\n", encoding="utf-8")
+                self.assertEqual(
+                    UpdateThread.should_install_to_root(Path(".git_archival.txt"), root),
+                    checkout == "archive",
                 )
-            )
-            self.assertTrue(
-                UpdateThread.should_install_to_root(Path("gui/main.py"), root)
-            )
-
-    def test_preserves_archive_metadata_with_git_file(self):
-        """Linked worktrees and submodules use a .git file, not a directory."""
-        from gui.main import UpdateThread
-
-        with tempfile.TemporaryDirectory() as raw:
-            root = Path(raw)
-            (root / ".git").write_text("gitdir: elsewhere\n", encoding="utf-8")
-
-            self.assertFalse(
-                UpdateThread.should_install_to_root(
-                    Path(".git_archival.txt"),
-                    root,
-                )
-            )
-
-    def test_installs_archive_metadata_outside_git_checkout(self):
-        from gui.main import UpdateThread
-
-        with tempfile.TemporaryDirectory() as raw:
-            root = Path(raw)
-
-            self.assertTrue(
-                UpdateThread.should_install_to_root(
-                    Path(".git_archival.txt"),
-                    root,
-                )
-            )
+                self.assertTrue(UpdateThread.should_install_to_root(Path("gui/main.py"), root))
 
 
 class UpdateThreadArchiveRootTests(unittest.TestCase):
@@ -280,13 +268,33 @@ class ShippedDataTrackingTests(unittest.TestCase):
                     "add a !.gitignore exception under data/ so tool updates include it",
                 )
 
-    def test_runtime_evaluation_prompts_are_gitignored(self):
+    def test_runtime_artifacts_are_gitignored(self):
+        skill = "data/skills/game-translation/"
+        paths = [
+            "log/evaluations/example-run/review_system_prompt.md",
+            *(skill + relative for relative in (
+                "tools/example/.env",
+                "tools/example/.env.local",
+                "tools/example/.api_key",
+                "tools/example/mistral_keys.txt",
+                "tools/example/.venv/lib/package.py",
+                "tools/example/__pycache__/tool.pyc",
+                "tools/example/node_modules/package/index.js",
+                "tools/example/bin/Debug/plugin.dll",
+                "tools/C++/Wolf/wolf_unpack/target/debug/wolf_unpack.exe",
+                "tools/C++/Wolf/wolf_unpack/target/release/deps/build.o",
+                "tools/C++/Unreal/python/polib.py",
+                "tools/C++/Trois/tts_jp_table.bin",
+                "tools/Game Translation/Active Projects/Artesia (Bakin)/BakinTL/BakinTL.exe",
+                "tools/Game Translation/Active Projects/Loccubus (RPG Maker MZ)/preparation/source_snapshot.zip",
+                "tools/Game Translation/Active Projects/Loccubus (RPG Maker MZ)/preparation/reports/content_exclusions.json",
+                "tools/Game Translation/Reference Pipelines/Unity IL2CPP (Hitonatsu)/images/out/TitleLogo.png",
+            )),
+        ]
         result = subprocess.run(
-            [
-                "git", "check-ignore", "--",
-                "log/evaluations/example-run/review_system_prompt.md",
-            ],
+            ["git", "check-ignore", "--stdin", "-z"],
             cwd=_REPO_ROOT,
+            input="\0".join(paths) + "\0",
             capture_output=True,
             text=True,
             check=False,
@@ -294,8 +302,9 @@ class ShippedDataTrackingTests(unittest.TestCase):
         self.assertEqual(
             result.returncode,
             0,
-            "runtime evaluation prompts must not be included by git add/archive",
+            "runtime output and private settings must not be included by git add/archive",
         )
+        self.assertEqual(set(result.stdout.strip("\0").split("\0")), set(paths))
 
 
 class SourceArchiveMetadataTests(unittest.TestCase):

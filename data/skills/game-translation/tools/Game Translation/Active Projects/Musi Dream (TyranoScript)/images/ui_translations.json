@@ -1,0 +1,35 @@
+{
+  "mode": "manual, offline; no translation API",
+  "records": [
+    {"id": 356, "path": "data/fgimage/default/ui_hint_kosuri.png", "source": "虫をクリックして 尻を割れ目に擦ろう", "target": "Click the bug to rub its rear against her slit.", "lines": ["Click the bug", "to rub its rear", "against her slit."]},
+    {"id": 357, "path": "data/fgimage/default/ui_hint_undress.png", "source": "ヒマリィを起こさず 服を脱がそう 服をクリック", "target": "Undress Himarii without waking her. Click her clothes.", "lines": ["Undress Himarii", "without waking her.", "Click her clothes"]},
+    {"id": 358, "path": "data/fgimage/default/ui_icon_danger.png", "source": "キケン", "target": "DANGER"},
+    {"id": 359, "path": "data/fgimage/default/ui_icon_hetare.png", "source": "ヘタレ", "target": "WIMP"},
+    {"id": 345, "path": "data/fgimage/default/ev_insert_explain.jpg", "blocks": [
+      {"source": "挿入ゲーム", "target": "INSERTION GAME"},
+      {"source": "ヒマリィの顔を見て、", "target": "Watch Himarii's face."},
+      {"source": "「挿れる」か「止まる」か判断せよ！", "target": "Choose \"Insert\" or \"Stop\"!"},
+      {"source": "判断ミスが続くとゲームオーバー！", "target": "Repeated mistakes = Game Over!"},
+      {"source": "８割以上挿入できてたらクリア！", "target": "Reach 80% insertion to clear!"},
+      {"source": "リロード", "target": "Reload"},
+      {"source": "挿れる", "target": "Insert"},
+      {"source": "止まる", "target": "Stop"},
+      {"source": "キケン", "target": "DANGER"},
+      {"source": "ヘタレ", "target": "WIMP"}
+    ]},
+    {"id": 17, "path": "data/bgimage/ev_insert_explain.jpg", "blocks": [
+      {"source": "挿入ゲーム", "target": "INSERTION GAME"},
+      {"source": "ヒマリィの顔を見て、", "target": "Watch Himarii's face."},
+      {"source": "「挿れる」か「止まる」か判断せよ！", "target": "Choose \"Insert\" or \"Stop\"!"},
+      {"source": "間違えると、危険度が上がります。一定以上になるとゲームオーバー。", "target": "Wrong choices raise danger. Too much danger means Game Over."},
+      {"source": "リロード", "target": "Reload"},
+      {"source": "挿れる", "target": "Insert"},
+      {"source": "止まる", "target": "Stop"},
+      {"source": "キケン", "target": "DANGER"}
+    ]},
+    {"id": 346, "path": "data/fgimage/default/ev_mission.jpg", "blocks": [
+      {"source": "ミッション", "target": "MISSION"},
+      {"source": "ネットの海に漂っている、ヒマリィの産卵動画を見つけてください。", "target": "Find Himarii's egg-laying video adrift in the sea of the internet."}
+    ]}
+  ]
+}

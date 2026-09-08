@@ -1,0 +1,131 @@
+[
+  {
+    "id": "CODE:12:53",
+    "source": "キャラクターが1回の攻撃で与えるダメージ量",
+    "translation": "The damage you deal with each attack.",
+    "source_numbers": [
+      "1"
+    ],
+    "target_numbers": [],
+    "review_reason": "1 attack is rendered as each attack; same per-attack quantity."
+  },
+  {
+    "id": "CODE:16:525",
+    "source": "遠謀#：「聖光柱」を二つ生成",
+    "translation": "Tactic #: Create 2 Holy Pillars.",
+    "source_numbers": [],
+    "target_numbers": [
+      "2"
+    ],
+    "review_reason": "Japanese numeral two is rendered as digit 2."
+  },
+  {
+    "id": "CODE:28:22",
+    "source": "カウントX：X秒経過するごとに1回効果を発生させる\n",
+    "translation": "Timer X: Activates once every X seconds.\n",
+    "source_numbers": [
+      "1"
+    ],
+    "target_numbers": [],
+    "review_reason": "1 activation is rendered as once."
+  },
+  {
+    "id": "CODE:28:33",
+    "source": "遠謀X：1戦闘中にX回発動、射程が0.2増加するごとに回数は+1される\n",
+    "translation": "Tactic X: Activates X times per battle; each +0.2 Range adds 1 activation.\n",
+    "source_numbers": [
+      "0.2",
+      "1",
+      "1"
+    ],
+    "target_numbers": [
+      "0.2",
+      "1"
+    ],
+    "review_reason": "1 battle is rendered as per battle; +0.2 Range and 1 added activation are retained."
+  },
+  {
+    "id": "CODE:28:88",
+    "source": "キル数X：X体の敵を倒すと1回効果が発生する\n",
+    "translation": "Kill Count X: Activates once for every X enemies defeated.\n",
+    "source_numbers": [
+      "1"
+    ],
+    "target_numbers": [],
+    "review_reason": "1 activation is rendered as once."
+  },
+  {
+    "id": "CODE:28:99",
+    "source": "跳弾：弾幕が敵に命中した後、さらに前方に1回跳弾し、[攻撃*0.5]のダメージを与える\n",
+    "translation": "Ricochet: On hit, bounces forward once for [Attack*0.5] damage.\n",
+    "source_numbers": [
+      "0.5",
+      "1"
+    ],
+    "target_numbers": [
+      "0.5"
+    ],
+    "review_reason": "1 bounce is rendered as once."
+  },
+  {
+    "id": "CODE:28:110",
+    "source": "破甲：1層ごとに目標の受けるダメージが25%増加する、重複可能\n",
+    "translation": "Armor Break: Damage taken +25% per stack. Multiple stacks can accumulate.\n",
+    "source_numbers": [
+      "1",
+      "25"
+    ],
+    "target_numbers": [
+      "25"
+    ],
+    "review_reason": "1 stack is rendered as per stack; 25% retained."
+  },
+  {
+    "id": "CODE:92:318",
+    "source": "「遠謀」系スキルが#％の確率で2回発生する",
+    "translation": "Tactic skills have a #% chance to activate twice.",
+    "source_numbers": [
+      "2"
+    ],
+    "target_numbers": [],
+    "review_reason": "2 activations are rendered as twice."
+  },
+  {
+    "id": "CODE:92:330",
+    "source": "「カウント」系スキルが#％の確率で2回発動する",
+    "translation": "Timer skills have a #% chance to activate twice.",
+    "source_numbers": [
+      "2"
+    ],
+    "target_numbers": [],
+    "review_reason": "2 activations are rendered as twice."
+  },
+  {
+    "id": "CODE:92:336",
+    "source": "スキル：#秒間、通常攻撃のダメージが2倍になる、クールダウン12秒",
+    "translation": "Skill: Double normal attack damage for # seconds. Cooldown: 12 seconds.",
+    "source_numbers": [
+      "12",
+      "2"
+    ],
+    "target_numbers": [
+      "12"
+    ],
+    "review_reason": "2x is rendered as Double."
+  },
+  {
+    "id": "CODE:92:369",
+    "source": "スキル：#回の攻撃の間攻撃速度が2倍、貫通ダメージが+25%される、クールダウン18秒",
+    "translation": "Skill: # attacks at double speed, +25% Piercing Damage. Cooldown: 18 sec.",
+    "source_numbers": [
+      "18",
+      "2",
+      "25"
+    ],
+    "target_numbers": [
+      "18",
+      "25"
+    ],
+    "review_reason": "2x is rendered as double."
+  }
+]

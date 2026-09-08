@@ -1,0 +1,1575 @@
+{
+  "meta": {},
+  "names": {
+    "アズサ": {
+      "en": "Azusa",
+      "gender": "female",
+      "role": "protagonist, third-year magic-academy student",
+      "register": "soft, hesitant, self-deprecating; calls herself ワタシ in katakana when she is dissociating",
+      "aliases": [],
+      "note": "Actors.json #1. Trapped in a time loop; must become Top Maginoir to escape. MessageAutoReplace draws her name in colour 2 wherever it appears in a message."
+    },
+    "ミリィ": {
+      "en": "Milly",
+      "gender": "female",
+      "role": "Azusa's senior and mentor at the academy",
+      "register": "warm, confident, teasing",
+      "aliases": [],
+      "note": "Actors.json #2. MessageAutoReplace draws her name in colour 18."
+    },
+    "ゲイル": {
+      "en": "Gale",
+      "gender": "male",
+      "role": "party member",
+      "register": "",
+      "aliases": [],
+      "note": "Actors.json #3"
+    },
+    "ミシェル": {
+      "en": "Michelle",
+      "gender": "female",
+      "role": "party member",
+      "register": "",
+      "aliases": [],
+      "note": "Actors.json #4"
+    },
+    "アルベール": {
+      "en": "Albert",
+      "gender": "male",
+      "role": "party member",
+      "register": "",
+      "aliases": [],
+      "note": "Actors.json #5"
+    },
+    "ケイシー": {
+      "en": "Casey",
+      "gender": "female",
+      "role": "party member",
+      "register": "",
+      "aliases": [],
+      "note": "Actors.json #6"
+    },
+    "エリオット": {
+      "en": "Elliot",
+      "gender": "male",
+      "role": "party member",
+      "register": "",
+      "aliases": [],
+      "note": "Actors.json #7"
+    },
+    "ローザ": {
+      "en": "Rosa",
+      "gender": "female",
+      "role": "party member",
+      "register": "",
+      "aliases": [],
+      "note": "Actors.json #8"
+    },
+    "学園生": {
+      "en": "Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ほうき": {
+      "en": "Broom",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "学園長": {
+      "en": "Principal",
+      "gender": "male",
+      "role": "head of the magic academy",
+      "register": "",
+      "aliases": [],
+      "note": "named speaker in code-101 parameters[4]"
+    },
+    "アクセサリーショップ": {
+      "en": "Accessory Shop",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "エルフ女性": {
+      "en": "Elf Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "男": {
+      "en": "Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "バニーちゃん": {
+      "en": "Bunny-chan",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "おっさん": {
+      "en": "Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ワニ（行為をするおじさん）": {
+      "en": "Crocodile Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ワニ行為をするおじさん": {
+      "en": "Crocodile Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "不審者": {
+      "en": "Suspicious Person",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "購買のお姉さん": {
+      "en": "Shop Lady",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "おじさん": {
+      "en": "Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "怪しいおじさん": {
+      "en": "Suspicious Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "女子": {
+      "en": "Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "男子": {
+      "en": "Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "女将": {
+      "en": "Proprietress",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "門番": {
+      "en": "Gatekeeper",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "カネアルジュニア": {
+      "en": "Kaneal Jr.",
+      "gender": "male",
+      "role": "Kaneal's son",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "取り巻き女子": {
+      "en": "Entourage Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "悟った老人": {
+      "en": "Enlightened Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "行き倒れおじさん": {
+      "en": "Collapsed Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "一般警備おじさん": {
+      "en": "General Security Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "フェニックス男子": {
+      "en": "Phoenix Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "フェニックス女子": {
+      "en": "Phoenix Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "職員": {
+      "en": "Staff Member",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "受付": {
+      "en": "Receptionist",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "女": {
+      "en": "Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "モブ": {
+      "en": "Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "魔人'花嫁泥棒'": {
+      "en": "Demon 'Bride Thief'",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "学年主任": {
+      "en": "Grade Supervisor",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ユニコーン教員": {
+      "en": "Unicorn Teacher",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ドラゴン教員": {
+      "en": "Dragon Teacher",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "フェニックス教員": {
+      "en": "Phoenix Teacher",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ドギー教員": {
+      "en": "Doggy Teacher",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "陽キャ": {
+      "en": "Popular Type",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "全裸": {
+      "en": "Naked Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ガキ": {
+      "en": "Brat",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ママ": {
+      "en": "Mom",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "たっくん": {
+      "en": "Takkun",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "盗賊": {
+      "en": "Thief",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "女学生": {
+      "en": "Schoolgirl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "女学生Ｂ": {
+      "en": "Schoolgirl B",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "時計": {
+      "en": "Clock",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "女子B": {
+      "en": "Girl B",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "食堂のおばちゃん": {
+      "en": "Cafeteria Lady",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "隣室女子": {
+      "en": "Girl Next Door",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "番台": {
+      "en": "Bathhouse Attendant",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "スポーツ男子": {
+      "en": "Sporty Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "母乳好き男子": {
+      "en": "Breast Milk Lover Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "妊婦好きの男子": {
+      "en": "Pregnant Woman Lover Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "赤ん坊": {
+      "en": "Baby",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ドラゴン学生": {
+      "en": "Dragon Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ドラゴン男子": {
+      "en": "Dragon Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ドラゴン女子": {
+      "en": "Dragon Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ユニコーン男子": {
+      "en": "Unicorn Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ユニコーン女子": {
+      "en": "Unicorn Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ユニコーン学生": {
+      "en": "Unicorn Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ドギー学生": {
+      "en": "Doggy Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ドギー女子": {
+      "en": "Doggy Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ドギー男子": {
+      "en": "Doggy Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "図書委員同期学生": {
+      "en": "Library Committee Classmate",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "図書委員男": {
+      "en": "Library Committee Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "保険医": {
+      "en": "School Nurse",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "用務員": {
+      "en": "Janitor",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "美術学生": {
+      "en": "Art Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "錬金工房": {
+      "en": "Alchemy Workshop",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "見習い": {
+      "en": "Apprentice",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "少女": {
+      "en": "Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "酔っ払い": {
+      "en": "Drunk",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "チャラオ": {
+      "en": "Flashy Guy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "スカウト": {
+      "en": "Scout",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ホームレス": {
+      "en": "Homeless Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "スラムの住人": {
+      "en": "Slum Resident",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "闇商人": {
+      "en": "Black Market Dealer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "下っ端": {
+      "en": "Underling",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "調整役": {
+      "en": "Coordinator",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "流れのヤクザ": {
+      "en": "Wandering Yakuza",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "催眠術師": {
+      "en": "Hypnotist",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "社長": {
+      "en": "President",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "チャラ男": {
+      "en": "Flashy Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ヤリチン": {
+      "en": "Fuckboy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "a boy who sleeps around; crude in the source, keep it crude"
+    },
+    "司会": {
+      "en": "Host",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "アナウンス": {
+      "en": "Announcement",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "パリピ女": {
+      "en": "Party Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "運営スタッフ": {
+      "en": "Operations Staff",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "司会者": {
+      "en": "Emcee",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ポットD": {
+      "en": "Pot D",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "カップル男女": {
+      "en": "Couple",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "店主": {
+      "en": "Shopkeeper",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "おばさん": {
+      "en": "Lady",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "サキュバス": {
+      "en": "Succubus",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "不審な男": {
+      "en": "Suspicious Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ハンター": {
+      "en": "Hunter",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "神主": {
+      "en": "Shrine Priest",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "強欲系男子": {
+      "en": "Greedy Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "カジノオーナー": {
+      "en": "Casino Owner",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "青鬼": {
+      "en": "Blue Ogre",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "クラスメイト": {
+      "en": "Classmate",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "魔人パティシエ": {
+      "en": "Demon Patissier",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "紫髪の少女": {
+      "en": "Purple-Haired Girl",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ドギー生徒": {
+      "en": "Doggy Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "奴隷女": {
+      "en": "Slave Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "カネアル": {
+      "en": "Kaneal",
+      "gender": "male",
+      "role": "wealthy man with a mansion (Map082)",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "雪女": {
+      "en": "Snow Woman",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ブラックサンタ": {
+      "en": "Black Santa",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "トップマギノワール": {
+      "en": "Top Maginoir",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "後輩": {
+      "en": "Junior",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "オークショニア": {
+      "en": "Auctioneer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "闇オークショニア": {
+      "en": "Black Market Auctioneer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "金持ちおじさん": {
+      "en": "Rich Old Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "金持ちおじさんＡ": {
+      "en": "Rich Old Man A",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "落札された少女Ａ": {
+      "en": "Auctioned Girl A",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "金持ちおじさんＢ": {
+      "en": "Rich Old Man B",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "落札された少女Ｂ": {
+      "en": "Auctioned Girl B",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "魔法警察": {
+      "en": "Magic Police",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ホームレスＡ": {
+      "en": "Homeless Man A",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ホームレスＣ": {
+      "en": "Homeless Man C",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "スラムの男B": {
+      "en": "Slum Man B",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "スラムの男A": {
+      "en": "Slum Man A",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "上客": {
+      "en": "Big Spender",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "狂った新郎": {
+      "en": "Bride Thief",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "MessageAutoReplace rewrites this to 花嫁泥棒 at draw time, so the English must be the English of THAT."
+    },
+    "モブ学生a": {
+      "en": "Student A",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "モブ学生c": {
+      "en": "Student C",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "キモオタ": {
+      "en": "Creepy Otaku",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "少年": {
+      "en": "Boy",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ボーカル": {
+      "en": "Vocalist",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "進行役": {
+      "en": "Moderator",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "観客": {
+      "en": "Audience",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "7位のギャル": {
+      "en": "7th Place Gal",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "母乳好き学生": {
+      "en": "Breast Milk Lover Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "母乳好き": {
+      "en": "Breast Milk Lover",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "カップル女": {
+      "en": "Girlfriend",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "カップル男": {
+      "en": "Boyfriend",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "リーダー格の不良": {
+      "en": "Delinquent Leader",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "取り巻きA": {
+      "en": "Entourage A",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "取り巻きB": {
+      "en": "Entourage B",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ミカ": {
+      "en": "Mika",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "保護した村人": {
+      "en": "Rescued Villager",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "村人": {
+      "en": "Villager",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "怪しい男": {
+      "en": "Suspicious Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ガラの悪い男達": {
+      "en": "Rough-Looking Men",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "リーダー": {
+      "en": "Leader",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "部下": {
+      "en": "Underling",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "オーナー": {
+      "en": "Owner",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "町民": {
+      "en": "Townsperson",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "子供": {
+      "en": "Child",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "母親": {
+      "en": "Mother",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "町民達": {
+      "en": "Townspeople",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "アズサ＆サキュバス": {
+      "en": "Azusa & Succubus",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "マッサージ師": {
+      "en": "Masseur",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "男子クラスメイト": {
+      "en": "Male Classmate",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "アズサ（オナホ）": {
+      "en": "Azusa (Onahole)",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "通りすがりの男": {
+      "en": "Passerby Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "同級生": {
+      "en": "Classmate",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "鬼": {
+      "en": "Ogre",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "魔人パティシエール": {
+      "en": "Demon Patissière",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "生徒": {
+      "en": "Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "生徒Ｂ": {
+      "en": "Student B",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "生徒Ｃ": {
+      "en": "Student C",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "客": {
+      "en": "Customer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "客Ｂ": {
+      "en": "Customer B",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "アズサ ゾクッ": {
+      "en": "Azusa (Shudder)",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "店長": {
+      "en": "Store Manager",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "女性客": {
+      "en": "Female Customer",
+      "gender": "female",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "図書委員の男": {
+      "en": "Library Committee Man",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "図書委員": {
+      "en": "Library Committee",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "体育会系": {
+      "en": "Athletic Type",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "男1": {
+      "en": "Man 1",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "男3": {
+      "en": "Man 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "男１": {
+      "en": "Man 1",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "男2": {
+      "en": "Man 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "先生": {
+      "en": "Teacher",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "男２": {
+      "en": "Man 2",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "男３": {
+      "en": "Man 3",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ユニコーン生徒": {
+      "en": "Unicorn Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "取り巻き": {
+      "en": "Entourage",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "生徒会役員": {
+      "en": "Student Council Officer",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "図書委員学生": {
+      "en": "Library Committee Student",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker nameplate (first line of a 401 run)"
+    },
+    "ドロシー": {
+      "en": "Dorothy",
+      "gender": "female",
+      "note": "named speaker in code-101 parameters[4]",
+      "aliases": []
+    },
+    "？？？": {
+      "en": "???",
+      "note": "the engine's own unknown-speaker placeholder - keep the three marks, do not name the character",
+      "aliases": []
+    }
+  },
+  "terms": {
+    "フェニックスクラス, クラスフェニックス": "Class Phoenix",
+    "ドラゴンクラス, クラスドラゴン": "Class Dragon",
+    "ユニコーンクラス, クラスユニコーン": "Class Unicorn",
+    "ドギークラス, クラスドギー": "Class Doggy",
+    "ヴァメリ, ヴァーミリオン": "Vermilion",
+    "花嫁泥棒": "Bride Thief",
+    "マギノワール": "Maginoir",
+    "トップマギノワール": "Top Maginoir",
+    "魔法学園": "magic academy",
+    "淫乱度": "Lewdness",
+    "貞操観念": "Chastity",
+    "羞恥心": "Shame",
+    "プライド": "Pride",
+    "ループ": "loop",
+    "ループ回数": "Loop Count",
+    "肉体の状態": "Physical Condition",
+    "精神状態": "Mental State",
+    "エッチ経験数": "Sex Count",
+    "オナニー回数": "Masturbation Count",
+    "フェラ経験数": "Blowjob Count",
+    "妊娠回数": "Pregnancy Count",
+    "処女を奪った相手": "Took Her Virginity",
+    "実績": "Achievements",
+    "エロ実績": "Ero Achievements",
+    "エンディング": "Endings",
+    "エロステータス": "Ero Status",
+    "モンスター図鑑": "Bestiary",
+    "オナホ": "onahole",
+    "ヤリチン": "Fuckboy",
+    "陰キャ": "gloomy loner",
+    "陽キャ": "popular kid",
+    "落ちこぼれ": "washout",
+    "エロシーン": "ero scene",
+    "既読": "already read",
+    "回想部屋": "Recollection Room",
+    "生徒会": "Student Council",
+    "購買": "school store",
+    "保健室": "nurse's office",
+    "用務員室": "janitor's room",
+    "女子寮": "girls' dormitory",
+    "男子寮": "boys' dormitory",
+    "大浴場": "public bath",
+    "錬金室": "alchemy lab",
+    "図書委員": "library committee member",
+    "学年主任": "year head",
+    "スラム": "slums",
+    "闇オークション": "black-market auction"
+  },
+  "do_not_translate": [
+    "右クリック",
+    "選択肢ヘルプ",
+    "テキスト",
+    "画像",
+    "ページ",
+    "初期化",
+    "左右",
+    "上下",
+    "透明度",
+    "普通",
+    "ドット",
+    "エロシーン終了"
+  ]
+}

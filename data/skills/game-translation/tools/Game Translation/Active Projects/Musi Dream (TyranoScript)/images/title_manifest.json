@@ -1,0 +1,52 @@
+{
+  "path": "data/bgimage/ev_title.jpg",
+  "source_sha256": "f3f68039aa61bed8b61dfe86474edbc5425e907d9b60e903f22780ca1f43501c",
+  "output_sha256": "ce1343a37ad6433e63fea11fcc7ab0f5b143da581d8fba74e72ce52cb6542496",
+  "width": 2880,
+  "height": 1620,
+  "mode": "RGB",
+  "source_format": "JPEG",
+  "output_format": "PNG",
+  "status": "rendered",
+  "reviewed": true,
+  "regions": [
+    {
+      "source": "虫ドリーム",
+      "target": "BUG DREAM",
+      "region": [
+        1574,
+        91,
+        2741,
+        480
+      ]
+    },
+    {
+      "source": "寝落ちYtuberとバズの夜",
+      "target": "A Sleeping Ytuber's Viral Night",
+      "region": [
+        1712,
+        493,
+        2519,
+        567
+      ]
+    }
+  ],
+  "notes": "Pristine sleeping heroine and colored star artwork preserved. Purple gradient lettering; shared white title/central-star halo and occluded upper subtitle border reconstructed. Lower frame and play icon retained.",
+  "qa": {
+    "changed_pixels": 354735,
+    "outside_edit_mask_changes": 0,
+    "ornament_changes": 0,
+    "erased_ink_pixels": 369410,
+    "donor_control_box": [
+      1440,
+      0,
+      2880,
+      70
+    ],
+    "donor_control_max_channel_difference": 2,
+    "subtitle_font": "Arial Bold",
+    "subtitle_size": 50,
+    "subtitle_width": 737.9375,
+    "visual_review": "Reviewed source/output and erased image at 2x; central subtitle arc inspected at 5x and removed. No residual Japanese or clipping. Colorful star pixels and pixels outside the declared edit mask unchanged."
+  }
+}

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <base href="{{GAME_BASE_URL}}">
+        <meta name="viewport" content="user-scalable=no">
+        <title>Runtime Image Dump</title>
+        <style>
+            body {
+                margin: 0;
+                background: #111;
+                color: #ddd;
+                font-family: Consolas, "Courier New", monospace;
+            }
+
+            main {
+                padding: 20px;
+            }
+
+            h1 {
+                margin: 0 0 12px;
+                font-size: 20px;
+                font-weight: 600;
+            }
+
+            #status {
+                margin-bottom: 12px;
+                color: #9fd;
+            }
+
+            #log {
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                font-size: 12px;
+                line-height: 1.45;
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <h1>Runtime Image Dump</h1>
+            <div id="status">Starting...</div>
+            <div id="log"></div>
+        </main>
+        <script type="text/javascript" src="{{RUNTIME_SCRIPT_URL}}"></script>
+    </body>
+</html>

@@ -1,0 +1,221 @@
+{
+  "meta": {
+    "game_jp": "コイン☆プッシー",
+    "game_en": "Coin Pussy",
+    "circle_jp": "くじら1%",
+    "circle_en": "Kujira 1%",
+    "honorifics": "KEEP Japanese honorifics (-chan, -san, -sama, -kun). The game leans on them: 受付ちゃん is the heroine's fan-nickname, and the guest girls are all -chan.",
+    "note": "Names are hand-locked from the game's own story text (EventData_Event_casino.csv) and the credits/profile panels, not model-inferred. Anything added by a later extract with an empty `en` gets filled by `tl.py run`'s names phase — review those before the text phase."
+  },
+  "names": {
+    "受付": {
+      "en": "Receptionist",
+      "gender": "female",
+      "role": "the heroine — reception staff at the casino 'Bunny & Honey', forced by the manager into being a bunny dealer for the paid 'Special Game'",
+      "register": "polite keigo (desu/masu) to customers, brittle and flustered underneath; parenthesised lines are inner monologue and drop the keigo entirely",
+      "aliases": [
+        "受付ちゃん",
+        "バニー"
+      ],
+      "note": "NAME BOX label — must stay short. Her profile: took the job without realising it was an adult venue, agreed only on condition she never wears a bunny suit; self-conscious about her big butt; wary of men after being groped on a train; can't refuse a direct request; needs the money for rent and student loans."
+    },
+    "受付ちゃん": {
+      "en": "Reception-chan",
+      "gender": "female",
+      "role": "the heroine's fan-nickname and later her porn-star stage name ('No.1女優 受付ちゃん')",
+      "register": "as 受付",
+      "aliases": [
+        "受付"
+      ],
+      "note": "Distinct from the bare 受付 name-box label on purpose: keep -chan wherever the source has it, because it is used as a brand/idol name."
+    },
+    "支配人": {
+      "en": "Manager",
+      "gender": "male",
+      "role": "the casino's manager — hammy showman who pushes the heroine into the bunny-dealer role and runs the broadcast",
+      "register": "loud, theatrical, over-familiar; catchphrase コラコラコラ～ッ！！！ → 'Now now nooow!!!'; calls her この娘 / 受付ちゃん",
+      "aliases": [
+        "支配人 "
+      ],
+      "note": "Also appears as the announcer voice in the Hscene CSV's Announce column."
+    },
+    "おじさん": {
+      "en": "Mister",
+      "gender": "male",
+      "role": "the player character and, in the crowd scenes, the generic older male patrons",
+      "register": "leering, familiar",
+      "note": "Where the source clearly means the crowd rather than the player, 'the old guys' / 'the geezers' reads better than the literal 'uncle'."
+    },
+    "出禁おじ": {
+      "en": "Banned Geezer",
+      "gender": "male",
+      "role": "a patron who has been barred from the venue",
+      "register": "crude, shameless"
+    },
+    "バニー": {
+      "en": "Bunny",
+      "gender": "female",
+      "role": "the bunny dealers, and the heroine's bunny persona",
+      "register": "n/a — used as a label",
+      "note": "NAME BOX label. バニーちゃん → 'Bunny-chan'; バニーディーラー → 'Bunny Dealer'."
+    },
+    "キュートちゃん": {
+      "en": "Cute-chan",
+      "gender": "female",
+      "role": "guest character — the cute one",
+      "register": "bubbly, sweet"
+    },
+    "おっとりちゃん": {
+      "en": "Mellow-chan",
+      "gender": "female",
+      "role": "guest character — the gentle, dozy one",
+      "register": "slow, soft, drawn-out"
+    },
+    "ギャルちゃん": {
+      "en": "Gyaru-chan",
+      "gender": "female",
+      "role": "guest character — the gyaru",
+      "register": "brash gyaru slang; -ssu, ちょ〜, マジ"
+    },
+    "クールちゃん": {
+      "en": "Cool-chan",
+      "gender": "female",
+      "role": "guest character — the cool, aloof one",
+      "register": "clipped, flat, unimpressed"
+    },
+    "ヤンデレちゃん": {
+      "en": "Yandere-chan",
+      "gender": "female",
+      "role": "guest character — the yandere",
+      "register": "sweet on the surface, possessive and unhinged underneath"
+    },
+    "夢乃ちか": {
+      "en": "Chika Yumeno",
+      "gender": "female",
+      "role": "voice actress (credits only)"
+    },
+    "まどのことり": {
+      "en": "Kotori Madono",
+      "gender": "female",
+      "role": "voice actress (credits only)"
+    },
+    "雲雀ゆい": {
+      "en": "Yui Hibari",
+      "gender": "female",
+      "role": "voice actress (credits only)"
+    },
+    "四方山みかん": {
+      "en": "Mikan Yomoyama",
+      "gender": "female",
+      "role": "voice actress (credits only)"
+    },
+    "浮藻くらげ": {
+      "en": "Kurage Ukimo",
+      "gender": "female",
+      "role": "voice actress (credits only)"
+    },
+    "くじら1%": {
+      "en": "Kujira 1%",
+      "gender": "unknown",
+      "role": "the developer circle (credits only)"
+    },
+    "実況アナウンサー": {
+      "en": "Announcer",
+      "gender": "male",
+      "role": "the live-broadcast play-by-play voice over the H-scenes (the Hscene CSV's Announce column) — the Manager working the crowd",
+      "register": "TV hype-man: shouty, delighted, crude, addresses the audience directly ('folks', 'ladies and gentlemen'), never the heroine's voice",
+      "note": "Not a name-box label — this speaker tag exists only to keep the narrator's register separate from the heroine's."
+    }
+  },
+  "terms": {
+    "コイン☆プッシー": "Coin Pussy",
+    "バニー＆ハニー": "Bunny & Honey",
+    "バニーディーラー": "Bunny Dealer",
+    "バニーちゃん": "Bunny-chan",
+    "スペシャルゲーム": "Special Game",
+    "コインプッシャー": "coin pusher",
+    "コイン": "Coin",
+    "ダークコイン": "Dark Coin",
+    "ダイヤ": "Diamond",
+    "ダイヤズ": "Diamonds",
+    "ジャックポットダイヤ": "Jackpot Diamond",
+    "レベルアップダイヤ": "Level-Up Diamond",
+    "レインボーダイヤ": "Rainbow Diamond",
+    "ゴールデンダイヤ": "Golden Diamond",
+    "ジャックポット": "Jackpot",
+    "ジャック": "Jackpot",
+    "弱点": "Weak Point",
+    "弱点攻め": "Weak Point",
+    "ブレイク": "Break",
+    "攻め力": "Power",
+    "連射力": "Fire Rate",
+    "回収力": "Catch Size",
+    "貯金力": "Payout",
+    "初期コイン": "Starting Coins",
+    "エイム": "Aim",
+    "アイテムズ": "Items",
+    "パワーアップ": "Power-Up",
+    "ワイロ": "Bribe",
+    "バイト": "Part-Time Job",
+    "思い出": "Memories",
+    "インタビュー": "Interview",
+    "字幕": "Subtitles",
+    "アナウンス": "Announcer",
+    "オノマトペ": "Onomatopoeia",
+    "お着換えモード": "Dress-Up Mode",
+    "コスチューム": "Costume",
+    "コスチェンジ": "Change Costume",
+    "背景チェンジ": "Change Background",
+    "撮影マップ切り替え": "Switch Photo Set",
+    "脱衣制限": "Undressing Limit",
+    "体液制限": "Fluids Limit",
+    "衣装カラー": "Outfit Colour",
+    "オートカメラ": "Auto Camera",
+    "固定カメラ": "Fixed Camera",
+    "女優プロフィール": "Actress Profile",
+    "出演作品": "Filmography",
+    "累計視聴": "Total Views",
+    "経験人数": "Partners",
+    "生中継": "Live Broadcast",
+    "生放送": "Live Broadcast",
+    "プレミアム生配信": "Premium Live Stream",
+    "チェキ": "Cheki",
+    "塩対応": "cold service",
+    "セリフ": "Line",
+    "シーン": "Scene",
+    "ステージ": "Stage",
+    "残りコイン": "Coins Left",
+    "最高コイン": "Best Coins",
+    "周目": "Loop",
+    "ゲストキャラクター": "Guest Character",
+    "声の出演": "Voice Cast",
+    "遊び方": "How to Play",
+    "動作設定": "Performance",
+    "画面モード": "Display Mode",
+    "画面解像度": "Resolution",
+    "パッド振動": "Pad Rumble",
+    "ギブアップ": "Give Up",
+    "タイトルへ": "To Title",
+    "ラストへ": "To Finale",
+    "肉便器": "cum dumpster",
+    "人間コンドーム": "human condom",
+    "オナペット": "jerk-off material",
+    "便女": "toilet girl",
+    "オナホ": "onahole",
+    "種付け": "breeding",
+    "中出し": "creampie",
+    "生中": "raw creampie",
+    "精飲": "cum-drinking",
+    "搾乳": "milking",
+    "乳しぼり": "milking",
+    "妊娠解禁": "pregnancy unlocked",
+    "失禁": "wetting herself",
+    "前戯": "Foreplay",
+    "ピストン": "Thrusting",
+    "ラッシュ": "Rush",
+    "絶頂": "Climax",
+    "追撃": "Follow-Up",
+    "フィニッシュ": "Finish",
+    "事後": "Afterglow"
+  }
+}

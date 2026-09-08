@@ -1,0 +1,20 @@
+{
+  "recorded": "2026-09-07",
+  "files": {
+    "assemble.py": "e773a899ab57ac4680738d08ad87e0e0105d7642791aae9846d21d5d45c890ca",
+    "BUILD.md": "b4e4e7cf98e3bbb87ef36a97fff7548806717e31ba0e5c9b83442ae88d113722",
+    "cold_smoke.ps1": "aeb93f4632b51d95d199a47ea8281df4ef4e03a86ba4509504a4bf31d001a33d",
+    "create_project.py": "436ac7aaa47af173ec30a76faa0b7c53f09af0ca6cf0f09227bb9c4b01b896c6",
+    "project_manifest.json": "30c3288e5d0e247becb5a57a2c8c7b6b07d40f92118aa1cbc9861a853463fb28",
+    "README.md": "b464c4ba81d42b5d65458e457a8b1eff2bb0b926acd1d9adb70f24e43fe0a5ba",
+    "repository.json": "3ec0397910e3b708f40e5814d7d541d5568b3a9553bb39aa8042831ff7ff97ec",
+    "verification.json": "f29c893e4cf81cda7f90e8cecf024fc6ee4d339a9a58357fd727841b6bc803f9",
+    "verification_prepare.json": "faf01d5a7c38860f963b0fc61c1d9ed5c56544930d0269ac8cbb349d1eadf4f3",
+    "verify_project.py": "9078fdac7bc6e7a32a27fe71aa864d23a16490f591d2faf96021c0c4e637e9eb",
+    "reports/cold_boot.json": "46d7bdb8872474918aff3a96bc7d9bc6ed10357b5b4ca74dc282fe1bd0957ecc",
+    "reports/cold_boot.png": "7faf0eac761f281364d375181d31d6cca7e5116c3d35644d94eec39deae96475"
+  },
+  "repository": "C:\\Users\\sw\\Desktop\\Projects\\tropical-chase-en",
+  "commit": "0efce2237f42061e75fbdd90eb1161976fca6d50",
+  "archive_sha256": "c857aa899584612c429d96112fd7489d0bfbdb0d584186173fd82588683d91a5"
+}

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "game": "Nightfall Princess",
+  "source_language": "ja",
+  "target_language": "en",
+  "phase": "preparation_only",
+  "source_sha256": "2c22ad3c7dd540f4e870c195935a206eeafc58665c458673c88c3acb9a5ab611",
+  "source_size": 153903396,
+  "engine": "GameMaker VM, bytecode 17",
+  "engine_version_note": "UTMT infers the 2023.8 feature level; the exact original compiler version is not established.",
+  "toolkit_path": "C:/Users/sw/Desktop/Tools/Game Translation/GameMaker",
+  "source_snapshot": "source/snapshot.json",
+  "raw_catalog": "source/catalog.raw.json",
+  "prepared_catalog": "catalog.prepared.json",
+  "token_patterns": ["\\r\\n|\\r|\\n", "#"],
+  "placeholder_policy": "Preserve every protected occurrence and its order. # may insert a number or an equipment target phrase. Displayed [Attack*0.5] formulas and explanatory X are not runtime placeholders.",
+  "typography": {
+    "punctuation": "Use straight ASCII quotation marks and apostrophes, hyphens and three periods. Use ASCII percent signs. Preserve protected line breaks.",
+    "reason": "All seven embedded fonts cover ordinary ASCII letters and punctuation. U+2014 and U+2019 are absent. No font modification is prepared.",
+    "width_policy": "Measure with actual font advances after translation; do not impose arbitrary character limits. Current scr_newline and merchant typewriter split at character boundaries and require English layout QA."
+  },
+  "workflow": {
+    "names_pass": "Skipped: hand-authored glossary owns all classified name records.",
+    "deduplication": "None at this preparation stage. Retain all instruction-site IDs and context. Repeated names share glossary spelling, not identity or description.",
+    "batching": "Keep each scene with its paired phase/alias context, all four merchant source records together, and each UI assembly together. Do not mix field instructions in a request.",
+    "technical_sites": "Exclude help lookup needles from free translation. Apply technical_overrides.json with matching visible terminology only during a later reviewed patch.",
+    "held_units": "Do not queue dormant help, the undisplayed merchant fourth record, or the isolated Holy Mark formula discrepancy until their recorded review item is resolved.",
+    "patching": "Translation and reviewed flags remain unset. No archive output or deployment in this phase."
+  }
+}

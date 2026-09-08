@@ -1,0 +1,1560 @@
+{
+  "names": {
+    "ベルフェゴール": {
+      "en": "Belphegor",
+      "gender": "female",
+      "role": "Demon protagonist; succubus (淫魔) of Sloth and Lust who descends on Peor and corrupts it with aphrodisiacs",
+      "register": "Archaic lordly demon speech: わらわ, copula じゃ, sentence-ends のぅ/のじゃ; lewd ♥/♪ flourishes; teasing, superior, hedonistic",
+      "aliases": [
+        "ベル"
+      ],
+      "note": "speaker x389"
+    },
+    "ベル": {
+      "en": "Bel",
+      "gender": "female",
+      "role": "Short alias / familiar-form of Belphegor acting as Root's 'partner' (相棒). NOTE: in the partner persona the name-box speaks crude masculine slang (俺/だぜ), but it is Belphegor's mask — translate as 'Bel'",
+      "register": "As partner: crude casual masculine slang, 俺, だぜ/じゃねぇか, teasing and blunt",
+      "aliases": [
+        "ベルフェゴール"
+      ],
+      "note": "speaker x342"
+    },
+    "ルート": {
+      "en": "Root",
+      "gender": "male",
+      "role": "Player-commander of Peor Kingdom forces; pupil of Ritz Klein; inherits the Guardian Knight name; later the Chancellor's officer",
+      "register": "Protagonist commander; addressed as ルート殿 / ルート・エルロン; neutral resolute register",
+      "aliases": [
+        "ルート・エルロン"
+      ],
+      "note": "speaker x19"
+    },
+    "エシュロット": {
+      "en": "Eschalot",
+      "gender": "female",
+      "role": "Princess of Light (Peor Kingdom); heroine of the Princess arc; full name Eschalot Peor",
+      "register": "Energetic tomboyish princess; first-person あたし; cheerful, exclamatory (任せろ!/よぉし!); earnest and kind",
+      "aliases": [
+        "エシュロット・ペオル",
+        "エシュロット王女"
+      ],
+      "note": "speaker x582"
+    },
+    "アナスタシア": {
+      "en": "Anastasia",
+      "gender": "female",
+      "role": "Strategist/aide to Eschalot and Root; former research-lab test subject",
+      "register": "Polished formal military adviser; keigo (です/ます); apologizes humbly (申し訳ありません); tactical briefings",
+      "aliases": [],
+      "note": "speaker x595"
+    },
+    "フィー": {
+      "en": "Fee",
+      "gender": "female",
+      "role": "Fairy scout/recon in Root's unit; calls Root 隊長",
+      "register": "Energetic casual; signature sentence-ender っス on nearly every line; breathless reports",
+      "aliases": [],
+      "note": "speaker x337"
+    },
+    "ベンアミ": {
+      "en": "Ben-Ami",
+      "gender": "unknown",
+      "role": "Peor Kingdom Chancellor (闇の宰相 / Dark Chancellor arc); of House Elam; also a battle tutorial/advisor voice. Daughter of Eglon Elam",
+      "register": "Two modes: (a) helpful tactical advisor, polite ～よ/～の; (b) solemn archaic ritual command speech (汝/命じる). First-person 私",
+      "aliases": [
+        "ベンアミ・エラム"
+      ],
+      "note": "speaker x455"
+    },
+    "グレゴール": {
+      "en": "Gregor",
+      "gender": "male",
+      "role": "Veteran fire mage allied with Eschalot's party",
+      "register": "Boastful theatrical elder-mage; ぞ/ですぞ, grandiose third-person self-reference 'このグレゴール', long-winded",
+      "aliases": [],
+      "note": "speaker x29"
+    },
+    "パルパ": {
+      "en": "Palpa",
+      "gender": "female",
+      "role": "House Brain; defector/rebel commander against the Chancellor (former enhanced-slave); elder sister of Loewen; travels with Meruu",
+      "register": "Stoic formal officer; 私; measured, no feminine sentence-final particles; calm, perceptive (senses souls/闇)",
+      "aliases": [
+        "パルパ・ブライン"
+      ],
+      "note": "speaker x253"
+    },
+    "ローエン": {
+      "en": "Loewen",
+      "gender": "male",
+      "role": "House Brain; Griffon Knight; younger brother of Palpa; seeks to defeat her to restore the family name",
+      "register": "Knightly/formal in public (私/～ます) but slips to 僕 and anguished cries toward his sister; honor-driven",
+      "aliases": [
+        "ローエン・ブライン"
+      ],
+      "note": "speaker x14"
+    },
+    "メルゥ": {
+      "en": "Meruu",
+      "gender": "female",
+      "role": "Childlike Giant-Beast-race (巨獣族) girl; travels with Palpa",
+      "register": "Very childish, third-person self-reference (メルゥ…), playful onomatopoeia (がおーっ); innocent, energetic",
+      "aliases": [],
+      "note": "speaker x165"
+    },
+    "リタ": {
+      "en": "Rita",
+      "gender": "female",
+      "role": "Corrupted daughter-figure fanatically devoted to 'Father' (the Chancellor)",
+      "register": "Clinging girlish; cries お父様/おとうさまぁ♥; broken aroused speech",
+      "aliases": [],
+      "note": "speaker x11"
+    },
+    "ルツ": {
+      "en": "Lutz",
+      "gender": "unknown",
+      "role": "Shield-tank unit; childlike great-shield bearer; abducted daughter of Ritz Klein",
+      "register": "Very childlike fragmentary speech with ellipses; third-person self-reference (ルツ); calls ぱぱぁ; no gendered markers",
+      "aliases": [],
+      "note": "speaker x104"
+    },
+    "サーシャ": {
+      "en": "Sasha",
+      "gender": "female",
+      "role": "Village girl of Ashdod rescued from the research lab; joins to be cured",
+      "register": "Timid country girl; first-person わたし; stutters and frightened っ! enders; polite ます",
+      "aliases": [],
+      "note": "speaker x11"
+    },
+    "ルクス": {
+      "en": "Lux",
+      "gender": "male",
+      "role": "King of the Aibak Empire; ally of Root; husband of the 'Eight Wives'",
+      "register": "Dignified polite royal/commander speech; です/ます; composed leader",
+      "aliases": [
+        "ルクス王"
+      ],
+      "note": "speaker x19"
+    },
+    "スミス": {
+      "en": "Smith",
+      "gender": "male",
+      "role": "Villager of Musod Village; volunteers as the village's representative",
+      "register": "Polite earnest commoner; 俺/私; deferential 〜です/ます; timid but brave",
+      "aliases": [],
+      "note": "speaker x24"
+    },
+    "ミレーズ": {
+      "en": "Milles",
+      "gender": "male",
+      "role": "Devoted close attendant/bodyguard (近侍) and Imperial Guard officer serving Lady Ben-Ami",
+      "register": "Stern self-effacing retainer; 私; blunt resolute declarations; arrogant/brutal toward others (ふん/貴様); fanatically loyal",
+      "aliases": [
+        "ミレーズ・ビアン"
+      ],
+      "note": "speaker x89"
+    },
+    "ガストン": {
+      "en": "Gaston",
+      "gender": "male",
+      "role": "Army captain serving under Palpa; pious commander (swears by Baal-Peor)",
+      "register": "Polite dutiful subordinate; 私; formal 〜ます/ございます; honorable, self-reproaching",
+      "aliases": [],
+      "note": "speaker x50"
+    },
+    "ガストン・ティーチ": {
+      "en": "Gaston Teach",
+      "gender": "male",
+      "role": "Measured honorable officer who looks after Gina and Nil; warns Root about breaking his oath; a 'good' kingdom-army commander",
+      "register": "Calm thoughtful polite; 私/～ます・ね; rueful and principled",
+      "aliases": [
+        "ガストン・テーチ"
+      ],
+      "note": "speaker x3"
+    },
+    "バラム・グラング": {
+      "en": "Balam Grang",
+      "gender": "male",
+      "role": "Kingdom-army general (将軍); vain cruel aristocrat who authorizes massacres of civilians",
+      "register": "Pompous condescending nobleman; 私 + ですねぇ/ですよ; smug ほっほっほ laugh; obsessed with his armor and rank",
+      "aliases": [
+        "バラム",
+        "バラム将軍"
+      ],
+      "note": "speaker x222"
+    },
+    "ギーガ・ショット": {
+      "en": "Giga Shot",
+      "gender": "male",
+      "role": "Kingdom-army Shooter-corps commander under General Balam; comic coward",
+      "register": "Blustering cowardly officer; 私; shifts blame; constant 胃痛 stomach-ulcer gags (痛たたた)",
+      "aliases": [],
+      "note": "speaker x24"
+    },
+    "ニーゲル・ダット": {
+      "en": "Nigel Datt",
+      "gender": "male",
+      "role": "Enemy knight/archer under General Balam; elitist who hunts commoners",
+      "register": "Haughty self-righteous; 我が; sneers at 平民/愚民; grandiose even while fleeing",
+      "aliases": [],
+      "note": "speaker x20"
+    },
+    "ウラゴ・マスリー": {
+      "en": "Urago Masuli",
+      "gender": "male",
+      "role": "Kingdom-army officer; obsequious subordinate flattering the General",
+      "register": "Extremely sycophantic ultra-formal ですなぁ/でございます; fawning",
+      "aliases": [],
+      "note": "speaker x140"
+    },
+    "キル・ザンシュ": {
+      "en": "Kiru Zanshu",
+      "gender": "male",
+      "role": "Bloodthirsty soldier under General Balam; relishes slaughtering villagers",
+      "register": "Rough thug; 俺/てめぇ; trailing ……; crude 〜じゃねぇ/〜ぜ; sadistic",
+      "aliases": [],
+      "note": "speaker x22"
+    },
+    "ゴートス・ケイプ": {
+      "en": "Gotos Cape",
+      "gender": "male",
+      "role": "Kingdom-army Lance-unit commander; bitter at being used as bait by Urago",
+      "register": "Hot-blooded officer; barks orders (全軍、突撃せよ！); curses rivals; defiant last-stand bravado",
+      "aliases": [],
+      "note": "speaker x13"
+    },
+    "バイゴウ": {
+      "en": "Baigou",
+      "gender": "male",
+      "role": "Veteran subordinate serving Chancellor Ben-Ami; rivals the newcomer Balam",
+      "register": "Effeminate okama camp speech: わね/わよ/のよ, 〜ちゃん, drawn-out ねぇ, hearts ♥; catty and gossipy (male character with affected camp voice)",
+      "aliases": [],
+      "note": "speaker x62"
+    },
+    "バイゴウ・カーン": {
+      "en": "Baigou Khan",
+      "gender": "female",
+      "role": "Enemy slaver commander serving Ben-Ami; leads enhanced-slave troops",
+      "register": "Sultry languid older woman; あたし/私; feminine わよ/わね/頂戴; teasing seductive ♥/♪",
+      "aliases": [],
+      "note": "speaker x9"
+    },
+    "カシーナ": {
+      "en": "Kashina",
+      "gender": "female",
+      "role": "Probability-obsessed tactician/advisor; delivers combat-mechanics tutorials, later defects to the Chancellor",
+      "register": "Calm analytical polite (です/でしょう); 私; philosophizes about probability 'converging'",
+      "aliases": [],
+      "note": "speaker x6"
+    },
+    "エグロン・エラム": {
+      "en": "Eglon Elam",
+      "gender": "male",
+      "role": "Chancellor Ben-Ami's father (House Elam); schemes to make his child the sovereign",
+      "register": "Grasping elder; archaic ワシ; imperious commands; ambition-driven",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "クロッゾ・ゾルゲ": {
+      "en": "Crozzo Sorge",
+      "gender": "male",
+      "role": "Brash mercenary-type enemy commander; fields a beast-knight unit (Crozzo Squad); commands Loewen",
+      "register": "Cocky rough bravado; 俺; 〜じゃねぇか/〜ぜ/くっくっく; thrill-seeking, festival (祭り) metaphors for battle",
+      "aliases": [
+        "カロッゾ・ゾルゲ"
+      ],
+      "note": "speaker x22"
+    },
+    "ポルク": {
+      "en": "Polk",
+      "gender": "male",
+      "role": "Loyal soldier/ally serving Root and Eschalot; archer/griffon-rider; formerly an enhanced slave",
+      "register": "Earnest military-cadet speech; signature tic 〜であります; refers to 自分; eager and devoted",
+      "aliases": [
+        "ポルク隊長"
+      ],
+      "note": "speaker x22"
+    },
+    "アルベール": {
+      "en": "Albert",
+      "gender": "male",
+      "role": "Lancer soldier; devoted subordinate of Captain Polk; reinforcement from Elron",
+      "register": "Earnest hot-blooded grunt; 〜だ/〜かよ/くそっ; eager to please his captain",
+      "aliases": [],
+      "note": "speaker x15"
+    },
+    "カインズ": {
+      "en": "Kainz",
+      "gender": "male",
+      "role": "Allied soldier in Polk's/Eschalot's unit; level-headed comrade of Albert",
+      "register": "Plain rough-soldier; だ plain forms; terse battlefield reports",
+      "aliases": [],
+      "note": "speaker x13"
+    },
+    "ロンメル": {
+      "en": "Rommel",
+      "gender": "male",
+      "role": "Elron-army officer/strategist serving under Eschalot; his wife is corrupted",
+      "register": "Crisp competent staff-officer; です/ます; tactical exposition; 殿/様 honorifics for allies",
+      "aliases": [
+        "ロンメル将軍"
+      ],
+      "note": "speaker x52"
+    },
+    "テラ・エルロン": {
+      "en": "Tera Elron",
+      "gender": "male",
+      "role": "Veteran general of House Elron; Root's father",
+      "register": "Dignified elder commander; archaic ワシ; hearty はっはっは laugh; bombastic",
+      "aliases": [],
+      "note": "speaker x52"
+    },
+    "リッツ・クライン": {
+      "en": "Ritz Klein",
+      "gender": "male",
+      "role": "Slain rebel-army captain; Root's former mentor; fought to recover his abducted daughter Lutz",
+      "register": "Gruff veteran officer; ワシ; blunt resolute (容赦はせぬぞ); dying lines fragment into katakana",
+      "aliases": [],
+      "note": "speaker x53"
+    },
+    "メイ": {
+      "en": "Mei",
+      "gender": "female",
+      "role": "Strategist (軍師) serving Lux; defends the people of Aibak",
+      "register": "Calm polite military advisor; 私/です・ます; respectful toward Lux",
+      "aliases": [],
+      "note": "speaker x10"
+    },
+    "ミオル": {
+      "en": "Mioru",
+      "gender": "female",
+      "role": "Aibak-side holy purifier (Priest/healer) who senses dark 'dominion' magic; also cooks",
+      "register": "Polite gentle (私/～ます) with emotional ～わ in alarm; pious",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "セィラ": {
+      "en": "Seira",
+      "gender": "female",
+      "role": "Aibak knight risen from slavery; field officer under Mei; protects the people",
+      "register": "Composed polite officer; 私; measured 〜ます; principled and resolute",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "カイ": {
+      "en": "Kai",
+      "gender": "male",
+      "role": "Undead/revenant warrior of the Aibak Empire who rises to shield the nation's people",
+      "register": "Stern archaic warrior; 私/我/我ら; ～ぞ/～ぬ; dignified and self-sacrificing",
+      "aliases": [],
+      "note": "speaker x6"
+    },
+    "サウド": {
+      "en": "Saud",
+      "gender": "male",
+      "role": "Knight of the Aibak Empire; enslaved warrior longing to be a true knight",
+      "register": "Honor-bound knightly creed; 俺; repeated 騎士は…！; earnest, self-sacrificing, anguished",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "ウノ": {
+      "en": "Uno",
+      "gender": "male",
+      "role": "Captain of a swordsman corps (剣士部隊); seasoned civil-war veteran",
+      "register": "Terse cool soldier; 私/我ら; clipped trailing ……; blunt tactical lines",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "グロリア": {
+      "en": "Gloria",
+      "gender": "male",
+      "role": "Devoted knight-commander serving Lux; leads a unit in the inter-nation mock war",
+      "register": "Stern martial knight; 私 with masculine な/ぞ enders; zealous loyalty; bloodthirsty battle cries",
+      "aliases": [],
+      "note": "speaker x8"
+    },
+    "ポチ": {
+      "en": "Pochi",
+      "gender": "male",
+      "role": "Aibak Empire transport-unit captain; former slave trader; loyal to Lux",
+      "register": "Rough hearty; 俺; coarse commander barks (おらおら、急げ急げ！); gruff but devoted",
+      "aliases": [],
+      "note": "speaker x8"
+    },
+    "ネス": {
+      "en": "Nes",
+      "gender": "unknown",
+      "role": "Aibak Empire warrior fiercely loyal to 'Master' (ダンナ様, i.e. Lux); follower of Gloria",
+      "register": "Broken primitive katakana; third-person self-reference (ネス); fierce, devoted; no gendered markers",
+      "aliases": [],
+      "note": "speaker x6"
+    },
+    "ウォルガード": {
+      "en": "Wolgard",
+      "gender": "unknown",
+      "role": "Aibak shield/tank warrior; proud archer who guards allies",
+      "register": "Stately self-sacrificing; 私; formal 〜ましょう; speaks of being everyone's shield; gender ambiguous (leans male)",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "マディン": {
+      "en": "Madin",
+      "gender": "male",
+      "role": "Former slave turned soldier under Lux; mock-battle opponent",
+      "register": "Rough macho; 俺/俺ぁ; ぜ/ねぇ; defiant ex-slave bravado",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "ハリエット": {
+      "en": "Harriet",
+      "gender": "female",
+      "role": "Rough female warrior/priestess under Lux; faith follows whoever saves her",
+      "register": "Tomboyish crude; female-rough あたい (also あたし); masculine slang enders (だぜ/ねぇんだよ); brash",
+      "aliases": [],
+      "note": "speaker x6"
+    },
+    "ティロ": {
+      "en": "Tiro",
+      "gender": "female",
+      "role": "One of Lux's 'Eight Wives' (八夫人); devoted, anxious follower",
+      "register": "Timid eager-to-please; わたし; ～です/ますっ with stammers; bird-like ピイイィィ cry",
+      "aliases": [],
+      "note": "speaker x8"
+    },
+    "サラ": {
+      "en": "Sara",
+      "gender": "female",
+      "role": "Former slave, now one of the consorts (后妃); tough capable fighter; mentors Iko",
+      "register": "Brash tough; 私 + わよ/わ/かしら; blunt and sardonic",
+      "aliases": [],
+      "note": "speaker x7"
+    },
+    "イコ": {
+      "en": "Iko",
+      "gender": "female",
+      "role": "Young girl unit; devoted little 'sister' figure to 'onii-chan' (Root)",
+      "register": "Childish; third-person self-reference (イコ); calls others おにーちゃん; eager",
+      "aliases": [],
+      "note": "speaker x8"
+    },
+    "ティラ": {
+      "en": "Tira",
+      "gender": "female",
+      "role": "Village defender protecting a hard-won safe haven; emotionally tied to Tiro",
+      "register": "Resolute but soft polite-female; ～ます/見せます; determined, emotional",
+      "aliases": [],
+      "note": "speaker x3"
+    },
+    "オーエン": {
+      "en": "Owen",
+      "gender": "male",
+      "role": "General of Grifford (グリフォード国); ally of Emperor Lux",
+      "register": "Formal officer; declarative; loyal resolute commander tone",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "シャオ": {
+      "en": "Shao",
+      "gender": "female",
+      "role": "Cheerful artillery/cannon operator unit",
+      "register": "Bubbly hyper girl; third-person 'シャオちゃん'; です/ますよぉ with drawn vowels; sound-effect exclamations",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "ラズィーヤ": {
+      "en": "Raziya",
+      "gender": "female",
+      "role": "A mother (queen/dragon-bound figure) assessing her son's allies; once fused with the Dragon of Domination",
+      "register": "Dignified maternal; 私 + わ/のよ; regal yet warm; speaks of 母親の性 and atoning for her sin",
+      "aliases": [],
+      "note": "speaker x6"
+    },
+    "バアル・ペオル": {
+      "en": "Baal-Peor",
+      "gender": "female",
+      "role": "Fallen Earth-Mother goddess of Peor (堕天); seeks atonement by serving humanity; longs for Meruu",
+      "register": "Archaic sorrowful divine speech; わらわ; ～じゃ/おる; penitent and solemn",
+      "aliases": [
+        "地母神バアル・ペオル"
+      ],
+      "note": "speaker x8"
+    },
+    "淫魔": {
+      "en": "Succubus (ancestress)",
+      "gender": "female",
+      "role": "Ancient succubus / demonic ancestress (lineage of Baal-Peor); grants Root's bloodline power and aphrodisiacs. NOTE: when used as a class label render 'Succubus'",
+      "register": "Archaic crone; わらわ; ～じゃ/おる; lecherous chuckle ホッホッホ♥; mocking, lewd, grandmotherly-superior",
+      "aliases": [],
+      "note": "speaker x44"
+    },
+    "コルナ": {
+      "en": "Koruna",
+      "gender": "female",
+      "role": "Recruitable enhanced-slave Shooter unit; pathologically shy of being approached",
+      "register": "Timid panicky; 私; stammering self-deprecating; pleading",
+      "aliases": [],
+      "note": "speaker x11"
+    },
+    "ダイアナ": {
+      "en": "Diana",
+      "gender": "female",
+      "role": "Thief / recruitable enhanced-slave; cynical escapee who aids the princess",
+      "register": "Brash streetwise; first-person あたい/あたし; rough 〜さね/〜だよ; cynical, self-mocking",
+      "aliases": [],
+      "note": "speaker x9"
+    },
+    "クレタ": {
+      "en": "Kreta",
+      "gender": "female",
+      "role": "Mage of Marge; volunteer enhanced-slave with overpowering magic; recruitable",
+      "register": "Haughty refined lady; わたくし; coquettish うふふ♥; playful, self-assured",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "アリア": {
+      "en": "Aria",
+      "gender": "female",
+      "role": "Village girl of Musod, daughter of the village chief; ex-enhanced-slave who joins",
+      "register": "Bubbly panicky; 私; flustered exclamations; feminine の？/よ enders",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "ルビー": {
+      "en": "Ruby",
+      "gender": "female",
+      "role": "Kansai-dialect merchant-priest (Priest class); profit-minded healer/support",
+      "register": "Heavy Kansai-ben (やろ/やで/しゃーない/～たるわ); brash money-minded but cheerful; first-person うち",
+      "aliases": [],
+      "note": "speaker x184"
+    },
+    "レミル": {
+      "en": "Remil",
+      "gender": "female",
+      "role": "Knight serving Root who delivers map/tutorial tips; pious ex-thief tempted by greed",
+      "register": "Polite tutorial voice (です/ます) with self-scolding bursts of piety; 私",
+      "aliases": [],
+      "note": "speaker x13"
+    },
+    "フォックス": {
+      "en": "Fox",
+      "gender": "female",
+      "role": "Self-proclaimed righteous bandit (義賊) who defends a village from invaders",
+      "register": "Cocky tomboyish outlaw; ～さね/～しな feminine-rough; swaggering, theatrical ('フォックス様')",
+      "aliases": [],
+      "note": "speaker x6"
+    },
+    "マリリン": {
+      "en": "Marilyn",
+      "gender": "female",
+      "role": "Trainee soldier (兵士見習い) in the kingdom army; flighty flirty rescue-ally",
+      "register": "Casual flirty; あたし; breezy ～わねぇ/でしょうが; comic mood swings; ogles cute girls",
+      "aliases": [],
+      "note": "speaker x7"
+    },
+    "アドミラ": {
+      "en": "Admira",
+      "gender": "female",
+      "role": "Predatory 'hunter'-type who collects cute girls; defiant captive",
+      "register": "Sultry predatory; ♥-laden ～のよ/わよ; teasing 'はいはい'; relishes hunting 'good girls'",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "ネーナ": {
+      "en": "Nena",
+      "gender": "female",
+      "role": "Enemy/rival ranged combatant (gunner/archer) who boasts of never missing",
+      "register": "Cutesy drawn-out vowels (外しませんよぉ/ついてないですぅ); playful then whiny when losing",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "ラメラ": {
+      "en": "Ramera",
+      "gender": "female",
+      "role": "Village-girl mage; fights in the mock-war then rages when her village is attacked",
+      "register": "Sharp-tongued young woman; feminine の？/ね enders; 私; furious at the demon",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "ニル": {
+      "en": "Nil",
+      "gender": "female",
+      "role": "Opportunistic mercenary looking to desert and loot; looked after by Gaston Teach",
+      "register": "Brassy mercenary; あたし; casual feminine enders (マシよ/だったの); panics crudely",
+      "aliases": [],
+      "note": "speaker x26"
+    },
+    "ジーナ": {
+      "en": "Gina",
+      "gender": "male",
+      "role": "Rebel/army soldier who panics and considers desertion; looked after by Gaston Teach",
+      "register": "Rough cowardly soldier slang; ～だぁ/～だろ/てめぇ; whiny, defeatist",
+      "aliases": [],
+      "note": "speaker x30"
+    },
+    "シュバイク": {
+      "en": "Schweik",
+      "gender": "male",
+      "role": "Repentant rough soldier (former rapist) who vows to protect the women he once wronged",
+      "register": "Tough gangster-ish 俺/てめぇら when rallying, switches to humble stammering 私/すいません when ashamed",
+      "aliases": [],
+      "note": "speaker x39"
+    },
+    "バーツ": {
+      "en": "Barts",
+      "gender": "male",
+      "role": "Bandit who just seized leadership of a mountain-bandit gang; drink-obsessed",
+      "register": "Cocky lowlife; arrogant 俺様; sneering くっくっく; crude slang",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "バウワン": {
+      "en": "Bauwan",
+      "gender": "male",
+      "role": "Bandit boss who rallies his gang to loot during the chaos",
+      "register": "Loud brigand; 俺/野郎ども/～ぜ; greedy, boozy, bombastic",
+      "aliases": [],
+      "note": "speaker x6"
+    },
+    "ジッコ": {
+      "en": "Jicco",
+      "gender": "male",
+      "role": "Bandit/smuggler boss (山賊 hideout leader)",
+      "register": "Crude violent thug; てめぇ/ねぇ/おらおら; threats; cowardly screaming when wounded",
+      "aliases": [],
+      "note": "speaker x10"
+    },
+    "ゴルゴメス": {
+      "en": "Gorgomes",
+      "gender": "male",
+      "role": "Pirate captain; revels in plunder and slaughter",
+      "register": "Violent gleeful; 俺; coarse pirate slang (〜ぜ/〜だろうが); bloodthirsty",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "ゴストン": {
+      "en": "Goston",
+      "gender": "male",
+      "role": "Slave-trader / ship captain transporting enhanced slaves; has an elder brother",
+      "register": "Gruff mercenary; 俺; ねぇ/だぜ; callously treats lives as 商品 (merchandise)",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "ゴーガン": {
+      "en": "Gogan",
+      "gender": "male",
+      "role": "Enemy/captured ace archer (never-miss marksman)",
+      "register": "Cool cocky; 俺; terse boastful taunts; fatalistic when captured",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "シルバー・ロウ": {
+      "en": "Silver Roe",
+      "gender": "male",
+      "role": "Enemy necromancer; aged lord of a skeleton/undead army obsessed with youth",
+      "register": "Archaic elderly male; ワシ + じゃ (のぅ/おる); creepy ヒョッヒョッヒョ cackle; envies the living",
+      "aliases": [],
+      "note": "speaker x53"
+    },
+    "セワン・スール": {
+      "en": "Sewan Sul",
+      "gender": "male",
+      "role": "Old temple guardian of Baal-Peor's shrine; protects Empress Meltim and the sanctum",
+      "register": "Gruff old-man; ワシ; ～じゃ/おる/せねばならぬ; self-important, blustery",
+      "aliases": [],
+      "note": "speaker x39"
+    },
+    "セイ": {
+      "en": "Sei",
+      "gender": "male",
+      "role": "Fanatical Priest serving Baal-Peor; obsessed with killing 'heretics'",
+      "register": "Unhinged zealot; 私/～ます (mock-polite); creepy フヒヒッ giggle; panting ♥; chants 'kill the heretics'",
+      "aliases": [],
+      "note": "speaker x7"
+    },
+    "カレブ": {
+      "en": "Caleb",
+      "gender": "male",
+      "role": "Zealot fighter declaring death as salvation for 'heretics'",
+      "register": "Fanatic-cleric outbursts; 貴様ら; grandiose ～だ; dies babbling about 'god's blessing'",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "ヌン": {
+      "en": "Nun",
+      "gender": "unknown",
+      "role": "Enemy religious zealot / theocratic invader spokesperson",
+      "register": "Grandiloquent fanatic; 我ら/我が神; sermonizing demands of surrender and 'purification'; no gender markers",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "預言者モーセ": {
+      "en": "Moses the Prophet",
+      "gender": "male",
+      "role": "Religious prophet leading 'the children of God' in an exodus against the demon; younger brother of Aaron",
+      "register": "Scriptural sermonizing high-register; 汝/～なかれ; commandments and zealous exhortation",
+      "aliases": [
+        "モーセ"
+      ],
+      "note": "speaker x4"
+    },
+    "アーローン": {
+      "en": "Aaron",
+      "gender": "male",
+      "role": "Religious warrior; elder brother of Moses; zealot guardian",
+      "register": "Pious solemn declamatory; 我が弟/務め; prayers to 神; righteous fervor",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "ヨシュア": {
+      "en": "Joshua",
+      "gender": "male",
+      "role": "Priest/cleric of the foreign faith; exhorts followers against the demon",
+      "register": "Scriptural sermonizing cadence; preacher's archaic imperatives",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "プラトン": {
+      "en": "Platon",
+      "gender": "male",
+      "role": "Honorable philosopher-warrior of a faith-based people; values human freedom",
+      "register": "Calm courteous philosophical; polite ～ましょう/～です; speaks of freedom and his god with dignity",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "ミリアム": {
+      "en": "Miriam",
+      "gender": "female",
+      "role": "Zealous holy warrior (blessed body) guarding her younger brother; enemy of the demon",
+      "register": "Pious prideful religious; 私; invokes 主 (the Lord); '神の祝福を受けし我が肉体'",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "アナンダ": {
+      "en": "Ananda",
+      "gender": "male",
+      "role": "Combat cleric/priest (enemy or rival faction)",
+      "register": "Jovial old-man ホッホッホ laugh; polite ますな/ますぞ; ironic priestly menace",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "研究施設の長": {
+      "en": "Research Facility Director",
+      "gender": "male",
+      "role": "Head of the kingdom's research/experiment facility; cruel slave-master over a corrupted captive",
+      "register": "Crude degrading dominator; insults (メス豚); sexual coercion",
+      "aliases": [],
+      "note": "speaker x3"
+    },
+    "アイバク": {
+      "en": "Aibak",
+      "gender": "unknown",
+      "role": "Empire/place name reference used in name-boxes (see term)",
+      "register": "N/A",
+      "aliases": [],
+      "note": ""
+    },
+    "ミレーズ・ビアン": {
+      "en": "Milles Bian",
+      "gender": "male",
+      "role": "Full-name form of Milles, Ben-Ami's 近侍 (see ミレーズ)",
+      "register": "Stern self-effacing retainer; 私; fanatically loyal",
+      "aliases": [
+        "ミレーズ"
+      ],
+      "note": "speaker x8"
+    },
+    "スケさん": {
+      "en": "Suke-san",
+      "gender": "male",
+      "role": "Liberated long-enslaved fighter; performs a Triangle Attack with comrades",
+      "register": "Broken halting katakana of a freed slave; 'we'=オレタチ; mournful-joyous",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "スケルトン": {
+      "en": "Skeleton",
+      "gender": "male",
+      "role": "Undead remains of Palpa's slain former soldiers; accuse Root/Anastasia/the Chancellor",
+      "register": "Halting broken katakana (オレタチ…コロシタ…); オレ; mournful, accusatory",
+      "aliases": [],
+      "note": "speaker x7"
+    },
+    "スカルナイト": {
+      "en": "Skull Knight",
+      "gender": "male",
+      "role": "Undead enemy unit; vengeful fallen soldier",
+      "register": "Halting broken katakana; オレタチ; repeating 返セ……; grief-and-rage",
+      "aliases": [],
+      "note": "speaker x1"
+    },
+    "アクススケルトン": {
+      "en": "Axe Skeleton",
+      "gender": "unknown",
+      "role": "generic mob; undead enemy unit (axe-wielding skeleton)",
+      "register": "generic mob; guttural curses (オノレ……王国軍……)",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "伝令": {
+      "en": "Messenger",
+      "gender": "unknown",
+      "role": "generic mob",
+      "register": "generic mob; anonymous battlefield courier",
+      "aliases": [],
+      "note": "speaker x35"
+    },
+    "観衆": {
+      "en": "Spectators",
+      "gender": "unknown",
+      "role": "generic mob",
+      "register": "generic mob; mixed lewd jeering crowd",
+      "aliases": [],
+      "note": "speaker x25"
+    },
+    "村人": {
+      "en": "Villager",
+      "gender": "unknown",
+      "role": "generic mob",
+      "register": "generic mob; tutorial/shop NPCs explaining mechanics",
+      "aliases": [],
+      "note": "speaker x35"
+    },
+    "町人": {
+      "en": "Townsperson",
+      "gender": "unknown",
+      "role": "generic mob",
+      "register": "generic mob; assorted town NPCs (drunk smith, complaining wife, layabouts), mixed gender",
+      "aliases": [],
+      "note": "speaker x7"
+    },
+    "街娘": {
+      "en": "Town Girl",
+      "gender": "female",
+      "role": "generic mob",
+      "register": "generic mob; rescued townswomen thanking the 隊長",
+      "aliases": [],
+      "note": "speaker x14"
+    },
+    "村娘": {
+      "en": "Village Girl",
+      "gender": "female",
+      "role": "generic mob",
+      "register": "generic mob; village-girl victims / minor quest givers",
+      "aliases": [],
+      "note": "speaker x7"
+    },
+    "民間女性": {
+      "en": "Civilian Woman",
+      "gender": "female",
+      "role": "generic mob",
+      "register": "generic mob; terrified female assault victims",
+      "aliases": [
+        "民間女性１",
+        "民間女性２"
+      ],
+      "note": "speaker x22"
+    },
+    "村長": {
+      "en": "Village Chief",
+      "gender": "male",
+      "role": "generic mob",
+      "register": "generic mob; humble rustic elder (～ですじゃ/～ますぞ)",
+      "aliases": [],
+      "note": "speaker x43"
+    },
+    "村のおばちゃん": {
+      "en": "Village Auntie",
+      "gender": "female",
+      "role": "Middle-aged Musod village woman who fights the kingdom army (Mage/Hunter type)",
+      "register": "Brassy old-wife banter; あたし; frying-pan jokes; defiant",
+      "aliases": [],
+      "note": "speaker x9"
+    },
+    "自警団": {
+      "en": "Vigilante / Town Watch",
+      "gender": "male",
+      "role": "generic mob; townsfolk self-defense militia",
+      "register": "generic mob; casual commoner-male (俺たち/俺ら)",
+      "aliases": [],
+      "note": "speaker x7"
+    },
+    "船長": {
+      "en": "Ship Captain",
+      "gender": "male",
+      "role": "generic mob; captain of an evacuation/cargo vessel serving Ruby",
+      "register": "generic mob; flustered polite ～です/ます; panics over his ship",
+      "aliases": [],
+      "note": "speaker x6"
+    },
+    "鍛冶屋の親方": {
+      "en": "Blacksmith Master",
+      "gender": "male",
+      "role": "Master blacksmith; gives a stolen-sword quest and rewards the party with weapons",
+      "register": "Gruff Edokko craftsman; 俺/てめぇ; proud of his trade, scorns unearned money",
+      "aliases": [],
+      "note": "speaker x22"
+    },
+    "鍛冶屋の弟子": {
+      "en": "Blacksmith's Apprentice",
+      "gender": "male",
+      "role": "Apprentice to the village blacksmith (親方); fights the demon's forces",
+      "register": "Boyish earnest; 僕; calls master 親方; flustered when scared",
+      "aliases": [],
+      "note": "speaker x15"
+    },
+    "元獣騎士の男": {
+      "en": "Former Beast Knight",
+      "gender": "male",
+      "role": "Ex-beast-knight NPC who gives weapon/terrain tutorial advice (hands over the Slender Spear)",
+      "register": "Casual instructive male; だよな/やりな",
+      "aliases": [],
+      "note": "speaker x1"
+    },
+    "子供": {
+      "en": "Child",
+      "gender": "male",
+      "role": "generic mob; a boy who delivers a weapon-triangle (halberd) tutorial",
+      "register": "generic mob; childish boyish 僕; eager show-off",
+      "aliases": [],
+      "note": "speaker x1"
+    },
+    "輸送隊隊長": {
+      "en": "Transport Unit Captain",
+      "gender": "male",
+      "role": "Chancellor-side supply-convoy commander escorting enhanced slaves",
+      "register": "Harried commanding; barks 〜ろ/〜ぞ; treats slaves as tools",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "輸送兵": {
+      "en": "Transport Soldier",
+      "gender": "unknown",
+      "role": "generic mob; supply/transport troops",
+      "register": "generic mob; answers their 隊長",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "王国軍兵": {
+      "en": "Kingdom Soldier",
+      "gender": "male",
+      "role": "generic mob; rank-and-file Peor army soldier reporting to the Chancellor",
+      "register": "generic mob; deferential military report (宰相閣下/申し訳ございません)",
+      "aliases": [],
+      "note": "speaker x55"
+    },
+    "エルロン軍兵": {
+      "en": "Elron Soldier",
+      "gender": "male",
+      "role": "generic mob; soldier of the Elron (Eschalot) faction",
+      "register": "generic mob; respectful military report; 俺",
+      "aliases": [],
+      "note": "speaker x14"
+    },
+    "王国騎士": {
+      "en": "Kingdom Knight",
+      "gender": "male",
+      "role": "Kingdom guard-knight (警備騎士団 patrol who finds the heroine)",
+      "register": "Stiff upright knightly; である/のだ; chivalrous, somewhat pompous",
+      "aliases": [],
+      "note": "speaker x13"
+    },
+    "反乱軍歩兵": {
+      "en": "Rebel Infantryman",
+      "gender": "male",
+      "role": "Surviving soldier of Ritz Klein's unit; sworn enemy of Root for killing Klein",
+      "register": "Vengeful formal-archaic; 俺たち; grim oaths; accusatory",
+      "aliases": [
+        "反乱軍兵"
+      ],
+      "note": "speaker x2"
+    },
+    "装甲兵": {
+      "en": "Armored Soldier",
+      "gender": "male",
+      "role": "generic mob; armored guards defending the Chancellor",
+      "register": "generic mob; panicked report to 将軍",
+      "aliases": [],
+      "note": "speaker x3"
+    },
+    "重装甲兵": {
+      "en": "Heavy Armor Soldier",
+      "gender": "unknown",
+      "role": "generic mob; panicking heavy-armor troops being routed",
+      "register": "generic mob",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "弓兵": {
+      "en": "Archer",
+      "gender": "male",
+      "role": "generic mob; kingdom archer ordering his 'meat-shield' sex-slaves to protect him",
+      "register": "generic mob; crude degrading; 俺; sexual taunts (肉盾/肉便器)",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "騎士": {
+      "en": "Knight",
+      "gender": "unknown",
+      "role": "generic mob; generic knight unit giving a retreat order",
+      "register": "generic mob; terse command (～ぞ)",
+      "aliases": [],
+      "note": "speaker x1"
+    },
+    "騎兵": {
+      "en": "Cavalryman",
+      "gender": "unknown",
+      "role": "generic mob; reporting trooper",
+      "register": "generic mob; stiff military report (確認いたしました！)",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "王国弩兵": {
+      "en": "Kingdom Crossbowman",
+      "gender": "unknown",
+      "role": "generic mob; kingdom crossbow soldiers",
+      "register": "generic mob; pain grunts",
+      "aliases": [],
+      "note": "speaker x5"
+    },
+    "獣騎士": {
+      "en": "Beast Knight",
+      "gender": "male",
+      "role": "Beast-cavalry soldier of the Crozzo Squad",
+      "register": "Disciplined soldier; polite ですか/います; loyal squad-member tone",
+      "aliases": [],
+      "note": "speaker x6"
+    },
+    "調教人衆": {
+      "en": "Slave-Trainers",
+      "gender": "male",
+      "role": "generic mob; group of slave handlers/'trainers' escorting a captive woman",
+      "register": "generic mob; rough male group (我々/貴様ら); callous",
+      "aliases": [],
+      "note": "speaker x148"
+    },
+    "媚薬錬金術師": {
+      "en": "Aphrodisiac Alchemist",
+      "gender": "unknown",
+      "role": "Chancellor-side alchemist hunting escaped enhanced slaves (also a unit class)",
+      "register": "Commanding terse; orders a manhunt; gender not determinable",
+      "aliases": [],
+      "note": "speaker x1"
+    },
+    "山賊": {
+      "en": "Bandit",
+      "gender": "unknown",
+      "role": "generic mob",
+      "register": "generic mob; rough bandit grunts addressing their お頭",
+      "aliases": [],
+      "note": "speaker x10"
+    },
+    "山賊頭": {
+      "en": "Bandit Chief",
+      "gender": "male",
+      "role": "Leader of a band of mountain bandits (holds a stolen treasure chest)",
+      "register": "Greedy thug; ～ぜ/くっくっく; gloating over loot",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "山賊闘士": {
+      "en": "Bandit Brawler",
+      "gender": "unknown",
+      "role": "generic mob; bandit rabble looting",
+      "register": "generic mob",
+      "aliases": [],
+      "note": "speaker x3"
+    },
+    "海賊闘士": {
+      "en": "Pirate Brawler",
+      "gender": "unknown",
+      "role": "generic mob; pirate crew addressing their お頭",
+      "register": "generic mob",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "海賊傭兵": {
+      "en": "Pirate Mercenary",
+      "gender": "unknown",
+      "role": "generic mob; rowdy pirate underling",
+      "register": "generic mob; rowdy ぜ leans male but unnamed",
+      "aliases": [],
+      "note": "speaker x1"
+    },
+    "盗賊": {
+      "en": "Thief",
+      "gender": "male",
+      "role": "generic mob; opportunistic thief looting the town",
+      "register": "generic mob; へへへっ/～ぜ; petty crook",
+      "aliases": [],
+      "note": "speaker x3"
+    },
+    "バルディック": {
+      "en": "Baldic",
+      "gender": "unknown",
+      "role": "Near-mute unit; only grunts, no articulate dialogue",
+      "register": "Near-mute; monosyllabic grunts む/ぬ; taciturn strongman",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "エルフの村人": {
+      "en": "Elf Villager",
+      "gender": "unknown",
+      "role": "generic mob",
+      "register": "generic mob; screaming village victim",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "試作強化奴隷": {
+      "en": "Prototype Enhanced Slave",
+      "gender": "unknown",
+      "role": "Experimental 'enhanced slave' war-unit; only moans/heat noises",
+      "register": "Non-verbal; gasps and aroused moans (corruption/heat SFX)",
+      "aliases": [],
+      "note": "speaker x21"
+    },
+    "強化奴隷兵": {
+      "en": "Enhanced Slave Soldier",
+      "gender": "female",
+      "role": "Corrupted enemy unit; aphrodisiac-broken female slave soldier",
+      "register": "Broken heat-maddened begging; ♥-laden pleading; submissive はい♥/ください",
+      "aliases": [],
+      "note": "speaker x6"
+    },
+    "魔界の竜": {
+      "en": "Demon-Realm Dragon",
+      "gender": "unknown",
+      "role": "generic mob (monster); only roars",
+      "register": "generic mob; non-verbal roars",
+      "aliases": [],
+      "note": "speaker x16"
+    },
+    "ベヒモス": {
+      "en": "Behemoth",
+      "gender": "unknown",
+      "role": "generic mob (monster); only roars",
+      "register": "generic mob; non-verbal",
+      "aliases": [],
+      "note": "speaker x8"
+    },
+    "バジリスク": {
+      "en": "Basilisk",
+      "gender": "unknown",
+      "role": "generic mob (monster); petrify beast, only roars",
+      "register": "generic mob; non-verbal",
+      "aliases": [],
+      "note": "speaker x17"
+    },
+    "バアルドラゴン": {
+      "en": "Baal Dragon",
+      "gender": "unknown",
+      "role": "generic mob (monster, dragon); only roars",
+      "register": "generic mob; non-verbal",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "グリフォン": {
+      "en": "Griffon",
+      "gender": "unknown",
+      "role": "generic mob (monster, griffon); only screeches",
+      "register": "generic mob; non-verbal",
+      "aliases": [],
+      "note": "speaker x1"
+    },
+    "ゴブリン": {
+      "en": "Goblin",
+      "gender": "unknown",
+      "role": "generic mob (monster); only shrieks",
+      "register": "generic mob; non-verbal",
+      "aliases": [],
+      "note": "speaker x17"
+    },
+    "馬": {
+      "en": "Horse",
+      "gender": "unknown",
+      "role": "generic mob (animal); only a whinny",
+      "register": "generic mob; non-verbal",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "地形調査": {
+      "en": "Terrain Survey",
+      "gender": "unknown",
+      "role": "generic mob / system label (reused undead flavor line)",
+      "register": "generic mob; reused old-man undead voice (ワシ+じゃ); treat as mob",
+      "aliases": [],
+      "note": "speaker x3"
+    },
+    "？？？": {
+      "en": "???",
+      "gender": "unknown",
+      "role": "Placeholder mystery-name used before a reveal; covers more than one character (a male villain AND Belphegor)",
+      "register": "Mixed: a menacing male villain voice, and Belphegor's archaic わらわ/じゃ demon speech",
+      "aliases": [
+        "ベルフェゴール"
+      ],
+      "note": ""
+    },
+    "No Speaker": {
+      "en": "(Narration)",
+      "gender": "unknown",
+      "role": "Narrator / unattributed exposition (history of Peor, the regency, the rebellion)",
+      "register": "Third-person world-building narration",
+      "aliases": [],
+      "note": ""
+    },
+    "ルート・エルロン": {
+      "en": "Root",
+      "gender": "male",
+      "role": "alias of Root",
+      "register": "Protagonist commander; addressed as ルート殿 / ルート・エルロン; neutral resolute register",
+      "aliases": [],
+      "note": ""
+    },
+    "エシュロット王女": {
+      "en": "Eschalot",
+      "gender": "female",
+      "role": "alias of Eschalot",
+      "register": "Energetic tomboyish princess; first-person あたし; cheerful, exclamatory (任せろ!/よぉし!); earnest and kind",
+      "aliases": [],
+      "note": ""
+    },
+    "エシュロット・ペオル": {
+      "en": "Eschalot",
+      "gender": "female",
+      "role": "alias of Eschalot",
+      "register": "Energetic tomboyish princess; first-person あたし; cheerful, exclamatory (任せろ!/よぉし!); earnest and kind",
+      "aliases": [],
+      "note": ""
+    },
+    "ベンアミ・エラム": {
+      "en": "Ben-Ami",
+      "gender": "female",
+      "role": "alias of Ben-Ami",
+      "register": "Two modes: (a) helpful tactical advisor, polite ～よ/～の; (b) solemn archaic ritual command speech (汝/命じる). First-person 私",
+      "aliases": [],
+      "note": ""
+    },
+    "パルパ・ブライン": {
+      "en": "Palpa",
+      "gender": "female",
+      "role": "alias of Palpa",
+      "register": "Stoic formal officer; 私; measured, no feminine sentence-final particles; calm, perceptive (senses souls/闇)",
+      "aliases": [],
+      "note": ""
+    },
+    "ローエン・ブライン": {
+      "en": "Loewen",
+      "gender": "male",
+      "role": "alias of Loewen",
+      "register": "Knightly/formal in public (私/～ます) but slips to 僕 and anguished cries toward his sister; honor-driven",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "ルクス王": {
+      "en": "Lux",
+      "gender": "male",
+      "role": "alias of Lux",
+      "register": "Dignified polite royal/commander speech; です/ます; composed leader",
+      "aliases": [],
+      "note": ""
+    },
+    "ガストン・テーチ": {
+      "en": "Gaston Teach",
+      "gender": "male",
+      "role": "alias of Gaston Teach",
+      "register": "Calm thoughtful polite; 私/～ます・ね; rueful and principled",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "バラム将軍": {
+      "en": "Balam Grang",
+      "gender": "male",
+      "role": "alias of Balam Grang",
+      "register": "Pompous condescending nobleman; 私 + ですねぇ/ですよ; smug ほっほっほ laugh; obsessed with his armor and rank",
+      "aliases": [],
+      "note": ""
+    },
+    "バラム": {
+      "en": "Balam Grang",
+      "gender": "male",
+      "role": "alias of Balam Grang",
+      "register": "Pompous condescending nobleman; 私 + ですねぇ/ですよ; smug ほっほっほ laugh; obsessed with his armor and rank",
+      "aliases": [],
+      "note": ""
+    },
+    "カロッゾ・ゾルゲ": {
+      "en": "Crozzo Sorge",
+      "gender": "male",
+      "role": "alias of Crozzo Sorge",
+      "register": "Cocky rough bravado; 俺; 〜じゃねぇか/〜ぜ/くっくっく; thrill-seeking, festival (祭り) metaphors for battle",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "ポルク隊長": {
+      "en": "Polk",
+      "gender": "male",
+      "role": "alias of Polk",
+      "register": "Earnest military-cadet speech; signature tic 〜であります; refers to 自分; eager and devoted",
+      "aliases": [],
+      "note": ""
+    },
+    "ロンメル将軍": {
+      "en": "Rommel",
+      "gender": "male",
+      "role": "alias of Rommel",
+      "register": "Crisp competent staff-officer; です/ます; tactical exposition; 殿/様 honorifics for allies",
+      "aliases": [],
+      "note": ""
+    },
+    "地母神バアル・ペオル": {
+      "en": "Baal-Peor",
+      "gender": "female",
+      "role": "alias of Baal-Peor",
+      "register": "Archaic sorrowful divine speech; わらわ; ～じゃ/おる; penitent and solemn",
+      "aliases": [],
+      "note": ""
+    },
+    "モーセ": {
+      "en": "Moses the Prophet",
+      "gender": "male",
+      "role": "alias of Moses the Prophet",
+      "register": "Scriptural sermonizing high-register; 汝/～なかれ; commandments and zealous exhortation",
+      "aliases": [],
+      "note": ""
+    },
+    "民間女性１": {
+      "en": "Civilian Woman",
+      "gender": "female",
+      "role": "alias of Civilian Woman",
+      "register": "generic mob; terrified female assault victims",
+      "aliases": [],
+      "note": "speaker x2"
+    },
+    "民間女性２": {
+      "en": "Civilian Woman",
+      "gender": "female",
+      "role": "alias of Civilian Woman",
+      "register": "generic mob; terrified female assault victims",
+      "aliases": [],
+      "note": "speaker x1"
+    },
+    "反乱軍兵": {
+      "en": "Rebel Infantryman",
+      "gender": "male",
+      "role": "alias of Rebel Infantryman",
+      "register": "Vengeful formal-archaic; 俺たち; grim oaths; accusatory",
+      "aliases": [],
+      "note": "speaker x20"
+    },
+    "ケイローン": {
+      "en": "Chiron",
+      "gender": "male",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker x8"
+    },
+    "魔界樹": {
+      "en": "Demon World Tree",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker x7"
+    },
+    "スライム": {
+      "en": "Slime",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker x4"
+    },
+    "ソードスケルトン": {
+      "en": "Sword Skeleton",
+      "gender": "",
+      "role": "",
+      "register": "",
+      "aliases": [],
+      "note": "speaker x1"
+    }
+  },
+  "terms": {
+    "堕落戦記ベルフェゴール・サーガ": "Daraku Senki: Belphegor Saga",
+    "魔王の媚薬と発情奴隷たち": "The Demon King's Aphrodisiac and the Slaves in Heat",
+    "光の王女編": "Princess of Light arc",
+    "闇の宰相編": "Dark Chancellor arc",
+    "堕落": "corruption",
+    "堕とす": "to corrupt / to break (into a slave)",
+    "堕落の使徒": "Apostles of Corruption",
+    "堕天": "fall from grace",
+    "調教": "training",
+    "調教完了": "Training Complete",
+    "媚薬": "aphrodisiac",
+    "秘薬": "secret elixir",
+    "淫魔の媚薬": "Succubus's Aphrodisiac",
+    "魔王の媚薬": "Demon King's Aphrodisiac",
+    "発情": "in heat / estrus",
+    "興奮度": "Arousal",
+    "カルマ": "Karma",
+    "淫魔": "Succubus",
+    "悪魔": "demon",
+    "魔王": "Demon King",
+    "魔界": "Demon Realm",
+    "淫堕の力": "Power of Lewd Corruption",
+    "淫堕の魔法": "Lewd Corruption Magic",
+    "上級淫堕の魔法": "Greater Lewd Corruption Magic",
+    "媚薬魔法": "Aphrodisiac Magic",
+    "上級媚薬魔法": "Greater Aphrodisiac Magic",
+    "強化奴隷の血": "Enhanced Slave's Blood",
+    "魔王の依代": "Demon King's Vessel",
+    "魔王との契約": "Pact with the Demon King",
+    "ベルフェゴールの力": "Power of Belphegor",
+    "奴隷": "slave",
+    "強化奴隷": "Enhanced Slave",
+    "強化奴隷兵": "Enhanced Slave Soldier",
+    "試作強化奴隷": "Prototype Enhanced Slave",
+    "被検体": "test subject",
+    "生体実験": "live human experimentation",
+    "研究施設 / 研究所": "research facility / research lab",
+    "種付け": "breeding",
+    "魔物精液": "monster semen",
+    "中出し": "creampie",
+    "レイプ": "rape",
+    "レイプ目": "rape-glazed eyes",
+    "オナニー中": "masturbating (status)",
+    "魅了": "Charm (status)",
+    "全裸": "fully nude",
+    "ノーパン": "pantyless",
+    "肉盾": "meat-shield",
+    "肉便器": "cum-dump",
+    "メス豚": "sow / breeding-bitch",
+    "バトルスキン": "Battle Skin (costume)",
+    "親衛隊": "Imperial Guard",
+    "近衛騎士": "Royal Guard Knight",
+    "近侍": "close attendant",
+    "守護騎士": "Guardian Knight",
+    "警備騎士団": "Guard Knight Order",
+    "宰相": "Chancellor",
+    "宰相閣下": "His Excellency the Chancellor",
+    "宰相の犬": "the Chancellor's dog",
+    "宰相軍": "Chancellor's army",
+    "王国軍": "Kingdom Army",
+    "反乱軍": "rebel army",
+    "ベルフェゴール軍": "Belphegor's army",
+    "バアル・ペオル軍": "Baal-Peor Army",
+    "自警団": "vigilante militia / town watch",
+    "王位継承の儀": "Rite of Succession",
+    "女王 / 女帝 / 陛下": "Queen / Empress / Your Majesty",
+    "ペオル王国": "Peor Kingdom",
+    "ペオル": "Peor (kingdom / also currency)",
+    "アイバク帝国": "Aibak Empire",
+    "グリフォード国": "Grifford",
+    "エルロン": "Elron",
+    "エルロン軍 / エルロン領": "Elron army / Elron territory",
+    "エルロン家": "House Elron",
+    "エラム家": "House Elam",
+    "ブライン家": "House Brain",
+    "ツォアル": "Tzoar",
+    "ムソド村": "Musod Village",
+    "アシュドッド村": "Ashdod Village",
+    "マージ": "Marge (place)",
+    "エン・ボケック砦": "En-Bokek Fort",
+    "エン・ボケック大橋": "En-Bokek Great Bridge",
+    "魔の山": "Demon Mountain",
+    "山おろし": "mountain-down (monster outbreak)",
+    "ツォアル高級酒『若返り』": "Tzoar Premium Liquor 'Rejuvenation'",
+    "地母神": "Earth Mother goddess",
+    "地母神バアル・ペオル": "Earth Mother Baal-Peor",
+    "地母神の加護": "Blessing of the Earth Mother",
+    "バアルドラゴン": "Baal Dragon",
+    "エンシェントバアル": "Ancient Baal",
+    "支配の龍": "Dragon of Domination",
+    "メルティム": "Meltim (first queen / Empress)",
+    "メルゥ": "Meruu",
+    "異教徒": "heretic / heathen",
+    "七つの大罪": "Seven Deadly Sins (Pride/Wrath/Envy/Sloth/Greed/Gluttony/Lust)",
+    "八夫人": "the Eight Wives",
+    "后妃": "consort",
+    "軍師": "Strategist / Tactician",
+    "三すくみ": "weapon triangle (sword-spear-axe standoff)",
+    "特効": "effective damage",
+    "特効武器": "Effective Weapon",
+    "防御無視": "Defense Ignore",
+    "クリティカル": "Critical",
+    "石化": "Petrify",
+    "恐怖": "Fear (status)",
+    "よろけ": "Stagger",
+    "武器落し": "Disarm",
+    "士気向上": "Morale Boost",
+    "ターン": "turn",
+    "出撃枠": "deployment slots",
+    "地形効果": "terrain effect",
+    "連戦": "consecutive battles",
+    "勝利条件": "victory condition",
+    "トライアングルアタック": "Triangle Attack",
+    "覚醒": "Awakening (class stage)",
+    "命中率／回避率／クリティカル率": "Hit Rate / Evasion Rate / Critical Rate",
+    "巨獣族": "Giant-Beast race",
+    "竜族": "Dragonkin",
+    "アンデッド": "Undead",
+    "死霊軍団": "undead legion",
+    "プリンセス": "Princess (class)",
+    "チャンセラー": "Chancellor (class)",
+    "ライトキング / ダークキング": "Light King / Dark King",
+    "シューター": "Shooter (class)",
+    "セイジ": "Sage",
+    "プリースト": "Priest",
+    "ビショップ": "Bishop",
+    "破戒僧": "Apostate Monk",
+    "死霊術師": "Necromancer",
+    "リッチ": "Lich",
+    "アーマーナイト": "Armor Knight",
+    "ジェネラル": "General",
+    "ソードマスター": "Sword Master",
+    "バーサーカー": "Berserker",
+    "パラディン": "Paladin",
+    "グリフォンナイト": "Griffon Knight",
+    "スケルトン": "Skeleton",
+    "スカルナイト": "Skull Knight",
+    "預言者": "Prophet",
+    "ドラゴンハーフ": "Dragon Half",
+    "剣 / 斧 / 槍": "Sword / Axe / Lance",
+    "槍斧 / ハルバード": "Halberd",
+    "弓": "Bow",
+    "大弓": "Siege Bow",
+    "魔導書": "Tome",
+    "杖": "Staff",
+    "スレンドスピア": "Slender Spear",
+    "アーマーキラー": "Armorkiller",
+    "見習いの剣": "Apprentice's Sword",
+    "魔王の剣／斧／槍／槍斧／弓": "Demon King's Sword/Axe/Lance/Halberd/Bow",
+    "地母神の剣／斧／槍／槍斧／弓": "Earth Mother's Sword/Axe/Lance/Halberd/Bow",
+    "解放の武具": "Liberation Arms",
+    "メルティウムの王剣": "Royal Sword of Meltium",
+    "コラップション": "Corruption (Ben-Ami's magic)",
+    "ムスペルヘイム": "Muspelheim (fire magic)",
+    "ムソド／アシュドッド": "Musod / Ashdod",
+    "妖精の蜜": "Fairy Nectar",
+    "騎士任命書": "Knight Commission",
+    "拘束魔法具": "Binding Magic Tool (manacles/shackles/gag)",
+    "上納金": "tribute / protection money",
+    "略奪": "plunder / pillage",
+    "義賊": "righteous bandit",
+    "輸送隊": "transport unit / supply train",
+    "ダンナ様": "Master (Nes's term for Lux)",
+    "民たちの真の安寧のために": "For the True Peace of the People",
+    "バリスタ": "Ballista",
+    "剣士部隊": "Swordsman Corps",
+    "ランス部隊": "Lance Unit",
+    "クロッゾ隊": "Crozzo Squad",
+    "軍事演習 / 模擬戦": "military exercise / mock battle",
+    "電撃作戦": "blitz operation",
+    "威力偵察": "reconnaissance-in-force"
+  },
+  "meta": {
+    "game": "Belphegor Saga",
+    "source": "dialogue analysis + database terms"
+  }
+}

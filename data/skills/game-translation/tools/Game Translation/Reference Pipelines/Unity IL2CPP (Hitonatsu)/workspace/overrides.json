@@ -1,0 +1,12 @@
+{
+  "_doc": "Hand rulings that win over whatever the model produced. Keyed by SOURCE string. Applied by tools/build.py after the model pass and honoured by tools/qa.py, so a fix here survives a --retranslate. Every entry carries its reason.",
+
+  "デフォルト_余韻": {
+    "en": "Default Afterglow",
+    "why": "Same source translated two ways ('Default Afterglow' / 'Default_Afterglow') because it is set on two separate dropdowns. Resolved to the spaced form by corpus majority: every sibling label in these dropdowns ('Default Override', 'Default Expression', 'Expression Override 01') uses spaces."
+  },
+  "デフォルト_喘ぎ絶頂": {
+    "en": "Default Moans Climax",
+    "why": "Same conflict, same resolution. The author's underscore is a field separator, not punctuation the player should see."
+  }
+}

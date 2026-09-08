@@ -1,0 +1,1466 @@
+{
+  "names": {
+    "リード": {
+      "en": "Lead",
+      "gender": "unknown",
+      "role": "Actor 1 base name; internal",
+      "register": "",
+      "note": "tentative; placeholder/system actor"
+    },
+    "テストアクター": {
+      "en": "Test Actor",
+      "gender": "unknown",
+      "role": "internal test actor",
+      "register": "",
+      "note": "dev/test only"
+    },
+    "表示用ユニット": {
+      "en": "Display Unit",
+      "gender": "unknown",
+      "role": "internal display actor",
+      "register": "",
+      "note": "dev/test only"
+    },
+    "パーティ01": {
+      "en": "Party 01",
+      "gender": "unknown",
+      "role": "internal party-slot actor",
+      "register": "",
+      "note": "dev/test only"
+    },
+    "パーティ02": {
+      "en": "Party 02",
+      "gender": "unknown",
+      "role": "internal party-slot actor",
+      "register": "",
+      "note": "dev/test only"
+    },
+    "パーティ03": {
+      "en": "Party 03",
+      "gender": "unknown",
+      "role": "internal party-slot actor",
+      "register": "",
+      "note": "dev/test only"
+    },
+    "パーティ04": {
+      "en": "Party 04",
+      "gender": "unknown",
+      "role": "internal party-slot actor",
+      "register": "",
+      "note": "dev/test only"
+    },
+    "アインアイク": {
+      "en": "Einaike",
+      "gender": "female",
+      "role": "Protagonist. Succubus general of the demon army, the \"Purple-Flame General\" (紫焔将), one of the 三鼎将 Three Generals; defeated, demoted, and confined in Cetus to be bred.",
+      "register": "Formal, dutiful, self-serious. First person 私. Heavy use of obligation enders 〜ねば／〜しないと, trailing ……; proud military diction. In H-scenes breaks down into raw screams and pleading (おゆるしください, いやなのに…).",
+      "note": "Female CONFIRMED: others call her サキュバス/淫魔将/牝, female pronouns. Romanization Einaike retained (no in-text reading contradicts it). Also addressed as 紫焔将/淫魔将(after demotion)/将軍/閣下."
+    },
+    "モレク": {
+      "en": "Moloch",
+      "gender": "male",
+      "role": "\"Thunder-Calm General\" (雷穏将), one of the 三鼎将 Three Generals; commands the 雷穏軍 (magic research). Formal strategist/aide who briefs the Demon Lord and analyzes the 英雄/Heroes.",
+      "register": "Formal military aide. はッ／左様／〜ております／〜ですな／〜模様です. Clipped reports, deferential 陛下. Dry sigh やれやれ. Refers to Furfur dismissively as フォルファクスめ.",
+      "note": "Male confirmed. Same character under fuller box 雷穏将モレク (separate entry)."
+    },
+    "ヴィネ": {
+      "en": "Vine",
+      "gender": "male",
+      "role": "\"Ice-Blast General\" (氷爆将), one of the 三鼎将 Three Generals; commands the 氷爆軍 (beast-demon handling, sabotage). Later pleads with the Demon Lord for Einaike's release.",
+      "register": "Crude, rough soldier; Kansai-tinged. First person オレ/自分. Rough enders 〜だぜ／〜ねぇ／〜じゃねぇか and ッカァー interjections; but speaks politely-rough to the Demon Lord (陛下, 〜でしょうや, 違いますかね). Cynical, blunt.",
+      "note": "Male confirmed (オレ, soldierly register). Same character appears under the fuller name-box 氷爆将ヴィネ (see separate entry)."
+    },
+    "ステータス表示用": {
+      "en": "Status Display",
+      "gender": "unknown",
+      "role": "internal status-display actor",
+      "register": "",
+      "note": "dev/test only"
+    },
+    "戦闘開始": {
+      "en": "Battle Start",
+      "gender": "unknown",
+      "role": "internal control actor",
+      "register": "",
+      "note": "dev/test only"
+    },
+    "テスト用": {
+      "en": "Test",
+      "gender": "unknown",
+      "role": "internal test actor",
+      "register": "",
+      "note": "dev/test only"
+    },
+    "ゴブリンA": {
+      "en": "Goblin A",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud in the facility.",
+      "register": "crude, leering; manic ギャギャ cackles",
+      "note": ""
+    },
+    "ゴブリンB": {
+      "en": "Goblin B",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, complaining grunt",
+      "note": ""
+    },
+    "ゴブリンC": {
+      "en": "Goblin C",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "coarse, gloating; ゴブゴブ verbal tic",
+      "note": ""
+    },
+    "フォルファクス": {
+      "en": "Furfur",
+      "gender": "female",
+      "role": "Great-demon antagonist, \"Vicious-Horn Lord\" (凶角卿), founder/commander of the 凶角団 (Vicious-Horn Corps); a former superior of Einaike's. Sadistic researcher of native biology; later herself sent to Cetus.",
+      "register": "Theatrical sadist. First person アタシ. Signature cackle キッヒ／キヒヒ／キィーッヒッヒッヒ. Long elongated vowels サァ／じゃぁないか, mocking honorifics (優等生ドノ, 貴公). Archly polite-cruel.",
+      "note": "GENDER CORRECTION: the brief says MALE — WRONG. Hydra calls her 彼女 (\"she\", her line at 153) and a Bigfoot/Hydra-type calls her あのクソ生意気な牛娘 (\"that cheeky cow-girl\", line 1130), i.e. a Minotaur-type female. 卿/Lord here is a gender-neutral rank title. Treat as FEMALE. Ars Goetia Furfur/Forfax (often depicted with bull/stag form, consistent with 牛娘)."
+    },
+    "コボルド": {
+      "en": "Kobold",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier produced as troop stock.",
+      "register": "loyal foot-soldier; rowdy but earnest",
+      "note": "Base race. Base form / ambient NPC variant."
+    },
+    "リザードマン": {
+      "en": "Lizardman",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit (also listed under Flying/Beast); bred soldier troop stock.",
+      "register": "calmer, analytical grunt; lore-spouting",
+      "note": "Base race, cross-listed in flying/beast/base. Base form / ambient NPC variant."
+    },
+    "トロール": {
+      "en": "Troll",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier produced as troop stock.",
+      "register": "slow, ponderous; reflective grunt",
+      "note": "Base race. Base form / ambient NPC variant."
+    },
+    "ミノタウロス": {
+      "en": "Minotaur",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier produced as troop stock.",
+      "register": "deferential soldier (to the general); flustered NPC",
+      "note": "Base race. Base form / ambient NPC variant."
+    },
+    "ハルピュイア": {
+      "en": "Harpy",
+      "gender": "female",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier produced as troop stock.",
+      "register": "meek, tearful, devoted sympathizer",
+      "note": "Flying race; female. Base form / ambient NPC variant (a sympathetic Harpy)."
+    },
+    "コカトリス": {
+      "en": "Cockatrice",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier troop stock.",
+      "register": "crude banter; also pedantic lore voice (である copula)",
+      "note": "Flying race. Base form / ambient NPC variant."
+    },
+    "ヤマチチ": {
+      "en": "Yamachichi",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier troop stock.",
+      "register": "crude, contemptuous of succubi; also musing NPC",
+      "note": "Flying race (cum-draining demon). Base form / ambient NPC variant."
+    },
+    "セイレーン": {
+      "en": "Siren",
+      "gender": "female",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier troop stock.",
+      "register": "flippant gyaru drawl (ンすか); also clinical researcher voice",
+      "note": "Flying race; female. Base form / ambient NPC variant."
+    },
+    "バジリスク": {
+      "en": "Basilisk",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit (also listed under Classes); bred soldier troop stock.",
+      "register": "crude beast-handler / gossiping grunt",
+      "note": "Flying race. Base form / ambient NPC variant."
+    },
+    "セワッジラット": {
+      "en": "Sewage Rat",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier troop stock.",
+      "register": "non-verbal squeaks (きき/じじ)",
+      "note": "Beast race. Bestial: speaks only in rat squeals."
+    },
+    "ドレッドウルフ": {
+      "en": "Dread Wolf",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier troop stock.",
+      "register": "non-verbal growls (がふ/がるる)",
+      "note": "Beast race. Bestial: speaks only in growls."
+    },
+    "ダンバブン": {
+      "en": "Danbabun",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier troop stock.",
+      "register": "non-verbal grunts (ぐふ/ばぶ)",
+      "note": "Beast race. Bestial: speaks only in grunts. Romanization tentative."
+    },
+    "ウガルルム": {
+      "en": "Ugarurum",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier troop stock.",
+      "register": "non-verbal growls/roars (がるる/ごるる)",
+      "note": "Beast race. Bestial roars. Romanization tentative."
+    },
+    "スライム": {
+      "en": "Slime",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier troop stock.",
+      "register": "smug, formal facility-guard voice; also the 'snitch' administrator",
+      "note": "Amorphous race. Base form / ambient NPC variant."
+    },
+    "イールワーム": {
+      "en": "Eel Worm",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier troop stock.",
+      "register": "slimy, gluttonous; うへへ/うひひ laugh",
+      "note": "Amorphous race. Base form / ambient NPC variant."
+    },
+    "ゼリーフレシュ": {
+      "en": "Jelly Flesh",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier troop stock.",
+      "register": "crude, complaining about stench; also lore NPC",
+      "note": "Amorphous race. Base form / ambient NPC variant."
+    },
+    "ヘドロスラッグ": {
+      "en": "Sludge Slug",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier troop stock.",
+      "register": "jaded gossip; world-weary crude",
+      "note": "Amorphous race. Base form / ambient NPC variant."
+    },
+    "ヒュドラ": {
+      "en": "Hydra",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier troop stock.",
+      "register": "dutiful report voice (うじゅる tic); also reflective NPC",
+      "note": "Amorphous race. Base form / ambient NPC variant."
+    },
+    "ゴブリン": {
+      "en": "Goblin",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier produced as troop stock.",
+      "register": "crude grunt soldier; gruff, jeering",
+      "note": "Base race. Base form / ambient NPC variant."
+    },
+    "コボルドA": {
+      "en": "Kobold A",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "coarse, bloodthirsty; ヒャーッハ war-cry",
+      "note": ""
+    },
+    "コボルドB": {
+      "en": "Kobold B",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, resentful; ぐひひ laugh",
+      "note": ""
+    },
+    "コボルドC": {
+      "en": "Kobold C",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "crude; yelps きゃん when cowed",
+      "note": ""
+    },
+    "コボルドZZV": {
+      "en": "Kobold ZZV",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, disgusted muttering",
+      "note": ""
+    },
+    "コボルドZZG": {
+      "en": "Kobold ZZG",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "low-rank crude; へっへ laugh",
+      "note": ""
+    },
+    "コボルドZZX": {
+      "en": "Kobold ZZX",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, ordering; ひっひ laugh",
+      "note": ""
+    },
+    "コボルドZZZ": {
+      "en": "Kobold ZZZ",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "grumbling, put-upon crude",
+      "note": ""
+    },
+    "リザードマンA": {
+      "en": "Lizardman A",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, taunting; うへへ laugh",
+      "note": ""
+    },
+    "リザードマンZZX": {
+      "en": "Lizardman ZZX",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, smug; ぬっひひ laugh",
+      "note": ""
+    },
+    "リザードマンZZZ": {
+      "en": "Lizardman ZZZ",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, sated; ひひっ laugh",
+      "note": ""
+    },
+    "トロールA": {
+      "en": "Troll A",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "sadistic, gloating; ぐひひ laugh",
+      "note": ""
+    },
+    "トロールB": {
+      "en": "Troll B",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "crude; げふげふ grunts",
+      "note": ""
+    },
+    "トロールZZG": {
+      "en": "Troll ZZG",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, sated; ぐっふ grunts",
+      "note": ""
+    },
+    "ミノタウロスA": {
+      "en": "Minotaur A",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, boastful (brags of horns); ぶふひひ laugh",
+      "note": ""
+    },
+    "ミノタウロスZZS": {
+      "en": "Minotaur ZZS",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, leering; ぶぅっふ laugh",
+      "note": ""
+    },
+    "ハルピュイアA": {
+      "en": "Harpy A",
+      "gender": "female",
+      "role": "Flying demon-race (飛行魔族) unit; futanari breeding stud (has penis) in the facility.",
+      "register": "bratty, playful-cruel loli voice; むひひ laugh",
+      "note": "Futanari: female-bodied but penetrates the heroine."
+    },
+    "コカトリスA": {
+      "en": "Cockatrice A",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud.",
+      "register": "old-man lecher; ふぉふぉ laugh",
+      "note": ""
+    },
+    "コカトリスZZY": {
+      "en": "Cockatrice ZZY",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, counting tally; mocking",
+      "note": ""
+    },
+    "コカトリス[計測不能]": {
+      "en": "Cockatrice [Uncountable]",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (H-scene variant, 'count immeasurable').",
+      "register": "crude, jaded; gloating over tally",
+      "note": ""
+    },
+    "ヤマチチA": {
+      "en": "Yamachichi A",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud.",
+      "register": "smug teaser; にゅほほ laugh",
+      "note": ""
+    },
+    "ヤマチチZZJ": {
+      "en": "Yamachichi ZZJ",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, mocking; ぎょふふ laugh",
+      "note": ""
+    },
+    "ヤマチチZZK": {
+      "en": "Yamachichi ZZK",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, impatient",
+      "note": ""
+    },
+    "セイレーンA": {
+      "en": "Siren A",
+      "gender": "female",
+      "role": "Flying demon-race (飛行魔族) unit; female breeding partner (lesbian rape) in the facility.",
+      "register": "sultry, teasing dominatrix; うふふ laugh",
+      "note": "Female who violates the heroine."
+    },
+    "セイレーンZZS": {
+      "en": "Siren ZZS",
+      "gender": "female",
+      "role": "Flying demon-race (飛行魔族) unit; female breeding partner (H-scene variant).",
+      "register": "sultry, cooing; むふふ laugh",
+      "note": ""
+    },
+    "バジリスクA": {
+      "en": "Basilisk A",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, fat-shaming taunts; ぎゅくく laugh",
+      "note": ""
+    },
+    "バジリスクB": {
+      "en": "Basilisk B",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, impatient (wants a turn)",
+      "note": ""
+    },
+    "バジリスクZZK": {
+      "en": "Basilisk ZZK",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, gloating; ぐひひ laugh",
+      "note": ""
+    },
+    "バジリスクZZI": {
+      "en": "Basilisk ZZI",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, resentful, vengeful",
+      "note": ""
+    },
+    "セワッジラットA": {
+      "en": "Sewage Rat A",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud.",
+      "register": "non-verbal squeaks (ぎぃ)",
+      "note": ""
+    },
+    "ドレッドウルフA": {
+      "en": "Dread Wolf A",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud.",
+      "register": "non-verbal growls (ぐるる)",
+      "note": ""
+    },
+    "ドレッドウルフB": {
+      "en": "Dread Wolf B",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud.",
+      "register": "non-verbal growls (がふふ)",
+      "note": ""
+    },
+    "ダンバブンA": {
+      "en": "Danbabun A",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud.",
+      "register": "non-verbal grunts (ぐふ/ぼふ)",
+      "note": ""
+    },
+    "スレイプニルA": {
+      "en": "Sleipnir A",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud.",
+      "register": "non-verbal whinnies (ぶるっふ)",
+      "note": ""
+    },
+    "スレイプニルZZJ": {
+      "en": "Sleipnir ZZJ",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "non-verbal whinnies (ぶるるぅ)",
+      "note": ""
+    },
+    "ウガルルムA": {
+      "en": "Ugarurum A",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud.",
+      "register": "non-verbal growls (ぐるる/がるぁ)",
+      "note": ""
+    },
+    "ウガルルムZZV": {
+      "en": "Ugarurum ZZV",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "non-verbal growls (うがるる)",
+      "note": ""
+    },
+    "スライムA": {
+      "en": "Slime A",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (a former general's mocker).",
+      "register": "smug, condescending elder; ぬほほ laugh",
+      "note": ""
+    },
+    "スライムB": {
+      "en": "Slime B",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, enthusing; えっひひ laugh",
+      "note": ""
+    },
+    "スライムC": {
+      "en": "Slime C",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, gloating over melting flesh",
+      "note": ""
+    },
+    "スライムD": {
+      "en": "Slime D",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, anticipatory; ひひ laugh",
+      "note": ""
+    },
+    "イールワームA": {
+      "en": "Eel Worm A",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud.",
+      "register": "menacing, devouring threats; げべべ laugh",
+      "note": ""
+    },
+    "ゼリーフレシュA": {
+      "en": "Jelly Flesh A",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (mind-reading sadist).",
+      "register": "smug, fondling; むふふ laugh",
+      "note": ""
+    },
+    "ゼリーフレシュZZS": {
+      "en": "Jelly Flesh ZZS",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "mock-rewarding sadist; ひひひ laugh",
+      "note": ""
+    },
+    "ヘドロスラッグA": {
+      "en": "Sludge Slug A",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (body-reading sadist).",
+      "register": "slow, taunting; ぐっぐっぐ laugh",
+      "note": ""
+    },
+    "ヘドロスラッグZZO": {
+      "en": "Sludge Slug ZZO",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "mocking, condescending; むひょほ laugh",
+      "note": ""
+    },
+    "ヒュドラA": {
+      "en": "Hydra A",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud.",
+      "register": "smug, mock-gentle; ぬぶぶ laugh",
+      "note": ""
+    },
+    "ヒュドラZZL": {
+      "en": "Hydra ZZL",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, gloating over her fall; ぎゅぶ laugh",
+      "note": ""
+    },
+    "ゴブリンZZJ": {
+      "en": "Goblin ZZJ",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, sneering; げっひひ laugh",
+      "note": ""
+    },
+    "ゴブリンZZK": {
+      "en": "Goblin ZZK",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "vulgar; ごびゃびゃ cackle",
+      "note": ""
+    },
+    "ゴブリンZZL": {
+      "en": "Goblin ZZL",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "grumbling, fastidious crude",
+      "note": ""
+    },
+    "ゴブリンZZM": {
+      "en": "Goblin ZZM",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "gleeful; うぉっほ laugh",
+      "note": ""
+    },
+    "ゴブリンZZN": {
+      "en": "Goblin ZZN",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "mocking; いひひ laugh",
+      "note": ""
+    },
+    "コボルドZZS": {
+      "en": "Kobold ZZS",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "coarse, complaining; くっく laugh",
+      "note": ""
+    },
+    "コボルド???": {
+      "en": "Kobold ???",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "frustrated, crude",
+      "note": ""
+    },
+    "リザードマンZZG": {
+      "en": "Lizardman ZZG",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, dismissive",
+      "note": ""
+    },
+    "リザードマン???": {
+      "en": "Lizardman ???",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, bored",
+      "note": ""
+    },
+    "トロールZZT": {
+      "en": "Troll ZZT",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "vicious, degrading; ぎゃひひ laugh",
+      "note": ""
+    },
+    "トロール???": {
+      "en": "Troll ???",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, mocking",
+      "note": ""
+    },
+    "ミノタウロスB": {
+      "en": "Minotaur B",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "dull, crude",
+      "note": ""
+    },
+    "ミノタウロスC": {
+      "en": "Minotaur C",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, mocking",
+      "note": ""
+    },
+    "ミノタウロスD": {
+      "en": "Minotaur D",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, impatient",
+      "note": ""
+    },
+    "ミノタウロスZZO": {
+      "en": "Minotaur ZZO",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude; んぎひひ laugh",
+      "note": ""
+    },
+    "ミノタウロスZZZ": {
+      "en": "Minotaur ZZZ",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "childishly cruel; むほほ laugh",
+      "note": ""
+    },
+    "コカトリスZZJ": {
+      "en": "Cockatrice ZZJ",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (statue-rape H-scene variant).",
+      "register": "gloating sadist; ぬほほ laugh",
+      "note": ""
+    },
+    "コカトリスZZZS": {
+      "en": "Cockatrice ZZZS",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (petrification-rape H-scene variant).",
+      "register": "gloating, artistic-sadist; ふぉふぉほほ laugh",
+      "note": ""
+    },
+    "ヤマチチZZE": {
+      "en": "Yamachichi ZZE",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (milk-tasting H-scene variant).",
+      "register": "crude, fussy critic; にぇひひ laugh",
+      "note": ""
+    },
+    "ヤマチチZZF": {
+      "en": "Yamachichi ZZF",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (milk-draining H-scene variant).",
+      "register": "crude, gluttonous; ぶえっへ laugh",
+      "note": ""
+    },
+    "ヤマチチZZZ": {
+      "en": "Yamachichi ZZZ",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (milk-drinking H-scene variant).",
+      "register": "crude, weary; クククッ laugh",
+      "note": ""
+    },
+    "セイレーンZZB": {
+      "en": "Siren ZZB",
+      "gender": "female",
+      "role": "Flying demon-race (飛行魔族) unit; female breeding partner (H-scene variant).",
+      "register": "haughty, mocking; おほほ laugh",
+      "note": ""
+    },
+    "セイレーンZZZ": {
+      "en": "Siren ZZZ",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; futanari/female-bodied stud taking the receiving role (H-scene variant).",
+      "register": "crude, lewd; ぎひひ laugh",
+      "note": "Line implies a 'pussy' that the heroine is put into — gender ambiguous; voiced crude-male."
+    },
+    "バジリスクZZL": {
+      "en": "Basilisk ZZL",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, gleeful; げぇへっへ laugh; ヤンス verbal tic",
+      "note": ""
+    },
+    "バジリスクZZB": {
+      "en": "Basilisk ZZB",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, gloating; ぎぃひっひ laugh",
+      "note": ""
+    },
+    "バジリスクZZZ": {
+      "en": "Basilisk ZZZ",
+      "gender": "male",
+      "role": "Flying demon-race (飛行魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, jeering; ぎゃーはっは laugh",
+      "note": ""
+    },
+    "セワッジラットZZP": {
+      "en": "Sewage Rat ZZP",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "non-verbal squeaks (きゅきゅ)",
+      "note": ""
+    },
+    "セワッジラットZZQ": {
+      "en": "Sewage Rat ZZQ",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "non-verbal squeaks (ぐぎゅ)",
+      "note": ""
+    },
+    "ドレッドウルフZZB": {
+      "en": "Dread Wolf ZZB",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "non-verbal barks (がうがう)",
+      "note": ""
+    },
+    "ドレッドウルフZZC": {
+      "en": "Dread Wolf ZZC",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "non-verbal growls (ぐふるる)",
+      "note": ""
+    },
+    "スレイプニルZZG": {
+      "en": "Sleipnir ZZG",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "non-verbal whinnies (ぶふるる)",
+      "note": ""
+    },
+    "ウガルルムZZK": {
+      "en": "Ugarurum ZZK",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "non-verbal roars (がるるぅ)",
+      "note": ""
+    },
+    "ウガルルムZZZ": {
+      "en": "Ugarurum ZZZ",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "non-verbal growls (うるるぅ)",
+      "note": ""
+    },
+    "スライムZZC": {
+      "en": "Slime ZZC",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (squeezing H-scene variant).",
+      "register": "crude, gloating; げぇっべ laugh",
+      "note": ""
+    },
+    "スライムZZZ": {
+      "en": "Slime ZZZ",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, mocking; みみみ laugh",
+      "note": ""
+    },
+    "ゼリーフレシュB": {
+      "en": "Jelly Flesh B",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud.",
+      "register": "crude, suggesting rougher play; へへ laugh",
+      "note": ""
+    },
+    "ゼリーフレシュZZT": {
+      "en": "Jelly Flesh ZZT",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, knowing veteran; くくく laugh",
+      "note": ""
+    },
+    "ヘドロスラッグZZS": {
+      "en": "Sludge Slug ZZS",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "lecherous; にゅほほ laugh",
+      "note": ""
+    },
+    "ヘドロスラッグZZZ": {
+      "en": "Sludge Slug ZZZ",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, jaded; ぐびび laugh",
+      "note": ""
+    },
+    "ヒュドラZZD": {
+      "en": "Hydra ZZD",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (H-scene variant).",
+      "register": "crude, impressed; げっげっげ laugh",
+      "note": ""
+    },
+    "ヒュドラZZZ": {
+      "en": "Hydra ZZZ",
+      "gender": "male",
+      "role": "Amorphous demon-race (不定形魔族) unit; bred soldier / breeding stud (multi-tentacle H-scene variant).",
+      "register": "crude, threatening; counts tentacles",
+      "note": ""
+    },
+    "スレイプニル": {
+      "en": "Sleipnir",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族) unit; bred soldier troop stock.",
+      "register": "non-verbal whinnies (ぶるる/ぶるひ)",
+      "note": "Beast race. Bestial: horse-like neighs."
+    },
+    "サキュバス": {
+      "en": "Succubus",
+      "gender": "female",
+      "role": "Generic name-box for a violated/bred succubus female (often Einaike herself) during H-scenes; also the species name. The lowest caste of the demon army, exists to be bred.",
+      "register": "In-scene: raw screaming and broken pleading — ぁあああ, やなのに…身体が求める, おゆるしください連呼, begging to be allowed to give birth. Despairing, dehumanized.",
+      "note": "Female confirmed (species is female; 牝). Distinct lettered boxes サキュバスA/B are gossiping fellow succubi (catty 〜わね／〜ですもの), not the bred victim."
+    },
+    "囚人": {
+      "en": "Prisoner",
+      "gender": "unknown",
+      "role": "Generic Cetus jailbird who mocks the newly-arrived heroine/administrator for needing to be bred to leave.",
+      "register": "Vulgar, jeering. Cackles クヒヒ／ぎひゃひゃ (male variant) and ウフフ／アハハ (female variant); taunts ご愁傷さまぁ. Also animalistic グルルル／グフッ growls.",
+      "note": "Gender VARIES — the same box carries both a male voice (テメェ, クヒヒッ) and a female voice (アンタ, ウフフッ, ですって). Mark unknown; pick gender per occurrence at line level."
+    },
+    "近衛兵": {
+      "en": "Imperial Guard",
+      "gender": "male",
+      "role": "Palace guard controlling access to the throne / high-command areas; processes audience requests and bars Einaike for her disheveled state.",
+      "register": "Curt, official. 〜できます／謁見の申請を行いますか; impersonal gate-keeping. Stiff.",
+      "note": "Gender male assumed (guard role, neutral martial register; no contradiction). Functional named NPC."
+    },
+    "原住民・重装兵A": {
+      "en": "Native - Heavy Infantry A",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit",
+      "register": "",
+      "note": ""
+    },
+    "原住民・魔導兵A": {
+      "en": "Native - Magic Soldier A",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit",
+      "register": "",
+      "note": ""
+    },
+    "ゴブリンD": {
+      "en": "Goblin D",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族) unit; bred soldier / breeding stud.",
+      "register": "crude grunt",
+      "note": ""
+    },
+    "原住民・魔導兵B": {
+      "en": "Native - Magic Soldier B",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit",
+      "register": "",
+      "note": ""
+    },
+    "？？？": {
+      "en": "???",
+      "gender": "unknown",
+      "role": "Placeholder name-box masking a speaker's identity at first reveal. In samples it masks at least TWO different characters: Furfur (キヒヒ cackle, prison taunts) and King McDonnell (戻ったか／面をあげ throne speech to Einaike). Also used for an attack-shout (\\{\\{\\{『フレイムラスト』\\}\\}\\}).",
+      "register": "Varies by hidden speaker — Furfur's キヒヒ cackle vs. the king's archaic regal command 面をあげ／〜ではないか.",
+      "note": "Gender unknown by design. Resolve per scene: the cackling lines = フォルファクス; the throne lines (戻ったか, アインアイクよ, 貴公) = 赤冠王マクドネル. Do not assign a single gender to the box."
+    },
+    "原住民・重装兵E": {
+      "en": "Native - Heavy Infantry E",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit",
+      "register": "",
+      "note": ""
+    },
+    "魔王軍": {
+      "en": "Demon Lord's Army",
+      "gender": "unknown",
+      "role": "collective/army name-box",
+      "register": "",
+      "note": ""
+    },
+    "門番ウガルルム": {
+      "en": "Gatekeeper Ugarurum",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族); Ugarurum serving as a gatekeeper (named NPC role).",
+      "register": "non-verbal growls (うがるる)",
+      "note": "Gatekeeper NPC; same race as the bred Ugarurum units."
+    },
+    "門番スレイプニル": {
+      "en": "Gatekeeper Sleipnir",
+      "gender": "male",
+      "role": "Beast demon-race (獣魔族); Sleipnir serving as a gatekeeper (named NPC role).",
+      "register": "non-verbal whinnies (ぷにるる)",
+      "note": "Gatekeeper NPC; same race as the bred Sleipnir units."
+    },
+    "魔王": {
+      "en": "Demon Lord",
+      "gender": "male",
+      "role": "Generic name-box for the reigning Demon Lord (current holder = Red-Crown King McDonnell) in his more reflective/anguished scenes, agonizing over the Dark God's decree to confine Einaike.",
+      "register": "Archaic, regal, conflicted. First person archaic; addresses the 邪神 as 貴方. Furigana on 汝(なれ); anguished groans むぅ／むぐ………… and trailing ellipses. Stern but pained.",
+      "note": "Male confirmed. Distinct name-box from 赤冠王マクドネル though same character; this box is used for softer/internal moments. Mentions アインアイクめ."
+    },
+    "紫焔軍・副官": {
+      "en": "Purple-Flame Army Adjutant",
+      "gender": "male",
+      "role": "Adjutant of Einaike's Purple-Flame Army; reports investigation findings (e.g. tracing the missing Sargatanas/サルガタナス卿) and coordinates troop deployment.",
+      "register": "Brisk military subordinate. アインアイク様／ははッ／〜ましょう／〜ですな; efficient, deferential, faintly wistful about war ending.",
+      "note": "Gender male (soldierly deferential register, no contradiction). Named role-character. Distinct from the shorter 副官 box."
+    },
+    "魔族A": {
+      "en": "Demon-kin A",
+      "gender": "unknown",
+      "role": "generic demon-kin",
+      "register": "",
+      "note": ""
+    },
+    "魔族B": {
+      "en": "Demon-kin B",
+      "gender": "unknown",
+      "role": "generic demon-kin",
+      "register": "",
+      "note": ""
+    },
+    "魔族C": {
+      "en": "Demon-kin C",
+      "gender": "unknown",
+      "role": "generic demon-kin",
+      "register": "",
+      "note": ""
+    },
+    "副官": {
+      "en": "Adjutant",
+      "gender": "unknown",
+      "role": "An adjutant/aide attending Einaike in a tense court scene; anguished at being unable to support her, then tries to intercede with the Demon Lord.",
+      "register": "Emotional, self-reproaching. アインアイク様／閣下／陛下; broken くッ…, exclamations 不甲斐ない！？. Loyal, distressed.",
+      "note": "Gender unknown (no decisive gendered marker; could be male officer). Likely the same role as 紫焔軍・副官 but separate box; flag whether to merge."
+    },
+    "教官トロール": {
+      "en": "Drill-Instructor Troll",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族); Troll drill instructor of the Purple-Flame Army barracks (named NPC role, not a battle variant).",
+      "register": "bellowing drill-sergeant; barking orders",
+      "note": "Story NPC (trainer), not a bred battle unit per se, but a Troll-race demon."
+    },
+    "教官ミノタウロス": {
+      "en": "Drill-Instructor Minotaur",
+      "gender": "male",
+      "role": "Base demon-race (基底魔族); Minotaur drill instructor of the Purple-Flame Army (named NPC role, not a battle variant).",
+      "register": "loud, dutiful soldier; rousing",
+      "note": "Story NPC (trainer), not a bred battle unit, but a Minotaur-race demon."
+    },
+    "侍従長": {
+      "en": "Lord Chamberlain",
+      "gender": "male",
+      "role": "The Demon Lord's chief chamberlain; gatekeeps audiences and dismissively appraises the returned Einaike as a mere lowly-species specimen.",
+      "register": "Haughty court servant. 〜ております／〜ですな／はぁ; condescending toward 弱小種族の一匹. Officious, snobbish.",
+      "note": "Gender male (court-official register). Named court-role character."
+    },
+    "原住民・重装兵": {
+      "en": "Native - Heavy Infantry",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit",
+      "register": "",
+      "note": ""
+    },
+    "魔族": {
+      "en": "Demon-kin",
+      "gender": "unknown",
+      "role": "generic demon-kin name-box",
+      "register": "",
+      "note": ""
+    },
+    "原住民・兵士A": {
+      "en": "Native - Soldier A",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit",
+      "register": "",
+      "note": ""
+    },
+    "原住民・魔法使いA": {
+      "en": "Native - Mage A",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit",
+      "register": "",
+      "note": ""
+    },
+    "英雄・\"勇者\"": {
+      "en": "Hero - \"the Valiant\"",
+      "gender": "male",
+      "role": "Elite 英雄 (Hero) born among the natives; noble commander of the Hero party who rallies them against the demon-kin to protect Vendia's world.",
+      "register": "Noble, commanding, formal. First person 我ら/我々/この私; archaic 〜がいい／〜なかれ／討ち滅ぼさせてもらおう. Named attacks 寂光…一閃 / 寂光. Resolute, idealistic.",
+      "note": "Male confirmed (noble masculine register). Romanization \"the Valiant\" for 勇者 per brief. NOTE: file also has bare-quote 英雄・勇者 and 英雄・賢者 etc. as separate boxes — see consolidation note below."
+    },
+    "英雄・\"戦士\"": {
+      "en": "Hero - \"the Warrior\"",
+      "gender": "male",
+      "role": "Elite 英雄 (Hero); the party's hot-blooded frontline bruiser. Believes in answering violence with violence.",
+      "register": "Crude, aggressive. オレ/オレら; rough 〜やがれ／〜じゃねぇか／スカタン／クソッ. Mocks teammates (スカシ野郎, 模範生クン). Belligerent.",
+      "note": "Male confirmed. Romanization \"the Warrior\" for 戦士. Same character as bare-quote box 英雄・戦士."
+    },
+    "英雄・\"武人\"": {
+      "en": "Hero - \"the Champion\"",
+      "gender": "male",
+      "role": "Elite 英雄 (Hero); the party's disciplined veteran/martial-artist. Steady, observant, watches over the others.",
+      "register": "Composed warrior. 〜ぞ／〜ゆえ／むぅ; terse, measured, faintly wry (フッ). Mature, level-headed.",
+      "note": "Male confirmed. Romanization \"the Champion\" for 武人. Same character as bare-quote box 英雄・武人."
+    },
+    "英雄・\"魔女\"": {
+      "en": "Hero - \"the Witch\"",
+      "gender": "female",
+      "role": "Elite 英雄 (Hero); the party's strategist/analyst. Assesses the threat of the breeding succubus (Einaike) and her ever-strengthening offspring.",
+      "register": "Cool, analytical, polite-feminine. 〜ですね／〜でしょう／〜ますよ; measured threat-assessment, occasional dry warnings. Calm tactician.",
+      "note": "Female confirmed (feminine polite enders; role = 魔女/Witch strategist per brief). Also appears as bare-quote box 英雄・魔女."
+    },
+    "英雄・\"賢者\"": {
+      "en": "Hero - \"the Sage\"",
+      "gender": "male",
+      "role": "Elite 英雄 (Hero); elder advisor of the party who counsels caution and reads the enemy's growth rate.",
+      "register": "Calm elder-scholar. 〜かね／〜ぞ／〜と思うが…; reflective, restrained, advisory. Uses そなた. Weary wisdom.",
+      "note": "Gender male (elder-scholar register, no contradicting line). Romanization \"the Sage\" for 賢者. Also bare-quote box 英雄・賢者 (which additionally contains a ヒヒッ-cackling line — possibly mislabeled/shared; flag)."
+    },
+    "英雄・勇者": {
+      "en": "Hero - \"the Valiant\"",
+      "gender": "male",
+      "role": "Hero (bare-quote name-box variant)",
+      "register": "",
+      "note": ""
+    },
+    "英雄・戦士": {
+      "en": "Hero - \"the Warrior\"",
+      "gender": "male",
+      "role": "Hero (bare-quote variant)",
+      "register": "",
+      "note": ""
+    },
+    "カロン": {
+      "en": "Charon",
+      "gender": "male",
+      "role": "Administrator and lore-guide of the Cetus (ケートゥス) breeding facility; explains its origin, timeless nature, and rules.",
+      "register": "Archaic-courteous elder. Sentence-enders ですな／ます／おりませぬ／やもしれません; chuckle ほほ. Measured, expository, deferential (貴女, 閣下).",
+      "note": "Gender male/neutral elder, consistent with brief. No line contradicts. Self-describes as 管理者側たる私."
+    },
+    "ミノタウロス（牝）": {
+      "en": "Minotaur (Female)",
+      "gender": "female",
+      "role": "Base demon-race (基底魔族); a female Minotaur being violated/bred (H-scene victim).",
+      "register": "screaming, pleading",
+      "note": "Rare female of an otherwise male unit race; appears as a bred victim, parallel to the heroine's fate."
+    },
+    "原住民・神言騎士": {
+      "en": "Native - Divine-Word Knight",
+      "gender": "male",
+      "role": "Native (human) elite holy knight (神言騎士) who fights the demon-kin and buys time for the 英雄/Hero to be born; mentioned as the benchmark the offspring surpass.",
+      "register": "Valiant, archaic-martial. おのれ魔族め／来るがいい／〜してくれよう; defiant, self-sacrificing 死地と心得た身. Heroic resignation.",
+      "note": "Gender male (martial knight register). A named native unit-type (not a demon monster species); included as it is a recurring story faction role. Several lettered variants exist (神言騎士A etc.)."
+    },
+    "英雄・魔女": {
+      "en": "Hero - \"the Witch\"",
+      "gender": "female",
+      "role": "Hero (bare-quote variant)",
+      "register": "",
+      "note": ""
+    },
+    "英雄・賢者": {
+      "en": "Hero - \"the Sage\"",
+      "gender": "male",
+      "role": "Hero (bare-quote variant)",
+      "register": "",
+      "note": ""
+    },
+    "原住民・神言騎士A・B": {
+      "en": "Native - Divine-Word Knight A & B",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit; two knights speaking",
+      "register": "",
+      "note": ""
+    },
+    "原住民・神言騎士A": {
+      "en": "Native - Divine-Word Knight A",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit",
+      "register": "",
+      "note": ""
+    },
+    "英雄・武人": {
+      "en": "Hero - \"the Champion\"",
+      "gender": "male",
+      "role": "Hero (bare-quote variant)",
+      "register": "",
+      "note": ""
+    },
+    "英雄・侍": {
+      "en": "Hero - \"the Samurai\"",
+      "gender": "male",
+      "role": "An additional named 英雄 (Hero) of the native party (\"the Samurai\"); reacts with alarm to how monstrously the demon has grown since the last repulse.",
+      "register": "Single sample only: shocked exclamation これが…魔族だというのか…！？. Insufficient for tics; martial/serious tone implied.",
+      "note": "Gender male assumed (侍/samurai, martial). A 5th+ named Hero beyond the brief's listed five — included as a clearly-named story character. Romanization \"the Samurai\" for 侍. Flag: minimal data."
+    },
+    "サキュバスA": {
+      "en": "Succubus A",
+      "gender": "female",
+      "role": "gossiping fellow succubus (bystander)",
+      "register": "catty, 〜わね/〜ですもの",
+      "note": ""
+    },
+    "サキュバスB": {
+      "en": "Succubus B",
+      "gender": "female",
+      "role": "gossiping fellow succubus (bystander)",
+      "register": "catty, 〜わね/〜ですもの",
+      "note": ""
+    },
+    "原住民・重装兵B": {
+      "en": "Native - Heavy Infantry B",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit",
+      "register": "",
+      "note": ""
+    },
+    "原住民・重装兵C": {
+      "en": "Native - Heavy Infantry C",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit",
+      "register": "",
+      "note": ""
+    },
+    "最終兵器ガルデン・ヴェンド": {
+      "en": "Ultimate Weapon Garden-Vend",
+      "gender": "unknown",
+      "role": "\"Ultimate Weapon\" named entity — a story-significant boss/weapon (likely the natives' last-resort creation tied to 創世神ヴェンディア/Vendia, given the name). Only an inarticulate line (………………！) in the sample.",
+      "register": "Silent in sample (only ………………！). No speech tics to characterize.",
+      "note": "Gender unknown (no dialogue/markers). Named story entity, not a monster species — included per task. Romanization ガルデン=Garden, ヴェンド=Vend; name echoes ヴェンディア/Vendia (creator goddess) — possibly \"Garden of Vendia\"/Vend. Flag for human review of intended romanization."
+    },
+    "紫焔将マルコシアス": {
+      "en": "Marchosias, the Purple-Flame General",
+      "gender": "male",
+      "role": "Field commander (titled Purple-Flame General here) reporting native-suppression results and pleading with the king for Einaike's amnesty (恩赦). See gender/identity note under マルコシアス.",
+      "register": "Formal field report. 〜ております／〜ませぬ; clipped suppression reports; earnest plea どうか…恩赦を. Loyal, composed.",
+      "note": "Male confirmed. Likely the same Marchosias as the king's retainer, here given the 紫焔将 rank-title box (possible dev reuse of the title after Einaike's fall, or a separate officer). Flag for human review against story context."
+    },
+    "赤冠王マクドネル": {
+      "en": "Red-Crown King McDonnell",
+      "gender": "male",
+      "role": "The reigning Demon Lord, holder of the secret art \"Red Cap\" (レッドキャップ); regal and terse. Rebukes his retainers; bound by the Dark God's decree.",
+      "register": "Terse, commanding. Curt うむ／〜であろう／〜だぞ; orders 口を閉じろ／口が過ぎるぞ. Long silences (………………). Reluctant authority.",
+      "note": "Male confirmed. Same individual as the 魔王 box; this box used for throne-room command scenes. Addresses subordinates by rank (雷穏将) or name (マルコシアス, ヴィネ)."
+    },
+    "氷爆将ヴィネ": {
+      "en": "Vine, the Ice-Blast General",
+      "gender": "male",
+      "role": "Fuller name-box for Vine in the climactic throne-room scene where he argues that Einaike has served her purpose and begs the king to free her from Cetus; later senses the world collapsing.",
+      "register": "Rough but earnest. オレ/自分; Kansai-rough 〜でしょうや／〜違いますかね／〜ねぇ; emotional plea あまりにも酷でしょうや. Gruff compassion.",
+      "note": "Male confirmed. Same character as ヴィネ; merge in glossary, distinct box used for plot-critical scene."
+    },
+    "雷穏将モレク": {
+      "en": "Moloch, the Thunder-Calm General",
+      "gender": "male",
+      "role": "Fuller name-box for Moloch in the throne-room scene; raises concerns about the offspring's runaway strength and joins the plea to release Einaike; senses the cataclysm.",
+      "register": "Formal aide. 左様／〜ますぞ／はっ; deferential 陛下; measured strategic caution.",
+      "note": "Male confirmed. Same character as モレク; merge in glossary."
+    },
+    "原住民・兵士": {
+      "en": "Native - Soldier",
+      "gender": "unknown",
+      "role": "native soldier (enemy/human); battlefield unit",
+      "register": "",
+      "note": ""
+    },
+    "\"蒼\"の魔王、リバイアサン": {
+      "en": "Leviathan, the Azure Demon Lord",
+      "gender": "unknown",
+      "role": "Primordial eldritch origin of all demon-kin; \"the one who set the table\" (卓を整えし存在). Sent into the world by the Dark God \"Human\" (ニンゲン) to devour the creation of goddess Vendia. Source/true nature of the 魔族.",
+      "register": "Solemn, archaic, oracular. Plural/collective self 我／我ら／我らの本性. Cosmic-mythic narration, long ellipses, control codes (\\!). Detached, ancient.",
+      "note": "Gender UNKNOWN/neutral confirmed (plural eldritch self, no gendered marker). \"蒼\"/Azure contrasts with Einaike as the \"紫\"/Purple Demon Lord (see 原住民・兵士 line referring to \"紫\"の魔王). Lore: world made by 創世神ヴェンディア/Vendia; Dark God = ニンゲン/Human."
+    },
+    "サキュバスの子": {
+      "en": "Succubus Child",
+      "gender": "female",
+      "role": "A succubus child (Einaike's offspring/a young succubus) who laments being left alone by Einaike and is then attacked; childlike and innocent.",
+      "register": "Childish, plaintive. Drawn-out ねぇーねぇー／はあぁーい; simple kana-heavy speech, frightened ひぃぃぃッ. Lonely, vulnerable.",
+      "note": "Gender female (succubus = female species; childlike feminine speech). A named story character, not a monster species — included per task."
+    },
+    "ケートゥ": {
+      "en": "Cetus (childlike voice)",
+      "gender": "unknown",
+      "role": "A childlike, amnesiac voice — apparently the personified/embodied facility \"ケートゥス\"/Cetus (truncated label), dimly half-remembering being told it is the demons' only hope and wondering what 魔族 even are.",
+      "register": "Childlike, dreamy, forgetful. Kana-heavy, vague まぞくって、なんだろう…; lonely 誰か、いないかなぁ; trailing ellipses. Innocent, untethered.",
+      "note": "Gender unknown (no gendered markers; childlike). Label appears truncated from ケートゥス. A named story entity, not a monster species — included. Flag: confirm whether this is the facility's avatar or a specific child character."
+    },
+    "マルコシアス": {
+      "en": "Marchosias",
+      "gender": "male",
+      "role": "Retainer of King McDonnell. In throne scenes speaks bluntly enough to be rebuked. Note: a separate name-box 紫焔将マルコシアス also appears (see note).",
+      "register": "Direct retainer's speech; rebuked by the king for 口が過ぎる (speaking out of turn).",
+      "note": "Male confirmed. CAUTION/likely data inconsistency: the brief lists マルコシアス as McDonnell's retainer, but the file's 25-line speaker is labeled 紫焔将マルコシアス (\"Purple-Flame General Marchosias\") — a battlefield field-commander reporting native suppression and begging the king for Einaike's amnesty (恩赦). Either the dev reused the Marchosias name for Einaike's subordinate field officer, or these are two boxes for one person. The bare マルコシアス key here has only the in-throne mention; treat 紫焔将マルコシアス as the speaking variant. Flag for human review."
+    }
+  },
+  "terms": {
+    "兵力増産所": "troop production facility",
+    "ケートゥス": "Cetus",
+    "魔族": "demon-kin",
+    "魔王": "Demon Lord",
+    "邪神": "Dark God",
+    "創世神": "Creator Goddess",
+    "ヴェンディア": "Vendia",
+    "原住民": "natives",
+    "英雄": "Hero",
+    "勇者": "the Valiant",
+    "魔女": "the Witch",
+    "賢者": "the Sage",
+    "魔導師": "Magus",
+    "サキュバス": "Succubus",
+    "三鼎将": "Three Generals",
+    "四方鼎将": "Four Cauldron Generals",
+    "鼎将": "Cauldron General",
+    "紫焔将": "Purple-Flame General",
+    "雷穏将": "Thunder-Calm General (note: Moloch's magic is wind-element)",
+    "氷爆将": "Ice-Blast General (note: his magic is water-element)",
+    "凶角卿": "Vicious-Horn Lord",
+    "赤冠王": "Red-Crown King",
+    "紫焔軍": "Purple-Flame Army",
+    "種付け": "breeding",
+    "種付": "breeding",
+    "種付け値": "breeding value",
+    "種付値": "breeding value",
+    "種付品質": "breeding quality",
+    "種馬": "stud",
+    "出産": "birth",
+    "繁殖": "breeding",
+    "孕み": "conception",
+    "兵力増産": "troop production",
+    "ユニット": "unit",
+    "誠心誠意度": "Devotion (verify: should imply forced/feigned sincerity)",
+    "褒章": "Decoration",
+    "邪神の細胞片": "Dark God Cell Fragment",
+    "基底魔族": "Base-kin",
+    "飛行魔族": "Flying-kin",
+    "獣魔族": "Beast-kin",
+    "不定形魔族": "Amorphous-kin",
+    "ゴブリン": "Goblin",
+    "コボルド": "Kobold",
+    "リザードマン": "Lizardman",
+    "トロール": "Troll",
+    "ミノタウロス": "Minotaur",
+    "ハルピュイア": "Harpy",
+    "コカトリス": "Cockatrice",
+    "ヤマチチ": "Yamachichi",
+    "セイレーン": "Siren",
+    "バジリスク": "Basilisk",
+    "セワッジラット": "Sewage Rat",
+    "ドレッドウルフ": "Dread Wolf",
+    "スレイプニル": "Sleipnir",
+    "スライム": "Slime",
+    "イールワーム": "Eel Worm",
+    "ゼリーフレシュ": "Jelly Flesh",
+    "ヘドロスラッグ": "Sludge Slug",
+    "ヒュドラ": "Hydra",
+    "サキュバス将軍の兵力増産所": "Brood General Succubus",
+    "孕み&スラッシュ": "Harassla (breed-and-slash)",
+    "種付け場": "breeding ground",
+    "種付値究極増加": "Ultimate Breeding Value Boost",
+    "牡": "male / stud",
+    "牝": "female (vulgar: bitch/sow)",
+    "子種": "seed",
+    "出産場": "Birthing Hall",
+    "繁殖スタイル": "breeding role",
+    "ケートゥス兵力増産所": "Cetus Troop Production Facility",
+    "ケートゥス収容所": "Cetus Containment Facility",
+    "収容所": "containment ward",
+    "牢獄": "dungeon / prison",
+    "監禁": "confinement",
+    "監獄": "prison",
+    "管理者": "administrator",
+    "管理官": "warden (verify vs 管理者=administrator)",
+    "第一仔": "firstborn",
+    "仔": "offspring / young",
+    "幼体": "young / juvenile (not 'larva' by default)",
+    "出荷": "shipped out",
+    "1回出産チケット": "1x Birth Ticket",
+    "10回出産チケット": "10x Birth Ticket",
+    "交換品・チケット": "Exchange & Tickets",
+    "交換アイテム": "exchange item",
+    "交換品": "exchange goods",
+    "基底魔族種馬追加": "Add Base-kin Stud",
+    "飛行魔族種馬追加": "Add Flying-kin Stud",
+    "獣魔族種馬追加": "Add Beast-kin Stud",
+    "不定形魔族種馬追加": "Add Amorphous-kin Stud",
+    "魔王軍": "Demon Lord's Army",
+    "基底種族": "Base race",
+    "獣型": "Beast-type",
+    "突然変異": "mutant",
+    "弱小種族": "lesser race / weakling race",
+    "強豪種族": "mighty race",
+    "囚人": "Prisoner",
+    "魔王陛下": "His Majesty the Demon Lord",
+    "赤冠王マクドネル": "Red-Crown King McDonnell",
+    "レッドキャップ": "Red Cap",
+    "マルコシアス": "Marchosias",
+    "紫焔将マルコシアス": "Marchosias, Purple-Flame General",
+    "初代魔王": "First Demon Lord",
+    "最高幹部": "supreme commander",
+    "氷爆軍": "Ice-Blast Army (verify role: beast-kin ops)",
+    "雷穏軍": "Thunder-Calm Army",
+    "凶角団": "Vicious-Horn Brigade",
+    "淫魔将": "Succubus General (or 'Whore General')",
+    "淫魔軍": "Lewd-Demon Army",
+    "卿": "Lord",
+    "閣下": "Your Excellency",
+    "将軍": "General",
+    "サルガタナス": "Sargatanas",
+    "ニンゲン": "Human",
+    "邪神の細胞": "Dark God Cell",
+    "邪神の恩寵": "Dark God's Blessing",
+    "邪神の威圧": "Dark God's Dread",
+    "神託": "divine oracle",
+    "宣託": "decree",
+    "創世神ヴェンディア": "Vendia, the Creator Goddess",
+    "リバイアサン": "Leviathan",
+    "蒼の魔王": "Azure Demon Lord",
+    "紫の魔王": "Violet Demon Lord",
+    "世界の破片": "world fragment",
+    "根源": "the Source / the Origin",
+    "戦士": "the Warrior",
+    "武人": "the Champion",
+    "神言騎士": "Divine-Word Knight",
+    "聖衛兵": "Holy Guard",
+    "重騎士": "Heavy Knight",
+    "大魔導師": "Archmage",
+    "奇術士": "Trickster",
+    "斥候": "Scout",
+    "弓兵": "Archer",
+    "武闘家": "Martial Artist",
+    "荒くれ": "Brawler",
+    "忍び": "Ninja",
+    "勇士": "Brave",
+    "聖職者": "Cleric",
+    "魔法使い": "Mage",
+    "兵士": "Soldier",
+    "魔導兵": "Magic Soldier",
+    "重装兵": "Heavy Infantry",
+    "最終兵器ガルデン・ヴェンド": "Final Weapon Garden-Vend",
+    "戦闘褒章": "Battle Decoration",
+    "彼岸花": "Spider Lily",
+    "地獄花": "Hell Flower",
+    "龍爪花": "Dragon-Claw Flower",
+    "曼珠沙華": "Manjushage / Red Spider Lily",
+    "大勲位曼珠沙華章": "Grand Order of the Crimson Lily",
+    "勲功": "distinguished service",
+    "武勲": "martial honors",
+    "魔王城": "Demon Lord's Castle",
+    "中央司令部": "Central Command",
+    "玉座": "throne",
+    "凶角卿居室": "Vicious-Horn Lord's Quarters",
+    "紫焔将居室": "Purple-Flame General's Quarters",
+    "浮遊要塞": "Floating Fortress",
+    "反重力帯要塞": "Anti-Gravity Fortress",
+    "出撃": "sortie",
+    "侵攻": "invasion",
+    "ラストステージ": "Final Stage",
+    "エキスパンドモード": "Expand Mode",
+    "回想": "Recollection",
+    "戦う": "Fight",
+    "逃げる": "Flee",
+    "攻撃": "Attack",
+    "防御": "Guard",
+    "スキル": "Skills",
+    "行動スキル": "Action Skills",
+    "所持スキル": "Owned Skills",
+    "装備": "Equip",
+    "最強装備": "Optimize",
+    "全て外す": "Remove All",
+    "ステータス": "Status",
+    "並び替え": "Reorder",
+    "セーブ": "Save",
+    "ゲーム終了": "Quit Game",
+    "オプション": "Options",
+    "その他": "Other",
+    "ニューゲーム": "New Game",
+    "コンティニュー": "Continue",
+    "タイトルへ": "To Title",
+    "やめる": "Cancel",
+    "購入する": "Buy",
+    "売却する": "Sell",
+    "バックログ": "Backlog",
+    "ウィンドウ消去": "Hide Window",
+    "文章スキップ": "Skip Text",
+    "画面拡大": "Zoom In",
+    "画面縮小": "Zoom Out",
+    "アイテム確認": "Check Items",
+    "戦闘即開始": "Instant Battle Start",
+    "長押し": "hold",
+    "凌辱": "ravishment",
+    "種付け場移行": "transition to breeding pen",
+    "設定資料": "Setting Materials",
+    "ストームディヴァー": "Storm Diver (note element mismatch in data)",
+    "ダンバブン": "Danbabun (LOW CONFIDENCE — verify)",
+    "アインアイク": "Einaike (TENTATIVE — verify against any Latin-script source)"
+  },
+  "meta": {}
+}

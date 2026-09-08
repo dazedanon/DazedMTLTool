@@ -31,7 +31,7 @@ class TranslationContextDialog(QDialog):
         parent: QWidget | None = None,
         *,
         game_root_fn: Callable[[], str],
-        copy_setup_fn: Callable[[], bool],
+        copy_setup_fn: Callable[[], bool] | None = None,
     ):
         super().__init__(parent)
         self._game_root_fn = game_root_fn
@@ -57,18 +57,20 @@ class TranslationContextDialog(QDialog):
         )
 
         setup_card = SectionCard(
-            "Generic setup",
-            "Use this when the project does not fit an engine-specific Workflow. "
-            "The copied skill discovers the file structure before writing guidance.",
+            "Generic setup" if copy_setup_fn else "Selected project",
+            ("Use this when the project does not fit an engine-specific Workflow. "
+             "The copied skill discovers the file structure before writing guidance.")
+            if copy_setup_fn else
+            "Your assistant prepares this guidance as part of the main task. Review or edit it below whenever needed.",
             compact=True,
         )
         self.project_path = QLineEdit()
         self.project_path.setReadOnly(True)
-        self.project_path.setPlaceholderText("Choose a project on the Translation page")
+        self.project_path.setPlaceholderText("Choose a project in the main window")
         setup_card.add_widget(self.project_path)
 
         self.status_banner = StatusBanner(
-            "Choose a project folder, then copy the setup skill.", "info"
+            "Choose a project folder to review its guidance.", "info"
         )
         setup_card.add_widget(self.status_banner)
 
@@ -83,6 +85,7 @@ class TranslationContextDialog(QDialog):
         )
         self.copy_setup_button.setMinimumWidth(Geometry.ACTION_WIDE)
         self.copy_setup_button.clicked.connect(self._copy_setup)
+        self.copy_setup_button.setVisible(copy_setup_fn is not None)
         setup_actions.addWidget(self.copy_setup_button)
 
         self.reload_button = QPushButton("Reload guidance")
@@ -130,12 +133,12 @@ class TranslationContextDialog(QDialog):
         self.project_path.setText(root)
         self.project_path.setCursorPosition(0)
         enabled = bool(root)
-        self.copy_setup_button.setEnabled(enabled)
+        self.copy_setup_button.setEnabled(enabled and self._copy_setup_fn is not None)
         self.reload_button.setEnabled(enabled)
         if not enabled:
             self.editors.invalidate()
             self.status_banner.set_status(
-                "Choose a project folder on the Translation page first.", "warning"
+                "Choose a project folder in the main window first.", "warning"
             )
             return False
 
@@ -149,7 +152,7 @@ class TranslationContextDialog(QDialog):
         return loaded
 
     def _copy_setup(self) -> None:
-        if self._copy_setup_fn():
+        if self._copy_setup_fn is not None and self._copy_setup_fn():
             self.reload_context()
             self.status_banner.set_status(
                 "Setup skill copied. Run it in your AI helper with this project accessible, "

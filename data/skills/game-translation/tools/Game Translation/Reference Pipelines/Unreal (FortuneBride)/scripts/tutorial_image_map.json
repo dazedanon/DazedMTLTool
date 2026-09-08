@@ -1,0 +1,84 @@
+{
+  "_comment": "Translation map for tutorial images. Each image: list of text elements with JP source, EN translation (glossary-matched), pixel box [x,y,w,h] of the JP text to erase, anchor (center/left), color hex sampled from original, font key, and size. Title/subtitle English already on image = skip. Coords are for the full-res extracted PNG.",
+  "fonts": {
+    "title": "FOT-KanaeReishoStd-B",
+    "body_jp": "DotMincho12Std-M",
+    "body_en": "serif"
+  },
+  "images": {
+    "tutorial_01_controls": {
+      "size": [2965, 1663],
+      "elements": [
+        {"jp": "キーボード", "en": "KEYBOARD", "box": [150, 268, 230, 50], "color": "#d98fd0", "anchor": "left", "size": 34, "tracking": 4},
+        {"jp": "マウス", "en": "MOUSE", "box": [1560, 268, 180, 50], "color": "#d98fd0", "anchor": "left", "size": 34, "tracking": 4},
+        {"jp": "設定画面", "en": "Settings", "box": [490, 430, 280, 70], "color": "#ff3fb0", "anchor": "left", "size": 52},
+        {"jp": "移動", "en": "Move", "box": [990, 890, 180, 70], "color": "#ffffff", "anchor": "left", "size": 50},
+        {"jp": "ダッシュ", "en": "Dash", "box": [990, 1230, 220, 70], "color": "#ffffff", "anchor": "left", "size": 50},
+        {"jp": "ズーム", "en": "Zoom", "box": [2310, 900, 200, 70], "color": "#ffffff", "anchor": "left", "size": 50}
+      ]
+    },
+    "tutorial_02_currency": {
+      "size": [2973, 1659],
+      "elements": [
+        {"jp": "快楽ポイント", "en": "Pleasure Points", "box": [530, 800, 420, 70], "color": "#ffffff", "anchor": "center", "size": 56},
+        {"jp": "チケット", "en": "Tickets", "box": [1900, 800, 420, 70], "color": "#ffffff", "anchor": "center", "size": 56},
+        {"jp": "この部屋独自の通貨。部屋から脱出するために、スロットを回して稼ぐのが目的です。", "en": "This room's unique currency. The goal is to earn it by spinning the slots to escape the room.", "box": [430, 1020, 640, 200], "color": "#cfc0e8", "anchor": "center", "size": 34, "highlight": {"slots to escape": "#d98fd0"}, "wrap": 26},
+        {"jp": "ストアで攻略に役立つ「チャーム」の購入に使えます。", "en": "Used in the store to buy Charms that help you progress.", "box": [1800, 1020, 640, 160], "color": "#cfc0e8", "anchor": "center", "size": 34, "highlight": {"Charms": "#d98fd0"}, "wrap": 26}
+      ]
+    },
+    "tutorial_05_store": {
+      "size": [2532, 1413],
+      "elements": [
+        {"jp": "チケットを支払って「チャーム」を購入できます。", "en": "Pay Tickets to purchase Charms.", "box": [1050, 430, 1350, 60], "color": "#cfc0e8", "anchor": "left", "size": 38, "highlight": {"Tickets": "#d98fd0", "Charms": "#d98fd0"}},
+        {"jp": "中央の「補充ボタン」を押すと、「快楽ポイント」を支払って品揃えを一新できます。", "en": "Press the central Restock Button to spend Pleasure Points and refresh the lineup.", "box": [1050, 560, 1350, 130], "color": "#cfc0e8", "anchor": "left", "size": 38, "highlight": {"Restock Button": "#d98fd0", "Pleasure Points": "#d98fd0"}, "wrap": 40},
+        {"jp": "購入した「チャーム」はこの「棚」に保管されます。", "en": "Purchased Charms are stored on this Shelf.", "box": [1280, 900, 1120, 130], "color": "#cfc0e8", "anchor": "left", "size": 38, "highlight": {"Charms": "#d98fd0", "Shelf": "#d98fd0"}, "wrap": 30},
+        {"jp": "ストア", "en": "Store", "box": [430, 1280, 200, 50], "color": "#cfc0e8", "anchor": "center", "size": 32}
+      ]
+    },
+    "tutorial_08_slot_intro": {
+      "size": [2813, 1573],
+      "elements": [
+        {"jp": "「快楽ポイント」を払うと7回スピン後にチケット1枚を獲得。", "en": "Pay Pleasure Points to get 1 Ticket after 7 spins.", "box": [1100, 420, 1550, 130], "color": "#cfa8e0", "anchor": "left", "size": 40, "highlight": {"Pleasure Points": "#ff7fd0"}, "wrap": 40},
+        {"jp": "「快楽ポイント」を払うと貰えるチケットが2枚で、スピンは3回。", "en": "Pay Pleasure Points to get 2 Tickets, with 3 spins.", "box": [1100, 640, 1550, 130], "color": "#cfa8e0", "anchor": "left", "size": 40, "highlight": {"Pleasure Points": "#ff7fd0"}, "wrap": 40},
+        {"jp": "スピン数を選択", "en": "Select spin count", "box": [430, 920, 360, 50], "color": "#cfc0e8", "anchor": "center", "size": 30},
+        {"jp": "スロットを回すのに必要な金額は死の期限を突破するごとに大きくなる", "en": "The cost to spin the slots increases each time you clear a Death Deadline.", "box": [1250, 990, 1350, 130], "color": "#e0b0b0", "anchor": "left", "size": 34, "wrap": 38},
+        {"jp": "支払ってからスロットを回し終えるまでが1ラウンド。次の「死の期限」が来るまでに3ラウンド、これを繰り返します。", "en": "From paying to finishing a spin is 1 Round. It takes 3 Rounds until the next Death Deadline, repeating this.", "box": [560, 1320, 1700, 130], "color": "#cfc0e8", "anchor": "center", "size": 32, "highlight": {"Death Deadline": "#d98fd0"}, "wrap": 70}
+      ]
+    },
+    "tutorial_10_red_button": {
+      "size": [2981, 1670],
+      "elements": [
+        {"jp": "椅子の隅の「赤ボタン」は、「赤ボタンで発動するチャーム」を持っている時に押せます。押すとそのチャームの会「チャージ」を消費して効果を発動。チャージはラウンド終了後に1回復します。", "en": "The Red Button at the corner of the chair can be pressed when you hold a Charm that activates with the red button. Pressing it consumes the Charm's Charge to trigger its effect. Charge recovers by 1 at the end of each round.", "box": [1080, 480, 1700, 360], "color": "#cfc0e8", "anchor": "left", "size": 34, "highlight": {"Red Button": "#ff3fb0", "Charm that activates with the red button": "#d98fd0", "Charge": "#7fd0ff"}, "wrap": 52},
+        {"jp": "赤ボタン", "en": "Red Button", "box": [380, 1280, 220, 50], "color": "#cfc0e8", "anchor": "center", "size": 30},
+        {"jp": "押せると点滅する", "en": "Blinks when pressable", "box": [330, 1350, 320, 40], "color": "#a090c0", "anchor": "center", "size": 26},
+        {"jp": "赤ボタンで発動するチャーム", "en": "Charm that activates with the red button", "box": [1700, 1560, 600, 40], "color": "#a090c0", "anchor": "center", "size": 26}
+      ]
+    },
+    "tutorial_11_six66": {
+      "size": [2820, 1581],
+      "elements": [
+        {"jp": "死の期限3以降、低確率で666が揃うことがあります。", "en": "From Death Deadline 3 on, 666 can rarely line up.", "box": [560, 1200, 1700, 60], "color": "#ff5050", "anchor": "center", "size": 40, "highlight": {"666": "#ffb030"}, "wrap": 60},
+        {"jp": "揃うとそのラウンドで獲得したポイントが没収となります。さらに死の期限7以降は所持しているポイントを全て失います。ここまで入金することを心がけましょう。", "en": "If it lines up, the points earned that round are forfeit. From Death Deadline 7 on, you also lose all held points. Be sure to deposit before reaching this.", "box": [560, 1290, 1700, 130], "color": "#d09090", "anchor": "center", "size": 30, "wrap": 90}
+      ]
+    },
+    "tutorial_14_start_demo": {
+      "size": [2764, 1549],
+      "elements": [
+        {"jp": "体験版のダウンロード", "en": "Thank you for", "box": [700, 740, 1360, 120], "color": "#ff3fb0", "anchor": "center", "size": 90, "skip_glow": false},
+        {"jp": "ありがとうございます", "en": "downloading the demo", "box": [700, 920, 1360, 120], "color": "#ff3fb0", "anchor": "center", "size": 90},
+        {"jp": "体験版では、死の期限10のうち死の期限3までの内容をプレイできます。", "en": "In the demo, you can play through Death Deadline 3 of the 10 Death Deadlines.", "box": [700, 1340, 1360, 50], "color": "#cfc0e8", "anchor": "center", "size": 30, "highlight": {"Death Deadline 3": "#ff7fb0", "10 Death Deadlines": "#ff7fb0"}},
+        {"jp": "操作確認と合わせてお楽しみください。", "en": "Enjoy it along with checking the controls.", "box": [700, 1410, 1360, 50], "color": "#cfc0e8", "anchor": "center", "size": 30}
+      ]
+    },
+    "tutorial_15_finish_demo": {
+      "size": [2763, 1548],
+      "elements": [
+        {"jp": "体験版をプレイしていただき", "en": "Thank you for playing", "box": [560, 280, 1640, 130], "color": "#ff3fb0", "anchor": "center", "size": 88},
+        {"jp": "ありがとうございます。", "en": "the demo.", "box": [560, 450, 1640, 130], "color": "#ff3fb0", "anchor": "center", "size": 88},
+        {"jp": "死の期限10までのストーリーや様々な木葉とのえっち、複数のエンディングに加えて「精神状態」「衣装変更」など様々な追加要素をお楽しみいただけます。", "en": "Enjoy the story through Death Deadline 10, various ecchi with Konoha, multiple endings, plus added features like Mental States and Outfit Changes.", "box": [560, 740, 1640, 130], "color": "#cfc0e8", "anchor": "center", "size": 30, "highlight": {"Mental States": "#d98fd0", "Outfit Changes": "#d98fd0"}, "wrap": 78},
+        {"jp": "体験版", "en": "Demo", "box": [780, 1120, 200, 40], "color": "#a090c0", "anchor": "center", "size": 28},
+        {"jp": "製品版", "en": "Full Version", "box": [1850, 1120, 240, 40], "color": "#a090c0", "anchor": "center", "size": 28}
+      ]
+    }
+  }
+}

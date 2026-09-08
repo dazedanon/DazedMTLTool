@@ -28,8 +28,10 @@ an existing file wholesale.
 ## Discover the project
 
 Start with a bounded inventory of file names, extensions, sizes, and directories. Ignore version
-control metadata, caches, generated build output, and `.dazedtl` except when reading the existing
-guidance files. Identify likely player-visible text using evidence from the project:
+control metadata, caches and generated build output. Under `.dazedtl`, read existing guidance,
+the reference registry, and reviewed extraction artifacts explicitly identified by the current
+handoff; ignore other implementation and progress files. Identify likely player-visible text
+using evidence from the project:
 
 - Prefer manifests, schemas, source code, resource loaders, and small structured databases that
   explain how text is stored or displayed.
@@ -86,6 +88,18 @@ recurring joke or catchphrase rule when available.
 
 Do not put per-character register, isolated jokes, glossary lists, inferred file structure,
 wrapping limits, or unsupported formatting rules here.
+
+{{CHARACTER_IDENTITY_RULES}}
+
+## Investigate before finalizing guidance
+
+Use the discovered engine's corpus map and reviewed extraction as the search surface for this
+shared investigation phase. The guidance-file write contract remains the three files above.
+The .dazedtl/reference-games.json registry, when present, is the same registry used by Workflow;
+use util.reference_games.reference_context with actual current Japanese source strings for exact
+overlaps. Reference translations remain advisory. Keep research notes outside API skill overlays.
+
+{{LOCALIZATION_INVESTIGATION_PHASE}}
 
 ## Apply and verify
 

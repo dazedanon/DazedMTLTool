@@ -2,6 +2,49 @@
 
 Use **Workflow** for most jobs. The other tabs are useful when you need a specific tool.
 
+## Len’s Method
+
+Use this tab to translate a whole game with an AI coding assistant. Len’s playbook covers
+engine detection, extraction, guidance, translation, fitting, injection, images,
+playtesting and building a local translation patch.
+
+1. Choose the game’s root folder and task: full translation, preparation, continue, or QA.
+2. Choose direct assistant translation or a translation API, and set the image scope.
+3. Click **Copy starting prompt**. DazedTL prepares or refreshes the project workspace
+   and copies the complete instructions in one action.
+4. Open the game folder in your coding assistant and paste that prompt. The assistant
+   inspects the game, prepares its glossary and guidance, and carries out the selected task.
+5. Use **Reload progress report** to review the assistant’s work and remaining checks.
+
+One starting prompt includes setup. You do not need to copy guidance between tabs or run
+a separate setup prompt. **Optional: review guidance and references** contains the shared
+editors and tools for adding reference translations whenever you want to use them.
+
+To reuse names and vocabulary from multiple prequels, list their folders or a prepared
+corpus folder in **Instructions**, such as “Use the translations in /path/to/prequels
+as terminology references for this game.” The same starting prompt tells your assistant
+to inspect those references, put verified recurring terms in the shared glossary, and
+register aligned translations. It preserves the original reference files and records
+conflicting spellings for review.
+
+Glossary, Game frame, Quirks, custom skills and reference translations are shared with
+Workflow. Changes saved in either route apply to the next compiled translation context.
+The base glossary checkbox controls whether Len’s batches include DazedTL’s stock terms.
+Setup includes the shared localization investigation and character identity safeguards.
+
+Direct translation needs your coding assistant’s access, but no DazedTL API key. API mode
+requires a provider, model and budget agreed with the assistant. Preparation does not make
+paid calls or copy private API keys. Some engine tools need additional dependencies,
+documented in the skill.
+
+The game’s `.dazedtl/len-method` folder holds its settings, handoff, context and progress
+report. App updates refresh the maintained Len skill and tools; project-specific adaptations
+stay in the game workspace. Resuming preserves previous work. After moving a game, select
+its new folder and copy the starting prompt again to refresh paths.
+
+The progress report is written by the assistant. Completion requires reviewed strings,
+images within scope and in-game validation; a complete string count alone is insufficient.
+
 ## Translation
 
 This is the manual translation screen. Workflow opens it for you at the correct time.

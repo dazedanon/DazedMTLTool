@@ -1,0 +1,99 @@
+{
+  "meta": {
+    "game": "musi_dream",
+    "source_language": "Japanese",
+    "target_language": "English",
+    "status": "Reviewed manual English translation, first release",
+    "source": "Shipped scripts and read_me.txt; no API or external lookup",
+    "note": "No official English title or Latin spelling of Himarii was found in the inspected text. Do not infer biological sex from register or from egg-laying. Do not turn technical speaker keys into display names."
+  },
+  "names": {
+    "ヒマリィ": {
+      "en": "Himarii",
+      "gender": "female",
+      "role": "Human video creator and central character; struggling to attract viewers",
+      "register": "Casual contemporary speech, 私, energetic exclamations, self-deprecation, and an on-camera voice that seeks an audience",
+      "aliases": [],
+      "speaker_keys": [
+        "底辺Ytuberヒマリィ",
+        "undress_face",
+        "kosuri_face",
+        "insert_face",
+        "sanran_face",
+        "sanran_bl",
+        "ev_baby"
+      ],
+      "note": "Editorial phonetic spelling, not creator-verified Latin orthography. scene1.ks:8-12 and narration at 18 establish name and premise. The ev_baby key identifies Himarii speaking in scene9, not an infant speaker. Review other bubble keys per scene."
+    },
+    "底辺Ytuberヒマリィ": {
+      "en": "Small-Time Ytuber Himarii",
+      "gender": "female",
+      "role": "Himarii's full displayed nameplate; keep the self-deprecating creator label when the source includes it",
+      "register": "Same character as Himarii",
+      "aliases": [],
+      "note": "28 active occurrences. Preserve Ytuber, the source's fictionalized platform wording. Nameplate fits the shipped 360px plate at 26px in live Chromium."
+    },
+    "巨大なキリギリス": {
+      "en": "Giant Katydid",
+      "gender": "unknown",
+      "role": "Talking insect-like creature that enters Himarii's room; player-directed actions belong to this creature",
+      "register": "Rough, colloquial, self-assured; stretched endings such as なァ and ねェ; may use 俺",
+      "aliases": [],
+      "speaker_keys": [
+        "undress_bug",
+        "kosuri_bug",
+        "insert_bug",
+        "sanran_ch"
+      ],
+      "note": "scene2_undress.ks:52-64 identifies a creature resembling a katydid. Gender/sex not established by masculine speech. Use it where third-person reference is needed until stronger evidence. Japanese バッタ in Himarii's startled reaction is her approximate description, not a glossary correction. All sanran_ch dialogue was reviewed in scene context and belongs to the katydid; display aliases leave engine keys unchanged."
+    },
+    "？？？": {
+      "en": "???",
+      "gender": "unknown",
+      "role": "Unidentified speaker before the creature is identified in scene2",
+      "register": "Keep the scene's colloquial voice without revealing the later label",
+      "aliases": [],
+      "note": "Two active occurrences. Do not substitute Giant Katydid before the source reveals that nameplate."
+    },
+    "俺": {
+      "en": "Me",
+      "gender": "unknown",
+      "role": "First-person viewer nameplate in the ending scenes; not automatically the insect",
+      "register": "Casual, masculine-coded first-person reactions as an online viewer",
+      "aliases": [],
+      "note": "14 active nameplate occurrences. scene9_baby.ks:144-147 comments on following future videos. A shared first-person pronoun never establishes shared identity."
+    }
+  },
+  "terms": {
+    "Ytuber": "Ytuber",
+    "Ytube": "Ytube",
+    "Hdouga": "Hdouga",
+    "キーウィ": "kiwi",
+    "キリギリス": "katydid",
+    "バッタ": "grasshopper",
+    "産卵": "egg-laying",
+    "卵": "egg",
+    "産卵管": "ovipositor",
+    "触角": "antennae",
+    "再生回数": "view count",
+    "再生数": "view count",
+    "動画": "video",
+    "チャンネル": "channel",
+    "ビデオカメラ": "video camera",
+    "おしまい": "The End",
+    "確認": "Confirm",
+    "リロード": "Reload",
+    "ほろち先生": "Horochi-sensei"
+  },
+  "do_not_merge": [
+    "Keep the anonymous ??? label until the source reveals the creature.",
+    "The viewer nameplate 俺 and the creature's first-person 俺 do not establish the same speaker.",
+    "The technical key ev_baby is used for Himarii's speech; it is not a child character's name."
+  ],
+  "do_not_translate": [
+    "Technical IDs in reports/engine_keys.json, only at identifier sites",
+    "All #registered_character_ID keys, including undress_bug, sanran_ch, and ev_baby",
+    "Labels, target/storage/name references, variables, asset paths, selectors, and font names",
+    "package.json name=tyranogame and Config.tjs projectID=musi_dream"
+  ]
+}

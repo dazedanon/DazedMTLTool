@@ -1,0 +1,10 @@
+tl/mistral_keys.txt
+*.env
+RE/dump/
+RE/images/
+images/src/
+dist/
+__pycache__/
+*.pyc
+plugin/**/bin/
+plugin/**/obj/

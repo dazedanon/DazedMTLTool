@@ -606,6 +606,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("AI-generated guide", prompt)
         self.assertIn(str(game_root.resolve()), generic_setup)
         self.assertNotIn("{{GAME_ROOT}}", generic_setup)
+        self.assertNotRegex(generic_setup, r"\{\{[A-Z_]+\}\}")
         for relative in (
             ".dazedtl/glossary.txt",
             ".dazedtl/skills/game.md",
