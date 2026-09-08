@@ -7,9 +7,12 @@ a maintainer explicitly uses --force / --refresh-offline / --refresh-all.
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -140,63 +143,121 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
 class UpdateThreadArchiveRootTests(unittest.TestCase):
     """Gitea zips nest files under a single top folder (repo display name)."""
 
-    def test_prefers_configured_archive_root(self):
+    def test_windows_filesystem_paths_support_long_local_and_unc_names(self):
         from gui.main import UpdateThread
 
-        with tempfile.TemporaryDirectory() as raw:
-            base = Path(raw)
-            preferred = base / UpdateThread.ARCHIVE_ROOT
-            preferred.mkdir()
-            (base / "other").mkdir()
-            self.assertEqual(UpdateThread.resolve_archive_root(base), preferred)
+        cases = (
+            ("C:/Users/test/Temp/../Temp", "\\\\?\\C:\\Users\\test\\Temp"),
+            ("//server/share/tool", "\\\\?\\UNC\\server\\share\\tool"),
+            ("\\\\?\\C:\\tool", "\\\\?\\C:\\tool"),
+            ("\\\\?\\UNC\\server\\share\\tool", "\\\\?\\UNC\\server\\share\\tool"),
+        )
+        with patch("gui.main.sys.platform", "win32"):
+            for source, expected in cases:
+                with self.subTest(source=source):
+                    self.assertEqual(str(UpdateThread._filesystem_path(source)), expected)
 
-    def test_falls_back_to_single_subdirectory(self):
+        with patch("gui.main.sys.platform", "linux"):
+            self.assertEqual(UpdateThread._filesystem_path("/tmp/tool"), Path("/tmp/tool"))
+
+    def test_deep_archive_apply_preserves_user_data_and_cleans_up_on_failure(self):
+        from gui.main import UpdateCandidate, UpdateThread
+
+        candidate = UpdateCandidate("b" * 40, UpdateThread.UPDATE_SOURCES[0])
+        archive_root = f"DazedMTLTool-{candidate}"
+        # Exceeds MAX_PATH even in a short temp/install folder, without any
+        # individual name exceeding Windows' 255-character component limit.
+        deep_rel = Path("data/skills") / ("nested/" * 36) / "CodeEntries/example.gml"
+        extractall = zipfile.ZipFile.extractall
+
+        for failure in (None, "extract", "copy"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as raw:
+                base = Path(raw)
+                root = base / "installed"
+                (root / "data").mkdir(parents=True)
+                (root / ".env").write_text("user settings", encoding="utf-8")
+                (root / "data/vocab.txt").write_text("user vocab", encoding="utf-8")
+                sha_file = root / "data/last_update_sha.txt"
+                sha_file.write_text("previous", encoding="utf-8")
+                staging = base / "staging"
+                staging.mkdir()
+                worker = UpdateThread()
+                finished = []
+                worker.finished.connect(lambda *result: finished.append(result))
+
+                def download(zip_path, _candidate):
+                    with zipfile.ZipFile(zip_path, "w") as archive:
+                        for rel, body in (
+                            (deep_rel.as_posix(), "translated script"),
+                            ("start.sh", "#!/bin/sh\n"),
+                            (".env", "archive settings"),
+                            ("data/vocab.txt", "archive vocab"),
+                            ("data/last_update_sha.txt", "archive marker"),
+                        ):
+                            archive.writestr(f"{archive_root}/{rel}", body)
+
+                def extract(archive, path):
+                    extractall(archive, path)
+                    if failure == "extract":
+                        raise OSError("extraction failed")
+
+                copy2 = shutil.copy2
+
+                def copy(src, dst):
+                    if failure == "copy":
+                        raise OSError("copy failed")
+                    return copy2(src, dst)
+
+                with (
+                    patch("gui.main.PROJECT_ROOT", root),
+                    patch.object(UpdateThread, "SHA_FILE", str(sha_file)),
+                    patch("gui.main.tempfile.gettempdir", return_value=str(staging)),
+                    patch.object(worker, "_download_archive", side_effect=download),
+                    patch.object(zipfile.ZipFile, "extractall", extract),
+                    patch("gui.main.shutil.copy2", side_effect=copy),
+                ):
+                    if failure:
+                        with self.assertRaises(OSError):
+                            worker._download_and_apply(candidate)
+                    else:
+                        worker._download_and_apply(candidate)
+
+                self.assertEqual(list(staging.iterdir()), [])
+                self.assertEqual((root / ".env").read_text(), "user settings")
+                self.assertEqual((root / "data/vocab.txt").read_text(), "user vocab")
+                self.assertEqual(sha_file.read_text(), "previous" if failure else candidate)
+                if failure:
+                    self.assertEqual(finished, [])
+                else:
+                    installed = UpdateThread._filesystem_path(root) / deep_rel
+                    self.assertEqual(installed.read_text(), "translated script")
+                    self.assertEqual(finished, [(True, f"updated:{candidate[:8]}")])
+                    if os.name != "nt":
+                        self.assertTrue((root / "start.sh").stat().st_mode & 0o111)
+                # Remove through the extended path so the outer fixture's
+                # cleanup also works on Windows with long paths disabled.
+                shutil.rmtree(UpdateThread._filesystem_path(root))
+
+    def test_resolves_archive_roots_and_rejects_ambiguous_layouts(self):
         from gui.main import UpdateThread
 
-        with tempfile.TemporaryDirectory() as raw:
-            base = Path(raw)
-            only = base / "renamed-repo-folder"
-            only.mkdir()
-            (only / "gui").mkdir()
-            (only / "gui" / "main.py").write_text("# ok", encoding="utf-8")
-            self.assertEqual(UpdateThread.resolve_archive_root(base), only)
+        layouts = (
+            ((UpdateThread.ARCHIVE_ROOT, "other"), UpdateThread.ARCHIVE_ROOT),
+            (("renamed-repo-folder",), "renamed-repo-folder"),
+            (("a", "b"), None),
+            ((), None),
+        )
+        for directories, expected in layouts:
+            with self.subTest(directories=directories), tempfile.TemporaryDirectory() as raw:
+                base = Path(raw)
+                for name in directories:
+                    (base / name).mkdir()
+                if expected is None:
+                    with self.assertRaises(FileNotFoundError):
+                        UpdateThread.resolve_archive_root(base)
+                else:
+                    self.assertEqual(UpdateThread.resolve_archive_root(base), base / expected)
 
-    def test_raises_when_archive_root_missing(self):
-        from gui.main import UpdateThread
-
-        with tempfile.TemporaryDirectory() as raw:
-            base = Path(raw)
-            (base / "a").mkdir()
-            (base / "b").mkdir()
-            with self.assertRaises(FileNotFoundError):
-                UpdateThread.resolve_archive_root(base)
-
-    def test_stale_archive_root_name_would_have_installed_nothing(self):
-        """Regression: wrong ARCHIVE_ROOT used to report success with 0 files."""
-        from gui.main import UpdateThread
-
-        with tempfile.TemporaryDirectory() as raw:
-            base = Path(raw)
-            real = base / "dazedtl"
-            real.mkdir()
-            (real / "gui").mkdir()
-            (real / "gui" / "main.py").write_text("print('hi')\n", encoding="utf-8")
-            (real / "data").mkdir()
-            (real / "data" / "help").mkdir()
-            (real / "data" / "help" / "00-welcome.md").write_text("# hi\n", encoding="utf-8")
-
-            # Old hardcoded slug before the DazedTL rebrand.
-            stale = base / "dazed-mtl-tool"
-            self.assertFalse(stale.exists())
-            self.assertEqual(list(stale.rglob("*")), [])
-
-            extracted = UpdateThread.resolve_archive_root(base)
-            install_files = [
-                src
-                for src in extracted.rglob("*")
-                if src.is_file() and UpdateThread.should_install(src.relative_to(extracted))
-            ]
-            self.assertGreaterEqual(len(install_files), 2)
 
 class ShippedDataTrackingTests(unittest.TestCase):
     """Guide/help and other shipped data/ files must be git-trackable.
