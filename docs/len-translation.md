@@ -12,18 +12,27 @@ prepares instructions and workspace files; Git operations run when the assistant
 
 ## Local Git and resumable work
 
-The starting prompt requires a verified source baseline before changing game files.
+The starting prompt records the supplied untranslated starting state before translation.
 The CLI uses Workflow's Git backend to create `original` and the translated branch,
 or reuse existing baselines and branch names:
 
 ```bash
 python scripts/len_translation.py git-status --game-root '/path/to/game'
-python scripts/len_translation.py git-setup --game-root '/path/to/game' \
-  --original '/path/to/clean-original' --version '1.00'
+python scripts/len_translation.py git-setup --game-root '/path/to/game' --version '1.00'
 ```
 
-Only a verified new untranslated game may use itself as the clean original. Continuing
-or QA without a registered baseline requires a separate untouched original. Setup
+For fresh tasks, the selected game folder is the original by default. Normal DazedTL
+preparation—an enabled `TranslationUpdateCheck` plugin, GameUpdate files, generated
+guidance, extraction or formatting—is not evidence that translation has occurred.
+The assistant records those additions, keeps them intact and creates a backup from the
+selected folder when needed. It does not require a pre-existing second copy or claim
+that a prepared snapshot is byte-identical to a separately verified vendor archive.
+
+When continuing preparation on a still-untranslated game, the assistant can use
+`--current-is-untranslated`. Actual translated games without a suitable baseline need
+`--original '/path/to/untranslated-source'`. The assistant checks for concrete evidence
+of prior injected translation or an unsuitable source, rather than treating every
+tool-generated file or English label as a reason to reject the selected folder. Setup
 refuses ambiguous parent repositories, unfinished Git operations, wrong branches and
 dirty reconciliation. It leaves existing staged and working changes for deliberate
 review and checkpointing. It does not create remotes or push.

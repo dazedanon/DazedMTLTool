@@ -19,6 +19,10 @@ The craft is in three things: **finding every string, keeping control codes/plac
 Read `references/project-lifecycle.md` for the required source preservation, local Git
 baseline, checkpoints, resumable artifacts and delivery phases. These are part of the
 same starting prompt, before and after the engine-specific translation work.
+For a fresh task, use the selected untranslated game as the initial source baseline.
+Normal preparation such as `TranslationUpdateCheck` does not make it an existing
+translation. Create any needed backup from that folder; do not demand a separately
+downloaded pristine copy unless concrete evidence shows the selected source is unsuitable.
 
 This copy lives at `DAZEDTL_ROOT/data/skills/game-translation`. Resolve DAZEDTL_ROOT
 as the application folder three levels above this skill folder. `tools/...` paths

@@ -36,8 +36,13 @@ def git_status(project: LenProject) -> dict:
     return result
 
 
-def setup_git(project: LenProject, *, original_game: Path | None = None, version: str | None = None) -> dict:
-    """Create or reuse baselines; never guess which modified tree is the original."""
+def setup_git(project: LenProject, *, original_game: Path | None = None, version: str | None = None,
+              current_is_untranslated: bool = False) -> dict:
+    """Use the selected untranslated game for fresh baselines, including normal tool preparation.
+
+    Resume/QA must identify another source or explicitly attest that the current
+    game remains untranslated. Merely selecting a resume stage is not that attestation.
+    """
     before = git_status(project)
     repo = before["repo_root"]
     if repo and Path(repo) != project.game_root:
@@ -76,11 +81,14 @@ def setup_git(project: LenProject, *, original_game: Path | None = None, version
             register_translation_branch(project.game_root, version, preserve_game_files=True)
             action = "registered"
         else:
-            if original_game is None or not version:
-                raise GitWorkflowError("Supply --original with the verified clean game folder and --version with its release label.")
-            original = original_game.expanduser().resolve()
-            if original == project.game_root and project.stage in {"continue", "qa"}:
-                raise GitWorkflowError("Resume and QA require a separate clean original folder when no baseline exists.")
+            if not version:
+                raise GitWorkflowError("Supply --version with the starting game's release label.")
+            resuming = project.stage in {"continue", "qa"}
+            if original_game is None and resuming and not current_is_untranslated:
+                raise GitWorkflowError("Supply --original for an existing translation, or --current-is-untranslated after verifying that only preparation occurred.")
+            original = original_game.expanduser().resolve() if original_game is not None else project.game_root
+            if original == project.game_root and resuming and not current_is_untranslated:
+                raise GitWorkflowError("Resume and QA require a separate clean original, or --current-is-untranslated after checking that translation has not begun.")
             bootstrap_repository(project.game_root, original, version, preserve_game_files=True)
             action = "created"
     return {"action": action, **git_status(project)}

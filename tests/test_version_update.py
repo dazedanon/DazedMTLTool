@@ -119,6 +119,7 @@ class GitVersionUpdateTests(unittest.TestCase):
         from tests.test_len_translation import guidance_fixture, make_skill
         from util.len_translation import LenProject, prepare_project
         from util.len_git import git_status, setup_git
+        from util.translation_update_check.installer import install as install_update_check
 
         native = self.root / "Native game"
         native.mkdir()
@@ -131,6 +132,11 @@ class GitVersionUpdateTests(unittest.TestCase):
         (native / "assets.pak").write_bytes(packed)
         (native / ".gitignore").write_text("*.pak\n")
         (native / ".env").write_text("PRIVATE=fixture\n")
+        js = native / "js"
+        js.mkdir()
+        (js / "plugins.js").write_text('var $plugins = [{"name":"OriginalPlugin","status":false,"parameters":{}}];\n')
+        self.assertTrue(install_update_check(native)[0])
+        prepared_plugins = (js / "plugins.js").read_bytes()
         with guidance_fixture(self.root):
             project = LenProject(native)
             prepare_project(project, make_skill(self.root / "skill"))
@@ -147,7 +153,9 @@ class GitVersionUpdateTests(unittest.TestCase):
                 return real_read_bytes(path)
 
             with redirect_stdout(output), patch.object(Path, "read_bytes", read_small_files):
-                self.assertEqual(len_main(["git-setup", "--game-root", str(native), "--original", str(native), "--version", "1.00"]), 0)
+                # An updater-prepared game is still the default untranslated
+                # source. No separately supplied --original is required.
+                self.assertEqual(len_main(["git-setup", "--game-root", str(native), "--version", "1.00"]), 0)
             state = json.loads(output.getvalue())
             self.assertEqual(state["action"], "created")
             self.assertTrue(state["configured"])
@@ -155,6 +163,10 @@ class GitVersionUpdateTests(unittest.TestCase):
             self.assertTrue(state["worktree_clean"])
             self.assertEqual((native / "scene.ks").read_bytes(), script)
             self.assertEqual((native / "data.json").read_bytes(), metadata)
+            self.assertEqual((js / "plugins.js").read_bytes(), prepared_plugins)
+            self.assertEqual(self.git(native, "show", "original:js/plugins.js"), prepared_plugins.decode().strip())
+            plugins = json.loads(prepared_plugins.decode().split("=", 1)[1].strip().removesuffix(";"))
+            self.assertTrue(next(entry for entry in plugins if entry["name"] == "TranslationUpdateCheck")["status"])
             tracked = self.git(native, "ls-files").splitlines()
             self.assertIn("labels.lua", tracked)
             self.assertIn(".dazedtl/len-method/work/driver.py", tracked)
@@ -1112,6 +1124,17 @@ class GitVersionUpdateTests(unittest.TestCase):
         with self.assertRaisesRegex(GitWorkflowError, "translation branch"):
             setup_git(project)
         self.assertEqual(self.git(self.translated, "show-ref"), before)
+
+        # Resuming setup is not the same as resuming an injected translation.
+        # A reviewed declaration permits the still-Japanese folder in this case.
+        self.new.joinpath("game.txt").write_text("未翻訳の台詞。\n", encoding="utf-8")
+        preparation = LenProject(self.new, stage="continue")
+        with self.assertRaisesRegex(GitWorkflowError, "Supply --original"):
+            setup_git(preparation, version="1.03")
+        self.assertFalse(self.new.joinpath(".git").exists())
+        resumed = setup_git(preparation, version="1.03", current_is_untranslated=True)
+        self.assertEqual(resumed["action"], "created")
+        self.assertEqual(self.git(self.new, "show", "original:game.txt"), "未翻訳の台詞。")
 
     def test_existing_original_can_register_and_switch_translation_branch(self):
         self.write_versions("Japanese\n", "English\n", "New\n")

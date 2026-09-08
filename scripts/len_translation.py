@@ -37,8 +37,9 @@ def main(argv=None) -> int:
     git_inspect.add_argument("--game-root", type=Path, required=True)
     git_setup = commands.add_parser("git-setup", help="Create or reuse local original/translation baselines, preserving native game bytes")
     git_setup.add_argument("--game-root", type=Path, required=True)
-    git_setup.add_argument("--original", type=Path, help="Verified clean original; use the game itself only before any translation")
-    git_setup.add_argument("--version", help="Release label belonging to that clean original")
+    git_setup.add_argument("--original", type=Path, help="Separate untranslated source if needed; fresh tasks default to the selected game")
+    git_setup.add_argument("--current-is-untranslated", action="store_true", help="Use the selected game when resuming preparation after verifying it is still untranslated")
+    git_setup.add_argument("--version", help="Release label belonging to the starting game")
     args = parser.parse_args(argv)
     try:
         project = load_project(args.game_root)
@@ -50,7 +51,10 @@ def main(argv=None) -> int:
         elif args.command in {"git-status", "git-setup"}:
             from util.len_git import git_status, setup_git
 
-            result = git_status(project) if args.command == "git-status" else setup_git(project, original_game=args.original, version=args.version)
+            result = git_status(project) if args.command == "git-status" else setup_git(
+                project, original_game=args.original, version=args.version,
+                current_is_untranslated=args.current_is_untranslated,
+            )
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             if not args.sources and (args.instruction_key or args.source_context):

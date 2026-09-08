@@ -7,8 +7,21 @@ Git setup, extraction and guidance, then stops before translation or injection.
 ## 1. Establish the source and local Git baseline
 
 - Identify the actual engine, original release/version and current translation state.
-  Preserve an untouched source copy before changing payload bytes. A Git hash or
-  ignored-asset inventory cannot restore uncommitted binaries by itself.
+  For fresh translation or preparation, the selected game folder is the intended
+  untranslated starting original by default. Do a bounded check of that folder and
+  the user's instructions for concrete contrary evidence, such as an injected
+  translation or a source-version mismatch. Trust the user's identification of the
+  starting original unless the actual game provides contradictory evidence.
+- Normal DazedTL preparation does not invalidate that source: an enabled
+  `TranslationUpdateCheck` plugin, GameUpdate files, `.dazedtl`, prepared glossaries,
+  extracted data, JSON formatting and Git scaffolding do not establish that the game
+  has been translated. Neither do English titles, stock UI labels or plugin metadata.
+  Do not remove the updater, undo preparation, search downloads/mounts or demand a
+  second copy just because these are present. Record known preparation and snapshot
+  the supplied state honestly; do not claim independent vendor-archive verification.
+- Preserve a recoverable backup before translation or injection. If another copy
+  does not already exist, create the backup from the selected starting game yourself.
+  A Git hash or ignored-asset inventory cannot restore uncommitted binaries by itself.
 - Run `DAZEDTL_ROOT/scripts/len_translation.py git-status --game-root <game>`.
   Inspect existing branches, worktree state and pending operations. Preserve the
   existing translated branch and remotes; do not initialize a nested repository,
@@ -23,10 +36,14 @@ Git setup, extraction and guidance, then stops before translation or injection.
   exceptions and confirm that checked-out files contain real usable payloads.
   The helper supplies `* -text` when no attributes file exists and keeps existing
   attributes intact. Check those existing rules against the engine before proceeding.
-- Run `git-setup --game-root <game> --original <clean original> --version <label>`
-  through that same application script. On a verified new untranslated game the
-  two folder arguments may be the same. Resume and QA require a separate clean
-  original if no baseline was recorded. Never call translated files the original.
+- Run `git-setup --game-root <game> --version <label>` through that same application
+  script. Fresh tasks default to the selected folder as the original; use
+  `--original <source>` only when a different untranslated source is needed.
+  If resuming preparation and the current game remains untranslated, the agent can
+  add `--current-is-untranslated` after checking that fact; the task label alone does
+  not establish that translation occurred. An actual translated game without a
+  suitable baseline still needs an untranslated source. Never call a known
+  translation the original merely to bypass this requirement.
   Use a verified release label; when none exists, `initial-unversioned` labels a
   snapshot without inventing an official version number.
 - The helper creates `original` and the translated branch using the shared
@@ -36,8 +53,10 @@ Git setup, extraction and guidance, then stops before translation or injection.
   trailers so a clone's official-update path cannot silently start normalizing text.
 - A refusal describes a prerequisite to resolve. For an existing dirty or unborn
   repository, inspect the diff and make a reviewed initial checkpoint before
-  reconciliation. For a missing clean original, ask for its location before
-  mutating game files. Do not force-reset, discard changes or fabricate a baseline.
+  reconciliation. Ask for another original only when concrete evidence or the user
+  establishes that the selected game cannot serve as the requested untranslated
+  starting source. Do not ask the user to reconfirm a source they already identified.
+  Do not force-reset, discard changes or fabricate a baseline.
 - Verify baseline commit IDs, the current translated branch and the actual tracked
   game files. Keep unrelated staged changes untouched. Local checkpoints are part
   of this task; creating remotes, pushing or publishing is a separate user action.

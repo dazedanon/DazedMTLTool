@@ -21,10 +21,12 @@ One starting prompt includes setup. You do not need to copy guidance between tab
 a separate setup prompt. **Optional: project tools and references** contains the shared
 editors, reference translations and **Git version tracking** for this game.
 
-Git setup records a clean original baseline and a translated branch, preserving existing
-repositories and native game bytes. If work has already begun and no baseline exists,
-the assistant needs an untouched original copy; it must not label translated files as
-original. Keep that source copy even when using Git. Authored tools, translated records
+Git setup uses the selected untranslated game as the starting original and records a
+translated branch, preserving existing repositories and native game bytes. DazedTL
+preparation such as `TranslationUpdateCheck` does not require a separate original copy.
+The assistant can create a backup from the selected folder before translating. A game
+that has actually been translated and has no suitable baseline still needs an
+untranslated source. Keep the backup even when using Git. Authored tools, translated records
 and QA notes go in the versioned `work/` folder; generated caches and API state stay local.
 Git setup and local checkpoints are included in the starting task. Online publishing is
 separate.
