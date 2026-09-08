@@ -8,6 +8,7 @@ import re
 import sys
 import os
 import json
+import ntpath
 import urllib.request
 import zipfile
 import shutil
@@ -363,6 +364,22 @@ class UpdateThread(QThread):
     def _read_stored_sha(self):
         return self.read_installed_sha()
 
+    @staticmethod
+    def _filesystem_path(path: str | Path) -> Path:
+        """Use extended Windows paths without requiring a machine-wide opt-in.
+
+        Prefix the base before appending archive members: bundled skill paths
+        plus the temporary directory and archive SHA can exceed MAX_PATH.
+        """
+        if sys.platform != "win32":
+            return Path(path)
+        absolute = ntpath.abspath(path)
+        if absolute.startswith("\\\\?\\"):
+            return Path(absolute)
+        if absolute.startswith("\\\\"):
+            absolute = "UNC\\" + absolute[2:]
+        return Path("\\\\?\\" + absolute)
+
     def _download_archive(self, zip_path: Path, candidate: UpdateCandidate):
         start_index = self.UPDATE_SOURCES.index(candidate.source)
         errors = []
@@ -408,7 +425,10 @@ class UpdateThread(QThread):
         )
 
     def _download_and_apply(self, latest_sha):
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        # Give TemporaryDirectory the extended base as well, so its cleanup
+        # can remove deep extracted files after either success or failure.
+        temp_base = self._filesystem_path(tempfile.gettempdir())
+        with tempfile.TemporaryDirectory(dir=temp_base) as tmp_dir:
             tmp = Path(tmp_dir)
             zip_path = tmp / "update.zip"
 
@@ -424,7 +444,7 @@ class UpdateThread(QThread):
                 zf.extractall(tmp)
 
             extracted = self.resolve_archive_root(tmp)
-            root = PROJECT_ROOT.resolve()
+            root = self._filesystem_path(PROJECT_ROOT).resolve()
 
             install_files = [
                 src
@@ -454,7 +474,7 @@ class UpdateThread(QThread):
                 pct = 85 + int(index * 15 / total_files)
                 self.progress.emit("Applying", min(100, pct), str(rel))
 
-        Path(self.SHA_FILE).write_text(latest_sha)
+        self._filesystem_path(self.SHA_FILE).write_text(latest_sha)
         self.finished.emit(True, f"updated:{latest_sha[:8]}")
 
 
