@@ -5083,8 +5083,6 @@ def cleanTranslatedText(translatedText, language):
         "【": "[",
         "é": "e",
         "’": "'",
-        "this guy": "this bastard",
-        "This guy": "This bastard",
         "```json": "",
         "```": "",
     }

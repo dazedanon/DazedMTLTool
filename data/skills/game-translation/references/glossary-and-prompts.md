@@ -254,7 +254,7 @@ Each of these is a failure a strong model produces confidently.
 - **Verify grammatical person from the source before writing.** Second-person address (お前/君/あなた) and third-person narration get flipped into first-person dialogue routinely.
 - Characters who refer to themselves by name keep that third-person self-reference in English.
 - Interpret discourse and stance markers (なかなか, ～っぽい, じゃん) together rather than mapping each to a standalone English meaning, and never let them become unsupported claims about skill, habit, frequency or progress over time.
-- Resolve コイツ/あいつ/こいつ by the referenced character's glossary gender: `this bastard` (male), `this bitch` (female).
+- Resolve コイツ/あいつ/こいつ by the referenced character's glossary gender.
 - A `=` or `＝` inside a Japanese name marks a foreign or nickname component, wrapped in parentheses: `バンカー＝ベット` -> `Bunker (Bet)`.
 - Speaker tags are always translated: `[クロネ]:` -> `[Kurone]:`.
 - `__PROTECTED_0__`-style tokens keep their relative position between the translated equivalents and are never reordered or dropped. `\cself` is a runtime substitution that stays in place untranslated. The literal string `Placeholder Text` is left untouched wherever it appears (the inverse of the QA scan for translations that ARE the bare word `placeholder`).

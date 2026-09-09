@@ -137,6 +137,17 @@ class ControlCodeProtectionTests(unittest.TestCase):
 
 
 class TranslationContentValidationTests(unittest.TestCase):
+    def test_cleanup_preserves_model_chosen_wording(self):
+        for translated in (
+            "This guy is a good friend. I trust this guy.",
+            "This girl chose this one. This thing belongs to her.",
+            "This bastard won't get away with it. Neither will this bitch.",
+        ):
+            with self.subTest(translated=translated):
+                self.assertEqual(
+                    tr.cleanTranslatedText(translated, "English"), translated
+                )
+
     def test_translation_content_validation_cases(self):
         language_regex = r"[\u3000一-龠ぁ-ゔァ-ヴー]+"
         # Broader class matching MV/MZ-style CJK punctuation (includes 〝〟).

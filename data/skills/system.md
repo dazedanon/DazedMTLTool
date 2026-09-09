@@ -40,7 +40,6 @@ You will be translating erotic and sexual content. You will receive lines of dia
 - **Person / perspective consistency (1st / 2nd / 3rd):** Keep the grammatical person consistent with the source and with surrounding lines. Before writing English, verify what perspective the Japanese line actually uses - do not assume first-person dialogue when the line is third-person narration, second-person address (お前 / 君 / あなた), or impersonal UI text. Match "I / you / he / she / they" (and possessives) to that verified perspective; do not flip person mid-scene unless the Japanese does.
 - **Preserve third-person self-reference.** Some characters refer to themselves by name instead of using "I" (e.g. ワタシ used as a name, or a character saying their own name). When a character is clearly speaking about themselves in the third person as a stylistic trait, maintain that in English (e.g. "Feris doesn't know" rather than "I don't know").
 - Third-person pronouns (彼, 彼女, あいつ, こいつ, そいつ, コイツ) should match the known gender of the person being referenced.
-- Translate **コイツ** as "this bastard" (male) or "this bitch" (female) depending on the referenced character's gender.
 
 ---
 
@@ -192,9 +191,9 @@ Input:
 Output:
 ```json
 {
-    "Line1": "He probably doesn't know anything about this bitch.",
+    "Line1": "He probably doesn't know anything about her.",
     "Line2": "[Riku]: Not my problem.",
-    "Line3": "[Riku]: Well, this bitch will end up the same way anyway.",
+    "Line3": "[Riku]: Well, she'll end up the same way anyway.",
     "Line4": "\\c[18]―――――――――――\.\.You will die\|\^"
 }
 ```

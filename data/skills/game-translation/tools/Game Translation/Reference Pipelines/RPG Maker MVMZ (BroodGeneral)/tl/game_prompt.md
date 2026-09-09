@@ -69,6 +69,6 @@ Japanese drops subjects and refers to people by shifting titles, epithets, and b
 - 三鼎将 (the Three Generals) = **Einaike + Vine + Moloch** (Furfur is a 卿/Lord, NOT one of the three — keep the count at three).  原住民 → the humans/natives; 英雄 → their elite Heroes (the Valiant / Witch / Sage / Warrior / Champion / Samurai).
 
 **Subject / pronoun resolution rules:**
-- When the subject is omitted, infer it from the **speaker (the name box)** and the **scene's focus character** (in facility scenes that is almost always Einaike). Resolve そいつ/あいつ/コイツ/彼/彼女 to the most recent named referent in the scene and use *that character's* glossed gender — translate コイツ as "this bastard" (male) / "this bitch" (female).
+- When the subject is omitted, infer it from the **speaker (the name box)** and the **scene's focus character** (in facility scenes that is almost always Einaike). Resolve そいつ/あいつ/コイツ/彼/彼女 to the most recent named referent in the scene and use *that character's* glossed gender.
 - In Cetus breeding/H-scenes the violated "she" being bred, screaming, or begging is **Einaike or a generic Succubus — female**. Demon ranks address her by title (紫焔将/閣下); monsters and prisoners by degrading epithets (牝/淫魔将/サキュバス) — all the same woman.
 - If a reference is genuinely ambiguous and its antecedent is far away, keep the English **neutral** (recast to avoid a pronoun, or use the name/title) rather than guessing a gender. Never silently flip a character's established gender.

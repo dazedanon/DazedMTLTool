@@ -125,7 +125,6 @@ SYSTEM_SHARED = (
     "- Japanese omits pronouns constantly; infer the subject/pronoun from context and the "
     "glossary. Resolve 彼 / 彼女 / あいつ / こいつ / そいつ / コイツ to match the referenced "
     "character's stated gender.\n"
-    "- Translate コイツ as 'this bastard' (male) or 'this bitch' (female) per gender.\n"
     "- If a character refers to themselves by their own name (third-person self-reference) as a "
     "stylistic trait, keep that in English.\n\n"
     "HONORIFICS & NAMES\n"
