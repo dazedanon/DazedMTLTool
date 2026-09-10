@@ -65,8 +65,8 @@
     //=========================================================================
     var CFG = {
         enabled: true,
-        hotkey: 'F9',          // key (event.key) that toggles the overlay
-        editorCmd: 'auto',      // 'auto' = auto-detect installed editors (VS Code, Cursor,
+        hotkey: "F9",          // key (event.key) that toggles the overlay
+        editorCmd: "auto",      // 'auto' = auto-detect installed editors (VS Code, Cursor,
                                 // VSCodium, Insiders, Windsurf). Or set an absolute path to
                                 // force a specific editor exe.
         editor: 'auto',         // which editor click-to-source opens files in:
@@ -76,7 +76,7 @@
                                 //   'builtin' = always the built-in in-game editor (view &
                                 //               edit the source file right inside the game).
                                 //   'vscode'  = always VSCode (uses editorCmd above).
-        workspaceFolder: 'auto',// 'auto' = open files inside the game ROOT folder as the
+        workspaceFolder: "auto",// 'auto' = open files inside the game ROOT folder as the
                                 // VSCode workspace (so they don't land in whatever window
                                 // happened to be open last). Or set an absolute folder.
         editorReuseWindow: true,// pass -r so VSCode reuses its current window
@@ -84,7 +84,7 @@
         captureUiText: true,    // capture plugin / menu / UI text drawn via Bitmap.drawText
                                 // (so e.g. status-window strings from plugins.js are locatable)
         dataDirOverride: null,  // set an absolute path to force the data dir
-        uiScale: 'auto'         // overlay scale: 'auto' from game width, or a number (1.5, 2, …)
+        uiScale: "1.25"         // overlay scale: 'auto' from game width, or a number (1.5, 2, …)
     };
 
     if (!CFG.enabled) { return; }
@@ -384,7 +384,19 @@
     //=========================================================================
     // Provenance: map a running event command-list to its source file + path
     //=========================================================================
+    // The running command list is the SAME array object every time the interpreter
+    // executes it, so its provenance never changes for the life of that object. On a
+    // game with 2011 common events, re-scanning $dataCommonEvents on every single
+    // message/choice/picture command was pure waste — cache by object identity. A
+    // WeakMap lets old $dataMap lists be GC'd on map transfer with no manual clearing.
+    var _listProvCache = (typeof WeakMap !== 'undefined') ? new WeakMap() : null;
     function resolveList(list) {
+        if (_listProvCache && list && _listProvCache.has(list)) { return _listProvCache.get(list); }
+        var res = resolveListUncached(list);
+        if (_listProvCache && list) { _listProvCache.set(list, res); }
+        return res;
+    }
+    function resolveListUncached(list) {
         try {
             if (typeof $dataMap !== 'undefined' && $dataMap && $dataMap.events &&
                 typeof $gameMap !== 'undefined' && $gameMap) {
@@ -453,6 +465,13 @@
     var groupSeq = 0;
     var currentGroup = -1;
     var textRecords = [];   // {kind,text,file,prefix,tail,group,ts,_key}
+    // Persistent catalogue of UI strings we've already fully resolved (key -> record),
+    // NOT capped by historySize. When a text-heavy scene (e.g. the skit/"Communication"
+    // viewer) draws more distinct strings than the 80-line history holds, older records
+    // get evicted and then re-drawn every frame; without this they'd re-run the expensive
+    // stack capture + source resolution on every frame. With it, each distinct UI string
+    // pays that cost at most once per session (reset on F9 reload).
+    var uiSeen = Object.create(null);
     var imageTriggers = {}; // picture filename -> {file,prefix,tail,label}
     var BUMP_GUARD_MS = 1000;
 
@@ -624,6 +643,18 @@
         var key = 'ui ' + text.replace(/\d+/g, '#');              // digit-normalized: "Money: 12/13" -> one entry
         var i = findByKey(key);
         if (i >= 0) { seenExisting(i, -1); return; }
+        // Already resolved once but scrolled out of the capped history: re-add the cached
+        // record instead of re-capturing the stack and re-resolving the source. This is
+        // what keeps a scene that draws hundreds of distinct strings from re-doing all
+        // that work every frame (the cause of the long "Communication" stall).
+        var cached = uiSeen[key];
+        if (cached) {
+            cached.ts = Date.now(); cached.group = -1;
+            textRecords.push(cached);
+            while (textRecords.length > CFG.historySize) { textRecords.shift(); }
+            scheduleRefresh();
+            return;
+        }
         var site = firstUserFrame(new Error().stack);
         var rec = { kind: 'ui', text: text, file: site.file, prefix: null,
             tail: null, label: site.label, uiLine: site.line, uiCol: null,
@@ -642,6 +673,7 @@
                 }
             }
         } catch (e) { log('uiSource', e); }
+        uiSeen[key] = rec;
         textRecords.push(rec);
         while (textRecords.length > CFG.historySize) { textRecords.shift(); }
         scheduleRefresh();
@@ -817,7 +849,7 @@
 
     function uiValueCandidates(text) {
         if (!uiValueIndex) { uiValueIndex = buildUiValueIndex(); uiIndexBuiltAt = Date.now(); }
-        if (!jsLitIndex) { jsLitIndex = buildJsLitIndex(); }
+        if (!jsLitIndex) { jsLitIndex = buildJsLitIndex(); }   // ~100ms once (measured); fine synchronously
         var c = uiValueIndex[text] || null;
         var lits = jsLitIndex[text] || null;
         if (!c && !lits && Date.now() - uiIndexBuiltAt > 5000) {
@@ -1095,6 +1127,14 @@
     // Hooks: images (load log with call-site)
     //=========================================================================
     var imageLog = []; // {url, label, ts, bitmap}
+    // url -> log entry we've already recorded. The engine caches bitmaps, so a scene that
+    // refreshes its sprites calls loadBitmap for the SAME handful of images every frame —
+    // here that was ~500k calls entering the skit ("Communication") viewer. The old dedup
+    // only collapsed CONSECUTIVE identical urls, so nearly every call fell through to
+    // `new Error().stack`, whose cost (V8 building the trace) is what produced the ~30 s
+    // freeze. Capturing the call-site once per DISTINCT url keeps full provenance while
+    // turning every repeat call into a cheap map lookup. (Reset on F9 reload.)
+    var imageSeen = Object.create(null);
     if (typeof ImageManager !== 'undefined') {
         var _loadBitmap = ImageManager.loadBitmap;
         ImageManager.loadBitmap = function (folder, filename) {
@@ -1102,12 +1142,17 @@
             try {
                 if (filename) {
                     var url = folder + filename + '.png';
-                    var last = imageLog[imageLog.length - 1];
-                    if (!last || last.url !== url) {
+                    var prev = imageSeen[url];
+                    if (!prev) {
+                        // First time for this url: capture the call-site (the one expensive step).
                         var site = firstUserFrame(new Error().stack);
-                        imageLog.push({ url: url, label: site.label, ts: Date.now(), bitmap: bm });
+                        var rec = { url: url, label: site.label, ts: Date.now(), bitmap: bm };
+                        imageSeen[url] = rec;
+                        imageLog.push(rec);
                         while (imageLog.length > CFG.historySize) { imageLog.shift(); }
-                    } else if (last && !last.bitmap) { last.bitmap = bm; }
+                    } else if (!prev.bitmap) {
+                        prev.bitmap = bm; // fill in the decoded bitmap if we logged before it was ready
+                    }
                 }
             } catch (e) { /* ignore */ }
             return bm;
@@ -2450,6 +2495,7 @@
             }
         } catch (e) { /* ignore */ }
         thumbCache = {};
+        imageSeen = Object.create(null); // re-log (and re-capture call-sites) after a reload
     }
 
     // Force on-screen sprites to re-fetch their bitmap from disk. Routing through
@@ -2480,6 +2526,8 @@
         // Drop our own caches so the panel relocates against the new file contents.
         fileCache = {}; lineCache = {}; dupIndex = null; _scanFiles = null;
         uiValueIndex = null; tmAssignCache = {}; jsLitIndex = null; // notetags / vocab / plugin edits
+        uiSeen = Object.create(null);                       // re-resolve UI strings against the new files
+        if (_listProvCache) { _listProvCache = new WeakMap(); }
 
         var parts = [];
         var d = reloadDataFiles();        if (d) { parts.push(d + ' data file' + (d === 1 ? '' : 's')); }
