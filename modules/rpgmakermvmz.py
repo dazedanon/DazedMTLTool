@@ -335,6 +335,12 @@ ENABLED_PLUGINS_357: set = {
 PATTERNS_355655 = {
     "テキスト-": (r"テキスト-(.+)", False),
     "CBR-エロステータス": (r"テキスト-(.+)", True),
+    # Only the second string argument is message text; retain the other arguments.
+    "$gameScreen.OriginalMessage": (
+        r"\$gameScreen\.OriginalMessage\(\s*(['\"])(?:\\.|(?!\1)[^\\])*\1\s*,\s*"
+        r"(['\"])((?:\\.|(?!\2)[^\\])*)\2\s*(?=,|\))",
+        False,
+    ),
     "=": (r'=\s?(.*)",', False),
     "var text": (r'var\stext\d+\s=\s\"(.+)\"', False),
     "logtxt = ": (r"logtxt\s=\s'(.+)'", False),
@@ -384,13 +390,13 @@ def _pat355655_replace_captured(source: str, match, replacement: str) -> str:
     return source[:start] + replacement + source[end:]
 
 
-def _escape_single_quoted_script_text(text: str) -> str:
-    """Keep translated text valid inside a single-quoted JavaScript string."""
+def _escape_quoted_script_text(text: str, quote: str) -> str:
+    """Keep translated text valid inside its JavaScript string delimiter."""
     text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", r"\n")
     escaped = []
     preceding_backslashes = 0
     for char in text:
-        if char == "'" and preceding_backslashes % 2 == 0:
+        if char == quote and preceding_backslashes % 2 == 0:
             escaped.append("\\")
         escaped.append(char)
         preceding_backslashes = preceding_backslashes + 1 if char == "\\" else 0
@@ -4068,8 +4074,8 @@ def searchCodes(page, pbar, jobList, filename):
                                             translatedText = translatedText.replace('\\"', "'")
                                             translatedText = translatedText.replace('"', "'")
                                             if key == "$gameMessage.show(this,":
-                                                translatedText = _escape_single_quoted_script_text(
-                                                    translatedText
+                                                translatedText = _escape_quoted_script_text(
+                                                    translatedText, "'"
                                                 )
                                             
                                             origParam = codeList[lineIdx]["parameters"][0]
@@ -4102,6 +4108,11 @@ def searchCodes(page, pbar, jobList, filename):
                                 else:
                                     translatedText = list355655[0]
                                     list355655.pop(0)
+
+                                    if key == "$gameScreen.OriginalMessage":
+                                        translatedText = _escape_quoted_script_text(
+                                            translatedText, match.group(2)
+                                        )
 
                                     if "gameVariables.setValue" in codeList[i]["parameters"][0]:
                                         translatedText = translatedText.replace('\"', "'")

@@ -9,6 +9,7 @@ import re
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
@@ -18,11 +19,82 @@ import modules.rpgmakermvmz as mvmz  # noqa: E402
 
 
 class TestMVMZScriptPatterns(unittest.TestCase):
-    def test_cbr_erotic_status_pattern_definition(self):
-        regex, multiline = mvmz.PATTERNS_355655["CBR-エロステータス"]
+    def test_original_message_translates_only_dialogue_and_preserves_script_syntax(self):
+        messages = [
+            (
+                '$gameScreen.OriginalMessage("", "それにきっと……この事件が私の記憶につながるのかもしれません……", 2, 1);',
+                "それにきっと……この事件が私の記憶につながるのかもしれません……",
+                'This may lead to my "memories".\nI hope so.',
+                r'$gameScreen.OriginalMessage("", "This may lead to my \"memories\".\nI hope so.", 2, 1);',
+            ),
+            (
+                "$gameScreen.OriginalMessage('記憶', '記憶', 2, 1);",
+                "記憶",
+                "I can't remember.\r\nIt's hazy.",
+                r"$gameScreen.OriginalMessage('記憶', 'I can\'t remember.\nIt\'s hazy.', 2, 1);",
+            ),
+            (
+                r'''$gameScreen.OriginalMessage('顔\'差分.png', "魔法, \"記憶\"", 0, 2);''',
+                r'魔法, \"記憶\"',
+                r'Use \\C[2]magic\\C[0] and \"remember\".',
+                r'''$gameScreen.OriginalMessage('顔\'差分.png', "Use \\C[2]magic\\C[0] and \"remember\".", 0, 2);''',
+            ),
+        ]
+        page = {"list": []}
+        expected = {"list": []}
+        for index, (script, _source, _translation, output) in enumerate(messages):
+            command = {
+                "code": 355 if index == 0 else 655,
+                "indent": 1,
+                "parameters": [script],
+            }
+            page["list"].append(command)
+            expected["list"].append(
+                {**command, "parameters": [output], "_original": script}
+            )
+        for script in (
+            "this.setWaitMode('message');",
+            '$gameScreen.OriginalMessage("顔.png", "", 2, 1);',
+            '$gameScreen.OriginalMessage("顔.png", "Already translated", 2, 1);',
+            '$gameScreen.OriginalMessage("", "日本語" + value, 2, 1);',
+        ):
+            command = {"code": 655, "indent": 1, "parameters": [script]}
+            page["list"].append(command)
+            expected["list"].append(copy.deepcopy(command))
 
-        self.assertEqual(regex, r"テキスト-(.+)")
-        self.assertTrue(multiline)
+        for enabled in (False, True):
+            with (
+                self.subTest(enabled=enabled),
+                patch.object(mvmz, "CODE355655", True),
+                patch.object(mvmz, "IGNORETLTEXT", True),
+                patch.object(mvmz, "PRESERVEORIGINAL", True),
+                patch.object(
+                    mvmz,
+                    "ENABLED_PATTERNS_355655",
+                    {"$gameScreen.OriginalMessage"} if enabled else set(),
+                ),
+                patch.object(
+                    mvmz,
+                    "translateAI",
+                    side_effect=lambda *_args: [
+                        [message[2] for message in messages], [0, 0]
+                    ],
+                ) as translate,
+            ):
+                translated_page = copy.deepcopy(page)
+                mvmz.searchCodes(translated_page, None, [], "TestMap.json")
+
+                self.assertEqual(translated_page, expected if enabled else page)
+                if enabled:
+                    translate.assert_called_once()
+                    self.assertEqual(
+                        translate.call_args.args[0],
+                        [message[1] for message in messages],
+                    )
+                    translate.reset_mock()
+                    mvmz.searchCodes(translated_page, None, [], "TestMap.json")
+                    self.assertEqual(translated_page, expected)
+                translate.assert_not_called()
 
     def test_cbr_erotic_status_multiline_integration(self):
         source_statuses = ["回", "人"]
