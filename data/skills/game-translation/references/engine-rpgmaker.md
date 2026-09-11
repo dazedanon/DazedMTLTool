@@ -83,7 +83,8 @@ DazedTL codifies this as a per-game LLM audit rather than a static config: hand 
 | **1b** | same event files | **`111` only** | Reconcile conditional-branch string comparisons against the `122` map (below). |
 | **2** | same event files | `122`, `357` by default. `355`/`655`, `356`, `108`, `320`/`324`/`325` only after the per-game audit | These hold strings the game uses as *instructions*, not display text. |
 
-**Never enable a Phase 2 code before Phase 0 + Phase 1 alone plays through.** A translated plugin keyword, script identifier or flag value stops matching the branch that reads it, and the failure has no crash and no diff.
+**Before enabling a Phase 2 code, prove baseline launch/save behavior and the relevant Phase 0 + Phase 1 path with a targeted native check.**
+A full playthrough is not required for this gate. A translated plugin keyword, script identifier or flag value stops matching the branch that reads it, and the failure has no crash and no diff.
 
 Keep `408` a per-game opt-in on the Phase 1 profile only.
 
@@ -1392,7 +1393,22 @@ A QA correction pass **writes only the live field, never `_original`**, and addr
 
 Write translated strings back into the JSON preserving key order and structure, and ship `data/*.json` (MV: `www/data/`) as **loose files over the original**. The game loads them directly, no repack.
 
-On a Japanese OS, force locale to `en_US` in project metadata so text renders correctly, and bundle the MSVC runtime DLLs if the game needs them.
+For every English MV/MZ output, set `System.json.locale` to `en_US` regardless of host OS.
+The source-preserving Len writer enforces it when the System locale field is present and retains the original locale under `_original`.
+A missing locale in a custom schema requires an explicit adapter; do not declare the locale check complete without an English live value.
+Bundle required MSVC runtime DLLs only when the selected game needs them.
+
+### English locale and plugin compatibility
+
+Check the installed `data/System.json` or `www/data/System.json`, not only the extraction store.
+Keep its live `locale` at `en_US`; retain the original source locale without modifying the untranslated baseline.
+This selects the engine's English input behavior and can also select different font or UI branches.
+Scan the shipped runtime and enabled plugins for `$dataSystem.locale`, `isJapanese`, `isChinese`, `isKorean`, locale comparisons and font/name-input overrides.
+Trace each relevant enabled consumer before deciding which branches need checks; a search hit alone is not a defect.
+Exercise Latin name entry, confirmation/cancel, fallback fonts and the affected plugin windows in the actual runtime.
+If a plugin assumed Japanese locale for unrelated styling, repair that specific assumption with a scoped override and recheck its rendered output.
+Do not restore `ja_JP` merely to recover its old font/layout branch.
+Retain the locale/plugin evidence with the current runtime hashes so unchanged checks can be reused.
 
 ### Re-render in the file's own serialization conventions
 

@@ -1606,7 +1606,7 @@ class ActivateResumeTests(BatchHistoryTestBase):
                 }],
             },
         )
-        with mock.patch.object(
+        with mock.patch.object(BH, "_client_for_entry", return_value=object()), mock.patch.object(
             BH,
             "provider_retrieve_batch",
             return_value={

@@ -42,7 +42,7 @@ you will hesitate to run.
 
 ---
 
-## Playtest after every export, not once at the end
+## Scope native checks to changed behavior
 
 **And if the game runs on this machine, capture the screen instead of squinting
 at it.** A screenshot can be measured; a memory of one cannot. See
@@ -51,18 +51,17 @@ PIXELS" - it turns "that looks a bit high" into "the ink centre is 8.9px above
 the plate centre in a 48.2px plate", which is the difference between guessing at
 a fix and deriving one.
 
-Run the same five items each time. The point is that a defect found after one export
-has one obvious cause, and a defect found after twenty has twenty.
+At the first injected milestone, prove normal launch, representative translated screens and a native save/load cycle.
+For later milestones, inspect the diff and test affected renderers, windows, substitutions, event triggers and save identities.
+Database edits need their consuming menus; a map-only test cannot show those labels.
+Choose representative and boundary cases for each changed class, plus every known defect reproduction.
+Do not walk every exported map or repeat all menus after each batch when automated checks and unchanged dependencies preserve that evidence.
+Group related validated text corrections and rerun their affected checks together.
 
-1. **Launch the game normally.**
-2. **Load a save near the area you just translated**, or start a new game.
-3. **Open every menu** and read item, skill, actor and location names. Database text
-   renders **only** in menus and never on a map, so a map-only playtest cannot see a
-   database pass at all. This is the single most commonly skipped step.
-4. **Walk every map you just exported.**
-5. **Save once and load it back.** This is the save-compatibility probe. Rewritten
-   data can invalidate an existing save when actor or item identities shift - see
-   `save-compatibility.md`.
+Before a long QA segment, report its bounded scope, estimated active time and next milestone using `progress-reporting.md`.
+A full start-to-finish playthrough, route grinding and a second human tester are optional expanded assurance unless the user explicitly requests them.
+Use accessible saves and scene-safe fixtures for targeted checks; label synthetic state and keep it out of player saves and release files.
+If a critical behavior cannot be reached or tested, record that exact gap instead of silently expanding into days of unrelated gameplay.
 
 For a follow-up limited to display metadata, such as a window credit, scope
 the rerun to the affected path when an artifact comparison proves gameplay
@@ -103,26 +102,22 @@ Hunt six defect classes:
 - residual source language
 - an image too crowded after editing
 
-**Fix and re-test ONE defect before making any further change.** Otherwise you cannot
-tell which edit caused what.
+Keep unrelated renderer/runtime fixes separate enough to identify regressions.
+A batch of related text corrections can share one affected-class validation milestone.
 
 For each leftover Japanese string: screenshot it, OCR the screenshot, then search the
 game folder for that exact string to find the field it came from. Where short or
 duplicated strings make that fail, instrument the runtime instead - see
 `playtest-instrumentation.md`.
 
-### Four passes that per-export testing structurally cannot do
+### Delivery checks and optional expanded playtesting
 
-Add these before release:
-
-- **Play start to finish**, not from old saves. An old save resumes *past* the maps
-  whose events you edited.
-- **Have a second person play.** They take choice branches (RPG Maker code `102`,
-  and the equivalent elsewhere) that you never take.
-- **Copy the finished translation onto a clean copy of the game and test that copy.**
-  This is the only check that catches a patch which works solely because your working
-  folder still holds a file the release does not.
-- **Audit the archive** for API keys, private notes and screenshots.
+Install the finished payload into a clean matching game copy, launch it and exercise the affected paths.
+This catches dependencies that exist only in the development folder.
+Audit the archive's exact payload, hashes, installation/restore behavior and absence of private working material.
+Reuse earlier route evidence only when its relevant source/output/runtime dependencies still match.
+A full fresh-game route or another tester can add coverage when requested; name that scope and estimate its cost before beginning it.
+Neither is an automatic prerequisite for every local patch or text QA follow-up.
 
 ### Every check in the pipeline is PER-UNIT. Budget for the bugs that have no unit
 

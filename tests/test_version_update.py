@@ -169,9 +169,10 @@ class GitVersionUpdateTests(unittest.TestCase):
             self.assertTrue(next(entry for entry in plugins if entry["name"] == "TranslationUpdateCheck")["status"])
             tracked = self.git(native, "ls-files").splitlines()
             self.assertIn("labels.lua", tracked)
-            self.assertIn(".dazedtl/len-method/work/driver.py", tracked)
-            self.assertIn(".dazedtl/len-method/work/translations.jsonl", tracked)
-            self.assertIn(".dazedtl/len-method/status.md", tracked)
+            self.assertNotIn(".dazedtl/len-method/work/driver.py", tracked)
+            self.assertNotIn(".dazedtl/len-method/work/translations.jsonl", tracked)
+            self.assertNotIn(".dazedtl/len-method/status.md", tracked)
+            self.assertNotIn(".dazedtl/len-method/progress.json", tracked)
             self.assertNotIn(".dazedtl/len-method/work/.env", tracked)
             self.assertNotIn(".dazedtl/len-method/context.json", tracked)
             self.assertNotIn(".env", tracked)
@@ -207,6 +208,149 @@ class GitVersionUpdateTests(unittest.TestCase):
             self.assertEqual((native / "scene.ks").read_bytes(), script)
             self.assertEqual((project.work_root / "driver.py").read_text(), "# authored tool\n")
             self.assertEqual((native / ".env").read_text(), "PRIVATE=fixture\n")
+
+    def test_len_patch_scope_keeps_originals_aligned_through_official_updates(self):
+        """Reviewed native payloads stay in Git; work and unchanged assets stay local."""
+        import hashlib
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from scripts.len_translation import main as len_main
+        from util.len_patch_scope import sync_patch_scope
+        from util.len_translation import LenProject, _prepare_local_work
+        from util.version_update.git_workflow import _load_asset_manifest
+
+        for folder in (self.old, self.translated, self.new):
+            (folder / "data").mkdir()
+            (folder / "img").mkdir()
+            (folder / "js/plugins").mkdir(parents=True)
+            (folder / ".gitignore").write_text("*.png_\n")
+            (folder / "js/plugins/Base.js").write_bytes(b"original plugin\r\n")
+        (self.new / "js/plugins/Base.js").write_bytes(b"updated original plugin\r\n")
+        old_text = b'{"text":"Japanese"}\r\n'
+        english = b'{"text":"English"}\r\n'
+        (self.old / "data/Text.json").write_bytes(old_text)
+        (self.translated / "data/Text.json").write_bytes(english)
+        (self.new / "data/Text.json").write_bytes(b'{"text":"New Japanese"}\r\n')
+        for folder, value in [(self.old, b"original image"), (self.translated, b"English image"), (self.new, b"updated image")]:
+            (folder / "img/Text [1].png_").write_bytes(value)
+        bootstrap_repository(self.translated, self.old, "1.00", preserve_game_files=True)
+        project = LenProject(self.translated)
+        _prepare_local_work(project)
+        self.git(self.translated, "add", ".gitignore")
+        self.git(self.translated, "-c", "user.name=Fixture", "-c", "user.email=fixture@invalid", "commit", "-qm", "Keep work local")
+        record = project.work_root / "qa.json"
+        record.write_text('{"reviewed":true}\n')
+        plugin = self.translated / "js/plugins/English.js"
+        plugin.write_bytes(b"// English display fixes\r\n")
+        selected = {"data/Text.json": {}, "img/Text [1].png_": {},
+                    "js/plugins/English.js": {"original_sha256": None}}
+        for name, row in selected.items():
+            row["sha256"] = hashlib.sha256((self.translated / name).read_bytes()).hexdigest()
+        document = {"files": selected}
+        before = self.git(self.translated, "show-ref")
+        index = (self.translated / ".git/index").read_bytes()
+        preview = sync_patch_scope(project, document, original_game=self.old, dry_run=True)
+        self.assertEqual(preview["translation_only_files"], ["js/plugins/English.js"])
+        self.assertEqual(self.git(self.translated, "show-ref"), before)
+        self.assertEqual((self.translated / ".git/index").read_bytes(), index)
+        manifest = project.work_root / "patch-files.json"
+        manifest.write_text(json.dumps(document))
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(len_main(["git-scope", "--game-root", str(self.translated),
+                                       "--manifest", str(manifest), "--original", str(self.old)]), 0)
+        self.assertFalse(json.loads(output.getvalue())["main_committed"])
+        expected = set(selected) | {".gitignore", ".gitattributes"}
+        self.assertEqual(set(self.git(self.translated, "ls-files").splitlines()), expected)
+        self.assertEqual(set(self.git(self.translated, "ls-tree", "-r", "--name-only", "original").splitlines()), expected - {"js/plugins/English.js"})
+        self.assertEqual(self.git(self.translated, "show", "original:data/Text.json"), old_text.decode().strip())
+        self.assertEqual(self.git(self.translated, "show", "original:img/Text [1].png_"), "original image")
+        self.assertEqual((self.translated / "data/Text.json").read_bytes(), english)
+        self.assertEqual((self.translated / "js/plugins/Base.js").read_bytes(), b"original plugin\r\n")
+        self.assertEqual(record.read_text(), '{"reviewed":true}\n')
+        self.assertIn("js/plugins/Base.js", _load_asset_manifest(self.translated, ""))
+        self.assertNotIn("img/Text [1].png_", _load_asset_manifest(self.translated, ""))
+        ensure_game_tool_gitignore(self.translated)
+        _prepare_local_work(project)
+        # Both managed refreshes continue to hide work and unused runtime assets.
+        self.assertTrue(self.git(self.translated, "check-ignore", str(record)))
+        self.assertTrue(self.git(self.translated, "check-ignore", "js/plugins/Base.js"))
+        self.git(self.translated, "add", ".gitignore")
+        self.git(self.translated, "-c", "user.name=Fixture", "-c", "user.email=fixture@invalid", "commit", "-qm", "Stage reviewed patch")
+        self.assertTrue(inspect_repository(self.translated).worktree_clean)
+        again = sync_patch_scope(project, document, original_game=self.old)
+        # A refreshed ignore block may create one metadata-only scope commit;
+        # repeated synchronization must otherwise be idempotent.
+        self.git(self.translated, "add", ".gitignore")
+        self.git(self.translated, "-c", "user.name=Fixture", "-c", "user.email=fixture@invalid", "commit", "--allow-empty", "-qm", "Refresh scope")
+        repeat = sync_patch_scope(project, document, original_game=self.old)
+        self.assertEqual(repeat["original_commit"], again["original_commit"])
+        self.assertTrue(inspect_repository(self.translated).worktree_clean)
+        apply_official_update(self.translated, self.new, "1.01")
+        self.assertEqual((self.translated / "data/Text.json").read_bytes(), (self.new / "data/Text.json").read_bytes())
+        self.assertEqual((self.translated / "img/Text [1].png_").read_bytes(), b"updated image")
+        self.assertEqual(plugin.read_bytes(), b"// English display fixes\r\n")
+        self.assertTrue(record.is_file())
+        self.assertEqual((self.translated / "js/plugins/Base.js").read_bytes(), b"updated original plugin\r\n")
+        self.assertEqual(set(self.git(self.translated, "ls-files").splitlines()), expected)
+        self.assertEqual(inspect_repository(self.translated).original_version, "1.01")
+
+    def test_len_patch_scope_refuses_unreviewed_state_without_mutating_branches(self):
+        """Wrong sources, stale delivery bytes and staged edits must never be overwritten."""
+        from util.len_patch_scope import sync_patch_scope
+        from util.len_translation import LenProject
+
+        self.write_versions("Japanese", "English", "New Japanese")
+        bootstrap_repository(self.translated, self.old, "1.00", preserve_game_files=True)
+        project = LenProject(self.translated)
+        before = self.git(self.translated, "show-ref")
+        ignore = (self.translated / ".gitignore").read_bytes()
+        index = self.git(self.translated, "ls-files", "--stage")
+        for manifest, source in [
+            (["game.txt"], self.new),
+            ({"files": {"game.txt": {"sha256": "0" * 64}}}, self.old),
+            ([".dazedtl/work/qa.json"], None),
+            (["../game.txt"], None),
+            ({"files": {"game.txt": {"original_sha256": None}}}, None),
+        ]:
+            with self.subTest(manifest=manifest), self.assertRaises(GitWorkflowError):
+                sync_patch_scope(project, manifest, original_game=source)
+            self.assertEqual(self.git(self.translated, "show-ref"), before)
+            self.assertEqual(self.git(self.translated, "ls-files", "--stage"), index)
+            self.assertEqual((self.translated / ".gitignore").read_bytes(), ignore)
+        # A failure after preparing the new original commit must restore both
+        # branch refs and ignore/index state without deleting any local files.
+        with patch("util.len_patch_scope._save_asset_manifest", side_effect=OSError("fixture failure")):
+            with self.assertRaises(OSError):
+                sync_patch_scope(project, ["game.txt"], original_game=self.old)
+        self.assertEqual(self.git(self.translated, "show-ref"), before)
+        self.assertEqual(self.git(self.translated, "ls-files", "--stage"), index)
+        self.assertEqual((self.translated / ".gitignore").read_bytes(), ignore)
+        lock = self.translated / ".git/index.lock"
+        lock.write_bytes(b"another Git operation")
+        with self.assertRaises(OSError):
+            sync_patch_scope(project, ["game.txt"], original_game=self.old)
+        self.assertEqual(lock.read_bytes(), b"another Git operation")
+        lock.unlink()
+        data = self.translated / "data"
+        data.mkdir()
+        (data / "New.js").write_text("// added runtime file")
+        (data / "leak.txt").write_text("local notes")
+        (data / ".gitignore").write_text("!leak.txt\n")
+        with self.assertRaisesRegex(GitWorkflowError, "ignore rules"):
+            sync_patch_scope(project, {"files": {"game.txt": {}, "data/New.js": {"original_sha256": None}}})
+        self.assertEqual(self.git(self.translated, "show-ref"), before)
+        self.assertEqual(self.git(self.translated, "ls-files", "--stage"), index)
+        self.assertEqual((self.translated / ".gitignore").read_bytes(), ignore)
+        (self.translated / "new.js").write_bytes(b"// new plugin")
+        with self.assertRaises(GitWorkflowError):
+            sync_patch_scope(project, ["game.txt", "new.js"])
+        self.git(self.translated, "add", "new.js")
+        staged = self.git(self.translated, "ls-files", "--stage")
+        with self.assertRaises(GitWorkflowError):
+            sync_patch_scope(project, ["game.txt"], original_game=self.old)
+        self.assertEqual(self.git(self.translated, "ls-files", "--stage"), staged)
+        self.assertEqual(self.git(self.translated, "show-ref"), before)
 
     def test_bootstrap_formats_worktree_before_git_init(self):
         """Formatting must hit disk before repository creation."""

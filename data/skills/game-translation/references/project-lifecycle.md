@@ -28,9 +28,18 @@ Git setup, extraction and guidance, then stops before translation or injection.
   rename branches or discard earlier work to simplify setup.
 - Review `.gitignore` against the engine's actual files. The new Len Git mode keeps
   the project's rules instead of applying the RPG Maker/WOLF extension allowlist.
-  Include required game text and intended patch inputs. Exclude keys, saves, logs,
-  caches and bulk source assets that have a separate recoverable backup. Verify
-  the proposed tracked file list before recording a baseline.
+  Use exact paths for the intended runtime patch, plus `.gitignore`, `.gitattributes`
+  and installation `README.md`; verify the proposed file list before the baseline.
+  Exclude all `.dazedtl` work and guidance, unmodified artwork, unused plugins,
+  engine libraries, runtime binaries, source copies, editable image sources,
+  keys, saves, logs and caches.
+  Include native translated files, translated runtime images and the modified or
+  added plugins, fonts or other dependencies required to apply the patch.
+  A file extension alone is not evidence that a file belongs in the patch.
+  Include runtime dependencies introduced by tool preparation when the patched
+  game references them, even if they are unchanged from the prepared backup.
+  For example, an enabled updater plugin must ship with its patched registration;
+  a diff against a backup that already contains that plugin will not select it.
 - Preserve runtime encodings and line endings with appropriate `.gitattributes`.
   For byte-sensitive payloads, use `-text` rules; retain deliberate filter/LFS
   exceptions and confirm that checked-out files contain real usable payloads.
@@ -63,21 +72,47 @@ Git setup, extraction and guidance, then stops before translation or injection.
 
 ## 2. Preserve work that can be resumed
 
-The handoff identifies `.dazedtl/len-method/work/` as the default location for
-authored tools, translated text records and QA notes. Its text/source allowlist,
-`project.json` and `status.md` are eligible for Git. Read existing project rules and
-extend that allowlist when a required authored format is missing. Check that secrets
-and runtime caches remain excluded. Existing versioned project folders are also valid.
+The handoff identifies `.dazedtl/len-method/work/` as the default location for authored tools, translated text records, image sources, research and QA notes.
+All `.dazedtl` files are local and ignored on both `main` and `original`, including glossary, settings, `project.json`, `progress.json` and `status.md`.
+Preserve these records and maintain separate workspace backups; the patch repository does not protect ignored files.
+Export database-backed translations to stable JSONL/JSON/CSV records there for recovery and review.
+Keep existing project-local adaptations and do not delete working files while removing them from Git tracking.
+Do not force-add work records to either game branch.
 
-Generated handoff/setup/context files, raw source snapshots, provider state and caches
-outside `work/` stay local. Export completed translations from SQLite or similar
-working stores to stable JSONL/JSON/CSV records under `work/` so Git protects them.
-Preserve old project-local adaptations; move or copy useful authored work deliberately.
-Record milestone commits and artifact paths in `status.md`. Checkpoint small reviewed
-changes after validation, using explicit paths rather than indiscriminate staging.
-Use the repository's configured identity. If none exists, automatic checkpoints may
-use the backend's per-command tool identity (`DazedMTLTool`, `local@dazedmtl.invalid`);
-do not invent a user identity or change global Git settings.
+### Align both branches before patch checkpoints
+
+First inject the reviewed runtime outputs into the selected game folder and verify their hashes.
+A translation present only in staging or an isolated QA game is not present in `main`.
+Create a complete list of the patch's runtime file paths in the ignored workspace, then run:
+
+```bash
+python DAZEDTL_ROOT/scripts/len_translation.py git-scope \
+  --game-root <game> --manifest <patch-files.json> \
+  --original <matching-untranslated-backup> --dry-run
+python DAZEDTL_ROOT/scripts/len_translation.py git-scope \
+  --game-root <game> --manifest <patch-files.json> \
+  --original <matching-untranslated-backup>
+```
+
+The manifest is a JSON list of exact relative paths, or an object with `files` mapping paths to records.
+A record can bind `sha256` and `original_sha256`; use `original_sha256: null` only for a genuine translation-only addition.
+Include the whole patch, not just the latest batch.
+Repository metadata (`.gitignore`, `.gitattributes`, installation `README.md`) is handled separately.
+A source backup is needed for a newly included original that the `original` branch does not already protect.
+Existing original blobs must match any supplied backup; a different game release belongs in Version Update.
+Never use current English bytes to fill a missing original.
+
+The command stages the exact patch and removes unrelated files only from Git's index, preserving local files.
+It appends a scope commit to `original` with the corresponding untranslated originals and shared repository metadata.
+Translation-only additions exist on the translation branch only.
+This retains history and aligns the ignored-asset inventory for official updates.
+It does not commit `main`, check out branches, inject translations, push or publish.
+Resolve existing staged changes deliberately, review `git diff --cached`, then commit the reviewed patch on the registered translation branch as part of the authorized local checkpoint.
+Never merge `main` into `original` or cherry-pick translation commits there.
+Verify both branch file lists, original bytes and delivered translation bytes after scope changes and official updates.
+Record checkpoint commits and artifact paths in local `status.md` and its workspace backup.
+Use the repository's configured identity; the backend's per-command tool identity is available when none exists.
+Do not invent a user identity or change global Git settings.
 
 ## 3. Extract, investigate and establish guidance
 
@@ -91,6 +126,14 @@ The setup phase's guidance-only edit boundary ends when that phase is complete.
 Continue into the selected task automatically; do not ask for another setup prompt.
 
 ## 4. Translate and resume from verified artifacts
+
+Follow `progress-reporting.md` from the first measured corpus onward. Export current
+saved units, including unfinished occurrences, and call the live `progress-update`
+helper after saved batches and milestones and before a pause/handoff. Report the
+current phase, short blocker and next action; keep detailed history in `status.md`.
+Revalidate source/output fingerprints and downstream phase checkpoints before
+refreshing stale progress. Resuming or copying another prompt must preserve the
+last report rather than resetting it or inventing an overall completion percentage.
 
 Consume per-batch context from the live compiler, retaining source/context fingerprints
 and stable IDs with results. Confirm provider/model/budget only when API mode needs
@@ -128,7 +171,7 @@ Retain existing originals through correction and rewrapping; validate the final
 source/live bindings with the shared QA manifest and independent verifier.
 Do not backfill missing Japanese from an already translated live value. Recover it
 from the matching baseline/store and verify IDs and source hashes first.
-For formats that cannot store `_original`, keep versioned sidecars under `work/`
+For formats that cannot store `_original`, keep sidecars in the separately backed-up `work/` directory
 with file/unit IDs, exact source, final live text, source hashes and injection
 bindings. Validate these against the shipped payload without adding unsupported
 keys to native containers. A Git baseline or store alone does not establish that

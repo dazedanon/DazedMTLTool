@@ -8,14 +8,14 @@ Use this tab to translate a whole game with an AI coding assistant. Len’s play
 engine detection, extraction, guidance, translation, fitting, injection, images,
 playtesting and building a local translation patch.
 
-1. Choose the game’s root folder and task: full translation, preparation, continue, or QA.
-2. Choose direct assistant translation or a translation API, and set the image scope.
-3. Click **Copy starting prompt**. DazedTL prepares or refreshes the project workspace
-   and copies the complete instructions in one action.
-4. Open the game folder in your coding assistant and paste that prompt. The assistant
-   preserves the original, sets up local Git tracking, prepares the glossary and guidance,
-   and carries out the selected task with reviewed checkpoints.
-5. Use **Reload progress report** to review the assistant’s work and remaining checks.
+1. Choose the game's root folder, task and image scope.
+2. Choose **Agent / Sub Direct Translation** or **API Batch Translation** before copying a prompt.
+3. For Direct, copy its starting prompt and paste it into your coding assistant with the game folder open.
+4. For API Batch, open **API Settings** to choose the provider/model.
+   If requests have not been prepared, choose preparation only and run that prompt first.
+   Return here for **Estimate prepared requests**, review the quote and accept it to enable the API translation prompt.
+5. Follow counted progress and remaining active-work estimates in the Len panel.
+   Use **View detailed log** for evidence or **Refresh progress** for an immediate update.
 
 One starting prompt includes setup. You do not need to copy guidance between tabs or run
 a separate setup prompt. **Optional: project tools and references** contains the shared
@@ -26,10 +26,12 @@ translated branch, preserving existing repositories and native game bytes. Dazed
 preparation such as `TranslationUpdateCheck` does not require a separate original copy.
 The assistant can create a backup from the selected folder before translating. A game
 that has actually been translated and has no suitable baseline still needs an
-untranslated source. Keep the backup even when using Git. Authored tools, translated records
-and QA notes go in the versioned `work/` folder; generated caches and API state stay local.
-Git setup and local checkpoints are included in the starting task. Online publishing is
-separate.
+untranslated source. Keep the backup even when using Git.
+`main` contains only the runtime translation patch and minimal repository metadata.
+`original` holds the corresponding untranslated files for backup and version updates.
+The assistant synchronizes these paths before patch checkpoints, keeping translation-only additions off `original`.
+All `.dazedtl` working records, guidance and QA evidence remain local; keep separate workspace backups.
+Git setup and local checkpoints are included in the starting task. Online publishing is separate.
 
 To reuse names and vocabulary from multiple prequels, list their folders or a prepared
 corpus folder in **Instructions**, such as “Use the translations in /path/to/prequels
@@ -43,7 +45,7 @@ Workflow. Changes saved in either route apply to the next compiled translation c
 For MV/MZ map and database writes, the starting prompt requires Workflow-compatible
 `_original` source metadata and preservation through reinjection and QA corrections.
 The assistant adapts the injector to stage JSON before the source-preserving write.
-Other native formats use versioned source/injection sidecars where extra keys are
+Other native formats use separately backed-up source/injection sidecars where extra keys are
 unsupported. This is handled within the same task.
 
 The base glossary checkbox controls whether Len’s batches include DazedTL’s stock terms.
@@ -54,18 +56,30 @@ that character's glossary and voice notes even when the line does not mention th
 name. Unidentified speakers stay unknown. The speaker labels are context for the
 assistant; they are not added to dialogue unless the source actually contains them.
 
-Direct translation needs your coding assistant’s access, but no DazedTL API key. API mode
-requires a provider, model and budget agreed with the assistant. Preparation does not make
-paid calls or copy private API keys. Some engine tools need additional dependencies,
-documented in the skill.
+Direct translation uses your coding assistant's access and plan limits, with no DazedTL API key.
+The word “Sub” does not instruct the assistant to delegate; your task instructions determine that.
+API Batch shows the estimated cost, model, request count, tokens and rates before enabling the translation prompt.
+Before extraction is complete, the estimate is unavailable rather than $0; the preparation prompt makes no translation API calls.
+The quote excludes retries, billed reasoning, images, assistant work, QA and provider waiting, and is not a spending cap.
+Changed settings, scope or request inputs require a fresh quote.
+The assistant reuses supported engine/API adapters and checks their final requests before submission; Len does not automatically submit every engine through the Translation tab.
+Some engine tools need additional dependencies documented in the skill.
 
 The game’s `.dazedtl/len-method` folder holds its settings, handoff, context and progress
 report. App updates refresh the maintained Len skill and tools; project-specific adaptations
 stay in the game workspace. Resuming preserves previous work. After moving a game, select
 its new folder and copy the starting prompt again to refresh paths.
 
-The progress report is written by the assistant. Completion requires reviewed strings,
-images within scope and in-game validation; a complete string count alone is insufficient.
+The assistant updates counted text, review and image progress from saved records.
+The panel also shows phase checkpoints, the last update, a blocker and the next action.
+Before extraction, totals stay unmeasured; afterward, provisional percentages show progress through discovered units until full coverage is audited; excluded images stay out of scope. Changed tracked
+inputs or scope show a warning until the agent rechecks and reports again. Progress
+survives prompt refreshes.
+The assistant updates it after milestones and at least every 10 minutes during active work, with measured throughput or explicit remaining phase estimates.
+QA targets the affected screens and behavior; a full playthrough is optional unless requested.
+English MV/MZ output uses `en_US`, with checks for English name entry and locale-sensitive plugins.
+Completion requires reviewed strings, images within scope
+and in-game validation; a complete string count alone is insufficient.
 
 ## Translation
 
@@ -180,6 +194,7 @@ of its box, lower the text width or use Rewrap in the RPG Maker Workflow.
 | `log` | Progress details and error information |
 | `.dazedtl` inside a game | Portable translation guidance plus local backups and tool state; keep this folder |
 
-Git should track `.dazedtl/glossary.txt`, `.dazedtl/settings.json`, and Markdown files under
+For standard Workflow projects, Git should track `.dazedtl/glossary.txt`, `.dazedtl/settings.json`, and Markdown files under
 `.dazedtl/skills/`. DazedTL keeps the rest of `.dazedtl` ignored because it contains local working
 files, backups, and caches. You normally do not need to edit those local folders by hand.
+Len runtime-patch projects keep all `.dazedtl` work local and separately backed up, as described above.

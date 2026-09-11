@@ -1,0 +1,471 @@
+# Reference pipelines and engine lessons
+
+Read the sections relevant to the detected engine or current failure class.
+Search by engine name, event code, renderer, placeholder, injection, encoding or save identity.
+These are observed failure patterns, not a requirement to investigate every engine on every job.
+All `tools/` paths resolve from the skill folder, and `references/` links below also resolve from that folder.
+The current SKILL.md, selected work mode and scoped QA contract take precedence over historical example workflows.
+
+## First: check for existing tooling before building anything
+
+There is a large corpus of finished, reusable pipelines bundled with this skill. **Always look before writing new code.**
+
+- **All bundled tooling lives in `tools/`, next to this `SKILL.md`.** Every `tools/...` path in this skill and in `references/` is relative to this shipped skill folder. Resolve it once per task: the directory holding this file, then `tools/` inside it. `python scripts/check_tools.py` prints the resolved root and reports which bundled folders and third-party downloads are present. Engine-generic tools in `tools/.NET/`, `tools/C++/`, `tools/Game Archives/`. Translation-specific tooling in `tools/Game Translation/` (see `references/tools-catalog.md`). Copy from these. Don't reinvent.
+- **Third-party binaries are not bundled** (AssetRipper, Il2CppDumper, BepInEx, dnSpy, Detect It Easy, retoc/repak/UAssetGUI, FModel, the UTMT CLI, disassemblers). `tools/THIRD-PARTY.md` lists each one, the place under `tools/` where the references expect it, and where to get it. When a referenced binary is missing, prepare it in the project workspace and adapt the copied tool paths there.
+- **Complete per-engine reference pipelines** (extract→translate→inject scripts, glossaries, prompts, docs, mod source) are preserved in **`tools/Game Translation/Reference Pipelines/`**, one folder per engine. Read the folder's `README.md` / `TRANSLATE_README.md` first, then copy and adapt.
+- **Keep reusable tooling in the maintained application and preserve separately backed-up project adaptations.** Game folders and ignored workspaces can be deleted; Git patch branches do not back them up. Per-game configs and provenance manifests inside the bundled pipelines still record the original author's absolute paths (`C:\Users\...\Desktop\Games\...`); treat them as examples to replace, never as locations to read.
+- **Best reference pipelines by quality** (all under `tools/Game Translation/Reference Pipelines/`): `RPG Maker MV (Mineria)` (**read `PIPELINE.md` first** - font-exact measurement, command-count-preserving injection with a structural save-safety proof gated into the release, an engine-parser trace harness that reads the shipped JS, batch + live off one builder), `Unreal (FortuneBride)` (Unreal + Mistral), `RPG Maker MVMZ (BroodGeneral)` (MZ flavour: native `101 parameters[4]` speakers, `helpwrap.py`, the `122`-display subset), `SRPG Studio (Belphegor)` (gold-standard wrapping/layout in `docs/`), `Unity Mono PlayMaker (CoinPussy)` (Claude batch + live, PlayMaker/CSV extraction, measured box-fitting), `Unity Mono (NTR Soccer)`, `Unity IL2CPP (Hitonatsu)` (**read `REFERENCE.md` first, then `PIPELINE.md`** - the only end-to-end IL2CPP pipeline here, on Unity 6 / metadata v39 where stock Il2CppDumper refuses the file. Its value is the four-reader census, since **half the corpus was in no file at all**: 105 dropdown options built at runtime from Addressables addresses stored UTF-16LE in `catalog.bin`, where a UTF-8 scan returns zero and reads as "nothing here", and where the function that obviously built those labels turned out to have one caller - a sort comparator. Also a JP-field classifier whose unruled path RAISES, a font gate read off a static TMP atlas with an empty fallback table, generation of a 105-member label family by construction rather than by the model, and the `ImageConversion.LoadImage` dead end - every overload funnels into a `ReadOnlySpan` whose `GetPinnableReference` is stripped, so images must be decoded at build time and uploaded through `LoadRawTextureData`. Its sharpest lesson is negative: two confidently-written patches on constructor defaults that the scene overrides EMPTY), `Unity Utage (Goblin Sword)` (Mistral + JSONL resume), `TyranoScript (AjinSyoujyo)` (Claude batch, span-splice injection proven byte-reversible, 2 MB Electron loader-shim patch, in-place UI image redraw), `RPG Maker VX Ace (DressQuest)` (**read `PIPELINE.md` first** - a Ruby Marshal reader/writer that round-trips 231/231 files byte for byte so the no-op inject compares BYTES, the `Scripts.rvdata2` second track with a two-gate audit, custom nametag codes, and a player-facing PowerShell installer that unpacks the archive), `RPG Maker MZ (Gakuen)` (**read `PIPELINE.md` first** - 10,665 units at $3.32 on Sonnet 5 batch; the most *tracks* of any pipeline here (data, `plugins.js`, a hand-written JS config, note tags, `package.json`/`index.html`, encrypted images), a declared-and-reported layout-override mechanism for widgets with no box, a rule-by-rule ablation of the number-drift canonicaliser, a load-time plugin that repairs display text a save cached from the pre-patch build, and a fourth track for **Japanese hardcoded in plugin SOURCE** - a JS tokenizer plus an exact-match key guard, after three casino minigames shipped fully Japanese with every counter green), `Bakin (Miyutsure)` (**read `ENGINE-BAKIN.md` first**, then `BUILD.md` - the whole engine reversed from scratch: container, scramble, rom format, a C# harness bound to the game's own `common.dll` that round-trips 138/138 files byte for byte, an `AppDomainManager` overlay that patches nothing, and packed-art replacement that never rebuilds the 3.8 GB pack). A second Bakin pipeline lives under `Active Projects/Artesia (Bakin)` (**read `PIPELINE.md` first**, then `ENGINE-CODES.md`) - an OLDER engine build with no localization feature at all, so the field whitelist is produced by two censuses instead of read off metadata; it adds the Claude batch+live driver, a reflection dumper for when the engine API moves, a structural walk of the resource index, the decompiled control-code table with six English-only renderer traps, and a measured 3.7x dialogue dedup. **Its strongest half is the LAYOUT work**, all of it driven by user screenshots: the engine's own word wrap transcribed and used to rebalance 5,694 strings, removing 5,809 orphaned line breaks; font size and the ink offset CALIBRATED off captured screens because no font table predicts what the native renderer does, and NOT off the author's own line breaks (over 44,056 shipped breaks the "the next word would still have fitted" rate is 99.97% at 16px and 90.52% at 24px and never bottoms out, because a Japanese author breaks at PHRASE boundaries, so the curve never picks a size); the vertical correction split into its two INDEPENDENT terms, `want = region_centre - size.Y/2 - ink_offset`, where re-centring rewrites the author's layout and needs intent evidence while the ink term only repairs your own font substitution and needs none, so a widget the centring gate rightly declines still takes the ink term alone, and that term survived the Light-to-Medium weight change untouched, because the ratio `(line_centre - ink_centre)/px` measures +0.0547 for Yu Gothic Light, Regular and Medium alike but +0.0625 for Bold, so only a move into a bold weight forces a re-measure. Hand-centred labels are detected as a group and restored. `gameFont` was REPOINTED at `Yu Gothic Medium`: the author asks for `游明朝 Demibold`, absent outside a Japanese Windows, and the first substitution reached for a Light face whose thin stems the engine's upscale destroyed. Emptying `gameFont` is the machine-independent alternative, since `setGameFont` sets `useSystemFont = !IsNullOrEmpty(name)` and only an empty name pushes `createFont` onto its file branch and so onto the `font.ttf` Bakin bundles in the pack, but it was DECLINED and documented as the fallback, being a different FAMILY at a weight nobody asked for, which invalidates the measured ink offset and pays the worst fit of the candidates (2,498 units over three rows against Medium's 1,365). Also `census_gate.py`, which walks the shipped rom generically because any check built on the extractor shares its blind spot.
+
+## Engine and renderer lessons
+
+- **Copying a reference pipeline means copying its CODE, never its per-game
+  RULINGS - and a ruling arrives disguised as a comment that already explains
+  itself.** `map_info_names: False  # editor tree only` was carried across from
+  another game's config, where it was correct and evidenced. On the new game
+  `MapNameExtend` was enabled with `showReal: true`, which makes
+  `Game_Map.displayName()` fall back to the MapInfos name on every map whose
+  editor display name is blank - 42 of them - so `校舎` sat over the school for
+  the whole run. The comment made it look settled, so nobody re-measured it.
+  When you adapt a config, treat every value as **unset** until this game's
+  census fills it, and rewrite the comment from this game's evidence.
+- **The same engine at a different BUILD is a different engine, and it fails
+  silently rather than loudly.** Two Bakin games two years apart: the older one
+  has no localization feature at all (no `[Localizable]` attribute, no
+  `LocalizeData` chunk, no `StringAttr.guid`), no `Font` rom resource, a
+  different rbpack header layout, resource-index paths stored under a different
+  root, and a `ReadMessage` with **no word-wrap parameter** - so the newer
+  pipeline's fitting model said "this widget does not wrap" about a panel that
+  always wraps. Half of those surface as a compile error you can just fix; the
+  other half are *readings* that quietly produce the wrong answer. So: find the
+  build stamp first (`revision.txt`), and **write a reflection dumper before you
+  write anything else** - 80 lines that bind to the game's own managed DLL and
+  print the fields, methods, enum values and static tables of any type. Verify
+  every field name your tool touches against it, rather than discovering the
+  twelfth one after the first three fail to compile.
+- **A default written in CODE is a hypothesis about the runtime value. The
+  shipped DATA is the truth, and it wins silently.** Decompiling is so much more
+  effort than reading a scene file that a hard-won constructor default feels like
+  a finding, and the surrounding code will happily corroborate it. On one game
+  `FacialLipSync..ctor` set `targetSpeakerName = "美羽"`, `Update` gated lip sync
+  on `String.Equals(speakerNameText.text, targetSpeakerName)`, and a sibling
+  method sized mouth-movement time from the subtitle's CHARACTER COUNT - so
+  translating the nameplate would obviously freeze the mouth, and English at 2.1x
+  would obviously overrun every voice clip. Two patches were written, both
+  correct about the disassembly, both **useless**: every instance in the scene
+  serialized those fields EMPTY, `GameObject.Find("")` returns null, the fields
+  were never assigned and both code paths were dead. Before building anything on
+  a field, grep the scene/prefab for the component and read the serialized value
+  - thirty seconds against a fix that fixes nothing and ships documented as real.
+  The same trap runs the other way: a field that looks inert in code may be
+  filled in by the data.
+- **And a CONFIG file is not the only source of its own setting.** The mirror of
+  the rule above, inside your own pipeline. A holdout list read from
+  `tl/holdout.json` was emptied on purpose, and the units stayed excluded anyway,
+  because `load_holdout()` re-injected a hardcoded `FLOOR_SPEAKERS` on every load -
+  a deliberate floor somebody added so the exclusion could not be lost, which then
+  outlived the decision it was protecting. It announced itself in one `note:` line
+  on stderr that read as noise. The tell was arithmetic, not the log: `validate`
+  reported 1,080 held out against 1,081 untranslated, and the missing 1 was the
+  sixth entry of the floor that the code version had dropped. **When a config
+  change does not take effect, grep the code for the key before re-editing the
+  file**, and when you add a floor, make it print WHY it exists and what would
+  clear it.
+- **A scan that reports NOTHING has to prove it could have reported something.**
+  Absence of evidence and a broken reader look identical, and the second one is
+  silent. Three ways it happened on one game: `grep -P '[\x{3040}-…]'` died with
+  `character value in \x{} is too large` (Git Bash needs the `(*UTF)` prefix) and
+  the empty result read as "no Japanese in the export"; a UTF-8 scan of an
+  Addressables `catalog.bin` returned zero because the strings are **UTF-16LE**,
+  hiding half the corpus; and a hand-rolled UTF-16 walker misaligned by one byte,
+  turning `ogg` into `漀最最` - CJK-looking mojibake that PASSES a Japanese test
+  and poisons the result instead of failing. **Run every new scanner over a
+  string you know is there before you trust a zero**, and prefer decoding a whole
+  blob at both parities over guessing where each string starts.
+- **When your layout model accuses the AUTHOR at scale, the model is wrong.**
+  The cheapest check on any fitting rule is to run it over the shipped source
+  language first. A Bakin build reported its dialogue panel as non-wrapping, and
+  **11.8% of the shipped Japanese lines already exceeded that panel** - nobody
+  ships one line in eight visibly broken, so the engine had to be wrapping, and
+  the decompiled signature confirmed it. Believing the layout data would have
+  paid a model to compress prose the engine reflows for free.
+- **Mask control codes before translating, restore after.** RPG Maker `\c[2]`, `\i[327]`, `\v[1]`, `\n[1]`, `%1`. Wolf `@`/`\` codes. Unity/Utage `<color=…>`, `{0}`, `[w]`, `[r]`. Unreal `<Green>…</>`, `{Placeholder}`. Replace each with a sentinel like `⟦0⟧` or `{CTRL1}`, keep a local map, restore on inject. **Validate the placeholder set is identical between source and translation** - a dropped/added/reordered code is a hard failure that must retry.
+- **Codes that insert a *word* need spaces in English. The source has none.** `\n[1]`, `%1`, `{0}`, `[name2]`, Wolf's `\cself[]` - Japanese sets no space around an inserted noun, so a faithful translation keeps none and the player reads **"NeroIs that alright?"**. Split your sentinels into *word inserts* (pad them) and *everything else* (`[p]`, `<color=…>`, line breaks - never pad). Decide which is which from the engine's own definitions, not a guess, and skip padding next to an apostrophe, hyphen or decoration so `⟦0⟧'s` and `⟦0⟧-chan` stay tight. Tell the model the rule *and* enforce it on inject - the insert is often peeled into a prefix/suffix where the model never sees it.
+- **A number dropped into a sentence needs a space too, and the check has to
+  *render* the label rather than reason about it.** `&'Add a fair amount' +
+  f.status[45][2] + ' used'` reads **"Add a fair amount3 used"** - English, no
+  placeholders, no residual Japanese, fits its widget, every check green.
+  Detecting it structurally ("a literal ending in a letter before an
+  expression") is mostly noise, because a formatting prefix or an `&nbsp`
+  entity has the same shape. Substitute a stand-in value for each variable,
+  join the pieces, and look for a digit pressed against a letter in the string
+  a player would actually read.
+- **A VERIFICATION built on your extraction can only confirm what your
+  extraction reaches.** The standard output check - re-extract the injected
+  build, look for residual source language - inherits the extractor's blind spot
+  exactly. If a field was unreachable going in, it is unreachable coming out,
+  and the scan reports it clean. One game shipped 50 Japanese battle messages
+  while the scan printed `never extracted as a unit: 0`, because the engine read
+  a NESTED duplicate (`Condition.EffectParamSettings.EffectParamList[].Message`)
+  of a flat field that had been translated. **Verify the shipped data by walking
+  it generically**, not by re-running the reader that produced it. A reflective
+  walk sees everything - which is also its problem: it found 73,698 Japanese
+  strings, almost all editor metadata. So classify each PATH (editor name, asset
+  path, formula, key, tag) and fail on any path nobody has classified yet.
+  Defaulting an unknown path to FAILURE is what makes it a gate rather than a
+  report, and it is what catches the next engine build's new field.
+- **The blind spot is usually a whole FILE, not a field.** Every check in a
+  translation pipeline is per-unit, so anything that never becomes a unit is
+  structurally invisible - and the biggest such thing is a file type your
+  extractor never opens. Three casino minigames shipped 100% Japanese because
+  their RPG Maker plugins draw their entire UI from string literals in their own
+  `.js` source: not in `data/`, not in the plugin PARAMETERS the pipeline
+  already tracked. Every counter read 100%, the residual-Japanese scan read 0,
+  and a player found it by walking into the casino. **Census the files the game
+  LOADS, not the files your extractor knows about**, and for each one answer
+  "could this draw text?" before deciding it is out of scope. Scripts, plugin
+  source, hand-written config, window captions and archived assets all can.
+- **The same shape one level up: a gate written from the same PREMISE as the fix
+  CONFIRMS the bug instead of testing it.** A row-count audit written alongside
+  its fix reported 0 while the player's screen was unchanged, because both
+  assumed one description code and the same database record is drawn through
+  four - `currentitemdes`, `currentskilldes`, `selectshopitemdes`,
+  `currentdictionarydes` - so the fix and the audit shipped the bug twice.
+  Enumerate every code that DRAWS a field before calling that field audited, and
+  derive the check from the screen rather than from the repair. Keep the reported
+  failing case and prove the corrected gate rejects the previous artifact. A
+  viewport-width check once approved result totals outside their painted panel;
+  see `references/text-fitting.md` for the independent pixel-bound regression.
+- **Two rules keep that classification honest.** An editor's own label for a
+  widget is not the widget's text - they sit side by side and only one is drawn.
+  And judge "this is a KEY, not display text" on the VALUE, never the path: a
+  text field whose source-language content is entirely inside a variable
+  reference is fine, but excusing the whole path would hide a genuinely
+  untranslated label in the same field.
+- **That same never-extracted class hides the AUTHOR'S OWN TYPOS**, and those are
+  the ones a player blames on the patch. One game's battle gauge read `102text`
+  because the author had typed a stray literal after a getter
+  (`\partystatus[0][10]text`); no source language, so never a unit, so
+  invisible - and shipped that way in the original too. Sweep the
+  never-extracted list by eye once; it is short, and it is the only pass that
+  will ever see them.
+- **A string with no source-language characters is never extracted, and that is
+  a defect when it has TRANSLATED SIBLINGS.** Extractors take a string when it
+  contains the source language - right almost always, wrong when the string
+  belongs to a group that was aligned as a group. One game's stat screen paired
+  two labels per row and the author aligned them by padding the shorter with a
+  leading IDEOGRAPHIC SPACE. The padded label containing kanji was extracted and
+  its translation dropped the space; the padded labels that were pure Latin
+  (`　MP ＋`) were never extracted and kept a 24px indent their partners lost.
+  Two rows lined up and two did not. **Sweep for the class**: layout labels that
+  were never extracted AND carry full-width typography - here 3 strings over 125
+  widgets, of which two were labels to fix and one was a deliberate spacer to
+  leave alone. Fix them as declared literal overrides, and fix the POSITION too
+  where the author's offset was compensating for width that is now gone.
+- **A built-in localization table is a HYPOTHESIS about coverage, and you must
+  measure it before you scope the job.** Finding the engine's own localization
+  feature already populated - locales declared, thousands of slots, an in-game
+  language menu - reads like the extraction has been done for you. On a shipped
+  Bakin game the table declared `['ja','en']` with 16,950 slots, **every value
+  empty**, and it addressed only 14,937 of 27,890 player-facing strings; dialogue
+  alone was 8,502 covered against **7,765 with no slot at all**, because the
+  developer generated it once and kept adding content. Filling only the existing
+  slots ships a half-Japanese game and **every automated check passes, because a
+  string with no slot is never a unit and so can never fail anything.** Enumerate
+  the engine's localizable fields yourself, diff that against the table, and
+  report the uncovered count before quoting the work. The same applies to any
+  vendor localization CSV, `.po`, or locale column.
+- **A gendered NOUN is a misgender your pronoun check cannot see.** Japanese
+  leans on gender-neutral words for people far more than English does, and a
+  translator reaching for something natural reaches for "guy". Correct about a
+  man, wrong about the female protagonist it is addressed to. A pronoun check
+  compares he/she against the SPEAKER's glossary gender and this is neither: a
+  NOUN, about the ADDRESSEE. The line is fluent, has no placeholders, no
+  residual source language and fits its box, so nothing automated sees it.
+  Scan for a male noun predicated of "you" in a line whose source carries a
+  second-person word and whose speaker is not the protagonist. **Keep the scan
+  narrow enough to read**: the loose version - any male term where the source
+  word was neutral - returned 480 hits that were mostly correct, while the
+  narrow one returned 11 of which 2 were real. A list nobody reads is not a
+  check.
+- **Gender is locked in the glossary, and the prompt trusts dialogue over names.** Japanese omits pronouns constantly. The model resolves 彼/彼女/こいつ from the glossary's gender field. Names that look one gender but read another (e.g. A male "Gina") are corrected in the glossary and the bible says "trust dialogue over name."
+- **Names get translated first, in their own pass, and written back into the glossary** before dialogue runs - so prose-embedded names match the name box. Merge all aliases (full name / nickname / alt reading) to one English name. Explicitly note which similar names are *distinct* people.
+- **A test suite that never CALLS the validator certifies its own bugs, and a
+  green count is not coverage.** A 41-check suite passed for a whole build while
+  `hard_issues` raised `NameError` on its very first line for a translated unit
+  - it referenced a constant the adaptation had deleted while keeping the call
+  site. The suite exercised the masking primitives directly and the validation
+  layer not at all, and the store held zero translations, so nothing ever
+  reached the broken line. Before trusting a suite, grep it for the name of the
+  function that decides what ships. If it is absent, the number of checks is
+  measuring something else.
+- **Anything you peel OUT of the unit is invisible to every per-unit check.**
+  A validator reads `tl`. A speaker name peeled into its own field is not in
+  `tl`, so residual-Japanese, placeholder and trap checks all pass a line whose
+  nameplate is still Japanese - and the glossary lookup falls back to the source
+  spelling by design, so nothing errors. Same for a prefix or suffix you split
+  off, a code argument you lifted into a sibling unit, or a value the injector
+  concatenates. Two fixes, and you want both: **run the checks on the RESTORED
+  string** the engine will actually parse, and give the peeled-off thing its own
+  check reported ONCE at its source rather than once per affected line. One bad
+  glossary row would otherwise print 42,695 identical failures with the actual
+  cause - one row in one file - nowhere in sight.
+- **Look for a nameplate that is MARKUP before writing a heuristic to guess
+  one.** Bakin puts the speaker in the dialogue string as `\NPL[name]`, on 85%
+  of units. When the engine parses the nameplate itself you get exact speaker
+  recovery instead of a four-gate guess that eats narration, the speaker list
+  seeded straight into the glossary with line counts, and no `[Kurone]: ` prefix
+  artifact to strip - because the English name goes back INSIDE the code. Check
+  the engine's control-code table for one before assuming the RPG Maker shape.
+  And when it exists, remember it has its own widget: that nameplate box was
+  234px and CLIPPING, on screen for 71,519 lines.
+- **Dialogue is scene-grouped and NOT deduped. Everything else IS deduped.** The model needs a coherent run of lines with speakers for pronoun/tone continuity. Names/items/UI/skills are translated once per unique string and injected everywhere.
+- **But MEASURE that rule before paying for it, because on a copy-paste-heavy
+  game it is most of the bill.** One Bakin eroge: **83,999 dialogue units,
+  22,914 distinct (speaker, body) pairs - 3.7x**. And the repeat distribution
+  was not natural prose repetition: 10,113 sources occurred *exactly four times*
+  and 7,156 *exactly twice*, because the author duplicates whole scenes per
+  costume and per route variant. The risk the rule exists for was measurable and
+  small - only **156 distinct bodies were ever spoken by more than one speaker**,
+  and they were almost all ellipses and moans. So key the dedup on **(speaker,
+  source)** rather than source alone: it costs a few hundred extra units, kills
+  the pronoun class outright, and leaves only "same speaker, different scene" -
+  which a post-hoc pass re-reviews by flagging any cluster whose translation
+  carries a third-person pronoun. Keep the conservative default one config flag
+  away, and state which one you used next to the cost figure.
+- **If you DO dedupe, the fanout must OVERWRITE, not fill blanks - or `retry`
+  is structurally incapable of fixing anything.** Filling only siblings whose
+  translation is empty looks right on the first pass and is silently useless on
+  every pass after it: on a retry every sibling already carries the text that
+  failed, so the representative is repaired and the rest keep the defect.
+  Measured on a 90,195-unit game: a full `--retranslate-all` round cost the
+  entire bill and left **65,492 units holding the bad translation**, which then
+  read as a same-source conflict the pipeline had manufactured itself.
+  Overwrite every sibling that is not explicitly LOCKED.
+- **Honorifics: match the game's own convention.** Some keep `-san/-chan/-senpai/Nii-san` (NTR Soccer, most eroge). Romanized-name SRPGs drop them. Decide once, put it in the bible.
+- **Preserve permitted adult content faithfully.** Match the source register
+  without euphemizing or moralizing. An R18 label does not establish character
+  ages or make every asset eligible: do not translate or edit sexual content
+  involving minors. Record any required exclusion without reproducing that content,
+  and continue the permitted scope.
+- **How the patch reaches the engine is a MEASUREMENT, not an assumption, and getting it wrong fails silently.** RGSS3 reads `Data\*.rvdata2` out of `Game.rgss3a` whenever the archive is present and IGNORES an identically-named loose file beside it - a fully translated `Data\` sitting in the game folder produced a game that started in Japanese, with no error and nothing in any log. Before building a release around loose-file override, put ONE changed string in place, run the game, and look at it. Where the archive wins, the install becomes extract -> overwrite -> move the archive away, and the player needs a tool for step one: ship one (`tools/Game Archives/RPG Maker RGSSAD/install-template.ps1` is a self-contained PowerShell installer with an embedded C# unpacker).
+- **Which overflow is fatal is an engine question, and usually only ONE of them is.** VX Ace's `Window_Message#process_new_line` calls `input_pause` then `new_page`, so a message taller than the box costs the player a click and loses nothing, while `process_normal_character` never tests the right edge and a wide line is simply cut off by the contents bitmap. Treating both as hard failures makes the pipeline pay a model to compress prose the engine would have handled by itself; treating neither loses text. Read the engine's own draw loop and grade them separately.
+- **Protect technical keys, paths and IDs by use.** Asset filenames
+  (`.png/.ogg/.m4a`), switch/state keys, GUIDs and database IDs are not display
+  text. When displayed wording also acts as a help-lookup substring, trace its
+  consumers before translating. Prefer a separate display mapping; where the
+  game requires coupled renaming, declare the exact producer/consumer sites and
+  verify the lookup match sets before and after. Do not replace the shared pool
+  globally. See the GameMaker reference for the synchronized helper-key case.
+- **Work out what actually bounds a widget before measuring it.** Four cases, and only the first is in most pipelines: a **declared box** (`width=`, a RectTransform). **no box at all** - the widget sizes to its content and collides with its neighbour or runs off the screen, so the shipped Japanese's own width is the budget, *never* the engine's default (but only where the Japanese itself fits - check, because the author's own label may already be clipped). A **background image** - a label drawn on a plate or bar is bounded by the painted region of the picture underneath (which may occupy only a small part of a transparent canvas), which no attribute mentions, which may not be the attribute you first reach for (a Bakin widget's frame is its `window` guid, not its `image` one, so measuring `image` measures the wrong plate or none), and which may itself be *resizable*: if the plate is a separate tag with a `width=` you can raise the bound instead of compressing the English, and a **column in a data table** (database row, CSV, `f.item=[…]` array) drawn by a generic layout macro, where the budget is the widest Japanese **in that column** - per table is useless, since one table mixes short names with long descriptions. Three labels shipped visibly broken on one screen while the layout validator reported zero overflows.
+- **A fifth case: no box AND no neighbour in the same record.** A caption drawn
+  at an absolute x/y is bounded by whatever the engine draws to its RIGHT -
+  which lives in a *different command* (RPG Maker's `DTextPicture` prepares the
+  string in a `357` and a separate `231` positions it) or a *different row of a
+  script block* (`テキスト-…` then `x-60`). No per-unit width check can see
+  that relationship, so the budget has to be computed by pairing the two up.
+  Authors budget these to the pixel: a 4-glyph label at x=172 with the value at
+  x=300 is exactly 128 of 128 px, zero slack, and the English lands on top of
+  the value.
+- **Validate a layout model against the SOURCE before you trust it on the
+  translation. If it accuses the author, the model is wrong.** A first pass
+  reported 61 collisions in the shipped Japanese; each round of "why would the
+  author ship that?" found a real modelling error - captions sharing an x are
+  mutually-exclusive VARIANTS of one slot, a right-aligned neighbour grows
+  LEFTWARD so it occupies `x-width .. x`, and two captions on one row can
+  belong to different screens. 61 to 7. The residue that a static model simply
+  cannot resolve is the argument for making the check **differential**: report
+  only where the English is wider than the Japanese it replaced, because the
+  author's own layout is the ground truth and a slot that already overlapped is
+  not something the patch broke.
+- **Text expands ~1.3 - 2× JP→EN.** Respect byte-span limits (Unreal fixed spans, exe patches) and box widths. Reflow/wrap to the engine's column (see `engine-srpg-studio.md` for the reference wrapping algorithm with CJK=2-cell counting, kinsoku binding, and widow control, and `text-fitting.md` for measuring the box in the first place). **Matching the source's line count does not prevent clipping** - a 1-line JP that becomes a 1-line EN has drifted by zero lines and can still run off screen.
+- **Substitute the WEIGHT the author asked for, because a lighter face is a
+  regression no width check can see.** Yu Gothic Light in place of the author's
+  游明朝 Demibold measured better on every count and looked visibly worse on
+  screen, since thin stems are exactly what an upscale destroys. The pagination
+  cost of the heavier face is small and measurable, so measure it instead of
+  assuming: over 83,999 units at 670px, the units needing more than 3 rows were
+  834 (0.99%) for Light, 1370 Regular, 1365 Medium, 1849 Bold, and 2498 (2.97%)
+  for the engine's bundled M+SmileBoom. That last figure makes coverage and
+  pagination a single TRADE rather than two independent choices - the bundled
+  face is the only one guaranteed present on every player machine and it is also
+  the worst paginator measured, so decide the pair together.
+- **Find out what the engine does to your string between the file and the screen.**
+  Extraction and injection being byte-perfect does not mean the text arrives
+  intact. AjinSyoujyo's older TyranoScript tag parser *deletes every literal
+  space* inside a quoted attribute value, so 488 correctly-translated labels shipped as
+  `Justtalknormally` and every check passed. Before declaring a run done, take one
+  translated string and trace it through the engine's own parser - the shipped
+  runtime will usually run it for you (`ELECTRON_RUN_AS_NODE=1 game.exe probe.js`,
+  a Mono/IL2CPP method call, a `.ks`/`.json` reload). Japanese hides this whole
+  class of bug because it uses no spaces. **And having found one, keep
+  looking** - the same engine ate spaces in a second, unrelated place, and the
+  first fix made it worse: U+00A0 defeats the tag parser's space deletion, but
+  message lines go through `$.trim()`, and jQuery's rtrim strips U+00A0 along
+  with the ordinary space. Each stage between the file and the screen needs
+  checking on its own. On Musi Dream's newer parser, `KeepSpaceInParameterValue=2`
+  preserves internal attribute spaces, so the old NBSP workaround must not be
+  copied; its theme's configuration sample reader strips whitespace separately.
+  See the TyranoScript reference for the measured branches.
+- **`\b` does not exist between CJK and Latin, so a pattern anchored on one
+  silently matches NOTHING.** Python's `\w` includes CJK, so in `はいen(v[3]<=50)`
+  there is no word boundary between `い` and `e`. A choice-condition splitter
+  written as `\b(?:if|en)\(` found nothing at all, the plugin's visibility
+  clause went to the model as ordinary prose, and the translation came back
+  without it - turning a stat-gated choice into a permanently visible one, with
+  no crash and nothing for a text check to see. Anywhere source-language text
+  can sit flush against an ASCII keyword, drop the `\b` and anchor
+  structurally. And verify the same for the ENGINE's own regex: the plugin here
+  used an unanchored `/\s?en\((.+?)\)/`, which is why `Yesen(...)` still works -
+  but that also means an English label containing `en(` would be eaten, so scan
+  the finished output with the engine's own pattern.
+- **A greedy escape lexer eats the word after a code, and the fix must know the
+  code NAMES.** RPG Maker lexes `\` plus `[A-Za-z]+`, so `\GWhat` is one unknown
+  code and the word is never drawn - a bug English creates and Japanese cannot,
+  because kana terminates the code. The obvious repair, "insert a space after
+  the escape letter", then splits every MULTI-letter code down the middle:
+  `\gold` became `\g old` and the shipped money notification read **"Got G
+  oldG!"**; `\name` and `\count` broke the same way. Match the whole letter run
+  and split after the longest *real* code name, so a run that IS a code is left
+  alone.
+- **What your extractor filtered out is still on screen.** Extraction keys on
+  "contains a source-language character", and everything that filter rejects is
+  invisible to every per-unit pass you will write. A line reading `______[p]` -
+  the author's trailing-off beat, alone on its own line - holds no Japanese, so
+  it was never a unit, so `polish` could not reach it, and it shipped as a row
+  of underscores. The same marker *attached to a sentence* converted fine.
+  Match **both widths** of every typographic convention (the author wrote that
+  marker in ASCII as well as fullwidth), and grep the **injected output** for
+  what your conventions should have converted - anything byte-identical to the
+  Japanese was never a unit. See `llm-pipeline.md`.
+- **A denylist of KEY strings must be scoped to where a key can actually be
+  REACHED, never applied to every unit of every kind.** A string is not a key -
+  a *position* is. `普通` is a font plugin's registered call name AND the middle
+  option of the difficulty picker AND the value echoed beside it; `ドット` is
+  that call name AND a visible font choice. One flat set checked against every
+  extraction left four player-facing strings Japanese on the FIRST screen of
+  the game, and **all twenty validation counters stayed green, because a unit
+  that was never extracted cannot fail anything.** Apply the set only where the
+  extractor can genuinely land on a key - a variable value, a plugin argument
+  outside the display whitelist - and never to dialogue, choices, help text or
+  a caption the whitelist already proved is drawn. What makes a choice safe to
+  translate is the DATA (the branch keys on the index; the plugin gets its call
+  name from a separate literal), and that is checkable; a denylist is not.
+- **A re-extraction that finds materially less than the store already holds is
+  a mistake, not an update - refuse the write.** Extraction reads the game
+  folder, and after an in-place inject that folder is the ENGLISH build, so a
+  re-run finds no source language, yields zero units per file, and cheerfully
+  saves those empty docs over the store. That wiped 10,505 finished
+  translations in one pass, with no error and no prompt, and was only
+  recoverable because a copy lived outside the game folder. Compare against
+  what the doc already holds before saving, raise naming the likely cause, and
+  keep the working copy somewhere a `rm -rf` of the game cannot reach.
+- **A gate can be perfectly correct and still be reading a STALE artifact.** The
+  rules above are about a check's logic. This one is about which file it opened.
+  Packaging packages the injected tree and does not build it, so config edit ->
+  every gate -> package ships the PREVIOUS inject with everything green, because
+  the gates read the store and the SOURCE tree and never the output. One edge
+  further upstream the unpack step is never re-run, so aiming the pipeline at a
+  newer game build ships STALE roms that MASK the author's new ones - a patch is
+  an override, not a merge. Three habits kill the class. **Verify the ARTIFACT
+  carries the change**, never that the command reported success: a scale override
+  read 0.90 in config, the run said OK, and the built tree held 1.0, because the
+  override was keyed by widget while the description panels draw a bare code,
+  carry no source language, were never extracted as units, and so the injector
+  could not name an owning file for any of them. **Re-run the upstream stage**
+  rather than trusting whatever it left on disk. And **make every producer stamp
+  what it built from and every consumer refuse a mismatch FATALLY**, on cheap
+  identity - size plus mtime, a config hash, the newest mtime under a tree -
+  never a content hash of a 1.7 GB archive. **And make every deploy MIRROR, not
+  merge**: copying never deletes, so a payload file you removed from the source
+  survives in the game folder and keeps being loaded, while every gate stays
+  green because they read the source and the store and never the output. Track
+  the exact patch-owned paths and previous hashes; remove a retired file only
+  when that ownership and hash match. Refuse unexpected files or modifications.
+  Mirror the owned payload, never recursively delete the game or a shared folder.
+- **Abbreviate on widget labels, never in prose, and gate the rewrite on the
+  unit's *form* rather than its source text.** `以上` is "or higher" in a
+  sentence and `+` on a button, and the short form is what makes a requirement
+  label fit (629px → 411px). Matching on the source string instead pushed `+`
+  into five message-text sentences. Where one concatenated fragment serves both
+  a label and prose - and on the reference game one served 52 sites - it has to
+  be split into two units before either can be fixed.
+- **A patch that breaks saves is worse than no patch, and nothing you already
+  run will tell you.** Engines save a *position*, and it is usually an index
+  into parsed content - TyranoScript's `current_order_index`, RPG Maker's
+  command index - not a label. Dropping a single `[r]` shifts every index
+  after it: on the reference game, a third of saves resumed at the wrong
+  element. Extraction being byte-reversible does not help, because the *patched*
+  file is the one being indexed. First compare source and release output with
+  the shipped parser. If all element identities, indices and control structure
+  remain unchanged, prove that invariant instead of adding a remapper. Otherwise
+  record positions by stable coordinates (source lines for a span splice),
+  re-derive indices on load, and support saves made before the fix existed.
+  Check cached display text independently: Musi Dream preserved scenario indices
+  but old saves still restored Japanese message layers, nameplates and captions.
+  Check read-history identity separately too: some plugins hash the original
+  dialogue, so preserving command indices alone does not preserve read flags.
+  See `references/save-compatibility.md` and the engine reference.
+- **A save also carries the build's *data*, not just its position.** Tables the
+  engine fills in at new-game (`f.item`, `f.task`, an RPG Maker `$gameParty`,
+  a Unity save blob) are copied into the save and never re-read, so a name
+  translated later stays Japanese in every existing save while the shipped
+  scripts grep clean. Ship the build's copy of the *display* fields and write
+  it back on load - never a field that doubles as a key, since a task name that
+  is also its jump target would send an old save to a label its build never
+  had. And check every other index the save holds: this engine stores
+  `map_macro` as `{storage, index}`, so one edit in `macro.ks` invalidated 668
+  of 713 macro registrations. See `references/save-compatibility.md`.
+- **Measure a validator's FALSE-positive rate on its first real run, and fix the
+  check before you touch the translation.** A check that cries wolf gets switched
+  off, and then it is not there for the one case it was written for. The
+  visible-number check on a 2,866-unit game opened with **seven flags, all seven
+  correct translations and none a real drift** - it did not know CJK myriad
+  grouping (`5000万G` *is* 50,000,000), thousands separators, a currency suffix
+  parsing asymmetrically, or that English spells numbers out (`100年` to "a
+  hundred years") and lexicalises them (`2倍` to "Doubles"). Canonicalising both
+  sides took it to 61 flags, then four targeted exclusions took it to 5 - of which
+  **4 were real inventions the naive version had buried in its own noise**. When a
+  case is genuinely right and the check is genuinely right about the shape, give
+  it a **per-unit, per-check waiver that carries a reason and is REPORTED**, never
+  a global mute: a suppression nobody can see is worse than the false positive it
+  hides. See `llm-pipeline.md`.
+- **A harness that carries its own copy of the shipping code stops testing it.**
+  Injected shims are written in the game's language and tested from yours, so
+  copying the function into the harness is the obvious bridge - and the day the
+  real one gains a branch, the test keeps reporting healthy percentages for logic
+  that no longer runs. Read the shipping file and extract the functions from it,
+  throwing if the names are gone. The same rule kills copies of an engine's own
+  parser rules, wrapping algorithm, or control-code table.
+- **Skip whole files that are structurally untranslatable, before paying for them.**
+  An asset-path table and a font-face table are both "strings containing Japanese"
+  and both are pure cost and pure risk. Pre-flight each file and pass it through
+  verbatim when *every* non-empty message looks like a resource - contains `://`,
+  matches `^[A-Za-z]:[/\\]`, has a slash plus a known asset extension, or simply
+  contains an underscore (engine ids and filenames) - or when the file is a font
+  table (every message short and matching `ゴシック|ゴチック|明朝|Mincho|Gothic|
+  メイリオ|Meiryo|Yu Gothic|Tahoma|Arial|Consolas|Segoe|SimSun|宋体|黑体|ヒラギノ|
+  Noto |IPA|VL ` or a short ASCII label). Still copy the file to the output and still
+  emit its progress tick, or the run appears hung on a file you deliberately skipped.
+  (`DAZEDTL_ROOT/modules/yuris.py:96`.)
+- **Each engine has a handful of characters its own renderer mishandles, and that
+  list belongs in the write-back path, not the prompt.** The Yuris runtime breaks on
+  `―` U+2015 HORIZONTAL BAR, so it is rewritten to `-` on output. Asking the model
+  not to emit a character works most of the time, which is worse than a rule that
+  works every time.
+- **Text edited in place never passes through export.** Plugin `.js` parameters and
+  engine script sources are edited **directly in the game folder**, while extracted
+  data flows workspace -> translate -> export -> game. Mixing the two models means an
+  export silently reverts your in-place edits, or an in-place edit is lost on the
+  next export. Decide which track each kind of text is on and never move it.
+- **Encoding is fragile.** SRPG Studio loose `.js` must be UTF-16LE **with BOM** (falls back to CP1252 → mojibake otherwise). RPG Maker/Unity JSON is UTF-8. Some old VN parsers require CRLF. Verify before shipping.
+
+## Delivery methods (pick per engine)
+
+- **Runtime hook (BepInEx/Harmony)** - Unity. Hook `TMP_Text.text`/`SetText` setters + `Awake`/`OnEnable` postfixes, look up a JSON dictionary, swap in place. Non-destructive, no repack. Bundled dict handles exact + `{0}`-format-pattern + compose matches. See unity refs.
+- **Force-locale** - Unity games that ship an official localization locked to `ja` (surprisingly common). One Harmony prefix flipping the language to the base/EN column translates everything with zero dictionary. Check for this FIRST on Unity games. (One shipped game had full official English locked to `ja` - 2,590/2,595 strings already translated.)
+- **Loose-file override** - RPG Maker (`data/*.json`), SRPG Studio (`Project/`), verified TyranoScript builds (`.ks`), some Trois/VN games with a patched loader. Edit, relaunch, done - tightest iteration.
+- **Overlay the engine's own unpack folder** - Bakin, and any engine whose launcher explodes a packed project into a temp folder *before* starting the runtime. The folder is complete by the time the game process exists, so a pre-`Main` hook can copy translated files over it: the patch is a few MB instead of a multi-GB repack, and no game binary is modified. On .NET that hook is an `appDomainManagerAssembly` line in the runtime's `.exe.config`. See `engine-bakin.md`.
+- **Archive repack** - Wolf (`Data.wolf`), KiriKiri (`.xp3`), Siglus (`Scene.pck`), YU-RIS (`.ypf`), Unreal (`.pak`). Unpack → translate → repack with the engine's tool.
+- **Exe patch** - last resort for hardcoded strings in the binary (Siglus `SiglusEngine.exe`, `Config.exe`, kaneiki). Same-length-or-shorter byte patches, or a loader hook.
+- **Save fixer** - if the engine bakes JP strings into saves (RPG Maker, Wolf), ship a save translator so existing players' saves load (see `engine-rpgmaker.md`).
+

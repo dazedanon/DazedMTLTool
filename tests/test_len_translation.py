@@ -1,9 +1,11 @@
 """Shared Len/Workflow guidance, conflict-safe imports, and project preservation."""
 
 from contextlib import contextmanager, redirect_stdout
+import copy
 from dataclasses import replace
 from io import StringIO
 import json
+import hashlib
 import os
 from pathlib import Path
 import tempfile
@@ -14,6 +16,152 @@ from util.len_translation import LenProject, import_glossary, load_project, prep
 from util.reference_games import add_paired_reference
 from util.skills import load_system_prompt
 from util.vocab import read_game_vocab, write_game_vocab
+
+
+def exercise_progress(test, project):
+    """Protect counted completion, invalidation and atomic report replacement."""
+    from scripts.len_translation import main
+    from util.len_progress import metric_display, read_progress, review_fingerprint, update_progress
+
+    unit = {"id": "Map001#1", "source": "はい。", "translation": "Yes."}
+    unit["translated_from_sha256"] = hashlib.sha256(unit["source"].encode()).hexdigest()
+    unit["reviewed_sha256"] = review_fingerprint(unit["source"].encode(), unit["translation"].encode())
+    other = {"id": "Map001#2", "source": "待って。", "translation": "Wait.",
+             "translated_from_sha256": hashlib.sha256("待って。".encode()).hexdigest()}
+    stale = {"id": "Map001#3", "source": "新しい台詞。", "translation": "Old line.",
+             "translated_from_sha256": hashlib.sha256("古い台詞。".encode()).hexdigest()}
+    records = project.work_root / "progress-units.json"
+    data = {"complete": True, "units": [unit, unit, other, stale]}
+    records.write_text(json.dumps(data))
+    image_source = project.work_root / "source-image.bin"
+    image_output = project.work_root / "translated-image.bin"
+    image_source.write_bytes(b"original image fixture")
+    image_output.write_bytes(b"translated image fixture")
+    relative = lambda path: path.relative_to(project.game_root).as_posix()
+    images = project.work_root / "progress-images.json"
+    images.write_text(json.dumps({"complete": True, "units": [{
+        "id": "title", "source": relative(image_source), "translation": relative(image_output),
+        "translated_from_sha256": hashlib.sha256(image_source.read_bytes()).hexdigest(),
+    }]}))
+    source = project.work_root / "source-manifest.json"
+    source.write_text('{"version":"1.0"}')
+    report = {"phase": "translation", "phases": {"preparation": "complete", "extraction": "complete"},
+              "text": relative(records), "images": relative(images), "inputs": [relative(source)],
+              "blocker": "", "next_action": "Translate the remaining dialogue."}
+    report_file = project.work_root / "progress-report.json"
+    report_file.write_text(json.dumps(report))
+    with redirect_stdout(StringIO()):
+        test.assertEqual(main(["progress-update", "--game-root", str(project.game_root), "--input", str(report_file)]), 0)
+    snapshot = read_progress(project)
+    test.assertEqual({key: snapshot["metrics"]["text"][key] for key in ("total", "translated", "reviewed", "discovered")},
+                     {"total": 3, "translated": 2, "reviewed": 1, "discovered": 3})
+    test.assertEqual(snapshot["metrics"]["images"]["translated"], 1)
+    test.assertEqual(snapshot["warnings"], [])
+    test.assertTrue(read_progress(replace(project, include_images=False))["warnings"])
+    test.assertTrue(read_progress(replace(project, instructions="Different scope"))["warnings"])
+    test.assertEqual(metric_display(snapshot["metrics"]["text"], "translated")[0], 66)
+    test.assertEqual(update_progress(project, report)["metrics"], snapshot["metrics"])
+
+    # Source edits invalidate the display. Even unchanged English needs review
+    # again when its Japanese changes; re-exporting does not bless an old review.
+    source.write_text('{"version":"1.1"}')
+    test.assertTrue(read_progress(project)["warnings"])
+    data["units"][0]["source"] = "はい！"
+    records.write_text(json.dumps(data))
+    test.assertEqual(update_progress(project, report)["metrics"]["text"]["translated"], 1)
+    unit["translated_from_sha256"] = hashlib.sha256(unit["source"].encode()).hexdigest()
+    records.write_text(json.dumps(data))
+    test.assertEqual(update_progress(project, report)["metrics"]["text"]["reviewed"], 0)
+    data["complete"] = False
+    records.write_text(json.dumps(data))
+    partial = update_progress(project, report)["metrics"]["text"]
+    test.assertIsNone(partial["total"])
+    test.assertEqual(partial["discovered"], 3)
+    test.assertEqual(metric_display(partial, "translated")[0], 66)
+    test.assertEqual(metric_display({"total": 0, "translated": 0, "reviewed": 0}, "translated"), (0, "No units", "0 / 0"))
+    test.assertEqual(metric_display(partial, "translated", excluded=True), (0, "Out of scope", ""))
+    data["complete"] = True
+    records.write_text(json.dumps(data))
+    update_progress(project, report)
+
+    before = (project.workspace / "progress.json").read_bytes()
+    invalid = (
+        {**report, "phase": "unknown"}, {**report, "phase": []},
+        {**report, "phases": {"qa": []}},
+        {**report, "phase": None, "phases": {"translation": "complete"}},
+        {**report, "text": "../outside.json"}, {**report, "text": "/absolute.json"},
+        {**report, "next_action": "wordy\nreport"}, {**report, "text": "missing.json"},
+        {**report, "metrics": {"text": {"translated": 999}}},
+    )
+    for bad in invalid:
+        with test.subTest(report=bad), test.assertRaises(ValueError):
+            update_progress(project, bad)
+        test.assertEqual((project.workspace / "progress.json").read_bytes(), before)
+    duplicate = copy.deepcopy(unit)
+    duplicate["translation"] = "Conflicting output"
+    records.write_text(json.dumps({"complete": True, "units": [unit, duplicate]}))
+    with test.assertRaises(ValueError):
+        update_progress(project, report)
+    test.assertEqual((project.workspace / "progress.json").read_bytes(), before)
+    records.write_text(json.dumps(data))
+    image_output.unlink()
+    test.assertTrue(read_progress(project)["warnings"])
+    with test.assertRaises(ValueError):
+        update_progress(project, report)
+    test.assertEqual((project.workspace / "progress.json").read_bytes(), before)
+    image_output.write_bytes(b"")
+    test.assertEqual(update_progress(project, report)["metrics"]["images"]["translated"], 0)
+    image_output.write_bytes(b"translated image fixture")
+    update_progress(project, report)
+    test.assertEqual(read_progress(project)["warnings"], [])
+    progress_path = project.workspace / "progress.json"
+    valid = progress_path.read_bytes()
+    for metric in ({"total": 1, "translated": 2, "reviewed": 0},
+                   {"total": 2, "translated": 1, "reviewed": 2},
+                   {"total": True, "translated": 1, "reviewed": 0},
+                   {"translated": 1, "reviewed": 0}):
+        broken = json.loads(valid)
+        broken["metrics"]["text"] = metric
+        progress_path.write_text(json.dumps(broken))
+        with test.subTest(metric=metric), test.assertRaises(ValueError):
+            read_progress(project)
+    broken = json.loads(valid)
+    del broken["phase"]
+    progress_path.write_text(json.dumps(broken))
+    with test.assertRaises(ValueError):
+        read_progress(project)
+    progress_path.write_bytes(valid)
+
+    # Same-size edits with restored mtime still invalidate the CLI's hash check.
+    stat = source.stat()
+    source.write_text('{"version":"9.9"}')
+    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    test.assertTrue(read_progress(project)["warnings"])
+    source.write_text('{"version":"1.1"}')
+    from util.len_progress import estimate_display
+    data["units"] = [unit, other, {"id": "Map002#1", "source": "新しい行"}]
+    data["complete"] = False
+    other.pop("translated_from_sha256")
+    records.write_text(json.dumps(data))
+    update_progress(project, {**report, "timing": {"translated": 60}})
+    other["translated_from_sha256"] = hashlib.sha256(other["source"].encode()).hexdigest()
+    records.write_text(json.dumps(data))
+    timed = update_progress(project, {**report, "timing": {"translated": 180},
+                                    "phases": {"translation": "active", "qa": "active"}})
+    test.assertEqual(len(timed["history"]), 2)
+    test.assertIn("1–3", estimate_display(timed))
+    test.assertIn("paused", estimate_display({**timed, "blocker": "Waiting for user scope"}))
+    # New source units reset the throughput sample instead of extrapolating an old scope.
+    data["units"].append({"id": "new", "source": "別の場面"})
+    records.write_text(json.dumps(data))
+    test.assertEqual(len(update_progress(project, {**report, "timing": {"translated": 240}})["history"]), 1)
+    for addition in ({"timing": {"translated": float("nan")}},
+                     {"estimates": {"qa": {"low_minutes": 5, "high_minutes": 1, "basis": "bad bounds"}}},
+                     {"inputs": [".dazedtl/len-method/progress.json"]}):
+        with test.assertRaises(ValueError):
+            update_progress(project, {**report, **addition})
+    # Leave a valid snapshot for the encompassing move/resume regression.
+    update_progress(project, report)
 
 
 def make_skill(root: Path) -> Path:
@@ -68,6 +216,8 @@ class LenTranslationTests(unittest.TestCase):
             custom.write_text("# adapted for this game\n")
             progress = project.workspace / "status.md"
             progress.write_text("Extraction reviewed; translation pending.\n")
+            exercise_progress(self, project)
+            saved_progress = (project.workspace / "progress.json").read_bytes()
             overlays = game / ".dazedtl/skills"
             overlays.mkdir(exist_ok=True)
             for name, body in {"game": "Space opera.", "quirks": "Keep rhetorical questions.", "battle": "Short battle labels."}.items():
@@ -136,7 +286,7 @@ class LenTranslationTests(unittest.TestCase):
             unidentified = request_context(project, ["待って。"], speakers=[" "], source_context="レオンの前の台詞")
             self.assertEqual(unidentified["speakers"], [None])
             self.assertNotIn("レオン (Leon)", unidentified["glossary"])
-            revised = replace(project, stage="continue", mode="api", include_images=False, include_glossary_base=False)
+            revised = replace(project, stage="continue", mode="local", include_images=False, include_glossary_base=False)
             self.assertNotIn("魔法 (Magic)", request_context(revised, sources)["glossary"])
             (overlays / "quirks.md").write_text("Keep pauses.")
             updated = request_context(project, sources)
@@ -161,6 +311,7 @@ class LenTranslationTests(unittest.TestCase):
             self.assertEqual(load_project(game), revised)
             self.assertEqual(custom.read_text(), "# adapted for this game\n")
             self.assertEqual(progress.read_text(), "Extraction reviewed; translation pending.\n")
+            self.assertEqual((project.workspace / "progress.json").read_bytes(), saved_progress)
             self.assertEqual(original.read_bytes(), b"original game")
             moved = root / "Moved game"
             game.rename(moved)
@@ -170,6 +321,81 @@ class LenTranslationTests(unittest.TestCase):
             self.assertIn(json.dumps(str(skill / "SKILL.md")), moved_prompt)
             self.assertNotIn(str(game), moved_prompt)
             self.assertEqual(shared_context(resumed)["system"], load_system_prompt(moved))
+            from util.len_progress import read_progress
+            # Image scope changed earlier, but moved artifact paths still resolve.
+            self.assertEqual(len(read_progress(resumed)["warnings"]), 1)
+
+        # The same handoff lifecycle must bind bulk context and API preflight to current inputs.
+        from util.len_translation import build_handoff, request_contexts
+        from util.len_api import compile_plan, create_estimate, validate_estimate
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as raw, guidance_fixture(Path(raw)):
+            root = Path(raw)
+            game = root / "game"
+            game.mkdir()
+            project = LenProject(game, mode="api")
+            prepare_project(replace(project, stage="prepare"), make_skill(root / "skill"))
+            source = project.work_root / "sources.json"
+            source.write_text('{"line":"鍵"}')
+            batches = [{"id": "scene-a", "sources": {"a": "鍵"}, "speakers": {"a": "レオン"}},
+                       {"id": "scene-b", "sources": ["待って。"], "speakers": [None]}]
+            expected = [request_context(project, **{k: v for k, v in batch.items() if k != "id"}) for batch in batches]
+            self.assertEqual([item["context"] for item in request_contexts(project, batches)], expected)
+            # The fast path must remain identical when advisory reference matches exist.
+            jp, en = root / "jp", root / "en"
+            jp.mkdir(); en.mkdir()
+            (jp / "Text.json").write_text('{"line":"鍵"}')
+            (en / "Text.json").write_text('{"line":"Key"}')
+            add_paired_reference(game, title="Earlier game", source_data=jp, translated_data=en)
+            self.assertEqual([item["context"] for item in request_contexts(project, batches)],
+                             [request_context(project, **{k: v for k, v in batch.items() if k != "id"}) for batch in batches])
+            with self.assertRaises(ValueError):
+                build_handoff(project)
+            plan = {"complete": True, "inputs": [source.relative_to(game).as_posix()], "batches": batches}
+            compiled = compile_plan(project, plan)
+            path = project.workspace / "api-requests.json"
+            path.write_text(json.dumps(compiled))
+            settings = {"model": "gpt-4.1", "api": "", "API_PROVIDER": "openai"}
+            with patch("util.len_api.api_settings", return_value=settings), \
+                 patch("tiktoken.encoding_for_model", return_value=SimpleNamespace(encode=lambda value: list(value))), \
+                 patch("util.translation.getPricingConfig", return_value={"inputAPICost": 2, "outputAPICost": 8}):
+                estimate = create_estimate(project)
+                self.assertGreater(estimate["input_tokens"], sum(len(json.dumps(b["sources"])) for b in batches))
+                self.assertEqual(estimate["batch_cost"], estimate["live_cost"] / 2)
+                with self.assertRaises(ValueError):
+                    validate_estimate(project, estimate)
+                estimate["approved"] = True
+                validate_estimate(project, estimate)
+                approved = replace(project, api_estimate=estimate)
+                self.assertTrue(build_handoff(approved))
+                with self.assertRaises(ValueError):
+                    validate_estimate(project, estimate, settings={**settings, "model": "different"})
+                source.write_text('{"line":"新しい鍵"}')
+                with self.assertRaises(ValueError):
+                    validate_estimate(project, estimate)
+                source.write_text('{"line":"鍵"}')
+                with patch("util.len_api._compiler_fingerprint", return_value="changed"):
+                    with self.assertRaises(ValueError):
+                        validate_estimate(project, estimate)
+                (en / "Text.json").write_text('{"line":"Changed reference"}')
+                with self.assertRaises(ValueError):
+                    validate_estimate(project, estimate)
+                (en / "Text.json").write_text('{"line":"Key"}')
+                original_requests = path.read_bytes()
+                tampered = json.loads(original_requests)
+                tampered["batches"][0]["sources"]["a"] = "違う"
+                path.write_text(json.dumps(tampered))
+                with self.assertRaises(ValueError):
+                    create_estimate(project)
+                path.write_bytes(original_requests)
+                write_game_vocab("# Game Terms\n鍵 (Different key)\n", game)
+                with self.assertRaises(ValueError):
+                    validate_estimate(project, estimate)
+            # Changing dependencies mid-compilation aborts the set.
+            shared = shared_context(project)
+            with patch("util.len_translation.shared_context", side_effect=[shared, {**shared, "content_sha256": "changed"}]):
+                with self.assertRaises(ValueError):
+                    request_contexts(project, batches)
 
     def test_invalid_import_or_workspace_preserves_existing_work(self):
         with tempfile.TemporaryDirectory() as raw, guidance_fixture(Path(raw)):

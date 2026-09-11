@@ -1386,8 +1386,11 @@ class DazedMTLGUI(QMainWindow):
 
         self.len_translation_tab = LenTranslationTab(
             self, settings=self.settings, open_version_tracking=self._open_len_version_tracking,
+            open_api_settings=lambda: self.switch_page(self.PAGE_CONFIG),
+            open_batch_history=lambda: self.switch_page(self.PAGE_BATCHES),
         )
         self.content_stack.addWidget(self.len_translation_tab)
+        self.config_tab.config_changed.connect(self.len_translation_tab._invalidate)
 
     def _open_len_version_tracking(self, game_root: str) -> None:
         self.version_update_tab.select_len_project(game_root)

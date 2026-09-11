@@ -898,6 +898,12 @@ class EvaluationManifestTests(unittest.TestCase):
             evaluation._validate_candidates(candidates)
 
     def test_usage_pricing_applies_provider_cache_write_rates(self):
+        # Exercise cache-write multipliers independently of changing model prices.
+        self.enterContext(mock.patch.object(
+            evaluation, "_candidate_rates",
+            side_effect=lambda candidate: {"input": 2.0 if candidate["execution"] == "live" else 1.0,
+                                           "cached_input": 0.0, "output": 0.0},
+        ))
         usage = {
             "input_tokens": 0,
             "cache_read_input_tokens": 0,

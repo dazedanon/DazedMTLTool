@@ -489,12 +489,15 @@ class TestRPGMakerQAManifest(unittest.TestCase):
         for filename, old, new in (
             ("Items.json", [None, {"id": 1, "name": "薬", "description": "回復する"}],
              [None, {"id": 1, "name": "Potion", "description": "Restores health"}]),
-            ("System.json", {"currencyUnit": "円", "armorTypes": ["", "服"], "terms": {"messages": {"win": "勝利"}}},
-             {"currencyUnit": "G", "armorTypes": ["", "Clothes"], "terms": {"messages": {"win": "Victory"}}}),
+            ("System.json", {"locale": "ja_JP", "currencyUnit": "円", "armorTypes": ["", "服"], "terms": {"messages": {"win": "勝利"}}},
+             {"locale": "ja_JP", "currencyUnit": "G", "armorTypes": ["", "Clothes"], "terms": {"messages": {"win": "Victory"}}}),
         ):
             preserved = preserve_originals(old, new, filename=filename)
             _write_json(data / filename, preserved)
             if filename == "System.json":
+                self.assertEqual(preserved["locale"], "en_US")
+                self.assertEqual(preserved["_original"]["locale"], "ja_JP")
+                self.assertEqual(preserve_originals(preserved, preserved, filename=filename), preserved)
                 self.assertEqual(preserved["_original"]["terms"], {"messages": {"win": "勝利"}})
                 self.assertEqual(preserved["_original"]["armorTypes"], {"1": "服"})
                 self.assertNotIn("_original", preserved["terms"])
@@ -511,7 +514,7 @@ class TestRPGMakerQAManifest(unittest.TestCase):
         self.assertEqual(set(pairs), {
             "レオン", "一行目。\n二行目。", "残る", "去る", "長い文。\n次の文。",
             "表示開始\n表示終了", 'show("開始");\nshow("終了");', "鍵を探す", "元の値",
-            '$gameVariables.value(1) === "合言葉"', "新しい名前", "薬", "回復する", "円", "服", "勝利",
+            '$gameVariables.value(1) === "合言葉"', "新しい名前", "薬", "回復する", "円", "服", "勝利", "ja_JP",
         })
 
         # A clean-baseline reinjection must also keep metadata already in the game.

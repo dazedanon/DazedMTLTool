@@ -20,67 +20,12 @@ from util.reference_games import load_registry, reference_context
 
 BUNDLED_SKILL = SKILLS_DIR / "game-translation"
 WORKSPACE_RELATIVE = Path(".dazedtl") / "len-method"
-_WORK_GITIGNORE = """# Version authored tools, translation records and QA notes; keep runtime data local.
-*
-!*/
-!.gitignore
-!.gitattributes
-!*.md
-!*.txt
-!*.json
-!*.jsonl
-!*.csv
-!*.tsv
-!*.py
-!*.js
-!*.cjs
-!*.mjs
-!*.cs
-!*.csproj
-!*.csx
-!*.c
-!*.h
-!*.cpp
-!*.rs
-!*.toml
-!*.yaml
-!*.yml
-!*.ps1
-!*.sh
-!*.bat
-!*.cmd
-!*.rb
-!*.gml
-!*.lua
-!*.rpy
-!*.ks
-!*.tjs
-!*.html
-!*.css
-!*.svg
-!*.ini
-!*.cfg
-!*.sln
-!*.resx
-!*.def
-.env
-.env.*
-api_keys.json
-*_key.txt
-*_keys.txt
-__pycache__/
-.venv/
-venv/
-node_modules/
-cache/
-logs/
-bin/
-obj/
-target/
-"""
 _WORK_IGNORE_BEGIN = "# BEGIN DazedTL Len project work"
 _WORK_IGNORE_END = "# END DazedTL Len project work"
 _WORK_IGNORE_BLOCK = f"""{_WORK_IGNORE_BEGIN}
+# Len work, guidance, translation stores and QA artifacts stay local.
+# Runtime patch files are selected separately with git-scope.
+/.dazedtl/**
 .env
 .env.*
 .api_key
@@ -95,11 +40,6 @@ saves/
 save/
 logs/
 cache/
-!/.dazedtl/len-method/
-/.dazedtl/len-method/*
-!/.dazedtl/len-method/project.json
-!/.dazedtl/len-method/status.md
-!/.dazedtl/len-method/work/
 {_WORK_IGNORE_END}
 """
 STAGES = {
@@ -109,8 +49,8 @@ STAGES = {
     "qa": "Review and fix the translation",
 }
 MODES = {
-    "local": "AI assistant translates directly",
-    "api": "Use a translation API",
+    "local": "Agent / Sub Direct Translation",
+    "api": "API Batch Translation",
 }
 
 
@@ -122,6 +62,7 @@ class LenProject:
     include_images: bool = True
     instructions: str = ""
     include_glossary_base: bool = True
+    api_estimate: dict | None = None
 
     @property
     def workspace(self) -> Path:
@@ -163,7 +104,8 @@ def load_project(game_root: Path) -> LenProject:
         if not isinstance(data, dict) or data.get("version") not in {1, 2}:
             raise ValueError("Unsupported Len project settings version.")
         # Resolve against the selected game so a moved folder remains portable.
-        project = LenProject(game_root, include_glossary_base=data.get("include_glossary_base", True), **{key: data[key] for key in (
+        project = LenProject(game_root, include_glossary_base=data.get("include_glossary_base", True),
+                             api_estimate=data.get("api_estimate"), **{key: data[key] for key in (
             "stage", "mode", "include_images", "instructions"
         )})
     _validate_project(project)
@@ -230,7 +172,8 @@ def _line_speakers(sources, speakers):
 
 def request_context(project: LenProject, sources: list[str] | dict[str, str], *,
                     instruction_key: str | None = None, source_context: str = "",
-                    speakers: list[str | None] | dict[str, str | None] | None = None) -> dict:
+                    speakers: list[str | None] | dict[str, str | None] | None = None,
+                    _shared=None, _reference_pack=None) -> dict:
     """Compile one batch with DazedTL's actual glossary/SFX matching and current instructions.
 
     No provider calls. Pipelines consume these fields directly instead of rebuilding prompts.
@@ -245,7 +188,7 @@ def request_context(project: LenProject, sources: list[str] | dict[str, str], *,
         raise ValueError("Source IDs must be nonempty strings.")
     line_speakers = _line_speakers(sources, speakers)
     speaker_names = list(line_speakers.values()) if isinstance(line_speakers, dict) else line_speakers or []
-    shared = shared_context(project)
+    shared = _shared if _shared is not None else shared_context(project)
     payload = json.dumps(sources, ensure_ascii=False)
     config = SimpleNamespace(prompt=shared["system"], vocab=shared["glossary"], language="English", useSfxReference=True)
     system, glossary, sfx, user = createContextParts(
@@ -269,13 +212,64 @@ def request_context(project: LenProject, sources: list[str] | dict[str, str], *,
         "request_instructions": ctx(instruction_key, language="English", context=source_context) if instruction_key else "",
         "preceding_japanese_source_context": source_context,
         "user": user,
-        "reference_translations": reference_context(project.game_root, values),
+        "reference_translations": (_reference_pack if _reference_pack is not None
+                                   else reference_context(project.game_root, values)),
     }
     if line_speakers is not None:
         result["speakers"] = line_speakers
     result["request_sha256"] = hashlib.sha256(
         json.dumps(result, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
+    return result
+
+
+def _reference_subset(references, sources):
+    """Keep canonical reference evidence identical to a single-batch lookup."""
+    wanted = set(sources.values() if isinstance(sources, dict) else sources)
+    pack = dict(references)
+    if pack["status"] == "ready":
+        pack["matches"] = {key: value for key, value in pack["matches"].items() if key in wanted}
+        pack["source_count"] = len(pack["matches"])
+        pack.pop("content_sha256")
+        pack["content_sha256"] = hashlib.sha256(json.dumps(
+            pack, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+    return pack
+
+
+def request_contexts(project: LenProject, batches: list[dict]) -> list[dict]:
+    """Compile a scene-ordered set with one guidance load and one reference census.
+
+    Returned requests are identical to independent request_context calls. A changed
+    dependency aborts the whole operation; no persistent cache can bless stale work.
+    """
+    if not isinstance(batches, list) or not batches:
+        raise ValueError("Supply a nonempty list of context batches.")
+    identities = set()
+    sources = []
+    for batch in batches:
+        if not isinstance(batch, dict) or batch.keys() - {"id", "sources", "speakers", "instruction_key", "source_context"}:
+            raise ValueError("Context batches accept id, sources, speakers, instruction_key and source_context.")
+        identity = batch.get("id")
+        if not isinstance(identity, str) or not identity or identity in identities:
+            raise ValueError("Each context batch needs a unique nonempty id.")
+        identities.add(identity)
+        values = batch.get("sources")
+        values = list(values.values()) if isinstance(values, dict) else values
+        if not isinstance(values, list) or not values or not all(isinstance(v, str) and v for v in values):
+            raise ValueError("Each batch needs a nonempty source list or source object.")
+        sources.extend(values)
+    shared = shared_context(project)
+    references = reference_context(project.game_root, sources)
+    result = []
+    for batch in batches:
+        values = batch["sources"]
+        pack = _reference_subset(references, values)
+        request = request_context(project, **{key: value for key, value in batch.items() if key != "id"},
+                                  _shared=shared, _reference_pack=pack)
+        result.append({"id": batch["id"], "sources": batch["sources"], "context": request})
+    if shared_context(project)["content_sha256"] != shared["content_sha256"] or reference_context(project.game_root, sources) != references:
+        raise ValueError("Guidance or references changed during compilation; retry the entire operation.")
     return result
 
 
@@ -382,6 +376,11 @@ def import_glossary(project: LenProject, document: dict) -> dict:
 
 def build_handoff(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> str:
     _validate_project(project)
+    api_summary = ""
+    if project.mode == "api" and project.stage != "prepare":
+        from util.len_api import validate_estimate, estimate_summary
+        validate_estimate(project, project.api_estimate)
+        api_summary = estimate_summary(project.api_estimate)
     task = {
         "translate": "Carry the game through extraction, translation, injection, layout fixes, in-game QA and a local translation patch.",
         "prepare": "Preparation only: inspect the engine, extract and audit the corpus, and prepare the glossary, game bible, prompt and validation plan. Stop before translation, injection or API-driver implementation.",
@@ -391,7 +390,15 @@ def build_handoff(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> str:
     mode = (
         "Translate directly with the AI assistant. No translation API calls, API-driver setup or hosted image generation are authorized by this handoff. Local extraction, image lettering, measurement and patch tools are allowed."
         if project.mode == "local" else
-        "Use a translation API selected and configured with the user. Reuse the chosen provider/model and budget; if these are not established, ask before paid calls. Keep keys out of prompts, logs and project artifacts."
+        ("API preparation only. No paid calls or API-driver implementation. Export the complete request plan "
+         "with context-many, then return to Len’s Method for the provider estimate and API handoff."
+         if project.stage == "prepare" else
+         "Use API Batch Translation with the reviewed estimate below. Read references/api-batch.md before "
+         "provider work. Revalidate this estimate before submitting the exact quoted request set; a changed "
+         "model, source, prompt or scope needs a fresh quote. Reuse the application’s provider configuration, "
+         "batch collection, approval and history where the engine adapter supports them. Never fall back "
+         "to live paid requests silently. The estimate is not a spending cap; additional retries need their "
+         "own estimate and approval. Keep keys out of prompts, logs and project artifacts.\n" + api_summary)
     )
     images = (
         "Include all images containing player-facing Japanese text: inventory archives, UI states and animation frames, translate and fit their text, and validate the resulting assets in game. This explicitly opts into the skill's image-translation scope."
@@ -413,12 +420,14 @@ Before changing game files, complete the project lifecycle in references/project
 {json.dumps([sys.executable, str(DATA_DIR.parent / 'scripts/len_translation.py'), 'git-status', '--game-root', str(project.game_root)], ensure_ascii=False)}
 Set up or reuse local version tracking with the same script's git-setup command and --version <release label>. For a fresh translation or preparation task, the selected game folder IS the intended untranslated starting source by default; --original is optional and only needed to select a different source. Do a bounded check of the current game and user instructions for evidence of an injected player-facing translation or a source-version mismatch. An enabled TranslationUpdateCheck plugin, GameUpdate files, .dazedtl metadata, extracted data, prepared glossaries, JSON formatting or Git scaffolding are normal tool preparation, not evidence of an already translated game. English titles, stock UI labels and plugin metadata alone are not evidence either. If the user identifies this folder as the starting original and there is no concrete contradictory evidence, proceed with it; do not search downloads, mounted media or unrelated folders for a supposedly cleaner copy or ask the user to reconfirm it. Record known preparation in status.md and snapshot the folder as supplied; do not remove the updater or undo preparation to manufacture a pristine-looking release. When resuming preparation and the game is still untranslated, use --current-is-untranslated; an actual translated game or unsuitable source release without a usable baseline needs --original <untranslated source>. Ask for another source only when concrete evidence or the user's statement establishes that the selected folder cannot serve as the starting original. Verify the version from local evidence, or label an unversioned snapshot initial-unversioned and record that limitation. The helper uses the shared Workflow backend and preserves native bytes and existing history. Resolve Git prerequisites without resetting, discarding, relabeling a known translation as original, or changing unrelated repository state. Local Git setup and reviewed checkpoints are part of this task; remote creation, pushing and publishing require a separate user request.
 
-Before the first baseline, review the game's .gitignore and .gitattributes against the actual engine: include the game text and patch inputs that need protection, exclude secrets, saves, caches and unrelated bulk assets, and preserve engine-required bytes and line endings (use scoped -text rules where appropriate). The Len Git mode does not impose Workflow's file-extension allowlist or reformat game payloads. Preserve a recoverable backup of this starting game before translation or injection; create that backup from the selected folder when needed instead of demanding a pre-existing second copy. Git's ignored-asset inventory is not a backup of those bytes. After setup, verify both baseline commits, the active translated branch and the files actually tracked before translating. Describe this as the supplied untranslated starting baseline, including recorded preparation, rather than claiming it is byte-identical to an independently verified vendor archive.
+Before the first baseline, review the game's complete file inventory and use an exact-path .gitignore allowlist for the intended runtime patch, plus .gitignore, .gitattributes and installation README.md. Keep unchanged vendor artwork, engine/runtime files, unused plugins, source copies, editable image sources and all .dazedtl guidance/work/QA records out of both game branches. Include translated native data, translated runtime images and only required modified or added plugins, fonts and other runtime dependencies. Include required runtime additions made during tool preparation even when their bytes match the prepared backup; inspect enabled plugin registrations and runtime references rather than relying only on a source/target diff. Preserve engine-required bytes and line endings (use scoped -text rules where appropriate). The Len Git mode does not impose Workflow's file-extension allowlist or reformat game payloads. Preserve a recoverable backup of this starting game before translation or injection; create that backup from the selected folder when needed instead of demanding a pre-existing second copy. Git's ignored-asset inventory is not a backup of those bytes. After setup, verify both baseline commits, the active translated branch and the files actually tracked before translating. Describe this as the supplied untranslated starting baseline, including recorded preparation, rather than claiming it is byte-identical to an independently verified vendor archive.
 
 Translation mode: {mode}
 
 Image scope: {images}
 For preparation-only work, document the selected image scope in the plan; do not render or inject replacements yet.
+
+Use targeted translation QA by default. Full start-to-finish playthroughs, grinding through battles and recruiting another playtester are separate optional scope. Test changed renderers and representative scene/UI variants, then report remaining route coverage honestly. Read references/direct-workflow.md for efficient direct batches and evidence reuse.
 
 Shared guidance is authoritative for BOTH Len's Method and Workflow:
 - {json.dumps(str(project.game_root / '.dazedtl/glossary.txt'))}: names, terms, character identity and individual voices.
@@ -444,11 +453,16 @@ If you already have a Len JSON glossary, use the shared import bridge in scripts
 
 Cover dialogue, choices, names, database descriptions, menus, plugin/script text and runtime-generated player-facing labels. Distinguish display text from internal identifiers. Preserve control codes, placeholders, archive structure and save compatibility.
 
-Preserve a recoverable source before changing game files. Put authored scripts, reviewed translation records, prequel provenance and QA notes in {json.dumps(str(project.work_root), ensure_ascii=False)} or existing versioned project folders. This work/ directory and the scope/status files are eligible for Git; generated prompts/context, caches, raw snapshots and API state outside work/ remain local. Check the work/ ignore policy when adding a new source format. Export database-backed translation stores to stable text records there so checkpoints protect completed translations. Preserve legacy adaptations and migrate useful authored work deliberately. After each validated milestone, review the diff and commit only the selected project files on the registered translation branch, preserving unrelated staged or working changes. Maintain {json.dumps(str(project.workspace / 'status.md'), ensure_ascii=False)} with the baseline and checkpoint commits, completed steps, artifact paths, measured coverage, unresolved issues and the next action. On resume, verify artifact and context fingerprints before reusing results. The presence of a handoff or a successful extraction is not evidence of completion.
+Preserve a recoverable source before changing game files. Put authored scripts, reviewed translation records, prequel provenance and QA notes in {json.dumps(str(project.work_root), ensure_ascii=False)}. All .dazedtl files stay local and ignored on main and original, including scope, glossary, status, progress, exports and editable image sources. Preserve and back up this working material separately; Git's patch branches do not protect ignored work. Never force-add it to a patch checkpoint. Preserve legacy adaptations and existing local records.
 
-Before the first actual MV/MZ map or database write, make the injector preserve Workflow-compatible _original metadata even when it uses an external translation store. Read the _original section of references/engine-rpgmaker.md. Stage translated JSON separately, then use this script's write-rpgmaker-json --source <matching untranslated baseline or previous game JSON with originals intact> --translated <staged JSON> --output <actual game JSON> for each changed file. Historical reference injectors do not call this helper automatically; adapt their output destination before running them. The writer retains existing originals, handles grouped dialogue, choices, speakers, database/System fields and supported event parameters, and refuses ambiguous structural changes before replacing a file. An adapter that changes command counts/order or unsupported fields must bind original source units explicitly and pass the same independent QA checks; do not bypass preservation on refusal. Never reconstruct a missing Japanese source from current English. Keep _original immutable through corrections, wrapping and reinjection, and verify final source/live mappings with the existing RPG Maker QA manifest and independent verifier. For native/binary formats that cannot carry this key, preserve equivalent versioned source/translation sidecars with file/unit IDs, exact source, final live text, source hashes and injection bindings; do not add unknown fields to engine containers. This happens within the current task without a separate user prompt.
+At each validated patch checkpoint, first ensure the reviewed runtime outputs have actually been injected into the selected game folder. English staged only in an isolated QA copy is not an English patch in main. Save a COMPLETE runtime path list, or a release manifest with files mapping paths to sha256 and original_sha256 (null only for genuine translation-only additions), in the ignored workspace. Run this script's git-scope --game-root <game> --manifest <file> --original <matching untranslated backup>, optionally with --dry-run first. Supply the whole current patch, not just the latest batch. The helper stages exactly those runtime files plus repository metadata, untracks everything else without deleting local files, and adds a scope commit to original containing the matching untranslated files. Translation-only additions have no invented original. Existing original bytes must match the supplied release; use Version Update for a different source version. The helper preserves branch history and updates the ignored-asset inventory used by Version Update. Resolve existing staged changes deliberately before using it. Review git diff --cached and commit the patch on the registered translation branch; do not merge main into original or cherry-pick translation commits there. Recheck both branch file lists and source/target hashes after scope changes and official updates. Keep local checkpoint commits and artifact paths in {json.dumps(str(project.workspace / 'status.md'), ensure_ascii=False)}. On resume, verify artifact and context fingerprints before reusing results. The presence of a handoff or successful extraction is not evidence of completion.
+
+Before the first actual MV/MZ map or database write, make the injector preserve Workflow-compatible _original metadata even when it uses an external translation store. Read the _original section of references/engine-rpgmaker.md. Stage translated JSON separately, then use this script's write-rpgmaker-json --source <matching untranslated baseline or previous game JSON with originals intact> --translated <staged JSON> --output <actual game JSON> for each changed file. Historical reference injectors do not call this helper automatically; adapt their output destination before running them. The writer retains existing originals, handles grouped dialogue, choices, speakers, database/System fields and supported event parameters, and refuses ambiguous structural changes before replacing a file. An adapter that changes command counts/order or unsupported fields must bind original source units explicitly and pass the same independent QA checks; do not bypass preservation on refusal. Never reconstruct a missing Japanese source from current English. Set System.json locale to en_US in the English output. Check enabled plugins for locale/isJapanese branches and test English name input, fonts and affected windows. Keep _original immutable through corrections, wrapping and reinjection, and verify final source/live mappings with the existing RPG Maker QA manifest and independent verifier. For native/binary formats that cannot carry this key, preserve equivalent source/translation sidecars in the separately backed-up workspace with file/unit IDs, exact source, final live text, source hashes and injection bindings; do not add unknown fields to engine containers. This happens within the current task without a separate user prompt.
 
 Validate coverage independently of the extractor, placeholders, fonts, text width and row counts, injected output, and actual in-game scenes. Report string coverage, image coverage, and playtested scenes separately. Never claim 100% translation from string counts alone; record inaccessible content, excluded assets and untested scenes explicitly. If this environment cannot launch the game, leave that verification pending and give the user precise playtest steps. Re-inject before packaging. Build a local patch with installation instructions after the applicable QA gates pass; uploading or publishing is a separate user action.
+
+Maintain the compact progress snapshot at {json.dumps(str(project.workspace / 'progress.json'), ensure_ascii=False)} as well as the detailed status.md log. Read references/progress-reporting.md from the live Len skill. After each saved batch or milestone, and before pausing or handing off, export saved unit records (including untranslated occurrences) and run this script's progress-update --game-root <game> --input <report JSON> command, or use --input - for JSON on stdin. Report the current phase, phase checkpoints, a short blocker and next action. The helper counts unique unit IDs, validates source/review fingerprints and writes progress atomically; it does not make API calls. Keep a discovered-unit denominator even when the independent coverage audit is unfinished; unknown full-corpus totals must remain unknown. Export cumulative active translation/review seconds and bounded remaining phase estimates with their assumptions. Refresh at least every 10 minutes during ongoing work and before any long QA or provider wait. Image scope must match this project. Include current source/evidence artifacts so changed inputs are flagged. Revalidate stale results and downstream checkpoints before reporting again. Never regenerate fingerprints to bless old translations or reviews. Preserve this file through resume and prompt refresh; the user should not maintain progress manually or need a separate prompt. Keep the detailed history in status.md; both progress files stay local and belong in the separate workspace backup, not the game patch branches.
+
 
 Additional project instructions:
 {project.instructions.strip() or '(none)'}
@@ -470,8 +484,8 @@ def _write_atomic(path: Path, text: str) -> None:
             temporary.unlink(missing_ok=True)
 
 
-def _prepare_versioned_work(project: LenProject) -> None:
-    """Expose authored project work without tracking generated context or credentials."""
+def _prepare_local_work(project: LenProject) -> None:
+    """Keep all Len working state local, after the shared portable-settings rules."""
     ignore = project.game_root / ".gitignore"
     text = ignore.read_text(encoding="utf-8", errors="surrogateescape") if ignore.exists() else ""
     if text.count(_WORK_IGNORE_BEGIN) != text.count(_WORK_IGNORE_END) or text.count(_WORK_IGNORE_BEGIN) > 1:
@@ -481,17 +495,15 @@ def _prepare_versioned_work(project: LenProject) -> None:
         end = text.index(_WORK_IGNORE_END) + len(_WORK_IGNORE_END)
         if end < start:
             raise ValueError("The Len project .gitignore block is out of order.")
-        updated = text[:start] + _WORK_IGNORE_BLOCK.rstrip() + text[end:]
+        text = text[:start] + text[end:]
+    patch_start = text.find("# BEGIN DazedTL Len patch files")
+    if patch_start >= 0:
+        updated = text[:patch_start].rstrip() + "\n\n" + _WORK_IGNORE_BLOCK + "\n" + text[patch_start:].lstrip("\r\n")
     else:
-        updated = text + ("\n" if text and not text.endswith("\n") else "") + "\n" + _WORK_IGNORE_BLOCK
-    if updated != text:
+        updated = text.rstrip() + "\n\n" + _WORK_IGNORE_BLOCK
+    if not ignore.exists() or ignore.read_text(encoding="utf-8", errors="surrogateescape") != updated:
         _write_atomic(ignore, updated)
     project.work_root.mkdir(parents=True, exist_ok=True)
-    work_ignore = project.work_root / ".gitignore"
-    if work_ignore.is_symlink() or (work_ignore.exists() and not work_ignore.is_file()):
-        raise ValueError("The Len work .gitignore must be a regular file.")
-    if not work_ignore.exists():
-        _write_atomic(work_ignore, _WORK_GITIGNORE)
 
 
 def prepare_project(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> Path:
@@ -500,12 +512,15 @@ def prepare_project(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> Pa
     _validate_skill(skill_root)
     context = shared_context(project)
     project.workspace.mkdir(parents=True, exist_ok=True)
-    _prepare_versioned_work(project)
+    _prepare_local_work(project)
     settings = asdict(project)
     settings.pop("game_root")
     _write_atomic(project.workspace / "project.json", json.dumps({"version": 2, **settings}, indent=2) + "\n")
     _write_atomic(project.workspace / "context.json", json.dumps(context, ensure_ascii=False, indent=2) + "\n")
     _write_atomic(project.workspace / "setup.md", load_generic_project_setup(project.game_root))
+    from util.len_progress import initialize_progress
+
+    initialize_progress(project)
     handoff = project.workspace / "handoff.md"
     _write_atomic(handoff, prompt)
     return handoff

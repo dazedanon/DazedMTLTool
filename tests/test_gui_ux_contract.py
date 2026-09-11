@@ -140,6 +140,41 @@ class GUIUXContractTests(unittest.TestCase):
                 (saved.workspace / "status.md").write_text("Needs in-game verification.")
                 tab._refresh_progress()
                 self.assertEqual(tab.progress_text.toPlainText(), "Needs in-game verification.")
+                from util.len_progress import update_progress
+                import hashlib
+                units = saved.work_root / "units.json"
+                record = {"id": "line1", "source": "鍵", "translation": "Key",
+                          "translated_from_sha256": hashlib.sha256("鍵".encode()).hexdigest()}
+                units.write_text(json.dumps({"complete": True, "units": [record, {"id": "line2", "source": "扉"}]}))
+                report = {"phase": "translation", "text": units.relative_to(game).as_posix(),
+                          "next_action": "Translate the door label."}
+                update_progress(saved, report)
+                with patch.object(tab, "isVisible", return_value=True):
+                    tab.progress_timer.timeout.emit()
+                self.assertEqual(tab.progress_bars["translated"].value(), 50)
+                self.assertEqual(tab.progress_bars["reviewed"].value(), 0)
+                self.assertEqual(tab.progress_bars["images"].format(), "Out of scope")
+                self.assertEqual(tab.progress_counts["translated"].text(), "1 / 2")
+                self.assertFalse(tab.progress_details.toggle.isChecked())
+                self.assertTrue(tab.progress_warning.isHidden())
+                self.assertEqual(tab.progress_text.toPlainText(), "Needs in-game verification.")
+                units.write_text(json.dumps({"complete": True, "units": [record]}))
+                with patch.object(tab, "isVisible", return_value=True):
+                    tab.progress_timer.timeout.emit()
+                self.assertFalse(tab.progress_warning.isHidden())
+                self.assertFalse(tab.progress_bars["translated"].isEnabled())
+                update_progress(saved, report)
+                tab._refresh_progress()
+                self.assertEqual(tab.progress_bars["translated"].value(), 100)
+                self.assertTrue(tab.progress_warning.isHidden())
+                progress_file = saved.workspace / "progress.json"
+                valid_progress = progress_file.read_bytes()
+                progress_file.write_text('{"schema":1,"metrics":[]}')
+                tab._refresh_progress()
+                self.assertFalse(tab.progress_warning.isHidden())
+                self.assertEqual(tab.progress_bars["translated"].value(), 0)
+                progress_file.write_bytes(valid_progress)
+                tab._refresh_progress()
                 tab.stage_combo.setCurrentIndex(tab.stage_combo.findData("qa"))
                 self.assertTrue(tab.copy_button.isEnabled())
                 self.assertEqual(tab.preview.toPlainText(), "")
@@ -167,6 +202,8 @@ class GUIUXContractTests(unittest.TestCase):
                 self.assertTrue(tab.copy_button.isEnabled())
                 self.assertEqual(tab.preview.toPlainText(), "")
                 self.assertEqual(tab.progress_text.toPlainText(), "")
+                self.assertEqual(tab.progress_bars["translated"].value(), 0)
+                self.assertEqual(tab.progress_counts["translated"].text(), "")
                 self.assertTrue(tab.images_check.isChecked())
                 tab.game_edit.setText(str(game))
                 tab._load_game()
@@ -176,6 +213,34 @@ class GUIUXContractTests(unittest.TestCase):
                 references.references.setCurrentRow(0)
                 references._remove()
                 self.assertEqual(load_registry(game)["references"], [])
+                # API mode must show its cost and explicit acceptance before copying;
+                # the preparation-only handoff remains available without a quote.
+                from dataclasses import replace
+                tab.mode_combo.setCurrentIndex(tab.mode_combo.findData("api"))
+                self.assertFalse(tab.copy_button.isEnabled())
+                self.assertFalse(tab.api_card.isHidden())
+                tab.stage_combo.setCurrentIndex(tab.stage_combo.findData("prepare"))
+                self.assertTrue(tab.copy_button.isEnabled())
+                tab.copy_button.click()
+                self.assertEqual(load_project(game).stage, "prepare")
+                tab.stage_combo.setCurrentIndex(tab.stage_combo.findData("continue"))
+                quote = {"model": "fixture-model", "provider": "openai", "requests": 2, "units": 20,
+                         "batch_cost": .25, "live_cost": .5, "input_tokens": 100, "output_tokens": 200,
+                         "input_rate": 2, "output_rate": 8, "request_file": "fixture.json", "approved": False}
+                tab._estimate_ready(replace(tab._project(), api_estimate=None), quote)
+                self.assertIn("$0.2500", tab.api_quote.text())
+                self.assertFalse(tab.copy_button.isEnabled())
+                tab.api_accept.setChecked(True)
+                self.assertTrue(tab.copy_button.isEnabled())
+                with patch("util.len_api.validate_estimate"):
+                    tab.copy_button.click()
+                self.assertTrue(load_project(game).api_estimate["approved"])
+                tab.images_check.setChecked(True)
+                self.assertFalse(tab.copy_button.isEnabled())
+                self.assertIsNone(tab._api_estimate)
+                tab.mode_combo.setCurrentIndex(tab.mode_combo.findData("local"))
+                self.assertTrue(tab.api_card.isHidden())
+                self.assertTrue(tab.copy_button.isEnabled())
             finally:
                 tab.close()
 

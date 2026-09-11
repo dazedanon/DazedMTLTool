@@ -20,7 +20,7 @@ _FIELDS = {
 }
 _SYSTEM_FIELDS = _FIELDS | {
     "terms", "armorTypes", "skillTypes", "equipTypes", "elements", "weaponTypes",
-    "switches", "variables",
+    "switches", "variables", "locale",
 }
 _RUNS = {401: 401, 405: 405, 108: 408, 408: 408, 355: 655}
 
@@ -190,6 +190,8 @@ def preserve_originals(source, translated, *, filename: str):
     _align(source, translated)
     result = copy.deepcopy(translated)
     _inherit(source, result)
+    if filename == "System.json" and isinstance(result, dict) and "locale" in result:
+        result["locale"] = "en_US"
     _walk(source, result, system=filename == "System.json")
     return result
 
