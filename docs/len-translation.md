@@ -44,6 +44,21 @@ For Ace, complete Workflow's extraction/RV2JSON prerequisite first and use its
 `ace_json` export, or pass `--data-path` for another reviewed export. Native Marshal
 files stay binary. Other engines continue through their own preparation tools.
 
+**Install Forge for in-game testing (MV/MZ)** is checked by default in the Len GUI.
+It is enabled for detected MV/MZ games and disabled for Ace and other engines.
+The choice is saved per game when copying the prompt. `rpgmaker-prep` honors it using
+Workflow's existing bundled installer and saved playtest settings. Copying a prompt
+or toggling the checkbox does not install anything immediately.
+
+For a game whose setup is already complete, the agent can apply just the saved choice:
+
+```bash
+python scripts/len_translation.py forge-setup --game-root '/path/to/game'
+```
+
+Unchecking skips Forge installation and updates; it does not uninstall an existing
+copy. Changing the choice refreshes the handoff and invalidates an accepted API quote.
+
 ## Local Git and resumable work
 
 The starting prompt records the supplied untranslated starting state before translation.

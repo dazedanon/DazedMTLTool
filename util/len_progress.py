@@ -32,7 +32,7 @@ def review_fingerprint(source: bytes, translation: bytes) -> str:
 def _scope(project: LenProject) -> str:
     # Mode and translate/continue/QA navigation do not change the game's corpus.
     value = {"include_images": project.include_images, "instructions": project.instructions,
-             "include_glossary_base": project.include_glossary_base}
+             "include_glossary_base": project.include_glossary_base, "install_forge": project.install_forge}
     return _digest(json.dumps(value, sort_keys=True).encode("utf-8"))
 
 

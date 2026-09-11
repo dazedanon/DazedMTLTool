@@ -27,6 +27,8 @@ def main(argv=None) -> int:
     rpg_prep = commands.add_parser("rpgmaker-prep", help="Run Workflow's RPG Maker formatting and GameUpdate preparation before Git setup")
     rpg_prep.add_argument("--game-root", type=Path, required=True)
     rpg_prep.add_argument("--data-path", type=Path, help="Existing Ace JSON export; defaults to the game's ace_json folder")
+    forge_setup = commands.add_parser("forge-setup", help="Apply the saved Forge installation choice without repeating file/Git preparation")
+    forge_setup.add_argument("--game-root", type=Path, required=True)
     context = commands.add_parser("context", help="Read current shared guidance; optionally compile one source batch")
     context.add_argument("--game-root", type=Path, required=True)
     context.add_argument("--sources", type=Path, help="JSON list of Japanese strings or ID-to-string object")
@@ -74,10 +76,16 @@ def main(argv=None) -> int:
             print(prepare_project(project))
         elif args.command == "rpgmaker-prep":
             from util.project_preparation import prepare_rpgmaker
+            from util.len_translation import setup_forge
 
             result = prepare_rpgmaker(project.game_root, data_path=args.data_path,
                                      log=lambda message: print(message, file=sys.stderr))
+            result["forge"] = setup_forge(project)
             print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.command == "forge-setup":
+            from util.len_translation import setup_forge
+
+            print(json.dumps(setup_forge(project), ensure_ascii=False, indent=2))
         elif args.command == "context-many":
             from util.len_api import compile_plan
             result = compile_plan(project, json.loads(args.input.read_text(encoding="utf-8-sig")))

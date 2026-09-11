@@ -59,6 +59,7 @@ def exercise_progress(test, project):
     test.assertEqual(snapshot["warnings"], [])
     test.assertTrue(read_progress(replace(project, include_images=False))["warnings"])
     test.assertTrue(read_progress(replace(project, instructions="Different scope"))["warnings"])
+    test.assertTrue(read_progress(replace(project, install_forge=False))["warnings"])
     test.assertEqual(metric_display(snapshot["metrics"]["text"], "translated")[0], 66)
     test.assertEqual(update_progress(project, report)["metrics"], snapshot["metrics"])
 
@@ -344,6 +345,33 @@ class LenTranslationTests(unittest.TestCase):
                 self.assertEqual((rpg / "data/System.json").read_bytes(), payload)
                 self.assertEqual((rpg / "js/plugins.js").read_bytes(), plugins)
                 self.assertFalse((rpg / "GameUpdate.bat").exists())
+                # Old project files inherit the checked default; explicit opt-out
+                # survives reload and never calls install or uninstall.
+                from util.len_translation import setup_forge
+                settings_path = rpg / ".dazedtl/len-method/project.json"
+                legacy = json.loads(settings_path.read_text())
+                legacy.pop("install_forge")
+                settings_path.write_text(json.dumps(legacy))
+                self.assertTrue(load_project(rpg).install_forge)
+                opted_out = replace(load_project(rpg), install_forge=False)
+                prepare_project(opted_out, skill)
+                self.assertFalse(load_project(rpg).install_forge)
+                (rpg / "js/plugins").mkdir()
+                installed_file = rpg / "js/plugins/Forge_MZ.js"
+                installed_file.write_text("existing Forge")
+                with patch("util.forge.installer.install") as install, patch("util.forge.installer.uninstall") as uninstall:
+                    self.assertEqual(setup_forge(opted_out)["status"], "skipped")
+                    self.assertEqual(setup_forge(LenProject(moved))["status"], "unsupported")
+                    install.assert_not_called()
+                    uninstall.assert_not_called()
+                self.assertEqual(installed_file.read_text(), "existing Forge")
+                (root / ".env").write_text("forgeHotkey=F7\n")
+                with patch("util.forge.installer.install", return_value=(True, "installed")) as install:
+                    self.assertEqual(setup_forge(replace(opted_out, install_forge=True))["status"], "installed")
+                    self.assertEqual(install.call_args.args, (rpg,))
+                    self.assertEqual(install.call_args.kwargs["cfg"]["forgeHotkey"], "F7")
+                with patch("util.forge.installer.install", return_value=(False, "Bundled Forge is missing")), self.assertRaises(ValueError):
+                    setup_forge(replace(opted_out, install_forge=True))
                 generic_setup.reset_mock()
                 rpg_setup.reset_mock()
                 prepare_project(resumed, skill)
@@ -392,6 +420,8 @@ class LenTranslationTests(unittest.TestCase):
                 estimate["approved"] = True
                 validate_estimate(project, estimate)
                 approved = replace(project, api_estimate=estimate)
+                with self.assertRaises(ValueError):
+                    validate_estimate(replace(approved, install_forge=False), estimate)
                 self.assertTrue(build_handoff(approved))
                 with self.assertRaises(ValueError):
                     validate_estimate(project, estimate, settings={**settings, "model": "different"})
@@ -460,7 +490,8 @@ class LenTranslationTests(unittest.TestCase):
             ):
                 with self.subTest(speakers=speakers), self.assertRaises(ValueError):
                     request_context(project, sources, speakers=speakers)
-            for invalid in (replace(project, mode="unknown"), replace(project, include_images="false")):
+            for invalid in (replace(project, mode="unknown"), replace(project, include_images="false"),
+                            replace(project, install_forge="false")):
                 with self.assertRaises(ValueError):
                     prepare_project(invalid, skill)
             with self.assertRaises(ValueError):

@@ -25,6 +25,10 @@ For RPG Maker, the assistant uses Workflow's preparation sequence: JSON formatti
 plugin-configuration formatting, GameUpdate installation, Git setup, then speakers
 and game guidance. Existing per-game updater settings and project metadata are kept.
 Ace uses its extracted JSON for formatting; other engines retain their own setup tools.
+**Install Forge for in-game testing (MV/MZ)** is on by default and saved per game.
+The assistant installs the bundled Forge during setup with Workflow's playtest settings.
+Uncheck it to skip installation; an existing copy is kept. The option is disabled
+for Ace and other engines. No extra confirmation is needed after choosing it.
 
 Git setup uses the selected untranslated game as the starting original and records a
 translated branch, preserving existing repositories and native game bytes. DazedTL

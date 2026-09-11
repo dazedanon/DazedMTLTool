@@ -19,6 +19,7 @@ from util.len_translation import BUNDLED_SKILL, MODES, STAGES, LenProject, load_
 from util.len_progress import PHASES, STATES, empty_progress, estimate_display, metric_display, read_progress
 from util.paths import APP_NAME, ORG_NAME
 from util.len_api import create_estimate, estimate_summary
+from util.project_preparation import rpgmaker_layout
 
 
 class LenEstimateWorker(QThread):
@@ -109,6 +110,15 @@ class LenTranslationTab(QWidget):
         self.base_check.setToolTip("Disable when the shared stock terms do not fit this game.")
         self.base_check.toggled.connect(self._invalidate)
         form.addRow("Glossary", self.base_check)
+        self.forge_check = QCheckBox("Install Forge for in-game testing (MV/MZ)")
+        self.forge_check.setChecked(True)
+        self.forge_check.setEnabled(False)
+        self.forge_check.setToolTip(
+            "Install the bundled Forge overlay during setup using Workflow's playtest settings. "
+            "Available for RPG Maker MV/MZ. Unchecking skips installation and leaves existing copies in place."
+        )
+        self.forge_check.toggled.connect(self._invalidate)
+        form.addRow("Playtest tools", self.forge_check)
         self.instructions_edit = QPlainTextEdit()
         self.instructions_edit.setPlaceholderText("Game-specific requests, reference-game paths, or known issues to fix…")
         self.instructions_edit.setMaximumHeight(100)
@@ -299,6 +309,7 @@ class LenTranslationTab(QWidget):
             stage=self.stage_combo.currentData(), mode=self.mode_combo.currentData(),
             include_images=self.images_check.isChecked(), instructions=self.instructions_edit.toPlainText(),
             include_glossary_base=self.base_check.isChecked(),
+            install_forge=self.forge_check.isChecked(),
             api_estimate={**self._api_estimate, "approved": self.api_accept.isChecked()} if self._api_estimate else None,
         )
 
@@ -314,11 +325,13 @@ class LenTranslationTab(QWidget):
         try:
             project = load_project(Path(self.game_edit.text().strip()))
             if self._loaded_game == str(project.game_root):
+                self._refresh_mode()
                 return
             self.stage_combo.setCurrentIndex(self.stage_combo.findData(project.stage))
             self.mode_combo.setCurrentIndex(self.mode_combo.findData(project.mode))
             self.images_check.setChecked(project.include_images)
             self.base_check.setChecked(project.include_glossary_base)
+            self.forge_check.setChecked(project.install_forge)
             self.instructions_edit.setPlainText(project.instructions)
             self._loaded_game = str(project.game_root)
             self._api_estimate = project.api_estimate
@@ -357,6 +370,8 @@ class LenTranslationTab(QWidget):
             self._refresh_mode()
 
     def _refresh_mode(self, *_):
+        layout = rpgmaker_layout(Path(self._loaded_game)) if self._loaded_game else None
+        self.forge_check.setEnabled(bool(layout and layout["engine"] == "MVMZ"))
         api = self.mode_combo.currentData() == "api"
         preparing = self.stage_combo.currentData() == "prepare"
         self.api_card.setVisible(api)

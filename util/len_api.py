@@ -72,7 +72,7 @@ def compile_plan(project: LenProject, plan: dict) -> dict:
 
 def _scope(project):
     return _hash(_canonical({"images": project.include_images, "instructions": project.instructions,
-                             "base_glossary": project.include_glossary_base}))
+                             "base_glossary": project.include_glossary_base, "install_forge": project.install_forge}))
 
 
 def _read_plan(project, path):

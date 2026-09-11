@@ -230,7 +230,11 @@ class GitVersionUpdateTests(unittest.TestCase):
              patch("util.translation_update_check.installer.DEFAULT_PLUGIN_SRC", checker):
             project = LenProject(rpg)
             prepare_project(project, make_skill(fixture / "skill"))
+            before_data = (rpg / "data/System.json").read_bytes()
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                self.assertEqual(len_main(["forge-setup", "--game-root", str(rpg)]), 0)
+                self.assertEqual((rpg / "data/System.json").read_bytes(), before_data)
+                self.assertFalse((rpg / "GameUpdate.bat").exists())
                 self.assertEqual(len_main(["rpgmaker-prep", "--game-root", str(rpg)]), 0)
                 self.assertEqual(len_main(["git-setup", "--game-root", str(rpg), "--version", "1.00"]), 0)
             source_blob = self.git(rpg, "show", "original:data/System.json")
@@ -239,10 +243,18 @@ class GitVersionUpdateTests(unittest.TestCase):
             prepared_plugins = (rpg / "js/plugins.js").read_text().strip()
             self.assertEqual(self.git(rpg, "show", "original:js/plugins.js"), prepared_plugins)
             self.assertTrue(json.loads(prepared_plugins.split("=", 1)[1].strip().removesuffix(";"))[0]["status"])
+            self.assertTrue((rpg / "js/plugins/Forge_MZ.js").is_file())
+            self.assertFalse(any(p.startswith(".dazedtl/") for p in self.git(rpg, "ls-files").splitlines()))
             original_commit = self.git(rpg, "rev-parse", "original")
             (rpg / "data/System.json").write_text('{"gameTitle":"English title"}')
-            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            project = replace(project, install_forge=False)
+            prepare_project(project, fixture / "skill")
+            forge_bytes = (rpg / "js/plugins/Forge_MZ.js").read_bytes()
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()), patch("util.forge.installer.install") as install_forge:
+                self.assertEqual(len_main(["forge-setup", "--game-root", str(rpg)]), 0)
                 self.assertEqual(len_main(["rpgmaker-prep", "--game-root", str(rpg)]), 0)
+                install_forge.assert_not_called()
+            self.assertEqual((rpg / "js/plugins/Forge_MZ.js").read_bytes(), forge_bytes)
             self.assertEqual(setup_git(replace(project, stage="continue"))["action"], "reused")
             self.assertEqual(self.git(rpg, "rev-parse", "original"), original_commit)
             self.assertEqual(self.git(rpg, "show", "original:data/System.json"), source_blob)

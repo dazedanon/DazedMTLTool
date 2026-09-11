@@ -64,6 +64,7 @@ class LenProject:
     instructions: str = ""
     include_glossary_base: bool = True
     api_estimate: dict | None = None
+    install_forge: bool = True
 
     @property
     def workspace(self) -> Path:
@@ -84,8 +85,8 @@ def _validate_project(project: LenProject) -> None:
         raise ValueError("Choose an existing game folder.")
     if project.stage not in STAGES or project.mode not in MODES:
         raise ValueError("Choose a supported task and translation mode.")
-    if type(project.include_images) is not bool or type(project.include_glossary_base) is not bool:
-        raise ValueError("Image scope and base glossary must be enabled or disabled.")
+    if any(type(value) is not bool for value in (project.include_images, project.include_glossary_base, project.install_forge)):
+        raise ValueError("Image scope, base glossary and Forge installation must be enabled or disabled.")
     if not isinstance(project.instructions, str):
         raise ValueError("Project instructions must be text.")
     # Do not write through project metadata symlinks into unrelated locations.
@@ -106,7 +107,8 @@ def load_project(game_root: Path) -> LenProject:
             raise ValueError("Unsupported Len project settings version.")
         # Resolve against the selected game so a moved folder remains portable.
         project = LenProject(game_root, include_glossary_base=data.get("include_glossary_base", True),
-                             api_estimate=data.get("api_estimate"), **{key: data[key] for key in (
+                             api_estimate=data.get("api_estimate"), install_forge=data.get("install_forge", True),
+                             **{key: data[key] for key in (
             "stage", "mode", "include_images", "instructions"
         )})
     _validate_project(project)
@@ -407,6 +409,22 @@ def build_handoff(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> str:
         "Image translation is excluded. Report known baked Japanese labels separately; do not replace images or claim whole-game coverage while those labels remain."
     )
     rpgmaker = rpgmaker_layout(project.game_root)
+    if not rpgmaker or rpgmaker["engine"] != "MVMZ":
+        forge = "Forge is unavailable for this engine; the MV/MZ plugin must not be installed here."
+    elif project.install_forge:
+        forge = (
+            "Install Forge is enabled in Len's GUI. The rpgmaker-prep command honors this saved choice "
+            "using Workflow's bundled Forge installer and saved playtest settings. If file preparation "
+            "is already complete, run scripts/len_translation.py forge-setup --game-root <game> to install "
+            "Forge without repeating formatting or Git setup. This selection authorizes installation "
+            "without another confirmation. Keep the enabled runtime plugin in the reviewed patch scope "
+            "and its local settings in the ignored workspace."
+        )
+    else:
+        forge = (
+            "Install Forge is disabled in Len's GUI. Skip Forge installation and updates. "
+            "Do not remove an existing Forge installation as a consequence of this checkbox."
+        )
     preparation = (
         "This is an RPG Maker game. Before extraction or the first Git baseline, preserve a recoverable "
         "copy of the starting game and run the same file preparation as Workflow: format game JSON with "
@@ -438,6 +456,8 @@ Read the skill entrypoint first and resolve its references/ and tools/ relative 
 Task: {task}
 
 Project preparation: {preparation}
+
+Forge preference: {forge}
 
 Before changing game files, complete the project lifecycle in references/project-lifecycle.md from Len's skill. Inspect Git with this application command (argument array):
 {json.dumps([sys.executable, str(DATA_DIR.parent / 'scripts/len_translation.py'), 'git-status', '--game-root', str(project.game_root)], ensure_ascii=False)}
@@ -527,6 +547,30 @@ def _prepare_local_work(project: LenProject) -> None:
     if not ignore.exists() or ignore.read_text(encoding="utf-8", errors="surrogateescape") != updated:
         _write_atomic(ignore, updated)
     project.work_root.mkdir(parents=True, exist_ok=True)
+
+
+def setup_forge(project: LenProject) -> dict:
+    """Honor Len's saved opt-in using Workflow's existing offline Forge installer."""
+    _validate_project(project)
+    layout = rpgmaker_layout(project.game_root)
+    if not layout or layout["engine"] != "MVMZ":
+        return {"status": "unsupported", "message": "Forge supports RPG Maker MV/MZ only."}
+    if not project.install_forge:
+        return {"status": "skipped", "message": "Forge installation is disabled for this project."}
+    from util.forge.installer import install
+    from util.playtest.config import load_config
+    from util.project_preparation import format_plugins_js
+
+    try:
+        ok, message = install(project.game_root, cfg=load_config(DATA_DIR.parent / ".env"))
+        if not ok:
+            raise ValueError(message)
+        format_plugins_js(layout["plugins_js"])
+    finally:
+        # The shared installer exposes Workflow's portable guidance. Len's
+        # runtime-patch repositories keep all of that working material local.
+        _prepare_local_work(project)
+    return {"status": "installed", "message": message}
 
 
 def prepare_project(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> Path:

@@ -152,3 +152,11 @@ At each milestone, also give a short human update: completed/discovered text and
 During preparation, report the files/tracks inspected and remaining inventory even before source-unit counts exist.
 Before a provider wait, distinguish queued requests from accepted translations and give the next reconciliation point.
 Keep long paths, full test matrices and narrative history in `status.md`; the main update should make progress understandable without opening that file.
+
+## Exclusions are a separate visible count
+
+Alongside eligible translation progress, report the count and reason for untranslated player-facing exclusions and unresolved findings in the main user update and delivery note.
+Keep source-language-free passthrough, development-only fields, content restrictions and accepted artwork exceptions distinct.
+Name whether a count means logical units or native display occurrences.
+A saved exclusion record must be reconciled with later source reviews and user corrections before its rows can be removed from the denominator.
+Use `review-decisions.md` when a decision is disputed or reversed; neither a retraction nor a renewed exclusion may silently disappear on resume.

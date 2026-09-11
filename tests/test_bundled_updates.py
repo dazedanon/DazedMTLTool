@@ -31,6 +31,7 @@ _SHIPPED_DATA_FILES = (
     "data/skills/game-translation/references/direct-workflow.md",
     "data/skills/game-translation/references/api-batch.md",
     "data/skills/game-translation/references/field-guide.md",
+    "data/skills/game-translation/references/review-decisions.md",
     "data/skills/game-translation/scripts/check_tools.py",
     "data/skills/game-translation/tools/Game Translation/GameMaker/vendor/manifest.json",
     "data/skills/game-translation/tools/Game Translation/GameMaker/vendor/source-reference/LICENSE.txt",

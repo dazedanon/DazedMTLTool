@@ -41,6 +41,12 @@ instructions for these games. For Ace, complete the existing Workflow extraction
 RV2JSON prerequisite and format its JSON export (`--data-path` if not in `ace_json`),
 leaving native Marshal files intact. Other engines keep their own preparation route.
 Existing updater configuration, README and ignore rules are preserved on reinstall.
+Len's **Install Forge** checkbox defaults on for MV/MZ and is saved as `install_forge`.
+The preparation command honors it through Workflow's bundled installer and saved
+playtest settings. For an already prepared game, use `forge-setup --game-root <game>`
+with the same script. An unchecked choice skips installation/updates and does not
+remove existing Forge. Forge does not apply to Ace or other engines; do not ask for
+another confirmation after the user has selected this option.
 
 This copy lives at `DAZEDTL_ROOT/data/skills/game-translation`. Resolve DAZEDTL_ROOT
 as the application folder three levels above this skill folder. `tools/...` paths
@@ -126,12 +132,23 @@ Review the actual collected adapter requests before submission; a preliminary al
 Preparation-only work ends with the extraction, glossary, game bible, request plan and validation plan.
 For every mode, images follow the user's selected scope; finding Japanese art does not expand it.
 
+## Age evidence in cartoony and stylized games
+
+Cartoony, chibi and super-deformed art styles are common across adult casts.
+Do not infer that a character is underage or exclude text solely from stylized proportions, short stature, a youthful face or an ambiguous label such as “girl”.
+Distinguish the game's general visual style from specific evidence about a character's age or depiction.
+Use established age/adulthood lore, the complete scene context and relevant user clarification; do not start a cast-wide age investigation merely because the art is stylized.
+Before creating or reinstating an age-related exclusion, read `references/review-decisions.md` and reconcile prior corrections and retractions.
+Carry a reviewed adult-context conclusion forward when its evidence is unchanged; reopening it requires specific contrary evidence, not the same appearance-based inference.
+Keep any justified restriction specific to the supported scene/participant rather than extending an ambiguous cue to a species, group or the whole cast.
+
 ## Work in measured milestones
 
 1. Detect the engine/build, read its reference, and inspect the relevant existing tools in `references/tools-catalog.md` before adapting a pipeline.
 2. Preserve the source and prove a small delivery canary before bulk translation.
 3. Inventory player-facing text independently of the extractor, including plugin/script labels, runtime-generated text and authorized images.
    Keep stable occurrence IDs, source hashes, speaker/scene associations and an explicit unresolved/excluded ledger.
+   Reconcile disputed or repeated exclusions with prior reviews and user corrections using `references/review-decisions.md` before changing scope.
 4. Build shared glossary and game guidance using `references/glossary-and-prompts.md` and any user-supplied reference games.
    Preserve placeholders, control flow, internal identifiers, source-supported identity and uncertainty.
 5. Translate and save resumable batches with complete compiled context.
@@ -152,6 +169,7 @@ Update `progress.json` from saved records after batches/milestones and at least 
 Tell the user the completed/discovered count, whether corpus coverage is audited, the current phase, estimated remaining active work, the next milestone and any blocker.
 Keep translation, review, image work, injection, QA and packaging separate.
 Use measured throughput plus explicit phase estimates; suspend estimates when scope or evidence changes.
+Show excluded and unresolved player-facing text counts and reasons alongside eligible progress.
 A text bar at 100% never establishes release readiness.
 
 ## Engine detection
@@ -187,6 +205,7 @@ If you can't tell, run Detect It Easy (`tools/.NET/die/diec.exe`, a download lis
 - `references/api-batch.md`: API preparation, saved request plan, GUI estimate/approval and supported provider execution.
 - `references/progress-reporting.md`: report schema, provisional/audited denominators, active time, bounded phase estimates and resume invalidation.
 - `references/project-lifecycle.md`: source baselines, runtime patch Git scope, checkpointing, backup and delivery.
+- `references/review-decisions.md`: disputed exclusions, source evidence, prior corrections, restored translations and visible omission counts.
 - `references/field-guide.md`: detailed reference-pipeline choices and lessons; search only the relevant engine or failure class.
 - `references/tools-catalog.md`: reusable tool paths; `tools/THIRD-PARTY.md` identifies dependencies absent from the bundle.
 - `references/glossary-and-prompts.md`, `references/reference-translations.md`: identity, voice, terminology and previous translations.
