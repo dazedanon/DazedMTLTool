@@ -24,6 +24,9 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("prepare", help="Prepare shared guidance, setup instructions and the skill handoff")
     prepare.add_argument("--game-root", type=Path, required=True)
+    rpg_prep = commands.add_parser("rpgmaker-prep", help="Run Workflow's RPG Maker formatting and GameUpdate preparation before Git setup")
+    rpg_prep.add_argument("--game-root", type=Path, required=True)
+    rpg_prep.add_argument("--data-path", type=Path, help="Existing Ace JSON export; defaults to the game's ace_json folder")
     context = commands.add_parser("context", help="Read current shared guidance; optionally compile one source batch")
     context.add_argument("--game-root", type=Path, required=True)
     context.add_argument("--sources", type=Path, help="JSON list of Japanese strings or ID-to-string object")
@@ -69,6 +72,12 @@ def main(argv=None) -> int:
         project = load_project(args.game_root)
         if args.command == "prepare":
             print(prepare_project(project))
+        elif args.command == "rpgmaker-prep":
+            from util.project_preparation import prepare_rpgmaker
+
+            result = prepare_rpgmaker(project.game_root, data_path=args.data_path,
+                                     log=lambda message: print(message, file=sys.stderr))
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         elif args.command == "context-many":
             from util.len_api import compile_plan
             result = compile_plan(project, json.loads(args.input.read_text(encoding="utf-8-sig")))

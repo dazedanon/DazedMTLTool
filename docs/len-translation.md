@@ -26,6 +26,24 @@ Copying a prompt prepares or refreshes the workspace and makes no translation AP
 The assistant performs source preservation, local Git setup, investigation and validated checkpoints within the selected task.
 Git operations run when the assistant starts, rather than when the prompt is copied.
 
+RPG Maker projects use Workflow's preparation sequence within that same starting task:
+format game JSON, format `plugins.js`, install GameUpdate and its MV/MZ startup check,
+then establish Git tracking and run the RPG Maker speaker/guidance setup.
+
+```bash
+python scripts/len_translation.py rpgmaker-prep --game-root '/path/to/game'
+python scripts/len_translation.py git-setup --game-root '/path/to/game' --version '1.00'
+```
+
+The formatters and installation helpers are shared with Workflow. Saved Config
+defaults initialize missing updater configuration; existing per-game configuration,
+README and ignore rules are preserved. Preparation failures stop before later file
+steps; resolve them before running Git setup. The assistant retains a pre-preparation
+backup and the matching prepared untranslated source for future baseline/scope checks.
+For Ace, complete Workflow's extraction/RV2JSON prerequisite first and use its
+`ace_json` export, or pass `--data-path` for another reviewed export. Native Marshal
+files stay binary. Other engines continue through their own preparation tools.
+
 ## Local Git and resumable work
 
 The starting prompt records the supplied untranslated starting state before translation.
@@ -53,7 +71,8 @@ refuses ambiguous parent repositories, unfinished Git operations, wrong branches
 dirty reconciliation. It leaves existing staged and working changes for deliberate
 review and checkpointing. It does not create remotes or push.
 
-New Len baselines preserve native encodings, line endings and JSON layout. They keep the
+Len's Git backend preserves the prepared file bytes. RPG Maker preparation intentionally
+normalizes JSON/plugin layout first; other engines retain their native formatting. Git keeps the
 project's reviewed ignore policy instead of installing Workflow's extension allowlist.
 When `.gitattributes` is missing, setup adds a byte-preserving default; existing rules
 are retained for review. A clone can reuse an unambiguous existing remote-tracking
@@ -132,8 +151,9 @@ same editor used for generic Translation context, with its separate setup-prompt
 **Reference translations** registers paired Japanese/English JSON folders or DazedTL JSON
 with `_original` fields in the same registry as Workflow. For another engine, first extract
 corresponding JSON structures; raw proprietary archives cannot serve as reference folders.
-The starting prompt directs the assistant to perform generic discovery and the shared
-localization investigation. It creates missing guidance and preserves valid existing decisions;
+The starting prompt selects Workflow's RPG Maker setup instructions for RPG Maker games,
+and generic discovery for other engines, followed by the shared localization investigation.
+It creates missing guidance and preserves valid existing decisions;
 the user does not need to copy files between tabs or supply another setup prompt.
 Both setup routes include whole-corpus identity coverage, unknown gender and reveal-sensitive
 alias rules. Glossary ownership stays separate from the game frame and research notes.

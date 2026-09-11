@@ -21,6 +21,11 @@ One starting prompt includes setup. You do not need to copy guidance between tab
 a separate setup prompt. **Optional: project tools and references** contains the shared
 editors, reference translations and **Git version tracking** for this game.
 
+For RPG Maker, the assistant uses Workflow's preparation sequence: JSON formatting,
+plugin-configuration formatting, GameUpdate installation, Git setup, then speakers
+and game guidance. Existing per-game updater settings and project metadata are kept.
+Ace uses its extracted JSON for formatting; other engines retain their own setup tools.
+
 Git setup uses the selected untranslated game as the starting original and records a
 translated branch, preserving existing repositories and native game bytes. DazedTL
 preparation such as `TranslationUpdateCheck` does not require a separate original copy.

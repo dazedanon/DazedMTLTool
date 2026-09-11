@@ -218,21 +218,11 @@ PHASE2_CONFIG = {
 }
 
 
-# Never copy these into a game root when applying gameupdate/ (local updater state
-# or stray translator assets that must not overwrite a live install).
-_GAMEUPDATE_COPY_SKIP_NAMES = frozenset({
-    "previous_patch_sha.txt",
-})
-
-# UberWolf is only useful for WOLF RPG Editor archives. The generic workflow
-# handles RPG Maker MV/MZ/Ace and must never install these files; the dedicated
-# WOLF workflow intentionally continues using the smaller shared skip set.
-_WOLF_ONLY_GAMEUPDATE_NAMES = frozenset({
-    "UberWolfCli.exe",
-    "UberWolfCli.LICENSE.txt",
-})
-_RPG_GAMEUPDATE_COPY_SKIP_NAMES = (
-    _GAMEUPDATE_COPY_SKIP_NAMES | _WOLF_ONLY_GAMEUPDATE_NAMES
+from util.project_preparation import (
+    GAMEUPDATE_COPY_SKIP_NAMES as _GAMEUPDATE_COPY_SKIP_NAMES,
+    WOLF_ONLY_GAMEUPDATE_NAMES as _WOLF_ONLY_GAMEUPDATE_NAMES,
+    RPG_GAMEUPDATE_COPY_SKIP_NAMES as _RPG_GAMEUPDATE_COPY_SKIP_NAMES,
+    GAMEUPDATE_PRESERVE_EXISTING,
 )
 
 
@@ -5921,9 +5911,9 @@ class WorkflowTab(QWidget):
 
     def _write_gameupdate_patch_config(self, game_root: str):
         """Write gameupdate/patch-config.txt from Config → Game Update defaults."""
-        from util.gameupdate_config import write_patch_config
+        from util.project_preparation import write_gameupdate_config
 
-        ok, msg = write_patch_config(game_root)
+        ok, msg = write_gameupdate_config(game_root)
         if ok:
             self._log(f"📝 Wrote patch-config.txt from Config defaults → {msg}")
         else:
@@ -5931,9 +5921,9 @@ class WorkflowTab(QWidget):
 
     def _install_translation_update_check(self, game_root: str):
         """Enable the fail-open MV/MZ startup check bundled with GameUpdate."""
-        from util.translation_update_check import install
+        from util.project_preparation import install_startup_check
 
-        ok, msg = install(game_root)
+        ok, msg = install_startup_check(game_root)
         self._log(("🧩 " if ok else "ℹ  ") + msg)
 
     def _run_gameupdate(self):
@@ -5947,7 +5937,8 @@ class WorkflowTab(QWidget):
         if not Path(src).is_dir():
             self._log(f"⚠  gameupdate folder not found: {src}")
             return
-        w = _FileCopyWorker(src, dst, skip_names=_RPG_GAMEUPDATE_COPY_SKIP_NAMES)
+        w = _FileCopyWorker(src, dst, skip_names=_RPG_GAMEUPDATE_COPY_SKIP_NAMES,
+                            preserve_existing=GAMEUPDATE_PRESERVE_EXISTING)
         w.log.connect(self._log)
         w.done.connect(
             lambda count, errors, destination=dst: self._on_gameupdate_done(
@@ -5997,6 +5988,7 @@ class WorkflowTab(QWidget):
                     gameupdate_src,
                     game_root_dst,
                     skip_names=_RPG_GAMEUPDATE_COPY_SKIP_NAMES,
+                    preserve_existing=GAMEUPDATE_PRESERVE_EXISTING,
                 ),
             ))
         else:

@@ -30,7 +30,7 @@ def format_json_files(
                 continue
             fp = Path(root) / name
             try:
-                text = fp.read_text(encoding="utf-8")
+                text = fp.read_text(encoding="utf-8-sig")
                 data = json.loads(text)
                 pretty = json.dumps(data, indent=4, ensure_ascii=False)
                 # Only write if the content actually changed

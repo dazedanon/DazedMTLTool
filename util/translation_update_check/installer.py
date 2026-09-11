@@ -56,7 +56,7 @@ def install(game_root: str | Path) -> tuple[bool, str]:
 
         if not _declared(content):
             before = content[:list_end].rstrip()
-            separator = newline if before.endswith(",") else "," + newline
+            separator = newline if before.endswith((",", "[")) else "," + newline
             content = before + separator + PLUGIN_ENTRY + newline + "    " + content[list_end:]
             plugins_js.write_text(content, encoding="utf-8", newline="")
     except Exception as exc:

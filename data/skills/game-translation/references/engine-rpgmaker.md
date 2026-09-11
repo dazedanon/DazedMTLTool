@@ -1309,6 +1309,23 @@ Where a pattern spans control codes, exclude structural characters from the capt
 
 ---
 
+## Shared project preparation
+
+Len uses Workflow's RPG Maker preparation before translation: back up the starting
+game, run `DAZEDTL_ROOT/scripts/len_translation.py rpgmaker-prep --game-root <game>`,
+then run the same script's `git-setup --game-root <game> --version <release>`.
+The preparation command formats JSON with dazedformat, formats plugins.js, installs
+the bundled GameUpdate files, writes missing per-game configuration from saved
+Config defaults, and installs the MV/MZ TranslationUpdateCheck. It preserves existing
+project configuration and excludes WOLF-only binaries and updater state.
+
+For Ace, perform the existing Workflow extraction/RV2JSON prerequisite first. The
+formatter targets its JSON export (`ace_json` or `--data-path <export>`), never the
+native Marshal payload, and MV/MZ plugin steps are skipped. Keep the prepared
+untranslated snapshot for Git/source alignment as well as the pre-preparation backup.
+Use the generated `setup.md` for Workflow's speaker, glossary, wrapping and shared
+investigation procedure. Existing baselines remain authoritative on resume.
+
 ## The `_original` source metadata
 
 **For Len's MV/MZ map and database JSON, keep Japanese in the same file under a Workflow-compatible `_original` key, including when using an external translation store.** This lets the existing QA and bug-fix tools recover the source from the injected game itself. Capture it before the first write and retain it through reruns, wrapping and corrections.

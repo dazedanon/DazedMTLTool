@@ -209,6 +209,45 @@ class GitVersionUpdateTests(unittest.TestCase):
             self.assertEqual((project.work_root / "driver.py").read_text(), "# authored tool\n")
             self.assertEqual((native / ".env").read_text(), "PRIVATE=fixture\n")
 
+        # RPG Maker takes Workflow's preparation path before the same Len Git
+        # backend captures its untranslated baseline. Resume never relabels it.
+        from contextlib import redirect_stderr
+        from dataclasses import replace
+        fixture = self.root / "rpg-fixture"
+        fixture.mkdir()
+        rpg = fixture / "Game"
+        (rpg / "data").mkdir(parents=True)
+        (rpg / "js").mkdir()
+        (rpg / "data/System.json").write_text('{"gameTitle":"元の題名"}', encoding="utf-8")
+        (rpg / "js/plugins.js").write_text("var $plugins=[];")
+        bundle = fixture / "gameupdate"
+        (bundle / "gameupdate").mkdir(parents=True)
+        (bundle / "GameUpdate.bat").write_text("fixture launcher")
+        checker = bundle / "gameupdate/TranslationUpdateCheck.js"
+        checker.write_text("// fixture checker")
+        (fixture / ".env").write_text("gameUpdateForge=gitlab\ngameUpdateHost=example.invalid\ngameUpdateUsername=Fixture\ngameUpdateBranch=main\n")
+        with guidance_fixture(fixture), patch("util.project_preparation.PROJECT_ROOT", fixture), \
+             patch("util.translation_update_check.installer.DEFAULT_PLUGIN_SRC", checker):
+            project = LenProject(rpg)
+            prepare_project(project, make_skill(fixture / "skill"))
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                self.assertEqual(len_main(["rpgmaker-prep", "--game-root", str(rpg)]), 0)
+                self.assertEqual(len_main(["git-setup", "--game-root", str(rpg), "--version", "1.00"]), 0)
+            source_blob = self.git(rpg, "show", "original:data/System.json")
+            self.assertEqual(json.loads(source_blob), {"gameTitle": "元の題名"})
+            self.assertEqual(source_blob, (rpg / "data/System.json").read_text())
+            prepared_plugins = (rpg / "js/plugins.js").read_text().strip()
+            self.assertEqual(self.git(rpg, "show", "original:js/plugins.js"), prepared_plugins)
+            self.assertTrue(json.loads(prepared_plugins.split("=", 1)[1].strip().removesuffix(";"))[0]["status"])
+            original_commit = self.git(rpg, "rev-parse", "original")
+            (rpg / "data/System.json").write_text('{"gameTitle":"English title"}')
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                self.assertEqual(len_main(["rpgmaker-prep", "--game-root", str(rpg)]), 0)
+            self.assertEqual(setup_git(replace(project, stage="continue"))["action"], "reused")
+            self.assertEqual(self.git(rpg, "rev-parse", "original"), original_commit)
+            self.assertEqual(self.git(rpg, "show", "original:data/System.json"), source_blob)
+            self.assertEqual(json.loads((rpg / "data/System.json").read_text())["gameTitle"], "English title")
+
     def test_len_patch_scope_keeps_originals_aligned_through_official_updates(self):
         """Reviewed native payloads stay in Git; work and unchanged assets stay local."""
         import hashlib

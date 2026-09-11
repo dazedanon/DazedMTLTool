@@ -26,6 +26,21 @@ Git setup, extraction and guidance, then stops before translation or injection.
   Inspect existing branches, worktree state and pending operations. Preserve the
   existing translated branch and remotes; do not initialize a nested repository,
   rename branches or discard earlier work to simplify setup.
+- For a fresh RPG Maker project, preserve a recoverable copy before preparation,
+  then run `rpgmaker-prep --game-root <game>` through that same application script.
+  This uses Workflow's dazedformat JSON formatter, plugins.js formatter, bundled
+  GameUpdate copy rules, saved Config defaults and MV/MZ startup checker. Existing
+  per-game patch configuration, README and ignore rules survive reinstallation.
+  Resolve preparation errors before Git setup or translation. Missing Game Update
+  org/username defaults are reported; finish the per-game repository configuration
+  before delivery without inventing a publication destination.
+  For Ace, first complete Workflow's extraction/RV2JSON prerequisite; the command
+  formats `ace_json`, or an existing export selected with `--data-path`, and skips
+  MV/MZ-only plugin actions. Do not format native Marshal bytes as text.
+  Keep the prepared untranslated snapshot recoverable for the subsequent baseline
+  and `git-scope` source checks, separately from the pre-preparation backup.
+  On resume, inspect completed preparation and repair only missing or requested
+  parts; never rebuild an existing Japanese baseline from current English.
 - Review `.gitignore` against the engine's actual files. The new Len Git mode keeps
   the project's rules instead of applying the RPG Maker/WOLF extension allowlist.
   Use exact paths for the intended runtime patch, plus `.gitignore`, `.gitattributes`
@@ -119,6 +134,9 @@ Do not invent a user identity or change global Git settings.
 Use the engine-specific playbook and reviewed source corpus. Run the shared `setup.md`
 phase to prepare the glossary, game frame and quirks. Read all user-specified prequel
 corpora and follow `reference-translations.md`; keep their source folders read-only.
+For RPG Maker, `setup.md` is the same engine-specific setup and investigation prompt
+used by Workflow, including speaker analysis and wrapping. Collect source names in
+the selected direct/API mode; the direct route does not authorize paid name collection.
 Check extraction coverage independently of the extractor. Preserve uncertainty,
 placeholder/control-code contracts and reveal-sensitive identities.
 

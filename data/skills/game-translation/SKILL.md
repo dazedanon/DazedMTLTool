@@ -32,6 +32,16 @@ Normal preparation such as `TranslationUpdateCheck` does not make it an existing
 translation. Create any needed backup from that folder; do not demand a separately
 downloaded pristine copy unless concrete evidence shows the selected source is unsuitable.
 
+For RPG Maker, use the same preparation steps as Workflow before translation:
+run `DAZEDTL_ROOT/scripts/len_translation.py rpgmaker-prep --game-root <game>` to
+format game JSON and plugin configuration and install GameUpdate with the MV/MZ
+startup check. Then use `git-setup` to record the prepared untranslated baseline.
+`setup.md` loads Workflow's RPG Maker speaker, glossary, wrapping and investigation
+instructions for these games. For Ace, complete the existing Workflow extraction/
+RV2JSON prerequisite and format its JSON export (`--data-path` if not in `ace_json`),
+leaving native Marshal files intact. Other engines keep their own preparation route.
+Existing updater configuration, README and ignore rules are preserved on reinstall.
+
 This copy lives at `DAZEDTL_ROOT/data/skills/game-translation`. Resolve DAZEDTL_ROOT
 as the application folder three levels above this skill folder. `tools/...` paths
 are relative to this skill folder; `DAZEDTL_ROOT/...` paths use the live application.

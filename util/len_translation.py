@@ -14,8 +14,9 @@ from util.paths import (
     DATA_DIR, GLOSSARY_BASE_SEPARATOR, SKILLS_DIR, game_glossary_path,
     prepare_game_translation_context, read_game_glossary,
 )
-from util.skills import load_generic_project_setup, load_system_prompt
+from util.skills import load_generic_project_setup, load_project_setup, load_system_prompt
 from util.reference_games import load_registry, reference_context
+from util.project_preparation import rpgmaker_layout
 
 
 BUNDLED_SKILL = SKILLS_DIR / "game-translation"
@@ -405,6 +406,26 @@ def build_handoff(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> str:
         if project.include_images else
         "Image translation is excluded. Report known baked Japanese labels separately; do not replace images or claim whole-game coverage while those labels remain."
     )
+    rpgmaker = rpgmaker_layout(project.game_root)
+    preparation = (
+        "This is an RPG Maker game. Before extraction or the first Git baseline, preserve a recoverable "
+        "copy of the starting game and run the same file preparation as Workflow: format game JSON with "
+        "dazedformat, format plugins.js, install the bundled GameUpdate helper using saved Config defaults, "
+        "and install the MV/MZ TranslationUpdateCheck. Use this application's scripts/len_translation.py "
+        "rpgmaker-prep --game-root <game> command, then retain a recoverable prepared untranslated "
+        "snapshot and run git-setup as described below. Use that matching prepared source for later "
+        "git-scope checks; keep the pre-preparation backup separately. For Ace, complete "
+        "Workflow's extraction/RV2JSON prerequisite first and use --data-path <existing JSON export> "
+        "when it is not in ace_json; never format native Marshal bytes as text. On resume, inspect "
+        "existing preparation and run only missing or requested repair work; never replace a known "
+        "Japanese Git baseline with the current translation. Read the generated setup.md: it uses "
+        "Workflow's RPG Maker speaker, glossary, wrapping and localization investigation instructions. "
+        "Collect source speakers within the selected translation mode; direct mode does not authorize "
+        "API calls just to collect names. Keep the configured game-specific updater settings and patch scope."
+        if rpgmaker else
+        "Use the detected engine's preparation tools and native-byte safeguards. RPG Maker formatting "
+        "and GameUpdate installation do not apply to an unrelated engine."
+    )
     return f"""Use Len's game-translation skill to translate this Japanese game into English.
 
 Game folder: {json.dumps(str(project.game_root), ensure_ascii=False)}
@@ -415,6 +436,8 @@ DazedTL application: {json.dumps(str(DATA_DIR.parent), ensure_ascii=False)}
 Read the skill entrypoint first and resolve its references/ and tools/ relative to that file. DAZEDTL_ROOT means the application folder above. Use its live code when a reference points there. Run the skill's scripts/check_tools.py with {json.dumps(sys.executable)}. Copy only tools you need to this project's workspace before adapting or running code that writes beside itself. Historical game paths in examples are not this project's paths.
 
 Task: {task}
+
+Project preparation: {preparation}
 
 Before changing game files, complete the project lifecycle in references/project-lifecycle.md from Len's skill. Inspect Git with this application command (argument array):
 {json.dumps([sys.executable, str(DATA_DIR.parent / 'scripts/len_translation.py'), 'git-status', '--game-root', str(project.game_root)], ensure_ascii=False)}
@@ -517,7 +540,16 @@ def prepare_project(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> Pa
     settings.pop("game_root")
     _write_atomic(project.workspace / "project.json", json.dumps({"version": 2, **settings}, indent=2) + "\n")
     _write_atomic(project.workspace / "context.json", json.dumps(context, ensure_ascii=False, indent=2) + "\n")
-    _write_atomic(project.workspace / "setup.md", load_generic_project_setup(project.game_root))
+    layout = rpgmaker_layout(project.game_root)
+    setup = (load_project_setup("rpgmaker", prepend=(
+        f"Selected game folder: {json.dumps(str(project.game_root), ensure_ascii=False)}\n"
+        f"RPG Maker JSON directory (default export location for Ace): {json.dumps(str(layout['data_path']), ensure_ascii=False)}\n"
+        "Use this selected game's sources and portable guidance files. If Ace JSON is not available, "
+        "complete the engine's extraction/conversion prerequisite first; use the actual reviewed "
+        "export if it lives elsewhere. Collect source speaker names "
+        "within the selected direct/API mode; do not introduce paid name collection in direct mode."
+    )) if layout else load_generic_project_setup(project.game_root))
+    _write_atomic(project.workspace / "setup.md", setup)
     from util.len_progress import initialize_progress
 
     initialize_progress(project)

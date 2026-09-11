@@ -37,6 +37,8 @@ class TranslationUpdateCheckInstallerTests(unittest.TestCase):
 
                     content = plugins_js.read_text(encoding="utf-8")
                     self.assertEqual(content.count(f'"name": "{PLUGIN_NAME}"'), 1)
+                    entries = json.loads(content.split("=", 1)[1].strip().removesuffix(";"))
+                    self.assertEqual([(entry["name"], entry["status"]) for entry in entries], [(PLUGIN_NAME, True)])
                     self.assertEqual(
                         (js_dir / "plugins" / f"{PLUGIN_NAME}.js").read_bytes(),
                         PLUGIN_PATH.read_bytes(),

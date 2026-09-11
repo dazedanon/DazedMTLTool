@@ -325,6 +325,31 @@ class LenTranslationTests(unittest.TestCase):
             # Image scope changed earlier, but moved artifact paths still resolve.
             self.assertEqual(len(read_progress(resumed)["warnings"]), 1)
 
+            # Copying a Len prompt selects Workflow's engine-specific guidance;
+            # actual formatting/install operations wait for the explicit prep command.
+            rpg = root / "RPG game"
+            (rpg / "data").mkdir(parents=True)
+            (rpg / "js").mkdir()
+            payload = b'{"gameTitle":"Japanese"}'
+            plugins = b"var $plugins=[];"
+            (rpg / "data/System.json").write_bytes(payload)
+            (rpg / "js/plugins.js").write_bytes(plugins)
+            with patch("util.len_translation.load_project_setup", return_value="Workflow RPG setup") as rpg_setup, \
+                 patch("util.len_translation.load_generic_project_setup", return_value="Generic setup") as generic_setup:
+                prepare_project(LenProject(rpg), skill)
+                self.assertEqual(rpg_setup.call_args.args, ("rpgmaker",))
+                self.assertIn(str(rpg), rpg_setup.call_args.kwargs["prepend"])
+                generic_setup.assert_not_called()
+                self.assertEqual((rpg / ".dazedtl/len-method/setup.md").read_text(), "Workflow RPG setup")
+                self.assertEqual((rpg / "data/System.json").read_bytes(), payload)
+                self.assertEqual((rpg / "js/plugins.js").read_bytes(), plugins)
+                self.assertFalse((rpg / "GameUpdate.bat").exists())
+                generic_setup.reset_mock()
+                rpg_setup.reset_mock()
+                prepare_project(resumed, skill)
+                rpg_setup.assert_not_called()
+                generic_setup.assert_called_once_with(moved)
+
         # The same handoff lifecycle must bind bulk context and API preflight to current inputs.
         from util.len_translation import build_handoff, request_contexts
         from util.len_api import compile_plan, create_estimate, validate_estimate

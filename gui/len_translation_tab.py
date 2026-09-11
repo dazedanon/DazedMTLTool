@@ -144,7 +144,8 @@ class LenTranslationTab(QWidget):
         handoff_card = SectionCard(
             "2. Copy the selected handoff",
             "Copy the prompt and paste it into your coding assistant with the game folder open. "
-            "Your assistant will preserve the original, set up local Git and translation guidance, then carry out the selected task.",
+            "Your assistant preserves the original and prepares the game. RPG Maker uses Workflow’s "
+            "formatting, GameUpdate, Git tracking, then speaker and game-guidance setup.",
         )
         actions = QHBoxLayout()
         self.copy_button = make_action_button("Copy starting prompt", variant="primary")

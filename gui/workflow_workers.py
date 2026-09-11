@@ -6,7 +6,6 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import jsbeautifier
 from PyQt5.QtCore import QThread, pyqtSignal
 
 
@@ -257,38 +256,24 @@ class FileCopyWorker(QThread):
     done = pyqtSignal(int, list)
     log = pyqtSignal(str)
 
-    def __init__(self, src: str, dst: str, skip_names: frozenset[str] | None = None):
+    def __init__(self, src: str, dst: str, skip_names: frozenset[str] | None = None,
+                 preserve_existing: frozenset[str] | None = None):
         super().__init__()
         self.src = src
         self.dst = dst
         self.skip_names = skip_names or frozenset()
+        self.preserve_existing = preserve_existing or frozenset()
 
     def run(self):
-        src = Path(self.src)
-        dst = Path(self.dst)
-        if not src.is_dir():
-            self.done.emit(0, [f"Source folder not found: {src}"])
-            return
-        dst.mkdir(parents=True, exist_ok=True)
-        copied = 0
-        errors: list[str] = []
-        self.log.emit(f"Copying {src} → {dst} …")
-        for path in src.rglob("*"):
-            if not path.is_file():
-                continue
-            if path.name in self.skip_names:
-                self.log.emit(f"  skipped {path.relative_to(src)}")
-                continue
-            relative = path.relative_to(src)
-            target = dst / relative
-            try:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, target)
-                copied += 1
-                self.log.emit(f"  copied {relative}")
-            except Exception as exc:
-                errors.append(f"{relative}: {exc}")
-        self.done.emit(copied, errors)
+        from util.project_preparation import copy_files
+
+        try:
+            self.log.emit(f"Copying {self.src} → {self.dst} …")
+            copied, errors = copy_files(self.src, self.dst, skip_names=self.skip_names,
+                                       preserve_existing=self.preserve_existing, log=self.log.emit)
+            self.done.emit(copied, errors)
+        except Exception as exc:
+            self.done.emit(0, [str(exc)])
 
 
 class ReleaseZipWorker(QThread):
@@ -327,18 +312,12 @@ class JsFormatWorker(QThread):
         try:
             path = Path(self.js_path)
             self.log.emit(f"Formatting {path.name} …")
-            original = path.read_text(encoding="utf-8")
-            options = jsbeautifier.default_options()
-            options.indent_size = 2
-            options.indent_char = " "
-            options.max_preserve_newlines = 2
-            options.preserve_newlines = True
-            options.end_with_newline = True
-            formatted = jsbeautifier.beautify(original, options)
-            path.write_text(formatted, encoding="utf-8")
+            from util.project_preparation import format_plugins_js
+
+            length = format_plugins_js(path)
             self.done.emit(
                 True,
-                f"plugins.js formatted successfully ({len(formatted):,} chars).",
+                f"plugins.js formatted successfully ({length:,} chars).",
             )
         except Exception as exc:
             self.done.emit(False, f"Format error: {exc}")
