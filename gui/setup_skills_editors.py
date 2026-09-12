@@ -8,12 +8,15 @@ from pathlib import Path
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
     QMessageBox,
     QPushButton,
     QStackedWidget,
+    QStyle,
     QTabBar,
     QTabWidget,
     QTextEdit,
@@ -32,6 +35,7 @@ from util.skills import (
 from util.paths import game_glossary_path, prepare_game_translation_context
 from util.vocab import read_game_vocab, write_game_vocab
 from gui.theme import Geometry, Spacing
+from gui.rich_text_dialog import RichTextDialog
 
 
 class _PlainPasteTextEdit(QTextEdit):
@@ -584,25 +588,20 @@ class SetupSkillsEditors(QWidget):
         if not root:
             return
 
-        warn = QMessageBox(self)
-        warn.setIcon(QMessageBox.Warning)
-        warn.setWindowTitle("Custom skill - quality warning")
-        warn.setTextFormat(Qt.RichText)
-        warn.setText(
+        warn = RichTextDialog(
+            "Custom skill - quality warning",
             "<b>Custom skills are merged into the translation system prompt.</b><br><br>"
             "Extra or poorly written skills can <b>distract the model and hurt "
             "translation quality</b> (conflicting rules, prompt bloat, diluted quirks).<br><br>"
             "Prefer <code>quirks.md</code> for voice rules and <code>game.md</code> "
             "for the Translation Frame. Add a custom skill only if you need a rare, tightly scoped "
-            "overlay - <b>at your own risk</b>."
+            "overlay - <b>at your own risk</b>.",
+            self,
+            icon=QStyle.SP_MessageBoxWarning,
+            buttons=QDialogButtonBox.Cancel | QDialogButtonBox.Ok,
         )
-        warn.setStandardButtons(QMessageBox.Cancel | QMessageBox.Ok)
-        warn.button(QMessageBox.Ok).setText("I understand - continue")
-        warn.setStyleSheet(
-            "QMessageBox{background-color:#252526;}"
-            "QLabel{color:#c8c8c8;font-size:13px;min-width:420px;}"
-        )
-        if warn.exec_() != QMessageBox.Ok:
+        warn.buttons.button(QDialogButtonBox.Ok).setText("I understand - continue")
+        if warn.exec_() != QDialog.Accepted:
             return
 
         name, ok = QInputDialog.getText(

@@ -10,11 +10,12 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtCore import QEvent, QObject, QSettings, QUrl, Qt
-from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget
+from PyQt5.QtGui import QFont, QImage, QPixmap, QTextCursor
+from PyQt5.QtTest import QTest
+from PyQt5.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QWidget
 
 from gui.guide_tab import GuideTab
-from gui.theme import COLORS, contrast_ratio
+from gui.theme import COLORS
 from gui.ui_components import PageHeader, SectionCard, make_action_button, set_status_text
 from gui.workflow_components import DisclosureSection, WorkflowStageCard
 
@@ -38,16 +39,6 @@ class GUIUXContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
-
-    def test_core_text_and_actions_meet_normal_text_contrast(self):
-        pairs = (
-            (COLORS.text_primary, COLORS.canvas),
-            (COLORS.text_secondary, COLORS.surface_1),
-            (COLORS.on_accent, COLORS.accent),
-        )
-        for foreground, background in pairs:
-            with self.subTest(foreground=foreground, background=background):
-                self.assertGreaterEqual(contrast_ratio(foreground, background), 4.5)
 
     def test_shared_components_expose_roles_without_transient_windows(self):
         show_filter = _TopLevelShowFilter()
@@ -78,6 +69,60 @@ class GUIUXContractTests(unittest.TestCase):
         self.assertEqual(status.text(), "Could not load files")
         self.assertEqual(status.objectName(), "appStatusText")
         self.assertEqual(status.property("state"), "error")
+
+    def test_long_popup_text_remains_readable_and_actions_work_with_large_fonts(self):
+        from gui.rich_text_dialog import RichTextDialog
+
+        original_font = self.app.font()
+        # Exercise overflowing prose and an unbroken filename: all text must be
+        # reachable by vertical scrolling, including after narrowing the dialog.
+        html = "<p>Read these instructions carefully. " + "Long instructions. " * 120 + "</p>"
+        html += "<p>" + "long_filename_" * 40 + "</p><p>Final instruction.</p>"
+        try:
+            for scale in (1.0, 1.5, 3.0):
+                with self.subTest(scale=scale):
+                    font = QFont(original_font)
+                    font.setPointSize(round(9 * scale))
+                    self.app.setFont(font)
+                    dialog = RichTextDialog(
+                        "Instructions", html,
+                        buttons=QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+                    )
+                    confirm = dialog.buttons.button(QDialogButtonBox.Ok)
+                    confirm.setText("I understand - continue")
+                    try:
+                        dialog.show()
+                        self.app.processEvents()
+                        self.assertEqual(dialog.browser.font().pointSize(), font.pointSize())
+                        self.assertTrue(dialog.browser.isReadOnly())
+                        for narrow in (False, True):
+                            if narrow:
+                                dialog.resize(dialog.minimumWidth(), dialog.minimumHeight())
+                                self.app.processEvents()
+                            self.assertEqual(dialog.browser.horizontalScrollBar().maximum(), 0)
+                            self.assertGreater(dialog.browser.verticalScrollBar().maximum(), 0)
+                            dialog.browser.moveCursor(QTextCursor.End)
+                            dialog.browser.ensureCursorVisible()
+                            self.app.processEvents()
+                            self.assertTrue(
+                                dialog.browser.viewport().rect().contains(dialog.browser.cursorRect()),
+                                "The final instruction must remain reachable by scrolling.",
+                            )
+                            self.assertTrue(confirm.isVisibleTo(dialog))
+                        confirm.click()
+                        self.assertEqual(dialog.result(), QDialog.Accepted)
+                        dialog.show()
+                        dialog.buttons.button(QDialogButtonBox.Cancel).click()
+                        self.assertEqual(dialog.result(), QDialog.Rejected)
+                        dialog.show()
+                        QTest.keyClick(dialog, Qt.Key_Escape)
+                        self.assertEqual(dialog.result(), QDialog.Rejected)
+                    finally:
+                        dialog.close()
+                        dialog.deleteLater()
+                        self.app.processEvents()
+        finally:
+            self.app.setFont(original_font)
 
     def test_len_handoff_tracks_selected_game_and_scope(self):
         from gui.len_translation_tab import LenTranslationTab

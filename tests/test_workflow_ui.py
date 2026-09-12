@@ -36,6 +36,7 @@ class ThemeContractTests(unittest.TestCase):
         pairs = (
             (COLORS.text_primary, COLORS.canvas),
             (COLORS.text_secondary, COLORS.canvas),
+            (COLORS.text_secondary, COLORS.surface_1),
             (COLORS.text_muted, COLORS.canvas),
             (COLORS.accent_text, COLORS.canvas),
             (COLORS.success, COLORS.canvas),

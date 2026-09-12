@@ -87,6 +87,7 @@ from PyQt5.QtWidgets import (
 )
 
 from gui.setup_skills_editors import SetupSkillsEditors
+from gui.rich_text_dialog import RichTextDialog
 from gui.git_prepare import GitPreparationCard
 from gui.theme import COLORS, Geometry, Spacing, application_stylesheet
 from gui.workflow_components import (
@@ -381,17 +382,7 @@ _STEP_HELP: dict[int, str] = {
 
 
 def _show_step_help(parent: QWidget | None, title: str, html: str) -> None:
-    box = QMessageBox(parent)
-    box.setWindowTitle(title)
-    box.setIcon(QMessageBox.Information)
-    box.setTextFormat(Qt.RichText)
-    box.setText(html)
-    box.setStandardButtons(QMessageBox.Ok)
-    box.setStyleSheet(
-        "QMessageBox{background-color:#252526;}"
-        "QLabel{color:#c8c8c8;font-size:13px;min-width:420px;}"
-    )
-    box.exec_()
+    RichTextDialog(title, html, parent).exec_()
 
 
 def _make_section_label(text: str) -> QLabel:
