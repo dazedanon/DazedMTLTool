@@ -45,6 +45,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         "input_cost",
         "output_cost",
         "font_scale",
+        "translationCompletionAlert",
         "gameUpdateForge",
         "gameUpdateHost",
         "gameUpdateUsername",
@@ -97,6 +98,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
                 "input_cost=3.25",
                 "output_cost=14.75",
                 "font_scale=1.4",
+                "translationCompletionAlert=false",
                 "gameUpdateForge=github",
                 "gameUpdateHost=github.example.test",
                 "gameUpdateUsername=translation-team",
@@ -149,6 +151,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertAlmostEqual(tab.input_cost_spin.value(), 3.25)
         self.assertAlmostEqual(tab.output_cost_spin.value(), 14.75)
         self.assertAlmostEqual(tab.font_scale_spin.value(), 1.4)
+        self.assertFalse(tab.translation_completion_alert_cb.isChecked())
         self.assertEqual(tab.gu_forge_combo.currentData(), "github")
         self.assertEqual(tab.gu_host_edit.text(), "github.example.test")
         self.assertEqual(tab.gu_username_edit.text(), "translation-team")
@@ -260,6 +263,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         tab.input_cost_spin.setValue(4.5)
         tab.output_cost_spin.setValue(18.25)
         tab.font_scale_spin.setValue(1.8)
+        tab.translation_completion_alert_cb.setChecked(True)
         tab.gu_forge_combo.setCurrentIndex(
             tab.gu_forge_combo.findData("forgejo")
         )
@@ -293,6 +297,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
             "input_cost": "4.5",
             "output_cost": "18.25",
             "font_scale": "1.8",
+            "translationCompletionAlert": "true",
             "gameUpdateForge": "forgejo",
             "gameUpdateHost": "forge.example.test",
             "gameUpdateUsername": "saved-team",
@@ -319,13 +324,24 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertAlmostEqual(reloaded.input_cost_spin.value(), 4.5)
         self.assertAlmostEqual(reloaded.output_cost_spin.value(), 18.25)
         self.assertAlmostEqual(reloaded.font_scale_spin.value(), 1.8)
+        self.assertTrue(reloaded.translation_completion_alert_cb.isChecked())
         self.assertEqual(reloaded.gu_forge_combo.currentData(), "forgejo")
         self.assertEqual(reloaded.gu_host_edit.text(), "forge.example.test")
         self.assertEqual(reloaded.gu_username_edit.text(), "saved-team")
         self.assertEqual(reloaded.gu_branch_edit.text(), "release")
 
+        # The alert uses the live preference, including changes made during a
+        # translation, and must not require a restart or an explicit Save click.
+        for enabled in (False, True):
+            reloaded.translation_completion_alert_cb.setChecked(enabled)
+            value = str(enabled).lower()
+            self.assertEqual(dotenv_values(self.env_path)["translationCompletionAlert"], value)
+            self.assertEqual(os.environ["translationCompletionAlert"], value)
+            self.assertEqual(reloaded.get_config()["translationCompletionAlert"], enabled)
+
     def test_reset_restores_and_persists_every_default(self) -> None:
         tab = self.make_tab()
+        tab.translation_completion_alert_cb.setChecked(True)
         with (
             patch.object(tab.mvmz_tab, "reset_to_defaults") as reset_mvmz,
             patch.object(tab.wolf_tab, "reset_to_defaults") as reset_wolf,
@@ -356,6 +372,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertAlmostEqual(tab.input_cost_spin.value(), 2.0)
         self.assertAlmostEqual(tab.output_cost_spin.value(), 8.0)
         self.assertAlmostEqual(tab.font_scale_spin.value(), 1.0)
+        self.assertFalse(tab.translation_completion_alert_cb.isChecked())
         self.assertEqual(tab.gu_forge_combo.currentData(), "gitlab")
         self.assertEqual(tab.gu_host_edit.text(), "gitgud.io")
         self.assertEqual(tab.gu_username_edit.text(), "")
@@ -380,6 +397,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
             "input_cost": "2.0",
             "output_cost": "8.0",
             "font_scale": "1.0",
+            "translationCompletionAlert": "false",
             "gameUpdateForge": "gitlab",
             "gameUpdateHost": "gitgud.io",
             "gameUpdateUsername": "",

@@ -983,6 +983,14 @@ class ConfigTab(QWidget):
         )
         add_row(ui_section, "Font Scale:", size_field(self.font_scale_spin))
 
+        self.translation_completion_alert_cb = QCheckBox("Translation completion alert")
+        self.translation_completion_alert_cb.setToolTip(
+            "Play the system sound and show a desktop notification when a normal or "
+            "batch translation finishes. Desktop notifications depend on your system settings.\n"
+            "Estimates, speaker scans, canceled runs, and failures do not trigger an alert."
+        )
+        ui_section.addRow(self.translation_completion_alert_cb)
+
         # ── GAME UPDATE ──────────────────────────────────────────────
         updates_card, gu_section = create_card("📦 Game Update Defaults")
 
@@ -1400,6 +1408,9 @@ class ConfigTab(QWidget):
 
         # UI settings
         self.font_scale_spin.setValue(float(_get("font_scale", "1.0")))
+        self.translation_completion_alert_cb.setChecked(
+            _get("translationCompletionAlert", "false").strip().lower() in ("true", "1", "yes")
+        )
 
         # Game Update defaults
         from util.gameupdate_config import (
@@ -1460,6 +1471,7 @@ class ConfigTab(QWidget):
         self.input_cost_spin.editingFinished.connect(self.auto_save)
         self.output_cost_spin.editingFinished.connect(self.auto_save)
         self.font_scale_spin.editingFinished.connect(self.auto_save)
+        self.translation_completion_alert_cb.stateChanged.connect(self.auto_save)
         self.gu_forge_combo.currentIndexChanged.connect(self.auto_save)
         self.gu_host_edit.editingFinished.connect(self.auto_save)
         self.gu_username_edit.editingFinished.connect(self.auto_save)
@@ -1487,6 +1499,7 @@ class ConfigTab(QWidget):
             self.input_cost_spin.editingFinished.disconnect(self.auto_save)
             self.output_cost_spin.editingFinished.disconnect(self.auto_save)
             self.font_scale_spin.editingFinished.disconnect(self.auto_save)
+            self.translation_completion_alert_cb.stateChanged.disconnect(self.auto_save)
             self.gu_forge_combo.currentIndexChanged.disconnect(self.auto_save)
             self.gu_host_edit.editingFinished.disconnect(self.auto_save)
             self.gu_username_edit.editingFinished.disconnect(self.auto_save)
@@ -1548,6 +1561,7 @@ class ConfigTab(QWidget):
                 "input_cost": str(self.input_cost_spin.value()),
                 "output_cost": str(self.output_cost_spin.value()),
                 "font_scale": str(self.font_scale_spin.value()),
+                "translationCompletionAlert": "true" if self.translation_completion_alert_cb.isChecked() else "false",
                 "gameUpdateForge": str(self.gu_forge_combo.currentData() or "gitlab"),
                 "gameUpdateHost": self.gu_host_edit.text().strip(),
                 "gameUpdateUsername": self.gu_username_edit.text().strip(),
@@ -1618,6 +1632,7 @@ class ConfigTab(QWidget):
 
         # UI settings
         self.font_scale_spin.setValue(1.0)
+        self.translation_completion_alert_cb.setChecked(False)
 
         # Game Update defaults
         from util.gameupdate_config import DEFAULT_BRANCH, DEFAULT_FORGE, DEFAULT_HOST
@@ -1662,6 +1677,7 @@ class ConfigTab(QWidget):
             "input_cost": self.input_cost_spin.value(),
             "output_cost": self.output_cost_spin.value(),
             "font_scale": self.font_scale_spin.value(),
+            "translationCompletionAlert": self.translation_completion_alert_cb.isChecked(),
             "gameUpdateForge": str(self.gu_forge_combo.currentData() or "gitlab"),
             "gameUpdateHost": self.gu_host_edit.text().strip(),
             "gameUpdateUsername": self.gu_username_edit.text().strip(),

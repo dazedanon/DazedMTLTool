@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QMessageBox, QListWidget, QListWidgetItem, QLineEdit,
     QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout, QStackedWidget,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QScrollArea, QMenu,
+    QScrollArea, QMenu, QStyle, QSystemTrayIcon,
 )
 from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QSettings, QSize
@@ -1954,6 +1954,8 @@ class TranslationTab(QWidget):
         # have been received, we queue the finalization until the last
         # file progress update arrives.
         self._finish_pending = None
+        self._completion_notified = False
+        self._completion_tray = None
         self.translation_process = None
         self.log_buffer = []  # Buffer for batching log messages
         self.log_timer = QTimer()  # Timer for flushing log buffer
@@ -4614,6 +4616,8 @@ class TranslationTab(QWidget):
     
     def reset_to_file_view(self):
         """Reset back to file selection view."""
+        if self._completion_tray is not None:
+            self._completion_tray.hide()
         self._active_workflow_return = None
         self._estimate_active_run = False
         self._reset_batch_pipeline_ui()
@@ -5084,6 +5088,9 @@ class TranslationTab(QWidget):
             self._batch_ui_phase = None
             self._batch_consume_started = False
             self._finish_pending = None
+            self._completion_notified = False
+            if self._completion_tray is not None:
+                self._completion_tray.hide()
             if batch_mode:
                 self._set_progress_view_mode(True, len(selected_files))
                 self.batch_overall_bar.setFormat("%p%")
@@ -5623,6 +5630,7 @@ class TranslationTab(QWidget):
                 ),
             )
             if success and phase == "canceled":
+                self._completion_notified = True
                 self.reset_to_file_view()
                 try:
                     if hasattr(self, 'translation_log_viewer') and self.translation_log_viewer:
@@ -5725,7 +5733,67 @@ class TranslationTab(QWidget):
                 QTimer.singleShot(600, self.translation_log_viewer.stop_tail)
         except Exception:
             pass
-            
+
+        self._notify_translation_complete(success)
+
+    def _notify_translation_complete(self, success):
+        """Alert once when the final translation results are ready to review."""
+        if self._completion_notified:
+            return
+        self._completion_notified = True
+        worker = getattr(self, "translation_worker", None)
+        if (
+            not success
+            or self._is_estimate_run()
+            or getattr(worker, "parse_speakers", False)
+            or getattr(worker, "should_stop", False)
+            or (self._batch_active and self._batch_ui_phase != "done")
+            or os.getenv("translationCompletionAlert", "false").strip().lower() not in ("true", "1", "yes")
+        ):
+            return
+
+        # Sound and taskbar attention still work without a desktop tray service.
+        # Do not bring the application to the foreground until the user clicks.
+        QApplication.beep()
+        QApplication.alert(self.window(), 5000)
+        if not (QSystemTrayIcon.isSystemTrayAvailable() and QSystemTrayIcon.supportsMessages()):
+            return
+        try:
+            if self._completion_tray is None:
+                self._completion_tray = QSystemTrayIcon(self)
+                icon = self.window().windowIcon()
+                if icon.isNull():
+                    icon = self.style().standardIcon(QStyle.SP_MessageBoxInformation)
+                self._completion_tray.setIcon(icon)
+                self._completion_tray.setToolTip(f"{APP_NAME} — Translation complete")
+                self._completion_tray.messageClicked.connect(self._show_completion_results)
+                self._completion_tray.activated.connect(self._show_completion_results)
+            self._completion_tray.show()
+            warnings = getattr(worker, "_run_mismatch_count", 0) or getattr(self, "_batch_mismatch_count", 0)
+            self._completion_tray.showMessage(
+                f"{APP_NAME} — Translation complete",
+                "Finished with validation warnings. Review Issues in the Translation log."
+                if warnings else "Your translation is ready. Open the Translation tab to review the results.",
+                QSystemTrayIcon.Warning if warnings else QSystemTrayIcon.Information,
+                10000,
+            )
+        except Exception as exc:
+            self.append_log(f"Could not show the completion notification: {exc}")
+
+    def _show_completion_results(self, reason=QSystemTrayIcon.Trigger):
+        if reason not in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
+            return
+        parent = self.parent_window
+        if parent is not None and hasattr(parent, "PAGE_TRANSLATION"):
+            parent.switch_page(parent.PAGE_TRANSLATION)
+        window = self.window()
+        window.setWindowState(window.windowState() & ~Qt.WindowMinimized)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+        if self._completion_tray is not None:
+            self._completion_tray.hide()
+
     def stop_translation(self):
         """Stop the translation process."""
         estimate_run = self._is_estimate_run()
@@ -5764,6 +5832,8 @@ class TranslationTab(QWidget):
         
     def closeEvent(self, event):
         """Handle widget close event."""
+        if self._completion_tray is not None:
+            self._completion_tray.hide()
         if hasattr(self, 'log_timer'):
             self.log_timer.stop()
         if hasattr(self, 'translation_log_viewer') and self.translation_log_viewer:

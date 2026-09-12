@@ -12,7 +12,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtWidgets import QApplication, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
 from gui.log_viewer import LogViewer, _parse_mismatch_log_line
 from gui.translation_tab import (
@@ -423,6 +423,9 @@ class TranslationTabUITests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
+        alert_env = mock.patch.dict(os.environ, {"translationCompletionAlert": "false"})
+        alert_env.start()
+        self.addCleanup(alert_env.stop)
         self.previous_cwd = Path.cwd()
         os.chdir(self.temporary.name)
         files = Path("files")
@@ -474,6 +477,55 @@ class TranslationTabUITests(unittest.TestCase):
         apply_finish.assert_called_once_with(False, "Speaker translation canceled")
         self.assertIsNone(self.tab._finish_pending)
 
+        # A completion alert belongs to the entire run, after the last file's
+        # results arrive. Duplicate finish signals must never repeat the alert.
+        with (
+            mock.patch.dict(os.environ, {"translationCompletionAlert": "true"}),
+            mock.patch.object(QApplication, "beep") as beep,
+            mock.patch.object(QApplication, "alert") as alert,
+            mock.patch.object(QSystemTrayIcon, "isSystemTrayAvailable", return_value=True) as available,
+            mock.patch.object(QSystemTrayIcon, "supportsMessages", return_value=True) as supports,
+            mock.patch.object(QSystemTrayIcon, "show"),
+            mock.patch.object(QSystemTrayIcon, "showMessage") as message,
+        ):
+            self.tab._file_progress_started = True
+            self.tab.on_translation_finished(True, "Success")
+            self.assertIsNotNone(self.tab._finish_pending)
+            beep.assert_not_called()
+            self.tab.update_file_progress(1, 2, "Actors.json")
+            beep.assert_not_called()
+            self.tab.update_file_progress(2, 2, "Map001.json")
+            beep.assert_called_once_with()
+            alert.assert_called_once()
+            message.assert_called_once()
+            self.assertIsNone(self.tab._finish_pending)
+            self.tab.on_translation_finished(True, "Success")
+            beep.assert_called_once()
+            message.assert_called_once()
+
+            parent = SimpleNamespace(PAGE_TRANSLATION=3, switch_page=mock.Mock())
+            self.tab.parent_window = parent
+            self.tab._completion_tray.messageClicked.emit()
+            parent.switch_page.assert_called_once_with(parent.PAGE_TRANSLATION)
+
+            # Disabled alerts are silent. Machines without desktop-message
+            # support still get the sound and taskbar attention when enabled.
+            for enabled, has_tray, has_messages in (
+                (False, True, True), (True, False, True), (True, True, False),
+            ):
+                with self.subTest(enabled=enabled, tray=has_tray, messages=has_messages):
+                    os.environ["translationCompletionAlert"] = str(enabled).lower()
+                    available.return_value = has_tray
+                    supports.return_value = has_messages
+                    self.tab._completion_notified = False
+                    beep.reset_mock()
+                    alert.reset_mock()
+                    message.reset_mock()
+                    self.tab.on_translation_finished(True, "Success")
+                    self.assertEqual(beep.call_count, int(enabled))
+                    self.assertEqual(alert.call_count, int(enabled))
+                    message.assert_not_called()
+
     def test_estimate_choice_stays_safe_and_is_never_rendered_as_translation(
         self,
     ) -> None:
@@ -498,6 +550,7 @@ class TranslationTabUITests(unittest.TestCase):
 
         self.tab.project_root = Path(self.temporary.name)
         self.tab.select_files_by_name(["Actors.json"])
+        self.tab._completion_notified = True
         with (
             mock.patch(
                 "gui.translation_tab._activate_configured_game_context",
@@ -569,7 +622,13 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertIn("Live $0.4000", self.tab.totals_cost_label.text())
         self.assertEqual(self.tab.totals_time_label.text(), "Time: 1.5s")
 
-        self.tab._apply_finish_ui(True, "TOTAL: estimate")
+        self.assertFalse(self.tab._completion_notified, "Starting a new run must rearm its alert.")
+        with (
+            mock.patch.dict(os.environ, {"translationCompletionAlert": "true"}),
+            mock.patch.object(QApplication, "beep") as beep,
+        ):
+            self.tab._apply_finish_ui(True, "TOTAL: estimate")
+        beep.assert_not_called()
         self.assertIn("Batch + auto cache $0.1500", self.tab.totals_cost_label.text())
         self.assertEqual(self.tab.file_card.title_label.text(), "Estimation results")
         self.assertEqual(self.tab.translate_button.text(), "Estimation complete")
@@ -586,7 +645,12 @@ class TranslationTabUITests(unittest.TestCase):
         self.tab.mode_combo.setCurrentText("Parse Speakers")
         self.tab.translation_worker = SimpleNamespace(parse_speakers=True)
 
-        self.tab._apply_finish_ui(True, "Success")
+        with (
+            mock.patch.dict(os.environ, {"translationCompletionAlert": "true"}),
+            mock.patch.object(QApplication, "beep") as beep,
+        ):
+            self.tab._apply_finish_ui(True, "Success")
+        beep.assert_not_called()
 
         self.assertEqual(self.tab.mode_combo.currentText(), "Translate")
         self.assertFalse(self.tab.sync_export_button.isHidden())
@@ -651,7 +715,12 @@ class TranslationTabUITests(unittest.TestCase):
     def test_generic_context_and_legacy_resume_preserve_safe_workflow(self) -> None:
         self.tab._batch_active = True
         self.tab._on_batch_phase("canceled", {"requests": 3})
-        self.tab._apply_finish_ui(True, "Batch canceled")
+        with (
+            mock.patch.dict(os.environ, {"translationCompletionAlert": "true"}),
+            mock.patch.object(QApplication, "beep") as beep,
+        ):
+            self.tab._apply_finish_ui(True, "Batch canceled")
+        beep.assert_not_called()
 
         self.assertEqual(self.tab.file_stack.currentIndex(), 0)
         self.assertFalse(self.tab._batch_active)
@@ -848,7 +917,11 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertIn("ready to write", prompt)
         self.assertNotIn("already in progress", prompt)
 
-    def test_noncompletion_batch_outcomes_are_not_rendered_as_complete(self) -> None:
+    @mock.patch.dict(os.environ, {"translationCompletionAlert": "true"})
+    @mock.patch.object(QApplication, "beep")
+    @mock.patch.object(QApplication, "alert")
+    @mock.patch.object(QSystemTrayIcon, "isSystemTrayAvailable", return_value=False)
+    def test_noncompletion_batch_outcomes_are_not_rendered_as_complete(self, _tray, _attention, beep) -> None:
         self.tab.create_progress_item("Classes.json")
         self.tab._batch_active = True
         self.tab._batch_ui_phase = "collect"
@@ -875,8 +948,10 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(self.tab.batch_overall_bar.value(), 25)
         self.assertEqual(self.tab.batch_overall_bar.format(), "No batch submitted")
         self.assertEqual(self.tab.translate_button.text(), "Nothing to submit")
+        beep.assert_not_called()
 
         self.tab._batch_active = True
+        self.tab._completion_notified = False
         self.tab._on_batch_phase("submit", {"files": 1, "requests": 16})
         self.tab._apply_finish_ui(False, "Gemini rejected the batch")
 
@@ -884,6 +959,7 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertIn("Failed", self.tab.batch_phase_title.text())
         self.assertEqual(self.tab.batch_overall_bar.format(), "Failed")
         self.assertNotEqual(self.tab.batch_overall_bar.value(), 100)
+        beep.assert_not_called()
 
         # Resume/poll must clear a stale Failed overall-bar label from a prior finish.
         self.tab._on_batch_phase("polling", None)
@@ -906,8 +982,10 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(self.tab.batch_overall_bar.format(), "%p%")
         self.assertIn("Processing", self.tab.batch_phase_title.text())
         self.assertIn("in_progress", self.tab.batch_poll_status.text())
+        beep.assert_not_called()
 
         self.tab._batch_active = True
+        self.tab._completion_notified = False
         self.tab.translation_worker = SimpleNamespace(_run_mismatch_count=5)
         self.tab._on_batch_phase("consume", None)
 
@@ -920,6 +998,9 @@ class TranslationTabUITests(unittest.TestCase):
         )
         self.assertIn("5 validation mismatches", self.tab.batch_consume_status.text())
         self.assertNotIn("Failed", self.tab.translating_label.text())
+        beep.assert_called_once_with()
+        self.tab._apply_finish_ui(True, "TOTAL: success")
+        beep.assert_called_once_with()
 
     def test_gemini_submit_estimate_uses_precision_and_thinking_warning(self) -> None:
         self.tab._batch_active = True
