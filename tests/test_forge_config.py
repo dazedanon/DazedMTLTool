@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
@@ -65,6 +66,24 @@ class ForgeConfigTests(unittest.TestCase):
                 "window.__dazedForgeConfigPath || `.dazedtl/forge-config.json`",
                 installed,
             )
+
+        # Exercise the installed bundle's input behavior as well as its config:
+        # scaled/restored panels stay usable and map input follows the mouse.
+        with patch("util.forge.config.load_config", return_value={}):
+            outputs = [
+                prepare_forge_js("MZ", cfg={"uiScale": scale})
+                for scale in ("0.75", "1", "1.5", "2", "3", "auto")
+            ]
+        result = subprocess.run(
+            ["node", str(ROOT / "tests" / "fixtures" / "forge_interactions.js")],
+            input=json.dumps(outputs),
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_packaged_nw_game_persists_config_and_keeps_f8_toggle_active(self):
         """Packaged games persist settings and can close Forge from Keys."""

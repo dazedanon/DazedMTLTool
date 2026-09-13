@@ -339,8 +339,19 @@ def _bootstrap_js(hotkey: str, ui_scale: str) -> str:
     var host = document.getElementById("forge-mvmz-host");
     if (!host) return;
     var fx = resolveUiScale(uiScale);
+    var changed = host.style.zoom !== String(fx);
     host.style.zoom = String(fx);
+    host.style.width = window.innerWidth / fx + "px";
+    host.style.height = window.innerHeight / fx + "px";
+    if (changed) window.dispatchEvent(new Event("dazedtl:forge-scale"));
   }}
+  // CSS zoom changes layout units, but mouse events and innerWidth/Height
+  // still use viewport pixels. Keep Forge's layout and input in local units.
+  window.__dazedForgeViewport = {{
+    local: function (value) {{ return value / resolveUiScale(uiScale); }},
+    width: function () {{ return this.local(window.innerWidth); }},
+    height: function () {{ return this.local(window.innerHeight); }}
+  }};
   if (!window.__dazedForgeUiScaleHook) {{
     window.__dazedForgeUiScaleHook = true;
     var observer = new MutationObserver(applyUiScale);
@@ -468,6 +479,66 @@ def _patch_keycode_reads(text: str) -> str:
     return text
 
 
+def _patch_scaled_interactions(text: str) -> str:
+    """Keep window bounds and map/panel input in the zoomed host's units.
+
+    These counts deliberately fail on upstream changes so a refreshed bundle
+    cannot silently ship with only some of its coordinate conversions applied.
+    Actor reordering compares clientY against a DOM rect and stays in pixels.
+    """
+    def replace(old: str, new: str, count: int) -> None:
+        nonlocal text
+        if text.count(old) != count:
+            raise ValueError(f"Could not patch Forge scaled interaction: {old}")
+        text = text.replace(old, new)
+
+    # A hard minimum outside the viewport clamp can push the resize handle
+    # offscreen again. Smaller viewports also need room to shrink the panel.
+    for size, dimension, position, initial in (
+        (560, "Width", "r", "x"),
+        (360, "Height", "i", "S"),
+    ):
+        axis = "X" if dimension == "Width" else "Y"
+        origin = "p" if dimension == "Width" else "m"
+        delta = f"V({initial})+e.client{axis}-V({origin})"
+        replace(
+            f"Math.max({size},Math.min(window.inner{dimension}-V({position}),{delta}))",
+            f"Math.min(window.inner{dimension}-V({position}),"
+            f"Math.max(Math.min({size},window.inner{dimension}*.75),{delta}))",
+            1,
+        )
+
+    for axis, edge in (("X", "left"), ("Y", "top")):
+        # Convert panel/launcher/map drag coordinates, leaving canvas-relative
+        # input and the actor list's rect comparisons for their own handling.
+        pattern = rf"e\.client{axis}(?!-t\.{edge}|[<>])"
+        text, count = re.subn(
+            pattern, rf"window.__dazedForgeViewport.local(e.client{axis})", text
+        )
+        if count != 9:
+            raise ValueError(f"Could not patch Forge scaled mouse {axis}")
+        replace(
+            f"e.client{axis}-t.{edge}",
+            f"window.__dazedForgeViewport.local(e.client{axis}-t.{edge})",
+            3,
+        )
+
+    for dimension in ("Width", "Height"):
+        replace(
+            f"window.inner{dimension}",
+            f"window.__dazedForgeViewport.{dimension.lower()}()",
+            13,
+        )
+    for handler in ("l", "u"):
+        original = f"window.addEventListener(`resize`,{handler})"
+        replace(
+            original,
+            original + f",window.addEventListener(`dazedtl:forge-scale`,{handler})",
+            1,
+        )
+    return text
+
+
 def apply_modern_forge_patches(text: str, hotkey: str, ui_scale: str) -> str:
     """Inject Dazed hotkey / UI-scale bootstrap and harden shortcut handling."""
     text = _strip_existing_bootstrap(text)
@@ -477,6 +548,7 @@ def apply_modern_forge_patches(text: str, hotkey: str, ui_scale: str) -> str:
     text = _patch_storage_adapter(text)
     text = _keep_toggle_ui_active_on_keys_tab(text)
     text = _patch_keycode_reads(text)
+    text = _patch_scaled_interactions(text)
     bootstrap = _bootstrap_js(hotkey, ui_scale)
     match = re.search(r"\*/\s*\n", text)
     if not match:
