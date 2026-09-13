@@ -72,6 +72,11 @@ the workflow below justifies them. Preserve unrelated user changes. Do not switc
      machine translation.
    - Preserve each speaker's established voice, relationships, pronouns, address forms, and level
      of formality. Preserve UI brevity and gameplay meaning where applicable.
+   - Use natural sentence rhythm, contractions, fragments, and idioms when the speaker and scene
+     support them. Read each affected exchange in order, including surviving translated neighbors,
+     then verify revisions against the Japanese for added or lost meaning, ambiguity, or emotional
+     force. Preserve deliberate formality or awkwardness; do not add slang, jokes, or intensity to
+     enliven the prose. Keep this check within the selected update scope.
    - Reuse glossary spellings exactly. Check repeated occurrences and grammatical variants before
      deciding that two different renderings are intentional.
    - Edit only player-visible values and the smallest directly related consistency fixes. Never

@@ -71,6 +71,19 @@ naturalized player-facing spelling and record uncertainty.
 
 {{CHARACTER_IDENTITY_RULES}}
 
+### Shared character-voice handling
+
+For major or recurring speakers, use the distributed scene samples to describe how they actually
+speak: sentence length and rhythm, vocabulary, contractions or fragments, politeness, forms of
+address, and supported changes with the listener or emotion. Put concise, actionable English
+voice notes in that character's glossary entry. Personality or role labels alone are insufficient.
+Record a short source locator with a distinctive observation; where it clarifies a recurring
+habit, include a brief English delivery example supported by that source. Examples illustrate
+delivery, not wording to reuse everywhere. Keep longer source excerpts in investigation evidence.
+Distinguish recurring habits from a single emotional outburst. Do not invent an accent, catchphrase,
+slang, or gendered stereotype from an archetype or an isolated Japanese ending. Sparse evidence
+calls for a conservative note, not a manufactured voice. Preserve compatible curated decisions.
+
 ### Optional reference translations
 
 The copied setup instructions may include a `<reference_translations>` attachment pointing to

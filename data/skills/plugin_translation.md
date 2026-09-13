@@ -8,6 +8,8 @@ Do not treat an encoded plugin parameter, nested struct, or large source file as
 <inputs>
 - Read `js/plugins.js` and the glossary file (`.dazedtl/glossary.txt`).
 - Treat the glossary as authoritative for names and terminology.
+- Read `.dazedtl/skills/game.md`, `.dazedtl/skills/quirks.md`, and other `.dazedtl/skills/*.md`
+  files when present for the game's register and character guidance.
 - Parse every entry in `js/plugins.js`, record whether it is enabled or disabled, and inspect every parameter value recursively.
 - Inspect the matching `js/plugins/<PluginName>.js` source file when available.
 - If a required source file is missing, list it and ask me to provide it after completing every other available audit check.
@@ -96,6 +98,12 @@ If nothing needs work, state the completed coverage checks and stop.
 Edit approved files directly and make the smallest possible changes.
 Translate every approved visible occurrence, including duplicated objectives and labels embedded in alternate styles or pages.
 Use the glossary consistently across the entire decoded container, not only the examples shown in the audit report.
+
+For dialogue, use natural English rhythm and the speaker's source-supported speech habits,
+including changes with the listener or emotion. Read connected lines in order for flow, then
+check revisions against the Japanese for changed meaning, ambiguity, or emotional force.
+Preserve deliberate formality or awkwardness; do not add slang, jokes, or intensity to enliven it.
+Keep UI and battle text concise and appropriate to their function rather than forcing dialogue style.
 
 For encoded parameters:
 - Change only the approved leaf values.

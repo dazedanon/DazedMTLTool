@@ -71,6 +71,15 @@ translations containing third-person pronouns are shown in every distinct scene 
 pronoun-bearing translations spoken by different detected speakers receive one representative scene per speaker.
 Ordinary safe repetition remains deduplicated.
 
+Read the English exchange in order for reply continuity, rhythm, emotional beats, and distinct
+speaker voices, then check any proposed revision against the Japanese. Concrete fluency or voice
+defects include calqued syntax that obstructs reading, a reply that no longer connects naturally,
+flattened source-supported hesitation or attitude, and formality that contradicts the speaker's
+relationship or current scene. Preserve deliberate stiffness, restraint, and awkwardness in the
+source. Extra slang, jokes, hostility, or explanation are not repairs. Equally faithful and fluent
+alternatives remain stylistic preference; the existing editorial-evidence and independent-review
+requirements still apply.
+
 Treat Japanese discourse markers, stance particles, hedges, and intensifiers as part of the whole
 utterance rather than as separate factual claims. Flag semantic inflation when a translation turns
 a reaction to the current remark or action into unsupported skill, habit, frequency, progress, or

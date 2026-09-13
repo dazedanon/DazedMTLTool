@@ -62,6 +62,9 @@ A faster context compiler does not establish a faster model or end-to-end transl
 
 ## Save small results; validate at the right scale
 
+Apply the shared source-checked dialogue pass before saving a batch. At cross-batch checkpoints,
+read split exchanges together so reply continuity and voice survive the batch boundary.
+
 After each batch, save accepted outputs atomically and check IDs, untranslated/empty results, placeholder multisets, protected codes and local layout bounds.
 Do not recompute the whole source/reference census or run every global rendering check merely because another small batch finished.
 As a starting point, perform a cross-batch review and checkpoint after roughly 1,000–1,500 units, or sooner when a glossary decision, renderer, extractor, control-code handling or source scope changes.

@@ -67,7 +67,7 @@ FINDING_CATEGORIES = frozenset({
 EDITORIAL_JUDGMENT_CATEGORIES = frozenset({"fluency", "voice", "wordplay"})
 APPROVED_NONBLOCKING_MECHANICAL_FLAGS = frozenset({"suspicious-length-ratio"})
 
-QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-reference-v12"
+QA_POLICY_VERSION = "rpgmaker-qa-scene-motif-editorial-reference-v13"
 FORCED_DEEP_MECHANICAL_FLAGS = frozenset({
     "empty-live",
     "unchanged-source",
@@ -1112,6 +1112,15 @@ chronology; omitted or invented information; and speaker voice plus natural Engl
 `context_expansion` value means a repeated pronoun-bearing translation was intentionally assigned
 in more than one scene. Judge it against this scene rather than assuming the wording that worked in
 another context still works here.
+
+Read the English exchange in order for reply continuity, rhythm, emotional beats, and distinct
+speaker voices, then check any proposed revision against the Japanese. Concrete fluency or voice
+defects include calqued syntax that obstructs reading, a reply that no longer connects naturally,
+flattened source-supported hesitation or attitude, and formality that contradicts the speaker's
+relationship or current scene. Preserve deliberate stiffness, restraint, and awkwardness in the
+source. Extra slang, jokes, hostility, or explanation are not repairs. Equally faithful and fluent
+alternatives remain stylistic preference; the existing editorial-evidence and independent-review
+requirements still apply.
 
 A `motif-family` item gathers all translations matching one recurring-joke or wordplay rule from
 the project's quirks. Return exactly one `motif_reviews` entry for every motif in the bundle,

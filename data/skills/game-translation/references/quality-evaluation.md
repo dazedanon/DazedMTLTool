@@ -65,6 +65,23 @@ Record `expected_requests`, `received_requests`, `missing_requests` and `provide
 
 You cannot review 48,000 lines. The selection method decides what the verdict measures, so it is the part to get right.
 
+### Calibrate a voice-guidance change on complete exchanges
+
+Before broad retranslation for a voice or fluency complaint, compare a bounded selection of
+complete exchanges from the affected game, covering different speakers, listeners, and moods.
+Keep the Japanese, speaker assignments, current glossary, and engine text boundaries visible.
+Compare the existing translation with a candidate made under the revised guidance; preserve
+source IDs and record the prompt/context used. Keep candidates in review artifacts until accepted.
+This can be a local editorial exercise in direct mode; it does not authorize additional provider
+calls or require a new full-game API pass. Apply the selected API workflow's cost boundary if used.
+
+Read the English exchanges for flow, then verify changes against the Japanese. Report meaning,
+voice/register, and reading flow separately, citing concrete preserved or lost nuances rather than
+"more creative" or "sounds better." Keep deliberate formality and awkwardness. Promote only
+source-supported recurring speech habits into the existing glossary; examples are not universal
+line replacements. Recheck controls and fit before accepting an edited translation. A small scene
+comparison is qualitative calibration, not a full-game quality score or release clearance.
+
 ### Stratify, never sample uniformly
 
 **Never draw a benchmark corpus uniformly at random.** RPG Maker text is dominated by short database strings and one or two chatty maps, so a uniform draw measures item-name translation and misses the control-code dialogue where models actually break.
@@ -148,6 +165,11 @@ ranking                      # overall
 4. **Natural English** - fluent, no model commentary, no unjustified additions.
 
 Without that stated order the judge silently optimizes for English fluency, which is exactly how a fluent mistranslated plot line beats a slightly stiff correct one.
+
+Natural delivery of source-supported attitude and subtext is part of fidelity. Among candidates
+that preserve meaning and required controls, prefer the exchange with natural flow and evidenced
+speaker rhythm and register. Literal syntax alone earns no accuracy advantage. Do not reward added
+wit, slang, hostility, or explanation, or erase deliberately formal, awkward, or restrained speech.
 
 Two anti-bias clauses, verbatim in the prompt:
 

@@ -8,6 +8,8 @@ Audit ace_json/scripts/*.rb for player-visible Japanese, tell me which scripts n
 - Read the glossary file (`.dazedtl/glossary.txt`) and the extracted Ruby files under ace_json/scripts/.
 - Use any script index/manifest to preserve script names and ordering.
 - Treat the glossary file as authoritative for names and terminology.
+- Read `.dazedtl/skills/game.md`, `.dazedtl/skills/quirks.md`, and other `.dazedtl/skills/*.md`
+  files when present for the game's register and character guidance.
 - If referenced script sources are missing or still packed, list what is needed and ask me to extract or provide them.
 </inputs>
 
@@ -24,6 +26,12 @@ Then ask one focused question: which listed scripts should you translate? If all
 
 <translate_only_when_approved>
 Translate only literals proven to reach the player through windows, draw_text/help methods, messages, menus, battle logs, or notifications. A string passed to print or p is not automatically player-visible; verify its runtime use.
+
+For dialogue, use natural English rhythm and the speaker's source-supported speech habits,
+including changes with the listener or emotion. Read connected lines in order for flow, then
+check revisions against the Japanese for changed meaning, ambiguity, or emotional force.
+Preserve deliberate formality or awkwardness; do not add slang, jokes, or intensity to enliven it.
+Keep UI and battle text concise and appropriate to their function rather than forcing dialogue style.
 
 Never translate hash keys, symbols, identifiers, class/module/method/constant names, lookup values, case/when or equality operands, filenames, paths, URLs, fonts, colors, regexes, save-data keys, or text read back elsewhere. Preserve Ruby interpolation (#{...}), printf/sprintf placeholders, escape sequences, control codes, quote style, encoding, and syntax. Search usages before changing an ambiguous literal; skip it if safety cannot be established.
 

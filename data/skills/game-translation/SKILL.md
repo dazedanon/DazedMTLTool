@@ -11,7 +11,7 @@ description: >-
 # Game Translation
 
 End-to-end playbook for translating a Japanese game to English: **detect engine → extract player-facing text → translate behind a locked glossary + game bible → inject/patch → validate in-game**.
-The craft is in three things: **finding every string, keeping control codes/placeholders/gender intact, and locking names/terms so they never drift.**
+The translation must preserve meaning and character voice in natural English, alongside complete text coverage, stable terminology, and intact game controls.
 
 ## DazedTL shared integration
 
@@ -78,6 +78,14 @@ Send that complete `user` field to the model. Keep actual nameplate translation 
 injection separate from this metadata. Preserve speaker/scene associations in stores
 and use the request fingerprint for cache/retry decisions; text-only dialogue dedup
 can reuse the wrong character's voice. The agent extracts speaker metadata itself.
+
+Apply the shared prompt's dialogue pass in both direct and API work: draft the exchange, read the
+English in order for reply continuity, rhythm and distinct voices, then check every revision
+against the Japanese for meaning, ambiguity and emotional force. Use source-supported voice notes
+from `references/glossary-and-prompts.md`; preserve deliberate stiffness or formality in the source.
+This is part of composing each translation, not a requirement for a second full-game provider run.
+Keep scene boundaries and speaker associations when splitting batches, and check exchanges spanning
+a split together at the next review checkpoint. Recheck controls and fit after wording changes.
 
 When the user names previous games or a reference-corpus folder in the starting
 instructions, follow `references/reference-translations.md` during setup. Inspect all
@@ -151,7 +159,7 @@ Keep any justified restriction specific to the supported scene/participant rathe
    Reconcile disputed or repeated exclusions with prior reviews and user corrections using `references/review-decisions.md` before changing scope.
 4. Build shared glossary and game guidance using `references/glossary-and-prompts.md` and any user-supplied reference games.
    Preserve placeholders, control flow, internal identifiers, source-supported identity and uncertainty.
-5. Translate and save resumable batches with complete compiled context.
+5. Translate, perform the source-checked dialogue pass, and save resumable batches with complete compiled context.
    Validate changed units immediately, then run corpus checks at bounded milestones instead of restarting the same full audit after every batch.
 6. Fit both width and row count against the actual renderer using `references/text-fitting.md`.
    Check headings, icons, dynamic values and body text separately.

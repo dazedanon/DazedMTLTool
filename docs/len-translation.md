@@ -173,6 +173,15 @@ the user does not need to copy files between tabs or supply another setup prompt
 Both setup routes include whole-corpus identity coverage, unknown gender and reveal-sensitive
 alias rules. Glossary ownership stays separate from the game frame and research notes.
 
+Both translation modes also share the dialogue quality instructions: draft each exchange in
+natural English with source-supported character voice, read it in order for flow, then check any
+polish against the Japanese for changed meaning or tone. Setup captures concrete speech habits
+and shifts with the listener or emotion in character glossary entries. The translation instruction
+includes this pass in the initial response; it does not add an automatic second provider run.
+The bundled quality-evaluation reference describes a small comparison of complete scenes when
+calibrating revised guidance. QA still requires evidence of a concrete defect before correcting
+otherwise valid wording.
+
 To inherit vocabulary from several prequels, name their folders (or one prepared corpus
 folder) in **Instructions** before copying the starting prompt. For example:
 

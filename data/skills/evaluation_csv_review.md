@@ -55,6 +55,12 @@ Do not reward literalness by itself, and do not penalize a valid localization me
 prefer another style. Ignore tiny punctuation or wording preferences when meaning and voice are
 equivalent.
 
+Natural delivery of source-supported attitude and subtext is part of fidelity. Among candidates
+that preserve meaning and required controls, prefer the one whose English exchange flows and
+whose speakers retain their evidenced rhythm and register. Do not give literal syntax an accuracy
+advantage by itself, or reward added wit, slang, hostility, or explanation. Preserve deliberately
+formal, awkward, or restrained speech. Name the specific lost nuance or reading defect in notes.
+
 For each sample row:
 
 - Fill all four ranking columns using every randomized candidate label, ordered best to worst

@@ -60,9 +60,18 @@ The game-specific section of `.dazedtl/glossary.txt` owns stable proper names an
   consistent English rendering matters.
 - Use entries shaped like `Japanese (English) - concise English note` and commit to one spelling.
 
+For major or recurring speakers, sample exchanges with different listeners and emotions. Describe
+observed sentence rhythm, vocabulary, politeness, forms of address, and use of contractions or
+fragments as actionable English voice notes in their glossary entries. Personality or role labels
+alone are insufficient. Add a short source locator and, when useful, a brief English delivery
+example grounded in it; an example illustrates a recurring habit, not wording to repeat everywhere.
+Distinguish recurring habits from one-off outbursts. Do not invent an accent, catchphrase, slang,
+or gendered stereotype from an archetype or isolated Japanese ending. Keep uncertain traits
+conservative and preserve compatible curated decisions.
+
 Do not put global prose rules, formatting instructions, speculative plot claims, generic words, or
-one-off lines in the Glossary. If the file contains DazedTL's base-glossary separator, preserve the
-separator and everything below it byte-for-byte.
+unrelated one-off lines in the Glossary. If the file contains DazedTL's base-glossary separator,
+preserve the separator and everything below it byte-for-byte.
 
 ### Game frame
 

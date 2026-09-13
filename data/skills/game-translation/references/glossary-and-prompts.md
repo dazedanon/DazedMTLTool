@@ -26,6 +26,34 @@ instructions; `--sources` adds the same matched glossary, SFX and reference evid
 used by DazedTL. These are the inputs to adapted drivers, so a sample pipeline's prompt
 builder must not silently override them.
 
+## Voice notes grounded in dialogue
+
+Use distributed scene samples to give major and recurring speakers concise, actionable voice
+notes in their existing glossary entries. Describe the English delivery supported by the Japanese:
+sentence length and rhythm, vocabulary, politeness, forms of address, and shifts with the listener
+or emotion. "Shy" or "villain" alone does not explain how someone speaks. A normally reserved
+character may become expansive with a friend; a polite speaker need not sound wooden.
+
+Attach a short source locator to distinctive observations. Add a brief English delivery example
+when it makes a recurring habit clearer; keep longer paired excerpts and the comparison rationale
+in workspace evidence. Examples guide delivery, not fixed translations for matching particles.
+For example, a note might say "Complete, measured sentences with strangers; clipped replies when
+irritated; retains polite address even in a refusal" only when those shifts are observed in source.
+Do not assign that example to an actual character without evidence or turn a single outburst into
+their default voice. Japanese endings alone do not establish an English regional accent, slang,
+catchphrase, or gendered stereotype. Preserve uncertainty and compatible user-authored choices.
+
+The shared system prompt owns the general translation-and-polish instruction. Apply it to each
+coherent exchange in either mode: read the drafted English in sequence for conversational flow,
+then check revisions against the Japanese and the current glossary. Natural delivery is part of
+fidelity to attitude and subtext. Preserve intentional awkwardness, formality, restraint, and
+ambiguity; do not add wit, hostility, explanation, or emotional intensity to make prose livelier.
+Required IDs, text boundaries, placeholders, and controls still constrain all revisions.
+
+When changing voice guidance for an existing translation, use the bounded scene comparison in
+`quality-evaluation.md` before broad retranslation. Refresh compiled context after accepted
+guidance edits, and revalidate affected cached outputs and review evidence under the current rules.
+
 ## Historical glossary.json schema (import once)
 
 ```json
