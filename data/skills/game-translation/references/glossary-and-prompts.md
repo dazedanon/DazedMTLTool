@@ -54,6 +54,11 @@ When changing voice guidance for an existing translation, use the bounded scene 
 `quality-evaluation.md` before broad retranslation. Refresh compiled context after accepted
 guidance edits, and revalidate affected cached outputs and review evidence under the current rules.
 
+Record distinctive laughs, interjections, verbal tics, and catchphrases alongside the other voice notes, with source anchors and the context where they apply.
+For example, an observed recurring `ふふ` can support "Keeps a soft Fufu laugh; preserve longer Fufufu only where the source extends it."
+That describes a speaker's delivery, not a global glossary replacement for every `ふ` sound or permission to add laughter.
+An intelligible signature sound is not an untranslated word; apply the shared system prompt's "Laughs and Character Sounds" guidance and preserve it during polish.
+
 ## Historical glossary.json schema (import once)
 
 ```json

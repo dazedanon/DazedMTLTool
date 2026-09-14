@@ -68,6 +68,9 @@ example grounded in it; an example illustrates a recurring habit, not wording to
 Distinguish recurring habits from one-off outbursts. Do not invent an accent, catchphrase, slang,
 or gendered stereotype from an archetype or isolated Japanese ending. Keep uncertain traits
 conservative and preserve compatible curated decisions.
+Include distinctive laughs, interjections, verbal tics, and recurring catchphrases when observed.
+Record their source forms, chosen English wording or Latin-letter sound spelling, and the situations where they occur; retain a recognizable laugh such as `ふふ → Fufu` instead of normalizing it to "Hehe."
+Keep these choices specific to the speaker and source context, rather than turning one example into a rule for every character or line.
 
 Do not put global prose rules, formatting instructions, speculative plot claims, generic words, or
 unrelated one-off lines in the Glossary. If the file contains DazedTL's base-glossary separator,

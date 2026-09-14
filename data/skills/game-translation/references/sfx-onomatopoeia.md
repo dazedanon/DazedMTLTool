@@ -56,6 +56,18 @@ moan it is a pacing gap between gasps, and collapsing it runs the phrases togeth
 
 ---
 
+### Laughs and other character sounds
+
+Latin-letter voice spellings can preserve characterization while satisfying the no-kana rule.
+Apply the live shared system prompt's "Laughs and Character Sounds" guidance in both direct and API work: a voiced `ふふ` may remain "Fufu," with distinct source forms such as `うふふ` and `おほほ` retaining their sound shape.
+Preserve the source's repetition, breath, pauses, and intensity without assigning a fixed emotion to a spelling.
+This does not authorize leaving ordinary Japanese words untranslated or romanizing all SFX.
+Distinguish audible laughter from narration about laughing and from an ambiguous breath or movement sound.
+Dictionary hints such as "chuckle," "smirk," or "heh" describe possible meanings; they must not override the current source or erase a distinctive voiced laugh.
+Store recurring speaker-specific choices in the existing character glossary and preserve them during polishing and review.
+
+---
+
 ## 2. Censor masks stay masked
 
 `〇` (U+3007) and `●` standing in for a word are a **deliberate authorial choice**,
@@ -225,8 +237,8 @@ equivalent, so every `ドキドキ` in the game becomes the same word.
   - equivalents: ah, oh; meaning: surprise, recognition, or realization; kind: voice or vocal sound
 ```
 
-- **Exclude romaji even when the snapshot carries it.** Showing `dokidoki` invites
-  the model to transliterate instead of localize.
+- **Exclude the dictionary's romaji field even when the snapshot carries it.** Showing `dokidoki` invites the model to transliterate instead of localize.
+  This keeps generic dictionary readings out of the hints; it does not forbid expressive voice spellings selected under "Laughs and other character sounds" above.
 - Say **"the requested target language"**, not "English". The shipped glosses are
   English while the target may not be.
 

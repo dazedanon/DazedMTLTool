@@ -83,6 +83,9 @@ Apply the shared prompt's dialogue pass in both direct and API work: draft the e
 English in order for reply continuity, rhythm and distinct voices, then check every revision
 against the Japanese for meaning, ambiguity and emotional force. Use source-supported voice notes
 from `references/glossary-and-prompts.md`; preserve deliberate stiffness or formality in the source.
+Apply the shared prompt's "Laughs and Character Sounds" guidance during drafting and polishing.
+Preserve distinctive laughs, interjections, verbal tics, and recurring phrasing; natural English must not erase their recognizable sound or timing.
+Use `references/sfx-onomatopoeia.md` for voiced sounds versus descriptive SFX and `references/glossary-and-prompts.md` to record recurring choices per speaker.
 This is part of composing each translation, not a requirement for a second full-game provider run.
 Keep scene boundaries and speaker associations when splitting batches, and check exchanges spanning
 a split together at the next review checkpoint. Recheck controls and fit after wording changes.

@@ -83,6 +83,9 @@ delivery, not wording to reuse everywhere. Keep longer source excerpts in invest
 Distinguish recurring habits from a single emotional outburst. Do not invent an accent, catchphrase,
 slang, or gendered stereotype from an archetype or an isolated Japanese ending. Sparse evidence
 calls for a conservative note, not a manufactured voice. Preserve compatible curated decisions.
+Include distinctive laughs, interjections, verbal tics, and recurring catchphrases when observed.
+Record their source forms, chosen English wording or Latin-letter sound spelling, and the situations where they occur; retain a recognizable laugh such as `ふふ → Fufu` instead of normalizing it to "Hehe."
+Keep these choices specific to the speaker and source context, rather than turning one example into a rule for every character or line.
 
 ### Optional reference translations
 

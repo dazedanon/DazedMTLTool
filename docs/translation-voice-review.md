@@ -75,3 +75,32 @@ grammatical sentence. Three conversations cannot establish improvement across th
 
 These checks verify instruction delivery and workflow integrity, not linguistic quality across
 models or the full game. UI behavior and provider execution were not changed.
+
+## Distinctive laughs and speech quirks (2026-09-14)
+
+The shared base prompt's blanket "no romaji, no exceptions" rule conflicted with preserving intelligible voice spellings such as "Fufu."
+An offline request compiled through the live LEN context builder reproduced that rule and exactly matched the Workflow system loader.
+The same request supplied optional SFX hints for `ふふ`, including "chuckle," "heh," and "smirk"; those are semantic suggestions, not fixed dialogue wording.
+These instructions could encourage flattening, though this inspection does not establish which instruction caused a particular model output.
+
+The shared prompt now distinguishes untranslated lexical content from expressive voice sounds and explicitly preserves distinctive laughter through polishing and review.
+The LEN playbook and SFX reference follow that distinction, and RPG Maker/Wolf and generic setup capture source forms, recurring voice choices, and their contexts in the existing character glossary.
+Ordinary "Hehe" and "Ahaha" laughs remain valid when supported by the source.
+No global substitution table or extra provider pass is introduced.
+
+Local examples in SEQUEL thirst `data/CommonEvents.json` illustrate the intended sound distinction:
+
+| Source location (zero-based command index) | Source laugh | Current English laugh | Intended sound shape |
+|---|---|---|---|
+| Event 53, command 27 | ふふ | Hehe | Fufu |
+| Event 57, command 13 | ふふふ | Hehehe | Fufufu |
+| Event 58, command 97 | うふふ | Hehehe | Ufufu |
+
+These are editorial examples taken from preserved source and current dialogue, not a blind model benchmark or reviewed replacements for complete scenes.
+Existing game dialogue is unchanged.
+Newly compiled requests load the revised shared prompt; refresh exported LEN context before continuing a run, and review old translations against their source before changing them.
+
+Verification for this update: the live LEN request compiler and Workflow loader produced identical revised system instructions, and RPG Maker, Wolf, and generic setup all included the voice notes.
+The core suite passed all 780 tests with 5 existing skips in 2.142s against an 8s ceiling; both edited skill entrypoints, shipped-asset tracking, and the whitespace diff check passed.
+The initial sandboxed core run could not write repository logs and temporary files; the rerun with repository access passed.
+No provider was called, so these checks verify guidance delivery and existing behavior, not translation quality across models.
