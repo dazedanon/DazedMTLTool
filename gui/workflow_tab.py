@@ -1388,6 +1388,18 @@ class WorkflowTab(QWidget):
         face_example.setWordWrap(True)
         face_example.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
         flags_grid.addWidget(face_example, 2, 1)
+        self.spk_autonamepopup_cb = QCheckBox("Use AutoNamePopup's face + index mapping")
+        self.spk_autonamepopup_cb.setToolTip(
+            "For games with enabled AutoNamePopup nameKeys. Preserves runtime names "
+            "and translates only plugin-linked Change Actor Name defaults. "
+            "Keep generic FACENAME101 disabled for shared face sheets."
+        )
+        self.spk_autonamepopup_cb.stateChanged.connect(self._apply_speaker_flags)
+        flags_grid.addWidget(self.spk_autonamepopup_cb, 3, 0)
+        autoname_example = QLabel("Exact face + index  ·  Keep generic Face → Speaker disabled")
+        autoname_example.setWordWrap(True)
+        autoname_example.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
+        flags_grid.addWidget(autoname_example, 3, 1)
         flags_grid.setColumnStretch(0, 2)
         flags_grid.setColumnStretch(1, 3)
         speaker_stage.add_layout(flags_grid)
@@ -1422,6 +1434,10 @@ class WorkflowTab(QWidget):
         speaker_stage.add_layout(context_actions)
         layout.addWidget(speaker_stage)
         self._populate_speaker_flags()
+        config_tab = getattr(self.parent_window, "config_tab", None)
+        mvmz_tab = getattr(config_tab, "mvmz_tab", None)
+        if mvmz_tab is not None:
+            mvmz_tab.config_changed.connect(self._populate_speaker_flags)
 
         guidance_stage = WorkflowStageCard(
             3,
@@ -5156,6 +5172,7 @@ class WorkflowTab(QWidget):
                 "INLINE401SPEAKERS": self.spk_inline_cb,
                 "FIRSTLINESPEAKERS": self.spk_firstline_cb,
                 "FACENAME101":       self.spk_face_cb,
+                "AUTONAMEPOPUP101": self.spk_autonamepopup_cb,
             }
             for key, cb in flag_map.items():
                 if key in cur:
@@ -5170,6 +5187,7 @@ class WorkflowTab(QWidget):
             "INLINE401SPEAKERS": self.spk_inline_cb.isChecked(),
             "FIRSTLINESPEAKERS": self.spk_firstline_cb.isChecked(),
             "FACENAME101":       self.spk_face_cb.isChecked(),
+            "AUTONAMEPOPUP101": self.spk_autonamepopup_cb.isChecked(),
         }
         try:
             from gui.config_integration import ConfigIntegration
@@ -5181,8 +5199,8 @@ class WorkflowTab(QWidget):
             try:
                 if self.parent_window and hasattr(self.parent_window, "config_tab"):
                     ct = self.parent_window.config_tab
-                    if hasattr(ct, "rpgmaker_tab") and ct.rpgmaker_tab:
-                        ct.rpgmaker_tab.set_config(cfg)
+                    if hasattr(ct, "mvmz_tab") and ct.mvmz_tab:
+                        ct.mvmz_tab.refresh_from_module()
             except Exception:
                 pass
         except Exception as exc:

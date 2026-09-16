@@ -250,6 +250,11 @@ def format_plugins_js(content: str) -> str:
     return jsbeautifier.beautify(content, options)
 
 
+def plugin_entries(content: str) -> tuple[dict, ...]:
+    """Read registry values without executing JavaScript or editing the file."""
+    return tuple(entry.value for entry in _parse_registry(content).entries)
+
+
 def plugin_names(content: str) -> tuple[str, ...]:
     """Validate a registry and return its plugin names in load order."""
     registry = _parse_registry(content)

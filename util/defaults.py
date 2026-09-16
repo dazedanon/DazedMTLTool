@@ -8,6 +8,7 @@ from util.paths import PROJECT_ROOT
 DEFAULTS = {
     'FIRSTLINESPEAKERS': False,
     'FACENAME101': False,
+    'AUTONAMEPOPUP101': False,
     'BRFLAG': False,
     'FIXTEXTWRAP': True,
     'IGNORETLTEXT': False,

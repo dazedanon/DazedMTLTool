@@ -280,10 +280,16 @@ def record_submit(
     file_set = list(file_set or [])
     glossary_freeze = None
     runtime_profile = None
+    sequential_metadata = {}
     try:
         with _batch_file_lock():
             state = _read_batch_file(BATCH_STATE_FILE)
         runtime_profile = state.get("runtime_profile")
+        if state.get("sequential_token_limit"):
+            sequential_metadata = {
+                key: state[key] for key in ("sequential_token_limit", "queued_request_count")
+                if key in state
+            }
         freeze_text = state.get("glossary_freeze")
         if isinstance(freeze_text, str) and freeze_text:
             glossary_freeze = freeze_text
@@ -323,6 +329,7 @@ def record_submit(
             fields["glossary_freeze"] = glossary_freeze
         if runtime_profile is not None:
             fields["runtime_profile"] = runtime_profile
+        fields.update(sequential_metadata)
         upsert_history_entry(bid, **fields)
 
 
@@ -760,6 +767,10 @@ def _discard_stale_canceled_active_state(state: dict) -> dict:
     """
     if not state:
         return {}
+    # Sequential failures must retain the unsent queue and paid recovery data.
+    # Only an explicit Clear may discard them.
+    if state.get("sequential_token_limit"):
+        return state
     # Fetched results are still recoverable; never auto-delete them here.
     if state.get("status") == "fetched" or state.get("batch_ids"):
         return state
@@ -795,12 +806,14 @@ def _discard_stale_active_locks() -> tuple[dict, dict]:
     return state, queue
 
 
-def _assert_recovery_target_unlocked(entries: list[dict]) -> None:
+def _assert_recovery_target_unlocked(entries: list[dict], *, for_download=False) -> None:
     """Block a history action from replacing an unrelated active recovery run."""
     _read_batch_file(BATCH_RESULTS_FILE, strict=True)
     # Canceled/errored active rows are not resumable and must not block recovery
     # of a different history entry after the GUI run has already stopped.
     state, queue = _discard_stale_active_locks()
+    if for_download and state.get("sequential_token_limit") and state.get("status") == "partially_submitted":
+        raise ValueError("More queued requests remain. Use Resume before downloading results.")
     if not state and not queue:
         return
 
@@ -831,6 +844,11 @@ def redownload_batch(batch_id: str) -> dict:
     if entry is None:
         raise ValueError(f"Unknown batch id (not in local history): {batch_id}")
     entries = _translation_group_entries(history, entry)
+    sequential = any(row.get("sequential_token_limit") for row in entries)
+    expected_keys = {key for row in entries for key in (row.get("custom_ids") or {}).values()}
+    expected_count = max(int(row.get("queued_request_count") or 0) for row in entries)
+    if sequential and len(expected_keys) != expected_count:
+        raise ValueError("More queued requests remain. Use Resume with the original durable queue.")
     for row in entries:
         if not dict(row.get("custom_ids") or {}):
             raise ValueError(
@@ -841,7 +859,7 @@ def redownload_batch(batch_id: str) -> dict:
     # the write transaction in case another process activated a run meanwhile.
     with BATCH_LOCK:
         with _batch_file_lock():
-            _assert_recovery_target_unlocked(entries)
+            _assert_recovery_target_unlocked(entries, for_download=True)
 
     resolved = []
     for row in entries:
@@ -853,6 +871,11 @@ def redownload_batch(batch_id: str) -> dict:
             raise ValueError(
                 f"Batch {row_id} is not ended (status={status_info['api_status']})"
             )
+        if sequential and (
+            status_info.get("terminal_failure")
+            or status_info.get("counts", {}).get("errored", 0)
+        ):
+            raise ValueError(f"Sequential batch {row_id} failed; consume/write blocked.")
         google_client = (
             _google_client_for_entry(row) if provider == "gemini" else None
         )
@@ -884,6 +907,9 @@ def redownload_batch(batch_id: str) -> dict:
         row_cost = _price_usage(row_usage, row_model, provider) if row_model else None
         fetched_parts.append((row_id, part, row_errors, row_usage, row_cost))
 
+    if sequential and (errored or set(results) != expected_keys):
+        raise ValueError("Sequential batch results are incomplete; consume/write blocked.")
+
     model = entry.get("model") or ""
     provider = entry.get("provider") or "anthropic"
     cost = _price_usage(usage, model, provider) if model else None
@@ -896,7 +922,7 @@ def redownload_batch(batch_id: str) -> dict:
 
     with T.BATCH_LOCK:
         with _batch_file_lock():
-            _assert_recovery_target_unlocked(entries)
+            _assert_recovery_target_unlocked(entries, for_download=True)
             _write_batch_file(BATCH_RESULTS_FILE, results)
             state_payload = {
                 "status": "fetched", "batch_ids": batch_ids, "batches": [],
@@ -959,7 +985,7 @@ def activate_for_resume(batch_id: str) -> str:
     """Ensure active files match a history entry for Translation-tab resume.
 
     Returns the batchRunState string to pass as batch_resume_state:
-    'submitted' | 'fetched'.
+    'partially_submitted' | 'submitted' | 'fetched'.
     """
     history = read_history()
     entry = _find_entry(history, batch_id)
@@ -969,6 +995,23 @@ def activate_for_resume(batch_id: str) -> str:
     status = entry.get("status")
     entries = _translation_group_entries(history, entry)
     target_ids = {str(row.get("id")) for row in entries if row.get("id")}
+
+    # An ended history row may be just the first sequential chunk. Preserve
+    # the complete active queue instead of relabeling it as fetched/submitted.
+    with BATCH_LOCK:
+        with _batch_file_lock():
+            active_state = _read_batch_file(BATCH_STATE_FILE, strict=True)
+            if (
+                active_state.get("batches")
+                and _active_batch_ids(active_state).issubset(target_ids)
+                and active_state.get("sequential_token_limit")
+            ):
+                return active_state["status"]
+    if any(row.get("sequential_token_limit") for row in entries):
+        submitted_count = len({key for row in entries for key in (row.get("custom_ids") or {}).values()})
+        expected_count = max(int(row.get("queued_request_count") or 0) for row in entries)
+        if submitted_count != expected_count:
+            raise ValueError("This partial sequential run needs its original durable queue to Resume.")
 
     if status in (STATUS_FETCHED, STATUS_ENDED, STATUS_CONSUMED):
         # Reuse results only when the active state explicitly proves ownership.
@@ -1022,6 +1065,9 @@ def activate_for_resume(batch_id: str) -> str:
                     "file_set": entry.get("file_set") or [],
                     "cost_estimate": entry.get("cost_estimate"),
                 }
+                if entry.get("sequential_token_limit"):
+                    state["sequential_token_limit"] = entry["sequential_token_limit"]
+                    state["queued_request_count"] = entry["queued_request_count"]
                 runtime_profile = entry.get("runtime_profile")
                 if runtime_profile is None:
                     runtime_profile = next(

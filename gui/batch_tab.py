@@ -497,8 +497,9 @@ class BatchTab(QWidget):
             )
         elif resume_state == "partially_submitted":
             resume_text = (
-                "Resume submitting the remaining split requests?\n\n"
-                "Already-submitted parts are kept. Additional provider charges may apply."
+                "Resume the durable partial queue?\n\n"
+                "Sequential OpenAI runs poll the paid chunk first and submit the next "
+                "chunk after success. Later chunks incur provider charges."
             )
         else:
             resume_text = (

@@ -97,20 +97,55 @@ class TranslationWorkerTests(unittest.TestCase):
         with (
             mock.patch(
                 "util.translation._read_batch_file",
-                return_value={"status": "submitted", "batches": [{"id": "batch-failed"}]},
+                return_value={"status": "partially_submitted", "sequential_token_limit": 100,
+                              "batches": [{"id": "batch-failed"}]},
             ),
             mock.patch(
                 "util.translation.checkTranslationBatchStatuses",
                 return_value=(True, statuses),
             ),
             mock.patch("util.translation.fetchTranslationBatches") as fetch,
+            mock.patch("util.translation.submitTranslationBatches") as submit,
+            mock.patch("util.translation._batch_file_lock"),
         ):
             result = worker._run_batch_poll_fetch()
 
         self.assertIs(result, False)
         fetch.assert_not_called()
+        submit.assert_not_called()
         self.assertEqual(phases[-1][0], "failed")
         self.assertIn("queue was preserved", phases[-1][1]["message"])
+
+    def test_sequential_resume_polls_before_advancing_and_fetches_only_at_end(self):
+        worker = TranslationWorker(Path.cwd(), ("JSON", (".json",), None))
+        state = {"status": "partially_submitted", "sequential_token_limit": 100,
+                 "batches": [{"id": "paid-first"}]}
+        actions = []
+
+        def poll(**_kwargs):
+            actions.append("poll")
+            return True, [{"id": state["batches"][-1]["id"], "terminal_failure": False}]
+
+        def submit(**_kwargs):
+            self.assertEqual(actions, ["poll"])
+            actions.append("submit")
+            state["status"] = "submitted"
+            state["batches"].append({"id": "paid-last"})
+            return ["paid-first", "paid-last"]
+
+        def fetch():
+            actions.append("fetch")
+            return 3, 0
+
+        with (
+            mock.patch("util.translation._read_batch_file", side_effect=lambda *_: state),
+            mock.patch("util.translation.checkTranslationBatchStatuses", side_effect=poll),
+            mock.patch("util.translation.submitTranslationBatches", side_effect=submit),
+            mock.patch("util.translation.fetchTranslationBatches", side_effect=fetch),
+            mock.patch("util.translation._batch_file_lock"),
+        ):
+            self.assertEqual(worker._run_batch_poll_fetch(), (3, 0))
+        self.assertEqual(actions, ["poll", "submit", "poll", "fetch"])
 
     def test_partial_file_failure_is_an_aggregate_failure(self) -> None:
         worker = TranslationWorker(Path.cwd(), ("JSON", (".json",), None))

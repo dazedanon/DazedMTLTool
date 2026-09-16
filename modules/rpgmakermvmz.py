@@ -92,6 +92,7 @@ _VAR_ACTOR_RE = re.compile(r"\\n\[(\d+)\]", re.IGNORECASE)
 # Game-variable nameplates (\v[X]) often mirror an actor name via code-122 script.
 _VAR_GAME_RE = re.compile(r"\\v\[(\d+)\]", re.IGNORECASE)
 _VAR_ACTOR_MAP_CACHE: dict | None = None
+_AUTONAMEPOPUP_CACHE: tuple[str, dict] | None = None
 _ACTOR_NAME_SCRIPT_RE = re.compile(
     r"\$gameActors\.actor\s*\(\s*(\d+)\s*\)\.name\s*\(\s*\)",
     re.IGNORECASE,
@@ -208,6 +209,8 @@ FIRSTLINESPEAKERS = False
 INLINE401SPEAKERS = False
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
+# Exact AutoNamePopup face/index context and protected runtime actor names.
+AUTONAMEPOPUP101 = False
 # Face name -> speaker mapping for FACENAME101.
 # Matching: if face string contains "_talk", split on it and look up the prefix;
 # otherwise try startswith against each key (longest key first).
@@ -855,7 +858,7 @@ def _capture_event_parameter_sources(code_list) -> list[tuple[dict, list]]:
         supported.add(108)
     if CODE111:
         supported.add(111)
-    if CODE320:
+    if CODE320 or AUTONAMEPOPUP101:
         supported.add(320)
     if CODE324:
         supported.add(324)
@@ -1343,6 +1346,50 @@ def _101_has_face_graphic(cmd) -> bool:
         and isinstance(params[0], str)
         and bool(params[0].strip())
     )
+
+
+def _get_autonamepopup_map() -> dict:
+    """Cache only declarations from the selected game's enabled plugin."""
+    global _AUTONAMEPOPUP_CACHE
+    if not AUTONAMEPOPUP101:
+        return {}
+    root = os.getenv("DAZED_GAME_ROOT", "").strip()
+    identity = str(Path(root or ".").resolve())
+    with _ACTOR_MAP_CACHE_LOCK:
+        if _AUTONAMEPOPUP_CACHE is None or _AUTONAMEPOPUP_CACHE[0] != identity:
+            from util.rpgmaker_autonamepopup import load_name_keys
+
+            try:
+                mapping = load_name_keys(root)
+            except (OSError, ValueError, TypeError) as exc:
+                print(f"[AutoNamePopup] Cannot read nameKeys; face inference skipped: {exc}")
+                mapping = {}
+            _AUTONAMEPOPUP_CACHE = (identity, mapping)
+        return _AUTONAMEPOPUP_CACHE[1]
+
+
+def _autonamepopup101_speaker(cmd) -> str | None:
+    params = cmd.get("parameters") or []
+    # Any explicit name, including a control-only name, wins over the mapping.
+    if len(params) < 4 or (len(params) > 4 and str(params[4] or "").strip()):
+        return None
+    if not isinstance(params[0], str) or not isinstance(params[1], int):
+        return None
+    name = _get_autonamepopup_map().get((params[0], params[1]))
+    if not name:
+        return None
+    return _resolve_code_speaker_name(name) or name
+
+
+def _autonamepopup_actor_ids() -> set[int]:
+    ids = set()
+    for name in _get_autonamepopup_map().values():
+        ids.update(int(match) for match in _VAR_ACTOR_RE.findall(name))
+        for variable in _VAR_GAME_RE.findall(name):
+            actor = _get_var_actor_map().get(int(variable))
+            if actor is not None:
+                ids.add(actor)
+    return ids
 
 
 def _entry_orig(entry) -> dict:
@@ -3895,12 +3942,25 @@ def searchCodes(page, pbar, jobList, filename):
             if (
                 "code" in codeList[i]
                 and codeList[i]["code"] == 101
-                and (CODE101 or SPEAKER_PARSE_MODE)
+                and (CODE101 or AUTONAMEPOPUP101 or SPEAKER_PARSE_MODE)
             ):
                 isVar = False
 
-                # Check for face name mappings first (before other processing)
-                if FACENAME101:
+                # Exact plugin mappings take precedence over filename guesses.
+                if AUTONAMEPOPUP101:
+                    speaker = ""
+                    matchedSpeaker = _autonamepopup101_speaker(codeList[i])
+                    if matchedSpeaker is not None:
+                        response = getSpeaker(matchedSpeaker)
+                        speaker = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+                        i += 1
+                        continue
+                    if not (CODE101 or SPEAKER_PARSE_MODE):
+                        i += 1
+                        continue
+                elif FACENAME101:
                     matchedSpeaker = _facename101_speaker(codeList[i])
                     if matchedSpeaker is not None:
                         speaker = matchedSpeaker
@@ -4899,9 +4959,15 @@ def searchCodes(page, pbar, jobList, filename):
                     # Set Data
                     codeList[i]["parameters"][j] = jaString
 
-            ### Event Code: 320 Set Variable
-            if "code" in codeList[i] and codeList[i]["code"] == 320 and CODE320 is True:
-                jaString = codeList[i]["parameters"][1]
+            ### Event Code: 320 Change Actor Name
+            if codeList[i].get("code") == 320 and (AUTONAMEPOPUP101 or CODE320):
+                params = codeList[i].get("parameters") or []
+                if len(params) < 2 or (
+                    AUTONAMEPOPUP101 and params[0] not in _autonamepopup_actor_ids()
+                ):
+                    i += 1
+                    continue
+                jaString = _param_source(codeList[i], 1) if AUTONAMEPOPUP101 else params[1]
                 if not isinstance(jaString, str):
                     i += 1
                     continue
@@ -4912,7 +4978,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not _has_japanese_text(jaString):
+                if not _text_needs_translation(_param_current(codeList[i], 1)):
                     i += 1
                     continue
 
@@ -5951,7 +6017,10 @@ def _parse_actors_json_entries(data) -> tuple[dict[int, str], set[int]]:
         aid = entry.get("id")
         if aid is None:
             continue
-        name = (entry.get("name") or "").strip()
+        name = (
+            _entry_field_source(entry, "name") if AUTONAMEPOPUP101
+            else (entry.get("name") or "")
+        ).strip()
         if name:
             named[int(aid)] = name
         else:
@@ -5965,7 +6034,10 @@ def _get_actor_map() -> dict:
     with _ACTOR_MAP_CACHE_LOCK:
         if _ACTOR_MAP_CACHE is not None:
             return _ACTOR_MAP_CACHE
-        for candidate in (Path("translated/Actors.json"), Path("files/Actors.json")):
+        candidates = (Path("files/Actors.json"), Path("translated/Actors.json"))
+        if not AUTONAMEPOPUP101:
+            candidates = tuple(reversed(candidates))
+        for candidate in candidates:
             if candidate.is_file():
                 try:
                     data = json.loads(candidate.read_text(encoding="utf-8-sig"))
@@ -6151,7 +6223,7 @@ def _substitute_actor_names(
     exact display name back to the original control code for post-AI restore.
     Blank Actors.json slots use :func:`_actor_name_for_translation` fallbacks.
     """
-    if not isinstance(text, str):
+    if AUTONAMEPOPUP101 or not isinstance(text, str):
         return text, {}
 
     var_actor_map = var_actor_map or {}
@@ -6246,11 +6318,13 @@ def _restore_actor_names(text: str, reverse_map: dict[str, str]) -> str:
 def resetActorMapCache():
     """Invalidate the cached actor and variable-actor maps so they reload on next use."""
     global _ACTOR_MAP_CACHE, _VAR_ACTOR_MAP_CACHE, _EMPTY_ACTOR_NAME_CACHE, _EMPTY_ACTOR_IDS_CACHE
+    global _AUTONAMEPOPUP_CACHE
     with _ACTOR_MAP_CACHE_LOCK:
         _ACTOR_MAP_CACHE = None
         _VAR_ACTOR_MAP_CACHE = None
         _EMPTY_ACTOR_IDS_CACHE = None
         _EMPTY_ACTOR_NAME_CACHE = {}
+        _AUTONAMEPOPUP_CACHE = None
 
 
 def translateAI(text, history, history_ctx=None):
@@ -6303,8 +6377,10 @@ def translateAI(text, history, history_ctx=None):
     # assignments (e.g. Ristaria \v[007] -> actor 1). Blank actor slots use a
     # real given-name fallback (Alex, …) so custom/player names are not left as
     # opaque __PROTECTED__ tokens.
-    actor_map = _get_actor_map()
-    var_actor_map = _get_var_actor_map()
+    # In AutoNamePopup mode shared protection owns runtime references end to
+    # end; translating a temporary actor label cannot reliably restore them.
+    actor_map = {} if AUTONAMEPOPUP101 else _get_actor_map()
+    var_actor_map = {} if AUTONAMEPOPUP101 else _get_var_actor_map()
     reverse: dict[str, str] = {}  # actor_name -> "\\n[X]" / "\\v[X]"
 
     if isinstance(text, list):
@@ -6349,6 +6425,7 @@ def resetSpeakerState():
     global NAMESLIST, SPEAKER_COLLECTED
     NAMESLIST = []
     SPEAKER_COLLECTED = []
+    resetActorMapCache()
     with _speakerCacheLock:
         _speakerCache.clear()
 

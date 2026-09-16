@@ -122,6 +122,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             self.workflow.spk_inline_cb,
             self.workflow.spk_firstline_cb,
             self.workflow.spk_face_cb,
+            self.workflow.spk_autonamepopup_cb,
         ):
             self.harness.clear_actions()
             checkbox.click()
@@ -441,6 +442,7 @@ class WorkflowHandlerContractTests(unittest.TestCase):
             (self.workflow.spk_inline_cb, True),
             (self.workflow.spk_firstline_cb, False),
             (self.workflow.spk_face_cb, True),
+            (self.workflow.spk_autonamepopup_cb, True),
         )
         for checkbox, checked in states:
             checkbox.blockSignals(True)
@@ -453,8 +455,32 @@ class WorkflowHandlerContractTests(unittest.TestCase):
                 "INLINE401SPEAKERS": True,
                 "FIRSTLINESPEAKERS": False,
                 "FACENAME101": True,
+                "AUTONAMEPOPUP101": True,
             }
         )
+
+        # The same option on Configuration must auto-save, including after a
+        # silent refresh reconnects signals. Reading settings must not write.
+        from gui.rpgmaker_tab import RPGMakerTab
+
+        config.read_current_config.return_value = {"AUTONAMEPOPUP101": False, "CODE401": True}
+        config.update_rpgmaker_config.reset_mock()
+        with patch("gui.rpgmaker_tab.ConfigIntegration", return_value=config):
+            settings = RPGMakerTab()
+        try:
+            config.update_rpgmaker_config.assert_not_called()
+            settings.autonamepopup101_cb.click()
+            self.assertTrue(config.update_rpgmaker_config.call_args.args[0]["AUTONAMEPOPUP101"])
+            config.update_rpgmaker_config.reset_mock()
+            settings.refresh_from_module()
+            config.update_rpgmaker_config.assert_not_called()
+            self.assertFalse(settings.autonamepopup101_cb.isChecked())
+            settings.autonamepopup101_cb.click()
+            config.update_rpgmaker_config.assert_called_once()
+            self.assertTrue(settings.get_config()["AUTONAMEPOPUP101"])
+        finally:
+            settings.close()
+            settings.deleteLater()
 
         editors = self.workflow.setup_editors
         game = self.harness.root / "SetupGame"

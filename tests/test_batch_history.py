@@ -89,15 +89,6 @@ class BatchRunStateTests(BatchHistoryTestBase):
 
         require_result.assert_called_once()
 
-    def test_queued_when_only_queue(self):
-        T._write_batch_file(T.BATCH_QUEUE_FILE, {"k1": {"payload": "x", "language": "English", "params": {}}})
-        self.assertEqual(T.batchRunState(), "queued")
-
-        T.clearBatchFiles(strict=True)
-
-        self.assertIsNone(T.batchRunState())
-        self.assertFalse(T.BATCH_QUEUE_FILE.exists())
-
     def test_corrupt_state_blocks_resume_and_submission(self):
         T._write_batch_file(
             T.BATCH_QUEUE_FILE,
@@ -200,6 +191,8 @@ class BatchRunStateTests(BatchHistoryTestBase):
 
     def test_persisted_artifacts_report_the_batch_phase(self):
         cases = (
+            ("queue only", T.BATCH_QUEUE_FILE,
+             {"k1": {"payload": "x", "language": "English", "params": {}}}, "queued"),
             (
                 "submitted state",
                 T.BATCH_STATE_FILE,
@@ -228,47 +221,30 @@ class BatchRunStateTests(BatchHistoryTestBase):
                 T.clearBatchFiles(strict=True)
                 T._write_batch_file(path, payload)
                 self.assertEqual(T.batchRunState(), expected)
+                T.clearBatchFiles(strict=True)
+                self.assertIsNone(T.batchRunState())
+                self.assertFalse(path.exists())
 
-    def test_queued_glossary_context_change_is_ignored_for_v5(self):
-        """Glossary harvests must not invalidate an unsubmitted v5 queue."""
-        payload = '{"Line1": "カイン"}'
-        old_vocab = "# Game Characters\nカイン (Kain)\n"
-        old_context = T.buildMatchedVocabText(
-            T.parseVocabWithCategories(old_vocab), payload
-        )
-        T.queue_batch_request(
-            payload,
-            "English",
-            {},
-            cache_context=old_context,
-        )
-        T.flush_batch_queue()
-
-        stale, total = T.batchQueueStaleContextCount(
-            "# Game Characters\nカイン (Cain)\n"
-        )
-
-        self.assertEqual((stale, total), (0, 1))
-
-    def test_queued_unrelated_glossary_change_stays_current(self):
-        payload = '{"Line1": "カイン"}'
-        original_vocab = "# Game Characters\nカイン (Cain)\n"
-        context = T.buildMatchedVocabText(
-            T.parseVocabWithCategories(original_vocab), payload
-        )
-        T.queue_batch_request(
-            payload,
-            "English",
-            {},
-            cache_context=context,
-        )
-        T.flush_batch_queue()
-
-        stale, total = T.batchQueueStaleContextCount(
-            original_vocab + "アベル (Abel)\n"
-        )
-
-        self.assertEqual((stale, total), (0, 1))
+    def test_v5_queue_stays_current_after_glossary_and_sfx_changes(self):
+        original_vocab = "# Game Characters\nカイン (Kain)\n"
+        for label, source, updated_vocab, use_sfx in (
+            ("name spelling", "カイン", "# Game Characters\nカイン (Cain)\n", True),
+            ("unrelated name", "カイン", original_vocab + "アベル (Abel)\n", True),
+            ("SFX disabled", "ドキドキ", "", False),
+        ):
+            with self.subTest(label=label):
+                T.clearBatchFiles(strict=True)
+                payload = json.dumps({"Line1": source}, ensure_ascii=False)
+                config = T.TranslationConfig(
+                    model="test", prompt="Translate English.", vocab=original_vocab,
+                    useSfxReference=True,
+                )
+                _system, glossary, sfx, _user = T.createContextParts(config, payload, "json")
+                T.queue_batch_request(payload, "English", {}, cache_context=glossary + sfx)
+                T.flush_batch_queue()
+                self.assertEqual(
+                    T.batchQueueStaleContextCount(updated_vocab, use_sfx_reference=use_sfx), (0, 1)
+                )
 
     def test_same_payload_with_different_history_queues_twice(self):
         payload = '{"Line1": "そうです"}'
@@ -342,18 +318,12 @@ class BatchRunStateTests(BatchHistoryTestBase):
             entry["cache_key_version"] = version
         return {key: entry}
 
-    def test_old_queue_versions_are_stale_before_submission(self):
-        for version in (None, 2, 3):
-            with self.subTest(version=version):
-                T.clearBatchFiles(strict=True)
-                T._write_batch_file(T.BATCH_QUEUE_FILE, self._old_queue(version))
-                self.assertEqual(T.batchQueueStaleContextCount(""), (1, 1))
-
     def test_old_queue_versions_are_blocked_at_paid_boundary(self):
         for version in (None, 2, 3):
             with self.subTest(version=version):
                 T.clearBatchFiles(strict=True)
                 T._write_batch_file(T.BATCH_QUEUE_FILE, self._old_queue(version))
+                self.assertEqual(T.batchQueueStaleContextCount(""), (1, 1))
                 with mock.patch("util.batch_providers.submit_batch") as submit:
                     with self.assertRaisesRegex(ValueError, "predates combined"):
                         T.submitTranslationBatches()
@@ -390,30 +360,6 @@ class BatchRunStateTests(BatchHistoryTestBase):
         self.assertIsNone(T.take_batch_result(
             payload, "English", "", request_context=["She disagreed."],
         ))
-
-    def test_queued_sfx_context_is_ignored_for_v5(self):
-        """SFX reference toggles must not invalidate an unsubmitted v5 queue."""
-        payload = '{"Line1": "ドキドキ"}'
-        config = T.TranslationConfig(
-            model="test", prompt="Translate English.", vocab="",
-            useSfxReference=True,
-        )
-        _system, glossary, sfx, _user = T.createContextParts(
-            config, payload, "json"
-        )
-        T.queue_batch_request(
-            payload,
-            "English",
-            {},
-            cache_context=glossary + sfx,
-        )
-        T.flush_batch_queue()
-
-        stale, total = T.batchQueueStaleContextCount(
-            "", use_sfx_reference=False
-        )
-
-        self.assertEqual((stale, total), (0, 1))
 
     def test_fetched_result_requires_same_glossary_context(self):
         payload = '{"Line1": "カイン"}'
@@ -566,6 +512,7 @@ class BatchRunStateTests(BatchHistoryTestBase):
 
 class HistorySurvivalTests(BatchHistoryTestBase):
     def test_history_survives_fetch_marker_and_clear(self):
+        BH.upsert_history_entry("msgbatch_keep", status=BH.STATUS_SUBMITTED, custom_ids={"a": "b"})
         custom_ids = {"req-000000": "cachekey1", "req-000001": "cachekey2"}
         BH.record_submit(
             [{"id": "msgbatch_abc", "custom_ids": custom_ids}],
@@ -587,17 +534,14 @@ class HistorySurvivalTests(BatchHistoryTestBase):
         self.assertFalse(T.BATCH_STATE_FILE.exists())
         # …but history retains custom_ids and is marked consumed.
         history = BH.read_history()
-        entry = history["batches"][0]
+        entry = next(row for row in history["batches"] if row["id"] == "msgbatch_abc")
         self.assertEqual(entry["id"], "msgbatch_abc")
         self.assertEqual(entry["custom_ids"], custom_ids)
         self.assertEqual(entry["status"], BH.STATUS_CONSUMED)
         self.assertEqual(entry["file_set"], ["Map001.json"])
-
-    def test_clear_does_not_wipe_history_file(self):
-        BH.upsert_history_entry("msgbatch_keep", status=BH.STATUS_SUBMITTED, custom_ids={"a": "b"})
-        T.clearBatchFiles()
         self.assertTrue(BH.BATCH_HISTORY_FILE.exists())
-        self.assertEqual(len(BH.read_history()["batches"]), 1)
+        kept = next(row for row in history["batches"] if row["id"] == "msgbatch_keep")
+        self.assertEqual(kept["status"], BH.STATUS_SUBMITTED)
 
     def test_corrupt_history_is_not_replaced_by_upsert(self):
         BH.BATCH_HISTORY_FILE.write_text("{truncated", encoding="utf-8")
@@ -743,6 +687,187 @@ class HistorySurvivalTests(BatchHistoryTestBase):
 
 
 class ProviderSubmissionTests(BatchHistoryTestBase):
+    def _queue_small_requests(self, count=5, provider="openai"):
+        for index in range(count):
+            payload = json.dumps({"Line1": f"文章{index}"})
+            T.queue_batch_request(
+                payload, "English",
+                {"model": "gpt-test", "messages": [{"role": "user", "content": payload}]},
+                provider=provider,
+            )
+        T.flush_batch_queue()
+
+    def test_input_cap_counts_system_history_payload_and_schema(self):
+        params = {"model": "gpt-test", "messages": [{"role": "user", "content": "短文"}]}
+        baseline = T._estimate_openai_batch_input_tokens(params)
+        for label, extra in (
+            ("system", {"messages": [{"role": "system", "content": "instructions " * 100}] + params["messages"]}),
+            ("history", {"messages": [{"role": "user", "content": "previous dialogue " * 100}] + params["messages"]}),
+            ("schema", {"response_format": {"type": "json_schema", "json_schema": {"schema": T.createTranslationSchema(50)}}}),
+        ):
+            with self.subTest(label=label):
+                self.assertGreater(T._estimate_openai_batch_input_tokens(dict(params, **extra)), baseline + 50)
+
+    def test_token_cap_only_splits_native_openai_above_limit(self):
+        for provider, endpoint, cap, expected_size in (
+            ("openai", "https://api.openai.com/v1", "1000", 5),
+            ("openai", "https://api.openai.com/v1", "65", 2),
+            ("openai", "https://api.openai.com/v1", "20", 0),
+            ("openai", "https://compatible.example/v1", "65", 5),
+            ("gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "65", 5),
+            ("anthropic", "https://api.anthropic.com", "65", 5),
+        ):
+            with self.subTest(provider=provider, endpoint=endpoint, cap=cap):
+                T.clearBatchFiles(strict=True)
+                self._queue_small_requests(provider=provider)
+                with (
+                    mock.patch.dict("os.environ", {"api": endpoint, "openaiBatchTokenLimit": cap}),
+                    mock.patch.object(T, "_estimate_openai_batch_input_tokens", return_value=30),
+                    mock.patch.object(T, "_get_anthropic_client", return_value=object()),
+                    mock.patch.object(BH, "active_key_name_for_environment", return_value="test-key"),
+                    mock.patch.object(BP, "submit_batch", return_value={"id": "batch-policy"}) as submit,
+                ):
+                    if expected_size == 0:
+                        with self.assertRaisesRegex(ValueError, "above the sequential OpenAI cap"):
+                            T.submitTranslationBatches()
+                        submit.assert_not_called()
+                        continue
+                    T.submitTranslationBatches()
+                submit.assert_called_once()
+                self.assertEqual(len(submit.call_args.args[1]), expected_size)
+                state = T.batchRunMetadata()
+                self.assertEqual(state["status"], "partially_submitted" if expected_size < 5 else "submitted")
+                self.assertEqual(len(T._read_batch_queue(strict=True)), 5)
+
+    def test_sequential_resume_polls_paid_chunk_then_merges_all_once(self):
+        self._queue_small_requests()
+        submitted_requests, provider_states = [], {}
+        finish_active = False
+
+        def submit(_provider, requests, **_kwargs):
+            # A new create is only allowed after every earlier job is durable
+            # and successful. No queue item may be paid for twice.
+            state = T.batchRunMetadata()
+            self.assertEqual(len(state.get("batches", [])), len(submitted_requests))
+            self.assertTrue(all(value == "completed" for value in provider_states.values()))
+            already_paid = {req["custom_id"] for chunk in submitted_requests for req in chunk}
+            self.assertFalse(already_paid.intersection(req["custom_id"] for req in requests))
+            submitted_requests.append(requests)
+            batch_id = f"seq-{len(submitted_requests)}"
+            provider_states[batch_id] = "in_progress"
+            return {"id": batch_id}
+
+        def retrieve(_provider, batch_id, **_kwargs):
+            if finish_active:
+                provider_states[batch_id] = "completed"
+            status = provider_states[batch_id]
+            return {"api_status": status, "ended": status == "completed", "counts": {}, "terminal_failure": False}
+
+        def download(_batch_id, custom_ids, **_kwargs):
+            return ({key: {"text": json.dumps({"Line1": cid})} for cid, key in custom_ids.items()}, [], {})
+
+        with (
+            mock.patch.dict("os.environ", {"api": "https://api.openai.com/v1", "openaiBatchTokenLimit": "65"}),
+            mock.patch.object(T, "_estimate_openai_batch_input_tokens", return_value=30),
+            mock.patch.object(BH, "active_key_name_for_environment", return_value="test-key"),
+            mock.patch.object(BH, "client_for_batch", return_value=object()),
+            mock.patch.object(BP, "submit_batch", side_effect=submit) as paid,
+            mock.patch.object(BP, "retrieve_batch", side_effect=retrieve),
+            mock.patch.object(BH, "download_batch_results", side_effect=download) as fetch,
+            mock.patch.object(BH, "_price_usage", return_value=0),
+        ):
+            self.assertEqual(T.submitTranslationBatches(), ["seq-1"])
+            checkpoint = T.BATCH_STATE_FILE.read_bytes()
+            self.assertEqual(T.batchRunState(), "partially_submitted")
+            for history_status in (BH.STATUS_SUBMITTED, BH.STATUS_ENDED):
+                BH.upsert_history_entry("seq-1", status=history_status)
+                self.assertEqual(BH.activate_for_resume("seq-1"), "partially_submitted")
+                self.assertEqual(T.BATCH_STATE_FILE.read_bytes(), checkpoint)
+                with self.assertRaisesRegex(ValueError, "More queued requests remain"):
+                    BH.redownload_batch("seq-1")
+            with self.assertRaisesRegex(RuntimeError, "More queued requests remain"):
+                T.fetchTranslationBatches()
+            fetch.assert_not_called()
+            # Simulate restart: only durable files remain; changing the setting
+            # must not change the cap recorded for the already-paid run.
+            T._batch_queue_pending = {}
+            with mock.patch.dict("os.environ", {"openaiBatchTokenLimit": "1"}):
+                self.assertEqual(T.submitTranslationBatches(), ["seq-1"])
+            self.assertEqual(T.BATCH_STATE_FILE.read_bytes(), checkpoint)
+            self.assertEqual(paid.call_count, 1)
+            finish_active = True
+            self.assertEqual(T.runTranslationBatches(poll=0), (5, 0))
+            self.assertEqual([len(chunk) for chunk in submitted_requests], [2, 2, 1])
+            self.assertEqual(fetch.call_count, 3)
+            self.assertEqual(T.batchRunState(), "fetched")
+            self.assertEqual(len(T._read_batch_file(T.BATCH_RESULTS_FILE)), 5)
+            self.assertEqual(T._read_batch_queue(strict=True), {})
+            self.assertEqual(T.fetchTranslationBatches(), (0, 0))
+            self.assertEqual(fetch.call_count, 3)
+
+    def test_sequential_provider_failure_blocks_later_payments_and_fetch(self):
+        for status, counts in (("failed", {}), ("expired", {}), ("cancelled", {}),
+                               ("completed", {"errored": 1})):
+            with (
+                self.subTest(status=status),
+                mock.patch.dict("os.environ", {"api": "https://api.openai.com/v1", "openaiBatchTokenLimit": "65"}),
+                mock.patch.object(T, "_estimate_openai_batch_input_tokens", return_value=30),
+                mock.patch.object(BH, "active_key_name_for_environment", return_value="test-key"),
+                mock.patch.object(BH, "client_for_batch", return_value=object()),
+                mock.patch.object(BP, "submit_batch", return_value={"id": "seq-failed"}) as submit,
+                mock.patch.object(BP, "retrieve_batch", return_value={
+                    "api_status": status, "ended": True, "counts": counts,
+                    "terminal_failure": status != "completed",
+                }),
+                mock.patch.object(BH, "download_batch_results") as fetch,
+            ):
+                T.clearBatchFiles(strict=True)
+                self._queue_small_requests()
+                T.submitTranslationBatches()
+                queue = T.BATCH_QUEUE_FILE.read_bytes()
+                with self.assertRaisesRegex(RuntimeError, "Provider batch failed"):
+                    T.submitTranslationBatches()
+                with self.assertRaisesRegex(RuntimeError, "consume was blocked"):
+                    T.runTranslationBatches(poll=0)
+                with self.assertRaisesRegex(RuntimeError, "More queued requests remain"):
+                    T.fetchTranslationBatches()
+                self.assertEqual(BH.activate_for_resume("seq-failed"), "partially_submitted")
+                self.assertEqual(BH._discard_stale_canceled_active_state(T.batchRunMetadata()), T.batchRunMetadata())
+                submit.assert_called_once()
+                fetch.assert_not_called()
+                self.assertEqual(T.BATCH_QUEUE_FILE.read_bytes(), queue)
+                self.assertFalse(T.BATCH_RESULTS_FILE.exists())
+
+    def test_sequential_fetch_keeps_queue_when_completed_output_is_missing(self):
+        self._queue_small_requests(count=3)
+        with (
+            mock.patch.dict("os.environ", {"api": "https://api.openai.com/v1", "openaiBatchTokenLimit": "65"}),
+            mock.patch.object(T, "_estimate_openai_batch_input_tokens", return_value=30),
+            mock.patch.object(BH, "active_key_name_for_environment", return_value="test-key"),
+            mock.patch.object(BH, "client_for_batch", return_value=object()),
+            mock.patch.object(BP, "submit_batch", side_effect=[{"id": "seq-1"}, {"id": "seq-2"}]),
+            mock.patch.object(BP, "retrieve_batch", return_value={
+                "api_status": "completed", "ended": True, "counts": {}, "terminal_failure": False,
+            }),
+            mock.patch.object(BH, "download_batch_results", return_value=({}, [], {})),
+        ):
+            T.submitTranslationBatches()
+            T.submitTranslationBatches()
+            self.assertEqual(T.batchRunState(), "submitted")
+            with self.assertRaisesRegex(RuntimeError, "consume/write blocked"):
+                T.fetchTranslationBatches()
+            with (
+                mock.patch.object(BH, "_client_for_entry", return_value=object()),
+                mock.patch.object(BH, "provider_retrieve_batch", return_value={
+                    "api_status": "completed", "ended": True, "counts": {}, "terminal_failure": False,
+                }),
+                mock.patch.object(BH, "_price_usage", return_value=0),
+            ):
+                with self.assertRaisesRegex(ValueError, "consume/write blocked"):
+                    BH.redownload_batch("seq-1")
+        self.assertEqual(len(T._read_batch_queue(strict=True)), 3)
+        self.assertFalse(T.BATCH_RESULTS_FILE.exists())
+
     def test_submission_lock_rejects_a_second_paid_submitter(self):
         with T._batch_submit_lock():
             with self.assertRaisesRegex(RuntimeError, "already being submitted"):
@@ -1488,43 +1613,23 @@ class BatchEstimateTests(BatchHistoryTestBase):
 
 
 class ActivateResumeTests(BatchHistoryTestBase):
-    def test_activate_submitted_restores_state(self):
-        custom_ids = {"req-000000": "k"}
-        BH.upsert_history_entry(
-            "msgbatch_act",
-            status=BH.STATUS_SUBMITTED,
-            custom_ids=custom_ids,
-            model="claude-sonnet-4-5",
-            file_set=["a.json"],
-        )
-        state = BH.activate_for_resume("msgbatch_act")
-        self.assertEqual(state, "submitted")
-        disk = T._read_batch_file(T.BATCH_STATE_FILE)
-        self.assertEqual(disk["batches"][0]["id"], "msgbatch_act")
-        self.assertEqual(disk["batches"][0]["custom_ids"], custom_ids)
-
-    def test_activate_submitted_restores_all_splits_in_the_run(self):
-        for batch_id, cache_key in (
-            ("batch-split-1", "key-1"),
-            ("batch-split-2", "key-2"),
-        ):
-            BH.upsert_history_entry(
-                batch_id,
-                status=BH.STATUS_SUBMITTED,
-                provider="openai",
-                model="gpt-test",
-                run_id="translation-run-1",
-                custom_ids={f"req-{batch_id[-1]}": cache_key},
-            )
-
-        self.assertEqual(BH.activate_for_resume("batch-split-2"), "submitted")
-
-        state = T._read_batch_file(T.BATCH_STATE_FILE)
-        self.assertEqual(state["run_id"], "translation-run-1")
-        self.assertEqual(
-            {item["id"] for item in state["batches"]},
-            {"batch-split-1", "batch-split-2"},
-        )
+    def test_activate_submitted_restores_legacy_and_grouped_runs(self):
+        for provider, run_id, count in (("anthropic", None, 1), ("openai", "translation-run-1", 2)):
+            with self.subTest(provider=provider, count=count):
+                T.clearBatchFiles(strict=True)
+                expected = {}
+                for index in range(count):
+                    batch_id = f"{provider}-{index}"
+                    custom_ids = {f"req-{index}": f"key-{index}"}
+                    expected[batch_id] = custom_ids
+                    BH.upsert_history_entry(
+                        batch_id, status=BH.STATUS_SUBMITTED, provider=provider,
+                        model="gpt-test", run_id=run_id, custom_ids=custom_ids,
+                    )
+                self.assertEqual(BH.activate_for_resume(batch_id), "submitted")
+                state = T._read_batch_file(T.BATCH_STATE_FILE)
+                self.assertEqual(state.get("run_id"), run_id)
+                self.assertEqual({item["id"]: item["custom_ids"] for item in state["batches"]}, expected)
 
     def test_activate_submitted_does_not_merge_an_unrelated_active_run(self):
         BH.upsert_history_entry(

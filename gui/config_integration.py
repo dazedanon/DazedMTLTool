@@ -125,7 +125,7 @@ class ConfigIntegration:
                 
             # Find configuration lines used by the RPG Maker config UI.
             bool_pattern = (
-                r'^(FIRSTLINESPEAKERS|INLINE401SPEAKERS|FACENAME101|NAMES|'
+                r'^(FIRSTLINESPEAKERS|INLINE401SPEAKERS|FACENAME101|AUTONAMEPOPUP101|NAMES|'
                 r'BRFLAG|FIXTEXTWRAP|IGNORETLTEXT|PRESERVEORIGINAL|TLSYSTEMVARIABLES|'
                 r'TLSYSTEMSWITCHES|JOIN408|SPEAKERS408|CODE\d+)\s*=\s*(True|False)'
             )
@@ -250,6 +250,7 @@ class ConfigIntegration:
             "FIRSTLINESPEAKERS": False,
             "INLINE401SPEAKERS": False,
             "FACENAME101": False,
+            "AUTONAMEPOPUP101": False,
             "NAMES": False,
             "BRFLAG": False,
             "FIXTEXTWRAP": True,
@@ -284,6 +285,7 @@ class ConfigIntegration:
             "FIRSTLINESPEAKERS": "If 1st line of 401 is a speaker, set to True",
             "INLINE401SPEAKERS": "Detect speaker from Name\u300cdialogue\u300d inline format in 401 lines",
             "FACENAME101": "Find Speakers in 101 Codes based on Face Name",
+            "AUTONAMEPOPUP101": "Use AutoNamePopup's exact face + index mapping",
             "NAMES": "Output a list of all the character names found",
             "BRFLAG": "If the game uses <br> instead of newlines",
             "FIXTEXTWRAP": "Overwrites textwrap for better formatting",

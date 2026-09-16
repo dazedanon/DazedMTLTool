@@ -2718,6 +2718,38 @@ def estimateTranslationCosts(model=None):
     return estimate
 
 
+OPENAI_BATCH_SEQUENTIAL_ENQUEUED_TOKEN_LIMIT = 600_000
+
+
+def _estimate_openai_batch_input_tokens(params):
+    """Conservatively count the complete request, including context and schema.
+
+    Serialized request fields slightly overcount message framing. Add 5% and
+    32 tokens for tokenizer/framing differences; this is not an account quota.
+    """
+    from util.batch_providers import _openai_batch_body
+
+    # Match the existing queue estimator; do not download a model-specific
+    # tokenizer while resuming paid work (model aliases also change over time).
+    encoding = tiktoken.encoding_for_model("gpt-4")
+    body = json.dumps(
+        _openai_batch_body("openai", params), ensure_ascii=False, separators=(",", ":")
+    )
+    tokens = len(encoding.encode(body, disallowed_special=()))
+    return (tokens * 105 + 99) // 100 + 32
+
+
+def _openai_batch_token_limit():
+    value = os.getenv("openaiBatchTokenLimit", str(OPENAI_BATCH_SEQUENTIAL_ENQUEUED_TOKEN_LIMIT))
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        limit = 0
+    if limit <= 0:
+        raise ValueError("openaiBatchTokenLimit must be a positive input-token limit")
+    return limit
+
+
 def submitTranslationBatches(file_set=None, cost_estimate=None):
     """Submit queued requests to the configured provider's Batch API.
 
@@ -2755,7 +2787,7 @@ def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
         for batch in batches
         for key in (batch.get("custom_ids") or {}).values()
     }
-    requests, id_map, size = [], {}, 0
+    requests, id_map, size, input_tokens = [], {}, 0, 0
     models = set()
     providers = set()
     for entry in queue.values():
@@ -2829,6 +2861,41 @@ def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
         or str(previous_state.get("endpoint") or "").strip()
         or current_endpoint
     )
+    from urllib.parse import urlparse
+
+    native_openai = provider == "openai" and urlparse(submitted_endpoint).hostname == "api.openai.com"
+    token_costs = {}
+    sequential_limit = previous_state.get("sequential_token_limit", 0)
+    if native_openai:
+        limit = sequential_limit or _openai_batch_token_limit()
+        token_costs = {
+            key: _estimate_openai_batch_input_tokens(entry["params"])
+            for key, entry in queue.items()
+        }
+        for key, tokens in token_costs.items():
+            if key not in submitted_keys and tokens > limit:
+                raise ValueError(
+                    f"One OpenAI batch request needs approximately {tokens:,} input tokens, "
+                    f"above the sequential OpenAI cap of {limit:,}. Reduce the translation "
+                    "batch size/context and re-collect before submitting."
+                )
+        if sum(token_costs.values()) > limit:
+            sequential_limit = limit
+    if sequential_limit:
+        print(f"[BATCH] sequential OpenAI cap: {sequential_limit:,} estimated input tokens.", flush=True)
+        if batches:
+            # Resume must confirm the already-paid work succeeded before paying
+            # for anything else. The submission lock covers this check and create.
+            ended, statuses = checkTranslationBatchStatuses()
+            failures = failedTranslationBatchStatuses(statuses)
+            if failures:
+                raise RuntimeError(
+                    "Provider batch failed; queue preserved and later submissions blocked. "
+                    + formatTranslationBatchFailures(failures)
+                )
+            if not ended:
+                print("[BATCH] Current provider chunk is still active. Resume polling it first.", flush=True)
+                return [b["id"] for b in batches]
     if batches:
         from util.batch_history import client_for_batch
 
@@ -2860,6 +2927,9 @@ def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
                 len(batch.get("custom_ids") or {}) for batch in batches
             ),
         }
+        if sequential_limit:
+            state_doc["sequential_token_limit"] = sequential_limit
+            state_doc["queued_request_count"] = len(queue)
         if previous_state.get("runtime_profile") is not None:
             state_doc["runtime_profile"] = previous_state["runtime_profile"]
         _attach_glossary_freeze(state_doc, previous_state)
@@ -2882,7 +2952,7 @@ def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
             print(f"[BATCH] history record_submit failed: {exc}", flush=True)
 
     def _submit():
-        nonlocal requests, id_map, size
+        nonlocal requests, id_map, size, input_tokens
         if not requests:
             return
         submitted = submit_batch(provider, requests, client=client)
@@ -2895,12 +2965,16 @@ def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
             "endpoint": submitted_endpoint,
             "cache_key_version": BATCH_CACHE_KEY_VERSION,
         }
+        if sequential_limit:
+            info["estimated_input_tokens"] = input_tokens
         batches.append(info)
         submitted_keys.update(id_map.values())
         complete = len(submitted_keys) == len(queue)
         _checkpoint(info, complete=complete)
         print(f"[BATCH] submitted {info['id']} ({len(requests)} requests)", flush=True)
-        requests, id_map, size = [], {}, 0
+        if sequential_limit and not complete:
+            print("[BATCH] More queued requests remain. Resume will poll this chunk before submitting the next.", flush=True)
+        requests, id_map, size, input_tokens = [], {}, 0, 0
 
     for i, (key, entry) in enumerate(queue.items()):
         if key in submitted_keys:
@@ -2915,11 +2989,15 @@ def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
             )
         if requests and (
             len(requests) >= max_requests or size + request_size > max_bytes
+            or (sequential_limit and input_tokens + token_costs[key] > sequential_limit)
         ):
             _submit()
+            if sequential_limit:
+                return [b["id"] for b in batches]
         requests.append({"custom_id": custom_id, "params": params})
         id_map[custom_id] = key
         size += request_size
+        input_tokens += token_costs.get(key, 0)
     _submit()
 
     # A retry after the final provider job was checkpointed has no new work, but
@@ -2974,6 +3052,11 @@ def checkTranslationBatchStatuses(print_status=True):
         normalized = retrieve_batch(provider, bid, client=client)
         api_status = normalized["api_status"]
         counts = normalized["counts"]
+        if state.get("sequential_token_limit") and normalized["ended"] and counts.get("errored", 0):
+            normalized = dict(normalized, terminal_failure=True)
+            normalized["errors"] = list(normalized.get("errors") or []) + [{
+                "message": "Current provider chunk contains failed requests; later submissions blocked."
+            }]
         statuses.append({
             "id": bid,
             "provider": provider,
@@ -3064,6 +3147,17 @@ def fetchTranslationBatches(batches=None):
     global _batch_results
     with _batch_file_lock():
         state = _read_batch_file(BATCH_STATE_FILE)
+    if state.get("sequential_token_limit") and state.get("status") == "partially_submitted":
+        raise RuntimeError(
+            "More queued requests remain. Resume the durable batch queue before fetching or consuming results."
+        )
+    if state.get("sequential_token_limit"):
+        ended, statuses = checkTranslationBatchStatuses(print_status=False)
+        if not ended or failedTranslationBatchStatuses(statuses):
+            raise RuntimeError(
+                "All sequential provider chunks must succeed before fetch/consume. "
+                + formatTranslationBatchFailures(statuses)
+            )
     batch_list = batches if batches is not None else (state.get("batches") or [])
     if not batch_list:
         print("[BATCH] No submitted batches - nothing to fetch.", flush=True)
@@ -3132,6 +3226,17 @@ def fetchTranslationBatches(batches=None):
         for k, v in usage_part.items():
             usage_totals[k] = usage_totals.get(k, 0) + (v or 0)
         history_parts.append((bid, provider, part, err_part, usage_part))
+
+    if state.get("sequential_token_limit"):
+        expected = {
+            key for info in state.get("batches", [])
+            for key in (info.get("custom_ids") or {}).values()
+        }
+        if errored or set(results) != expected:
+            raise RuntimeError(
+                "Sequential batch results are incomplete or contain errors; "
+                "queue preserved and consume/write blocked."
+            )
 
     model = state.get("model") or os.getenv("model", "")
     aggregate_provider = state.get("provider") or (
@@ -3217,7 +3322,7 @@ def runTranslationBatches(poll=60):
     if not state.get("batches"):
         if not submitTranslationBatches():
             return 0, 0
-    print(f"[BATCH] polling every {poll}s (Ctrl-C is safe — resume later with fetchTranslationBatches)...", flush=True)
+    print(f"[BATCH] polling every {poll}s (Ctrl-C is safe — resume later with runTranslationBatches)...", flush=True)
     while True:
         ended, statuses = checkTranslationBatchStatuses(print_status=True)
         if ended:
@@ -3228,6 +3333,11 @@ def runTranslationBatches(poll=60):
                     "Provider batch failed; the local queue was preserved and "
                     f"consume was blocked. {detail}"
                 )
+            current = batchRunMetadata()
+            if current.get("sequential_token_limit") and current.get("status") == "partially_submitted":
+                print("[BATCH] Current provider chunk completed. Submitting the next queued chunk...", flush=True)
+                submitTranslationBatches()
+                continue
             break
         time.sleep(poll)
     return fetchTranslationBatches()

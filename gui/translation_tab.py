@@ -709,7 +709,9 @@ class TranslationWorker(QThread):
 
         with _batch_file_lock():
             state = _read_batch_file(BATCH_STATE_FILE)
-        if not state.get("batches") or state.get("status") == "partially_submitted":
+        if not state.get("batches") or (
+            state.get("status") == "partially_submitted" and not state.get("sequential_token_limit")
+        ):
             est = self._batch_pending_estimate
             file_set = list(self.selected_files or [])
             if not self._emit_batch_output(
@@ -751,6 +753,16 @@ class TranslationWorker(QThread):
                     self.emit_log(f"❌ [BATCH] {message}")
                     self._emit_batch_phase("failed", {"message": message})
                     return False
+                with _batch_file_lock():
+                    state = _read_batch_file(BATCH_STATE_FILE)
+                if state.get("status") == "partially_submitted":
+                    if self.should_stop:
+                        return None
+                    self.emit_log(
+                        "[BATCH] Current provider chunk completed. Submitting the next queued chunk..."
+                    )
+                    self._emit_batch_output(submitTranslationBatches)
+                    continue
                 break
             for _ in range(poll * 10):
                 if self.should_stop:
@@ -4831,8 +4843,9 @@ class TranslationTab(QWidget):
                         )
                     elif batch_resume_state == "partially_submitted":
                         prompt = (
-                            "Part of a split batch was submitted. Resume submitting "
-                            "the remaining parts?\n\nAdditional provider charges may apply."
+                            "A durable batch queue still has unsent requests. Resume?\n\n"
+                            "Sequential OpenAI runs poll the paid chunk first, then submit "
+                            "the next chunk after it succeeds. Later chunks incur provider charges."
                         )
                     else:
                         prompt = (

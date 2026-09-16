@@ -92,6 +92,8 @@ The in-app **Guide** is the canonical user documentation. Its source is kept in
 - [Set up Git safely](data/help/01-git-setup.md)
 - [Set up an AI helper](data/help/02-ai-helper.md)
 - [RPG Maker workflow](data/help/03-workflow-rpg.md)
+- [AutoNamePopup shared-face speaker support](docs/rpgmaker-autonamepopup.md)
+- [Sequential OpenAI Batch queues and Resume](docs/development.md#sequential-native-openai-batches)
 - [WOLF workflow](data/help/04-workflow-wolf.md)
 - [Other pages and features](data/help/05-other-tabs.md)
 - [Complete first-translation example](data/help/06-examples.md)

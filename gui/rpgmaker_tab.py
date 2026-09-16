@@ -50,6 +50,7 @@ class RPGMakerTab(QWidget):
         "FIRSTLINESPEAKERS": False,
         "INLINE401SPEAKERS": False,
         "FACENAME101": False,
+        "AUTONAMEPOPUP101": False,
         "BRFLAG": False,
         "FIXTEXTWRAP": True,
         "IGNORETLTEXT": False,
@@ -254,6 +255,13 @@ class RPGMakerTab(QWidget):
         )
         col1.addLayout(layout)
         
+        self.autonamepopup101_cb, layout = self._create_checkbox_with_description(
+            "AutoNamePopup", "Use exact face + index mapping",
+            "Uses enabled AutoNamePopup nameKeys, protects runtime actor names, and translates "
+            "plugin-linked default names. Keep generic Face → Speaker disabled for shared sheets."
+        )
+        col1.addLayout(layout)
+
         self.brflag_cb, layout = self._create_checkbox_with_description(
             "<br> Line Breaks", "Use br instead of newlines", "For games using <br> instead of \\n."
         )
@@ -504,6 +512,7 @@ class RPGMakerTab(QWidget):
             self.first_line_speakers_cb.stateChanged.disconnect()
             self.inline401speakers_cb.stateChanged.disconnect()
             self.facename101_cb.stateChanged.disconnect()
+            self.autonamepopup101_cb.stateChanged.disconnect()
             self.brflag_cb.stateChanged.disconnect()
             self.fixtextwrap_cb.stateChanged.disconnect()
             self.ignoretltext_cb.stateChanged.disconnect()
@@ -544,6 +553,7 @@ class RPGMakerTab(QWidget):
         self.first_line_speakers_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.inline401speakers_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.facename101_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.autonamepopup101_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.brflag_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.fixtextwrap_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.ignoretltext_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -604,6 +614,7 @@ class RPGMakerTab(QWidget):
             "FIRSTLINESPEAKERS": self.first_line_speakers_cb.isChecked(),
             "INLINE401SPEAKERS": self.inline401speakers_cb.isChecked(),
             "FACENAME101": self.facename101_cb.isChecked(),
+            "AUTONAMEPOPUP101": self.autonamepopup101_cb.isChecked(),
             "BRFLAG": self.brflag_cb.isChecked(),
             "FIXTEXTWRAP": self.fixtextwrap_cb.isChecked(),
             "IGNORETLTEXT": self.ignoretltext_cb.isChecked(),
@@ -643,6 +654,7 @@ class RPGMakerTab(QWidget):
         self.first_line_speakers_cb.setChecked(config.get("FIRSTLINESPEAKERS", False))
         self.inline401speakers_cb.setChecked(config.get("INLINE401SPEAKERS", False))
         self.facename101_cb.setChecked(config.get("FACENAME101", False))
+        self.autonamepopup101_cb.setChecked(config.get("AUTONAMEPOPUP101", False))
         self.brflag_cb.setChecked(config.get("BRFLAG", False))
         self.fixtextwrap_cb.setChecked(config.get("FIXTEXTWRAP", True))
         self.ignoretltext_cb.setChecked(config.get("IGNORETLTEXT", False))
@@ -792,26 +804,11 @@ class RPGMakerTab(QWidget):
                     )
                 return
                 
-            # Read the current file
-            with open(module_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # Update each configuration value
-            for key, value in config.items():
-                # Convert boolean to Python boolean string
-                value_str = repr(value) if isinstance(value, str) else str(value)
-                
-                # Find and replace the line with this configuration
-                import re
-                pattern = rf'^{key}\s*=\s*.*$'
-                replacement = f'{key} = {value_str}'
-                
-                content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
-            
-            # Write the updated content back
-            with open(module_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
+            # Use the shared persistence path so an already imported engine
+            # receives the same values as the saved configuration.
+            self.config_integration.modules_dir = module_path.parent
+            self.config_integration.update_rpgmaker_config(config)
+
             # Emit signal for other components (silent)
             self.config_changed.emit()
             
