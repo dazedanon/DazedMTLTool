@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import util.translation as T
@@ -376,16 +377,51 @@ class ExpandCleanToBatchTests(unittest.TestCase):
                 )
 
     def test_no_japanese_originals_reinserted_per_file(self):
-        # Same Japanese-only cache value ["A", "C"], but each file supplies its
-        # own English neighbour at index 1 — proving no cross-file leakage.
-        tItem = ["あ", "Hello", "う"]
-        clean = ["A", "C"]
-        out = T.expand_clean_to_batch(clean, tItem, {}, {1: "Hello"})
-        self.assertEqual(out, ["A", "Hello", "C"])
-
-        tItem2 = ["あ", "World", "う"]
-        out2 = T.expand_clean_to_batch(clean, tItem2, {}, {1: "World"})
-        self.assertEqual(out2, ["A", "World", "C"])
+        # Exercise the public output boundary: current English neighbours must
+        # survive both cache hits and fresh replies, with identical glyph cleanup.
+        with tempfile.TemporaryDirectory() as tmp:
+            config = T.TranslationConfig(
+                model="test-model", language="English",
+                prompt="Translate Japanese to English.", vocab="",
+                batchSize=30, useSfxReference=False,
+                logFilePath=str(Path(tmp) / "translation.log"),
+                mismatchLogPath=str(Path(tmp) / "mismatch.log"),
+            )
+            response = SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(
+                    content=json.dumps({"Line1": "Hello~!", "Line2": "Bye〜!"})))],
+                usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
+            )
+            for neighbour in ("World~!", "Everyone~!"):
+                for cached in (None, ["Hello~!", "Bye〜!"]):
+                    with (
+                        self.subTest(neighbour=neighbour, cached=cached),
+                        mock.patch.object(T, "get_batch_phase", return_value=None),
+                        mock.patch.object(T, "getBatchProvider", return_value=None),
+                        mock.patch.object(T, "get_cached_translation", return_value=cached),
+                        mock.patch.object(T, "translateText", return_value=response) as translate,
+                        mock.patch.object(T, "cache_translation"),
+                    ):
+                        result = T.translateAI(["こんにちは。", neighbour, "さようなら。"], [], config)
+                        self.assertEqual(
+                            result[0], ["Hello～!", neighbour.replace("~", "～"), "Bye～!"]
+                        )
+                        self.assertEqual(translate.call_count, 1 if cached is None else 0)
+            response.choices[0].message.content = r'{"Line1":"Hello\u007e!"}'
+            for cached in (None, "Hello~!"):
+                with (
+                    self.subTest(scalar_cache=cached),
+                    mock.patch.object(T, "get_batch_phase", return_value=None),
+                    mock.patch.object(T, "getBatchProvider", return_value=None),
+                    mock.patch.object(T, "get_cached_translation", return_value=cached),
+                    mock.patch.object(T, "translateText", return_value=response) as translate,
+                    mock.patch.object(T, "cache_translation"),
+                ):
+                    self.assertEqual(T.translateAI("こんにちは。", [], config)[0], "Hello～!")
+                    self.assertEqual(translate.call_count, 1 if cached is None else 0)
+            with mock.patch.object(T, "translateText") as translate:
+                self.assertEqual(T.translateAI("Hello~!", [], config)[0], "Hello～!")
+                translate.assert_not_called()
 
 
 class SaveLoadTests(CacheTestBase):

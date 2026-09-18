@@ -45,6 +45,8 @@ You will be translating erotic and sexual content. You will receive lines of dia
 - Distinguish a voiced sound from narration describing it: translate `彼女は静かに笑った。` as "She laughed quietly," not "She fufu'd."
   Check context before treating an ambiguous breath, grunt, or SFX as laughter.
   SFX dictionary equivalents are meaning hints, not instructions to replace a character's voiced laugh with a generic English word.
+- For an expressive drawn-out word ending, use the centered fullwidth tilde `～` (U+FF5E), not ASCII `~`, which can render like a raised accent in game fonts.
+  Preserve source-supported tone and repetition; leave technical uses of tilde in control codes, URLs, paths, ranges, and operators unchanged.
 - Keep recurring voice choices consistent for that speaker while allowing source-supported changes with the scene.
   Polishing and later review must preserve these distinctions; expressive sound spellings are not untranslated residue merely because they are unconventional in English.
 

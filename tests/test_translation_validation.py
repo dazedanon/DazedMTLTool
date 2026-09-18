@@ -137,16 +137,29 @@ class ControlCodeProtectionTests(unittest.TestCase):
 
 
 class TranslationContentValidationTests(unittest.TestCase):
-    def test_cleanup_preserves_model_chosen_wording(self):
-        for translated in (
-            "This guy is a good friend. I trust this guy.",
-            "This girl chose this one. This thing belongs to her.",
-            "This bastard won't get away with it. Neither will this bitch.",
-        ):
-            with self.subTest(translated=translated):
-                self.assertEqual(
-                    tr.cleanTranslatedText(translated, "English"), translated
-                )
+    def test_cleanup_preserves_wording_and_normalizes_dialogue_punctuation(self):
+        cases = (
+            ("This guy is a good friend. I trust this guy.", None),
+            ("This girl chose this one. This thing belongs to her.", None),
+            ("This bastard won't get away with it. Neither will this bitch.", None),
+            ("Hello~__PROTECTED_0__", "Hello～__PROTECTED_0__"),
+            ("Toraya~. True〜. Ponnn~~~!!", "Toraya～. True～. Ponnn～～～!!"),
+            ("Hello~\nCome on in~!", "Hello～\nCome on in～!"),
+            (r'\C[2]Hello~\C[0] __PROTECTED_0__',
+             r'\C[2]Hello～\C[0] __PROTECTED_0__'),
+            (r'\SE[chime~] Hi~!', r'\SE[chime~] Hi～!'),
+            ("~10, 10~20, A~Z, ~flags, `value~`, ~/save, /tmp/save~, "
+             "https://example.test/page~ and file~.txt", None),
+            ('{"Line1":"Hello~!","Line2":"True〜."}',
+             '{"Line1":"Hello～!","Line2":"True～."}'),
+            ("Already centered～. ...", None),
+        )
+        for source, expected in cases:
+            with self.subTest(source=source):
+                expected = source if expected is None else expected
+                cleaned = tr.cleanTranslatedText(source, "English")
+                self.assertEqual(cleaned, expected)
+                self.assertEqual(tr.cleanTranslatedText(cleaned, "English"), expected)
 
     def test_translation_content_validation_cases(self):
         language_regex = r"[\u3000一-龠ぁ-ゔァ-ヴー]+"
