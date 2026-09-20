@@ -189,11 +189,18 @@ class TranslationWorkerTests(unittest.TestCase):
         self.assertEqual(active["max"], 1)
 
     def test_mvmz_batch_phase_reuses_one_process_for_all_files(self) -> None:
-        """RPG Maker batch collection and estimation reuse one interpreter."""
+        """Unsupported plugin data cannot abort the shared RPG Maker worker."""
         worker = TranslationWorker(
             Path.cwd(), ("RPG Maker MV/MZ", (".json",), None)
         )
         calls = []
+        errors = []
+        progress = []
+        worker.file_error_signal.connect(lambda *args: errors.append(args))
+        worker.progress_signal.connect(lambda *args: progress.append(args))
+        supported = ["Map001.json", "Map002.json", "Actors.json"]
+        selected = ["TrpParticleGroups.json", *supported[:1],
+                    "PluginData.json", *supported[1:]]
 
         def run_many(
             filenames,
@@ -207,34 +214,27 @@ class TranslationWorkerTests(unittest.TestCase):
             return "Success"
 
         worker.run_module_in_process = run_many
-        consume_result = worker._run_files(
-            ["Map001.json", "Map002.json", "Actors.json"],
-            False,
-            batch_phase="consume",
-        )
-        estimate_result = worker._run_files(
-            ["Map001.json", "Map002.json", "Actors.json"],
-            True,
-            batch_phase="estimate",
-        )
+        for phase in ("collect", "estimate", "consume"):
+            with self.subTest(phase=phase):
+                progress.clear()
+                result = worker._run_files(selected, phase == "estimate", phase)
+                self.assertEqual(result, "TOTAL: success")
+                self.assertEqual(calls[-1], (supported, phase == "estimate", phase))
+                self.assertEqual([event[0] for event in progress], [1, 2, 3, 4, 5])
+                self.assertTrue(all(event[1] == 5 for event in progress))
+                self.assertEqual({event[2] for event in progress}, set(selected))
+        self.assertEqual(len(calls), 3)
+        # Collect/consume must not report the same skipped file twice.
+        self.assertEqual([error[0] for error in errors],
+                         ["TrpParticleGroups.json", "PluginData.json"])
 
-        self.assertEqual(consume_result, "TOTAL: success")
-        self.assertEqual(estimate_result, "TOTAL: success")
-        self.assertEqual(
-            calls,
-            [
-                (
-                    ["Map001.json", "Map002.json", "Actors.json"],
-                    False,
-                    "consume",
-                ),
-                (
-                    ["Map001.json", "Map002.json", "Actors.json"],
-                    True,
-                    "estimate",
-                ),
-            ],
-        )
+        def fail_supported(filenames, *_args, file_result_callback):
+            file_result_callback(filenames[0], ("SUBPROCESS_ERROR", "bad JSON"))
+            return ("SUBPROCESS_ERROR", "bad JSON")
+
+        worker.run_module_in_process = fail_supported
+        self.assertEqual(worker._run_files(selected, True, "estimate"), "Fail")
+        self.assertEqual([error[0] for error in errors[-3:]], supported)
 
     def test_multi_file_runner_streams_input_and_per_file_results(self) -> None:
         """The persistent protocol retains per-file mismatch reporting."""

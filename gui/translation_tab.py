@@ -55,6 +55,7 @@ from util.paths import (
     prepare_game_translation_context,
 )
 from gui.theme import COLORS, Geometry, Spacing
+from util.rpgmaker_files import mvmz_file_kind
 from gui.ui_components import (
     CheckableFileList,
     PageHeader,
@@ -78,12 +79,9 @@ def _mismatch_summary(count):
     return f"{count} validation {noun}"
 
 
-_NON_TRANSLATABLE_MVMZ_NAMES = {"animations.json", "tilesets.json"}
-
-
 def _is_nontranslatable_mvmz_file(filename) -> bool:
-    """Return whether an MV/MZ JSON database is valid but has no TL handler."""
-    return Path(str(filename or "")).name.casefold() in _NON_TRANSLATABLE_MVMZ_NAMES
+    """Skip any filename without an MV/MZ parser, including plugin databases."""
+    return mvmz_file_kind(filename) is None
 
 
 def create_section_header(title):
@@ -587,7 +585,7 @@ class TranslationWorker(QThread):
         return self._speaker_translation_approved
 
     def _report_unsupported_mvmz_file(self, filename):
-        """Report a known non-translatable MV/MZ database once per run."""
+        """Report an unsupported MV/MZ database once per run."""
         normalized = Path(str(filename)).name.casefold()
         if normalized in self._reported_unsupported_mvmz_files:
             return

@@ -39,6 +39,7 @@ from util.paths import (
     read_active_glossary,
 )
 from util.rpgmaker_markers import SUPPORTED_CODE408_MARKERS
+from util.rpgmaker_files import mvmz_file_kind
 from util.id_ranges import id_in_ranges
 
 # Globals
@@ -535,63 +536,64 @@ def handleMVMZ(filename, estimate):
 
 
 def openFiles(filename):
+    file_kind = mvmz_file_kind(filename)
     with open("files/" + filename, "r", encoding="utf-8-sig") as f:
         data = json.load(f)
 
         # Map Files
-        if "Map" in filename and "MapInfos" not in filename:
+        if file_kind == "Map":
             translatedData = parseMap(data, filename)
 
         # CommonEvents Files
-        elif "CommonEvents" in filename:
+        elif file_kind == "CommonEvents":
             translatedData = parseCommonEvents(data, filename)
 
         # Actor File
-        elif "Actors" in filename:
+        elif file_kind == "Actors":
             translatedData = parseNames(data, filename, "Actors")
 
         # Armor File
-        elif "Armors" in filename:
+        elif file_kind == "Armors":
             translatedData = parseNames(data, filename, "Armors")
 
         # Weapons File
-        elif "Weapons" in filename:
+        elif file_kind == "Weapons":
             translatedData = parseNames(data, filename, "Weapons")
 
         # Classes File
-        elif "Classes" in filename:
+        elif file_kind == "Classes":
             translatedData = parseNames(data, filename, "Classes")
 
         # Enemies File
-        elif "Enemies" in filename:
+        elif file_kind == "Enemies":
             translatedData = parseNames(data, filename, "Enemies")
 
         # Items File
-        elif "Items" in filename:
+        elif file_kind == "Items":
             translatedData = parseNames(data, filename, "Items")
 
         # MapInfo File
-        elif "MapInfos" in filename:
+        elif file_kind == "MapInfos":
             translatedData = parseNames(data, filename, "MapInfos")
 
         # Skills File
-        elif "Skills" in filename:
+        elif file_kind == "Skills":
             translatedData = parseNames(data, filename, "Skills")
 
         # Troops File
-        elif "Troops" in filename:
+        elif file_kind == "Troops":
             translatedData = parseTroops(data, filename)
 
         # States File
-        elif "States" in filename:
+        elif file_kind == "States":
             translatedData = parseSS(data, filename)
 
         # System File
-        elif "System" in filename:
+        elif file_kind == "System":
             translatedData = parseSystem(data, filename)
 
         # Scenario File
-        elif "Scenario" in filename:
+        elif file_kind == "Scenario":
             translatedData = parseScenario(data, filename)
 
         else:
@@ -1647,8 +1649,7 @@ def checkSave(data, filename, tokens):
 
 def _is_map_data_filename(filename: str) -> bool:
     """Match the same map-file family routed to ``parseMap`` by ``openFiles``."""
-    name = str(filename or "")
-    return "Map" in name and "MapInfos" not in name
+    return mvmz_file_kind(filename) == "Map"
 
 
 def configureBatchMapNames(filenames) -> None:

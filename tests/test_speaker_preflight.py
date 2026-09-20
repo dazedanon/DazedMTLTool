@@ -191,7 +191,7 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
             finalize.assert_not_called()
 
     def test_known_nontranslatable_mvmz_files_do_not_block_speaker_scan(self):
-        """Valid Animations/Tilesets JSON must not abort scans of real TL files."""
+        """Engine and plugin data without parsers must not abort speaker scans."""
         with tempfile.TemporaryDirectory() as raw:
             worker = TranslationWorker(
                 Path(raw),
@@ -200,6 +200,7 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                     "Animations.json",
                     "Map001.json",
                     "Tilesets.json",
+                    "TrpParticleGroups.json",
                 ],
                 parse_speakers=True,
             )
@@ -227,25 +228,36 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
             finalize.assert_not_called()
             self.assertEqual(
                 [error[0] for error in errors],
-                ["Animations.json", "Tilesets.json"],
+                ["Animations.json", "Tilesets.json", "TrpParticleGroups.json"],
             )
             self.assertEqual(
                 progress,
                 [
-                    (1, 3, "Animations.json"),
-                    (2, 3, "Map001.json"),
-                    (3, 3, "Tilesets.json"),
+                    (1, 4, "Animations.json"),
+                    (2, 4, "Map001.json"),
+                    (3, 4, "Tilesets.json"),
+                    (4, 4, "TrpParticleGroups.json"),
                 ],
             )
-            self.assertTrue(any("2 unsupported skipped" in line for line in logs))
+            self.assertTrue(any("3 unsupported skipped" in line for line in logs))
             self.assertFalse(any("Speaker scan failed" in line for line in logs))
 
     def test_known_nontranslatable_mvmz_files_do_not_fail_translation_run(self):
+        unsupported = ["Animations.json", "TrpParticleGroups.json"]
+        for estimate, supported in (
+            (False, ["Map001.json"]), (True, ["Map001.json"]),
+            (False, []), (True, []),
+        ):
+            with self.subTest(estimate=estimate, supported=supported):
+                self._check_unsupported_run(unsupported, supported, estimate)
+
+    def _check_unsupported_run(self, unsupported, supported, estimate):
         with tempfile.TemporaryDirectory() as raw:
+            selected = unsupported + supported
             worker = TranslationWorker(
                 Path(raw),
                 ["RPG Maker MV/MZ", ["json"], None],
-                selected_files=["Animations.json", "Map001.json"],
+                selected_files=selected,
             )
             errors = []
             progress = []
@@ -253,19 +265,29 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
             worker.progress_signal.connect(lambda *args: progress.append(args))
 
             with (
-                patch.dict(os.environ, {"fileThreads": "1"}),
+                patch.dict(os.environ, {
+                    "fileThreads": "1", "model": "gpt-5.6-terra",
+                    "api": "https://api.openai.com/v1", "API_PROVIDER": "openai",
+                }),
                 patch.object(
                     worker, "run_module_in_process", return_value="Success"
                 ) as run_file,
             ):
-                result = worker._run_files(worker.selected_files, False)
+                result = worker._run_files(selected, estimate)
 
-            self.assertEqual(result, "Success")
-            run_file.assert_called_once_with("Map001.json", False, None)
-            self.assertEqual([error[0] for error in errors], ["Animations.json"])
+            if estimate:
+                self.assertIn("TOTAL estimate:", result)
+            else:
+                self.assertEqual(result, "Success")
+            if supported:
+                run_file.assert_called_once_with("Map001.json", estimate, None)
+            else:
+                run_file.assert_not_called()
+            self.assertEqual([error[0] for error in errors], unsupported)
             self.assertEqual(
                 progress,
-                [(1, 2, "Animations.json"), (2, 2, "Map001.json")],
+                [(index, len(selected), filename)
+                 for index, filename in enumerate(selected, 1)],
             )
 
     def test_wolf_scan_failure_fails_preflight_before_translation(self):
