@@ -153,6 +153,11 @@ class TranslationContentValidationTests(unittest.TestCase):
             ('{"Line1":"Hello~!","Line2":"True〜."}',
              '{"Line1":"Hello～!","Line2":"True～."}'),
             ("Already centered～. ...", None),
+            ("What’s your basis for that?", "What's your basis for that?"),
+            ("‘I’m here,’ she said. Don‛t use modifierʼs or fullwidth＇s.",
+             "'I'm here,' she said. Don't use modifier's or fullwidth's."),
+            (r"\SE[O’Neil] __PROTECTED_0__ https://example.test/O’Neil `O’Neil`",
+             None),
         )
         for source, expected in cases:
             with self.subTest(source=source):
@@ -336,6 +341,17 @@ class TranslationResponseSchemaTests(unittest.TestCase):
         )
         self.assertIn('"Line1": "A"', array_logged)
         self.assertIn('"Line3": "C"', array_logged)
+        # Literal and JSON-escaped apostrophes must produce identical game text,
+        # including the array schema and malformed-response recovery path.
+        for raw in (
+            '{"Line1":"What’s up~?"}',
+            r'{"Line1":"What\u2019s up\u007e?"}',
+            r'{"translations":["What\u2019s up\u007e?"]}',
+            r'{"Line1":"What\u2019s up\u007e?", broken}',
+        ):
+            with self.subTest(raw=raw):
+                self.assertEqual(tr.extractTranslation(raw, True), ["What's up～?"])
+                self.assertEqual(tr.extractTranslation(raw, False), "What's up～?")
 
 
 class EmptyProviderContentTests(unittest.TestCase):

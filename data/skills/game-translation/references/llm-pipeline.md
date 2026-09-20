@@ -591,6 +591,12 @@ Build the lookup table from a **full database dump once**, flattened to `{"type:
 
 **Map every fancy quote to a single ASCII apostrophe before serializing, and apply the identical table to the reply before parsing.** A JP line carrying U+201C U+201D U+FF02 U+2018 U+2019 U+201B U+02BC U+FF07 is read by the model as an ASCII double quote, and `"スキルを"リセットする` comes back as an empty value plus stray trailing text. It parses, the key count matches, and the content is silently gone. One `str.maketrans` table, **including the double quotes, which become `'` and not `"`**. Run the same table over the response before `json.loads` so the repair is symmetric.
 
+**Normalize decoded English prose too, including cached replies and text that bypasses the model.**
+A raw JSON response may spell an apostrophe as `\u2019`, which only becomes a curly glyph after `json.loads`.
+Use straight ASCII apostrophes for contractions, possessives and single-quoted prose before measuring, wrapping or serializing translated output.
+DazedMTLTool applies `util.translation.normalize_dialogue_typography` at its decoded-output and cache boundaries; direct-agent pipelines must apply the same rule to localized text values.
+Preserve protected runtime tokens, paths, URLs, inline code and `_original` metadata, and escape the result for its host format rather than replacing punctuation across raw game files.
+
 **Scope NFKC to half-width kana spans only:**
 ```python
 re.sub(r"[｡-ﾟ]+", lambda m: unicodedata.normalize("NFKC", m.group(0)), text)

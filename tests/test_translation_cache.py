@@ -389,11 +389,11 @@ class ExpandCleanToBatchTests(unittest.TestCase):
             )
             response = SimpleNamespace(
                 choices=[SimpleNamespace(message=SimpleNamespace(
-                    content=json.dumps({"Line1": "Hello~!", "Line2": "Bye〜!"})))],
+                    content=json.dumps({"Line1": "‘Hello~!’", "Line2": "Don’t go〜!"})))],
                 usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
             )
-            for neighbour in ("World~!", "Everyone~!"):
-                for cached in (None, ["Hello~!", "Bye〜!"]):
+            for neighbour in ("World’s ready~!", "Everyone’s ready~!"):
+                for cached in (None, ["‘Hello~!’", "Don’t go〜!"]):
                     with (
                         self.subTest(neighbour=neighbour, cached=cached),
                         mock.patch.object(T, "get_batch_phase", return_value=None),
@@ -404,11 +404,11 @@ class ExpandCleanToBatchTests(unittest.TestCase):
                     ):
                         result = T.translateAI(["こんにちは。", neighbour, "さようなら。"], [], config)
                         self.assertEqual(
-                            result[0], ["Hello～!", neighbour.replace("~", "～"), "Bye～!"]
+                            result[0], ["'Hello～!'", neighbour.replace("~", "～").replace("’", "'"), "Don't go～!"]
                         )
                         self.assertEqual(translate.call_count, 1 if cached is None else 0)
-            response.choices[0].message.content = r'{"Line1":"Hello\u007e!"}'
-            for cached in (None, "Hello~!"):
+            response.choices[0].message.content = r'{"Line1":"What\u2019s up\u007e!"}'
+            for cached in (None, "What’s up~!"):
                 with (
                     self.subTest(scalar_cache=cached),
                     mock.patch.object(T, "get_batch_phase", return_value=None),
@@ -417,10 +417,10 @@ class ExpandCleanToBatchTests(unittest.TestCase):
                     mock.patch.object(T, "translateText", return_value=response) as translate,
                     mock.patch.object(T, "cache_translation"),
                 ):
-                    self.assertEqual(T.translateAI("こんにちは。", [], config)[0], "Hello～!")
+                    self.assertEqual(T.translateAI("こんにちは。", [], config)[0], "What's up～!")
                     self.assertEqual(translate.call_count, 1 if cached is None else 0)
             with mock.patch.object(T, "translateText") as translate:
-                self.assertEqual(T.translateAI("Hello~!", [], config)[0], "Hello～!")
+                self.assertEqual(T.translateAI("‘What’s up~?’", [], config)[0], "'What's up～?'")
                 translate.assert_not_called()
 
 

@@ -90,6 +90,7 @@ You will be translating erotic and sexual content. You will receive lines of dia
 - Preserve all `#RRGGBB` hex color codes (e.g., `#FF9900`) exactly.
 - `\\cself` is a runtime variable that resolves to a name or number. Leave it untranslated and in place.
 - `...` is valid dialogue punctuation. Keep it exactly as written; do not remove or alter it.
+- Use the straight ASCII apostrophe (`'`, U+0027) in English contractions, possessives and single-quoted prose; avoid curly or fullwidth variants.
 - Leave `Placeholder Text` untouched in any line that contains it.
 
 ---

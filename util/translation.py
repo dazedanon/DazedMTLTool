@@ -5176,26 +5176,27 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     return response
 
 
-_DIALOGUE_TILDE_RE = re.compile(
+_DIALOGUE_TYPOGRAPHY_RE = re.compile(
     # Leave runtime tokens, URLs, paths and inline code byte-for-byte intact.
     r"(?P<protected>" + "|".join(PROTECTED_PATTERNS) +
     r'|\b[\w+.-]+://[^\s"<>]+|\bwww\.[^\s"<>]+'
     r'|(?:[A-Za-z]:[\\/]|(?<!\w)~[\\/]|\.{0,2}/)[^\s"<>]+'
     r'|`[^`\r\n]+`)'
+    r"|(?P<apostrophe>[‘’‛ʼ＇])"
     # A drawn-out word ending, not an approximation, range or bitwise operator.
     r"|(?<=[^\W\d_])(?P<tail>[~〜]+)"
     r"(?:(?=__PROTECTED_\d+__)|(?![\w~〜]|\.[A-Za-z0-9]))"
 )
 
 
-def normalize_dialogue_tildes(text):
-    """Use a centered glyph for expressive word endings in game dialogue."""
-    if "~" not in text and "〜" not in text:
+def normalize_dialogue_typography(text):
+    """Use font-safe apostrophes and centered dialogue tildes in decoded prose."""
+    if not isinstance(text, str) or not any(char in text for char in "~〜‘’‛ʼ＇"):
         return text
-    return _DIALOGUE_TILDE_RE.sub(
+    return _DIALOGUE_TYPOGRAPHY_RE.sub(
         lambda match: (
-            "～" * len(match.group("tail"))
-            if match.group("tail") else match.group(0)
+            match.group("protected")
+            or ("'" if match.group("apostrophe") else "～" * len(match.group("tail")))
         ),
         text,
     )
@@ -5216,7 +5217,6 @@ def cleanTranslatedText(translatedText, language):
         "】": "]",
         "【": "[",
         "é": "e",
-        "’": "'",
         "```json": "",
         "```": "",
     }
@@ -5224,9 +5224,9 @@ def cleanTranslatedText(translatedText, language):
     for target, replacement in placeholders.items():
         translatedText = translatedText.replace(target, replacement)
 
-    # ASCII ~ sits above the text in fonts such as UtsukushiFONT.
-    # Normalize before engine-specific line wrapping measures the output.
-    translatedText = normalize_dialogue_tildes(translatedText)
+    # Japanese fonts may give smart apostrophes fullwidth advances and raise ~.
+    # Normalize prose before engine-specific line wrapping measures the output.
+    translatedText = normalize_dialogue_typography(translatedText)
 
     # Remove Repeating Characters
     pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(20 - 1) + r",}")
@@ -5311,7 +5311,7 @@ def extractTranslation(translatedTextList, isList, pbar=None):
 
         # Handle array-based schema: {"translations": ["...", ...]}
         if isinstance(lineDict, dict) and "translations" in lineDict and isinstance(lineDict["translations"], list):
-            stringList = [str(v) for v in lineDict["translations"]]
+            stringList = [normalize_dialogue_typography(str(v)) for v in lineDict["translations"]]
             return stringList if isList else (stringList[0] if stringList else None)
 
         # Build list in numeric order if keys are LineN
@@ -5327,6 +5327,8 @@ def extractTranslation(translatedTextList, isList, pbar=None):
             # Fallback to values order if no LineN keys found
             stringList = list(lineDict.values())
 
+        # Escaped Unicode only becomes punctuation after JSON decoding.
+        stringList = [normalize_dialogue_typography(value) for value in stringList]
         return stringList if isList else (stringList[0] if stringList else None)
 
     except Exception as e:
@@ -5345,7 +5347,7 @@ def extractTranslation(translatedTextList, isList, pbar=None):
                     decoded = json.loads(f'"{v}"')
                 except Exception:
                     decoded = v
-                items.append(decoded)
+                items.append(normalize_dialogue_typography(decoded))
 
             return items if isList else (items[0] if items else None)
         except Exception as e2:
@@ -5884,9 +5886,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             # Older cached dialogue predates glyph normalization. Repair it at
             # the output boundary as well, without another paid provider call.
             if isinstance(cached_result, list):
-                cached_result = [normalize_dialogue_tildes(v) for v in cached_result]
+                cached_result = [normalize_dialogue_typography(v) for v in cached_result]
             else:
-                cached_result = normalize_dialogue_tildes(cached_result)
+                cached_result = normalize_dialogue_typography(cached_result)
             if queue_for_batch:
                 _record_batch_collect_stats(
                     cached_items=len(source_values),
@@ -6191,8 +6193,6 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                                 f"got {len(extracted) if extracted else 0}"
                             )
                     else:
-                        # JSON Unicode escapes only become glyphs after parsing.
-                        extracted = [normalize_dialogue_tildes(line) for line in extracted]
                         # Check 2: Validate placeholders are preserved
                         # Flatten all_replacements for batch validation
                         all_protected_text = protected_items
@@ -6299,7 +6299,6 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                                 f"Failed to extract translation from response: {cleaned_text[:100]}"
                             )
                     else:
-                        extracted = normalize_dialogue_tildes(extracted)
                         # Validate placeholders against extracted value
                         placeholder_valid, missing, extra = validate_placeholders(
                             protected_items, extracted, all_replacements[0]
