@@ -755,6 +755,62 @@ class EvaluationManifestTests(unittest.TestCase):
         )
         self.assertEqual(live_cache["ttl"], "5m")
 
+        for model, requires_thinking in (
+            ("claude-opus-5-5", True),
+            ("claude-opus-5-5-20260915", True),
+            ("claude-fable-5-1", True),
+            ("claude-fable-5", True),
+            ("claude-mythos-5-1", True),
+            ("claude-mythos-preview", True),
+            ("claude-opus-5", False),
+            ("claude-sonnet-4-6", False),
+            ("claude-haiku-4-5", False),
+        ):
+            for execution in ("batch", "live"):
+                with self.subTest(model=model, execution=execution):
+                    adapted = evaluation._provider_params(
+                        {**candidates[2], "model": model, "execution": execution},
+                        request,
+                    )
+                    self.assertEqual(adapted["thinking"], {
+                        "type": "adaptive" if requires_thinking else "disabled"
+                    })
+                    self.assertEqual(
+                        adapted["output_config"].get("effort"),
+                        "low" if requires_thinking else None,
+                    )
+                    self.assertEqual(adapted["output_config"]["format"]["schema"], schema)
+                    self.assertEqual(adapted["messages"], params["anthropic"]["messages"])
+                    self.assertEqual(adapted["max_tokens"], evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST)
+
+        for model, effort in (("gpt-6-astra", "low"), ("gpt-6-sol", "none"), ("gpt-6-luna", "none")):
+            for execution in ("batch", "live"):
+                with self.subTest(model=model, execution=execution):
+                    adapted = evaluation._provider_params(
+                        {**candidates[0], "model": model, "execution": execution},
+                        request,
+                    )
+                    self.assertEqual(adapted["reasoning_effort"], effort)
+                    self.assertNotIn("temperature", adapted)
+                    self.assertNotIn("frequency_penalty", adapted)
+                    self.assertEqual(adapted["max_completion_tokens"], evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST)
+                    self.assertEqual(adapted["response_format"], params["openai"]["response_format"])
+
+        for base, effort in ((candidates[0], "high"), (candidates[1], "medium"), (candidates[2], "high")):
+            with self.subTest(provider=base["provider"], effort=effort):
+                adapted = evaluation._provider_params({**base, "reasoning_effort": effort, "max_output_tokens": 16384}, request)
+                if base["provider"] == "anthropic":
+                    self.assertEqual(adapted["thinking"], {"type": "adaptive"})
+                    self.assertEqual(adapted["output_config"]["effort"], effort)
+                else:
+                    self.assertEqual(adapted["reasoning_effort"], effort)
+                self.assertEqual(adapted.get("max_completion_tokens", adapted.get("max_tokens")), 16384)
+        for model, effort in (("gpt-6-astra", "none"), ("gpt-6-sol", "minimal"), ("claude-opus-5-5", "none")):
+            with self.subTest(invalid_model=model, effort=effort):
+                base = candidates[2] if model.startswith("claude") else candidates[0]
+                with self.assertRaisesRegex(ValueError, "unsupported reasoning"):
+                    evaluation._provider_params({**base, "model": model, "reasoning_effort": effort}, request)
+
     def test_claude_batch_submits_uncached_without_live_prewarm(self):
         request = self.manifest["logical_requests"][0]
         manifest = {
@@ -768,6 +824,9 @@ class EvaluationManifestTests(unittest.TestCase):
         }
         candidate = {
             **dict(evaluation.DEFAULT_CANDIDATES[2]),
+            "model": "claude-fable-5-1",
+            "reasoning_effort": "high",
+            "max_output_tokens": 16384,
             "id": "candidate-claude",
             "status": "prepared",
             "estimate": {"cost_usd": 1.0},
@@ -808,6 +867,9 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertNotIn("cache_prewarm", candidate)
         self.assertNotIn("prewarm_usage", candidate)
         self.assertTrue(submitted_params)
+        self.assertEqual(submitted_params[0]["thinking"], {"type": "adaptive"})
+        self.assertEqual(submitted_params[0]["output_config"]["effort"], "high")
+        self.assertEqual(submitted_params[0]["max_tokens"], 16384)
         self.assertFalse(any(
             "cache_control" in block
             for params in submitted_params
@@ -1019,6 +1081,20 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertEqual(
             count_tokens.call_count, len(self.manifest["logical_requests"])
         )
+        higher = {**candidate, "reasoning_effort": "high", "max_output_tokens": 16384}
+        capped = evaluation.estimate_candidate(self.manifest, higher)
+        self.assertEqual(capped["output_token_cap_per_request"], 16384)
+        self.assertTrue(capped["reasoning_tokens_unestimated"])
+        baseline = evaluation.estimate_candidate(self.manifest, candidate)
+        expected_increase = len(self.manifest["executions"]) * (16384 - 4096) * capped["rates"]["output"] / 1_000_000
+        self.assertAlmostEqual(capped["maximum_cost_usd"] - baseline["maximum_cost_usd"], expected_increase)
+        for limit in (0, -1, 128001, 1.5, True):
+            with self.subTest(limit=limit), self.assertRaisesRegex(ValueError, "Output token limit"):
+                evaluation.estimate_candidate(self.manifest, {**candidate, "max_output_tokens": limit})
+        with mock.patch.object(evaluation, "_candidate_rates", return_value={"input": 1, "output": 1}):
+            evaluation._validate_candidates([candidate, higher])
+            with self.assertRaisesRegex(ValueError, "Duplicate comparison"):
+                evaluation._validate_candidates([higher, dict(higher)])
 
     def test_submit_refreshes_estimate_and_blocks_over_budget_before_provider(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -1622,8 +1698,11 @@ class EvaluationManifestTests(unittest.TestCase):
                 "id": "candidate-1",
                 "provider": "openai",
                 "endpoint": "https://api.openai.com/v1",
-                "model": "gpt-test",
+                "model": "gpt-6-sol",
                 "label": "gpt-test",
+                "reasoning_effort": "high",
+                "effective_reasoning_effort": "high",
+                "max_output_tokens": 16384,
                 "execution": "live",
                 "status": "running_live",
             }
@@ -1659,6 +1738,20 @@ class EvaluationManifestTests(unittest.TestCase):
                     )
 
             execute.assert_not_called()
+
+            for field, value in (("reasoning_effort", "low"), ("effective_reasoning_effort", "low"), ("max_output_tokens", "8192")):
+                evaluation._atomic_write_json(checkpoint, {
+                    **evaluation._candidate_artifact_identity(candidate, self.manifest),
+                    field: value, "raw_results": {}, "errors": [], "usage": {},
+                })
+                with self.subTest(field=field), mock.patch.object(evaluation, "_clients", return_value=(object(), None)), mock.patch.object(
+                    evaluation.batch_api, "execute_live_request"
+                ) as execute, self.assertRaisesRegex(ValueError, f"wrong {field.replace('_', ' ')}"):
+                    evaluation._execute_live_candidate(
+                        run_dir, state, self.manifest, candidate, evaluation._request_lookup(self.manifest),
+                        "local-key", lambda _message: None,
+                    )
+                execute.assert_not_called()
 
     def test_live_evaluation_retries_transient_request_errors(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -2337,10 +2430,12 @@ class EvaluationHistoryTests(unittest.TestCase):
         candidates = [{
             "provider": "openai",
             "endpoint": "https://api.openai.com/v1",
-            "model": "test-model",
+            "model": "gpt-6-sol",
             "key_name": "OpenAI",
             "execution": "batch",
-        }]
+            "reasoning_effort": effort,
+            "max_output_tokens": limit,
+        } for effort, limit in (("auto", 8192), ("high", 16384))]
         estimate = {
             "cost_usd": 0.01,
             "maximum_cost_usd": 0.02,
@@ -2355,8 +2450,6 @@ class EvaluationHistoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, mock.patch(
             "util.evaluation.build_manifest", side_effect=(manifest, second_manifest)
         ), mock.patch(
-            "util.evaluation._validate_candidates"
-        ), mock.patch(
             "util.evaluation.estimate_candidate", return_value=estimate
         ):
             project = Path(temporary)
@@ -2370,6 +2463,10 @@ class EvaluationHistoryTests(unittest.TestCase):
             self.assertEqual([run["run_dir"] for run in runs], [second.resolve()])
             self.assertEqual(runs[0]["status"], "prepared")
             self.assertEqual(evaluation.latest_run(project), second.resolve())
+            saved, _manifest = evaluation.load_run(second)
+            self.assertEqual([c["reasoning_effort"] for c in saved["candidates"]], ["auto", "high"])
+            self.assertEqual([c["effective_reasoning_effort"] for c in saved["candidates"]], ["none", "high"])
+            self.assertEqual([c["max_output_tokens"] for c in saved["candidates"]], [8192, 16384])
 
     def test_completed_managed_run_moves_into_archive(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -2460,6 +2557,16 @@ class EvaluationHistoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary) / "project"
             run_dir = self._make_run(project)
+            state, manifest = evaluation.load_run(run_dir)
+            candidate = state["candidates"][0]
+            candidate.update({
+                "model": "gpt-6-astra", "reasoning_effort": "high",
+                "effective_reasoning_effort": "high", "max_output_tokens": 16384,
+            })
+            evaluation._atomic_write_json(run_dir / "state.json", state)
+            result = evaluation._read_json(run_dir / candidate["result_file"])
+            result.update(evaluation._candidate_artifact_identity(candidate, manifest))
+            evaluation._atomic_write_json(run_dir / candidate["result_file"], result)
             archive_path = Path(temporary) / "portable.dazedeval"
             exported = evaluation.export_run_archive(run_dir, archive_path)
 
@@ -2481,6 +2588,12 @@ class EvaluationHistoryTests(unittest.TestCase):
             self.assertEqual(imported_state["human_review"]["reviewed"], 25)
             self.assertTrue((imported / "results/candidate-1.json").is_file())
             self.assertEqual(len(evaluation.list_runs(project)), 2)
+            restored = imported_state["candidates"][0]
+            self.assertEqual(evaluation.generation_settings(restored), evaluation.generation_settings(candidate))
+            self.assertEqual(evaluation.load_comparison_data(imported)["candidates"][0]["label"], evaluation.candidate_label(candidate))
+            for updates in ({"max_output_tokens": 8192}, {"reasoning_effort": "low", "effective_reasoning_effort": "low"}):
+                with self.subTest(updates=updates), self.assertRaisesRegex(ValueError, "wrong"):
+                    evaluation._validate_result_artifact({**restored, **updates}, result, imported_state, manifest)
 
     def test_import_rejects_archive_path_traversal(self):
         with tempfile.TemporaryDirectory() as temporary:

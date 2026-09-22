@@ -186,6 +186,20 @@ These are detailed written instructions given to the translation AI and your AI 
 should leave the shared instructions alone. Game-specific names and writing rules belong in
 Workflow Step 3.
 
+## Translation Evaluation
+
+Each model row has its own **Reasoning effort** and **Output token limit**.
+The low-cost default selects a supported setting and shows the effective level in the dropdown.
+Models that require reasoning do not offer Off; unknown models use provider defaults.
+You can add the same model more than once with different efforts or output limits to compare the results.
+
+The output limit applies to each request and includes both reasoning and translation tokens.
+Raising it increases the theoretical cost ceiling shown before submission.
+The text estimate excludes unpredictable reasoning costs; the ceiling includes the full selected output limit and automatic attempts.
+
+Prepare the benchmark again after changing a model's settings.
+Saved evaluations and exported evaluation archives retain the selected settings, and results identify each model's effort and output limit.
+
 ## Configuration
 
 This is where you save your AI service, private API key, model, text width, and game-specific

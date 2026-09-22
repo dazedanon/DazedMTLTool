@@ -9,6 +9,11 @@ import re
 import threading
 from pathlib import Path
 
+from util.evaluation_settings import (
+    DEFAULT_MAX_OUTPUT_TOKENS, EFFORT_LABELS, MAX_OUTPUT_TOKEN_LIMIT,
+    generation_settings, reasoning_profile,
+)
+
 from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import (
@@ -130,12 +135,13 @@ class EvaluationTab(QWidget):
     """Prepare, submit, and review a user-defined model comparison."""
 
     COLUMNS = (
-        "Model", "API URL", "Mode", "Status", "Likely upper", "Actual",
+        "Model", "API URL", "Mode", "Status", "Text estimate", "Actual",
         "No-cache", "Cache read", "Valid", "Consistency", "Meaning Accuracy",
         "Glossary & Prompt",
         "Natural & Contextual", "Best overall",
     )
     COLUMN_LABELS = {
+        "Text estimate": "Text\ncost",
         "Meaning Accuracy": "Meaning\nAccuracy",
         "Glossary & Prompt": "Glossary &\nPrompt",
         "Natural & Contextual": "Natural &\nContextual",
@@ -143,6 +149,8 @@ class EvaluationTab(QWidget):
         "Cache read": "Cache\nread",
     }
     COLUMN_TOOLTIPS = {
+        "Model": "Model name, followed by reasoning effort and the per-request output token limit. Hover over a model to see the full settings.",
+        "Text estimate": "Estimate for translation text. Reasoning costs are additional; the submission dialog shows the theoretical ceiling.",
         "Actual": (
             "Total provider cost calculated from the returned token usage."
         ),
@@ -236,6 +244,8 @@ class EvaluationTab(QWidget):
         self._worker_cancelable = False
         self._worker_uses_translation_runtime = False
         self._candidate_widgets: list[dict] = []
+        self._generation_setup_dirty = False
+        self._restoring_benchmark_setup = False
         self._content_inventory: dict = {}
         self._content_source_items: dict[str, QTreeWidgetItem] = {}
         self._content_map_items: dict[str, QTreeWidgetItem] = {}
@@ -610,6 +620,7 @@ class EvaluationTab(QWidget):
             item.setText(f"{item.text()} ⓘ")
             item.setToolTip(tooltip)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setWordWrap(False)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.table.setTextElideMode(Qt.ElideMiddle)
         self.table.verticalHeader().setVisible(False)
@@ -820,6 +831,7 @@ class EvaluationTab(QWidget):
         self.log.setPlaceholderText("Evaluation activity…")
         results.add_widget(self.log, 1)
         QTimer.singleShot(0, self._refresh_responsive_geometry)
+
         self._update_actions()
 
     def resizeEvent(self, event):
@@ -873,7 +885,7 @@ class EvaluationTab(QWidget):
         if not viewport_width:
             return
         weights = (
-            1.55, 1.65, 0.60, 0.82, 0.68, 0.62, 0.68, 0.68,
+            2.20, 1.00, 0.60, 0.82, 0.68, 0.62, 0.68, 0.68,
             0.60, 0.90, 0.95, 1.02, 1.12, 0.82,
         )
         column_count = len(weights)
@@ -1373,6 +1385,7 @@ class EvaluationTab(QWidget):
     def _add_candidate_row(
         self, endpoint: str = "https://api.openai.com/v1", model: str = "",
         execution: str = "batch", *, key_name: str = "",
+        reasoning_effort: str = "auto", max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
     ):
         endpoint = self._endpoint_for_legacy_provider(endpoint)
         endpoint_edit = QLineEdit(endpoint)
@@ -1440,6 +1453,40 @@ class EvaluationTab(QWidget):
             )
         execution_combo.setMinimumWidth(104)
 
+        reasoning_combo = _EvaluationComboBox()
+        reasoning_combo.setMinimumWidth(285)
+        reasoning_combo.setAccessibleName("Reasoning effort")
+        output_tokens = QSpinBox()
+        output_tokens.setRange(1, MAX_OUTPUT_TOKEN_LIMIT)
+        output_tokens.setSingleStep(1024)
+        output_tokens.setGroupSeparatorShown(True)
+        output_tokens.setValue(max_output_tokens)
+        output_tokens.setKeyboardTracking(False)
+        output_tokens.setMinimumWidth(130)
+        output_tokens.setAccessibleName("Output token limit")
+        output_tokens.setToolTip(
+            "Maximum output tokens per request, including reasoning and translation. "
+            "A higher limit raises the theoretical cost ceiling shown before submission."
+        )
+        generation_field = QWidget()
+        generation_field.setObjectName("evaluationGenerationField")
+        generation_field.setStyleSheet("QWidget#evaluationGenerationField { background-color: transparent; }")
+        generation_layout = QHBoxLayout(generation_field)
+        generation_layout.setContentsMargins(0, 0, 0, 12)
+        generation_layout.setSpacing(12)
+        reasoning_label = QLabel("Reasoning effort")
+        reasoning_label.setBuddy(reasoning_combo)
+        token_label = QLabel("Output token limit")
+        token_label.setBuddy(output_tokens)
+        generation_layout.addWidget(reasoning_label)
+        generation_layout.addWidget(reasoning_combo)
+        generation_layout.addSpacing(12)
+        generation_layout.addWidget(token_label)
+        generation_layout.addWidget(output_tokens)
+        generation_hint = QLabel("Includes reasoning and translation.")
+        generation_hint.setWordWrap(True)
+        generation_layout.addWidget(generation_hint, 1)
+
         scan_btn = QPushButton("Scan")
         scan_btn.setToolTip("Fetch models available to this saved API key")
         configure_action_button(scan_btn, variant="secondary")
@@ -1454,6 +1501,10 @@ class EvaluationTab(QWidget):
             "key": key_combo,
             "model": model_combo,
             "execution": execution_combo,
+            "generation_field": generation_field,
+            "reasoning": reasoning_combo,
+            "max_output_tokens": output_tokens,
+            "generation_hint": generation_hint,
             "scan": scan_btn,
             "remove": remove_btn,
             "model_fetch_thread": None,
@@ -1490,6 +1541,12 @@ class EvaluationTab(QWidget):
         remove_btn.clicked.connect(lambda _checked=False, row=widgets: self._remove_candidate_row(row))
         self._refresh_model_suggestions(widgets, model)
         self._refresh_candidate_key(widgets, preferred_name=key_name)
+        self._refresh_reasoning_options(widgets, preferred=reasoning_effort)
+        model_combo.currentTextChanged.connect(
+            lambda _text, row=widgets: self._refresh_reasoning_options(row)
+        )
+        reasoning_combo.currentIndexChanged.connect(lambda _index: self._on_generation_settings_changed())
+        output_tokens.valueChanged.connect(lambda _value: self._on_generation_settings_changed())
         self._reflow_candidate_rows()
         self._schedule_candidate_model_scan(widgets, delay_ms=350)
 
@@ -1497,7 +1554,7 @@ class EvaluationTab(QWidget):
         for widgets in list(self._candidate_widgets):
             widgets["scan_timer"].stop()
             for name in (
-                "endpoint_field", "key", "model", "execution", "scan", "remove"
+                "endpoint_field", "key", "model", "execution", "scan", "remove", "generation_field"
             ):
                 widget = widgets[name]
                 self.candidate_grid.removeWidget(widget)
@@ -1523,6 +1580,7 @@ class EvaluationTab(QWidget):
 
     def _restore_benchmark_setup(self, state: dict, manifest: dict):
         """Populate Benchmark setup from a saved run's immutable inputs."""
+        self._restoring_benchmark_setup = True
         candidates = list(state.get("candidates") or [])
         if candidates:
             self._clear_candidate_rows()
@@ -1532,6 +1590,8 @@ class EvaluationTab(QWidget):
                     str(candidate.get("model") or ""),
                     str(candidate.get("execution") or "batch"),
                     key_name=str(candidate.get("key_name") or ""),
+                    reasoning_effort=str(candidate.get("reasoning_effort", "auto")),
+                    max_output_tokens=int(candidate.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)),
                 )
                 if state.get("credential_binding_required"):
                     # Import archives are data, not authority to select one of
@@ -1580,6 +1640,8 @@ class EvaluationTab(QWidget):
         budget = float(state.get("budget_usd_per_model", 0) or 0)
         if budget > 0:
             self.budget_spin.setValue(budget)
+        self._restoring_benchmark_setup = False
+        self._generation_setup_dirty = False
 
     def _remove_candidate_row(self, widgets: dict):
         if len(self._candidate_widgets) <= 1:
@@ -1592,7 +1654,7 @@ class EvaluationTab(QWidget):
         self._candidate_widgets.remove(widgets)
         widgets["scan_timer"].stop()
         for name in (
-            "endpoint_field", "key", "model", "execution", "scan", "remove"
+            "endpoint_field", "key", "model", "execution", "scan", "remove", "generation_field"
         ):
             widget = widgets[name]
             self.candidate_grid.removeWidget(widget)
@@ -1601,12 +1663,15 @@ class EvaluationTab(QWidget):
 
     def _reflow_candidate_rows(self):
         for row_index, widgets in enumerate(self._candidate_widgets, start=1):
+            grid_row = row_index * 2 - 1
             for column, name in enumerate((
                 "endpoint_field", "key", "model", "execution", "scan", "remove"
             )):
-                self.candidate_grid.addWidget(widgets[name], row_index, column)
+                self.candidate_grid.addWidget(widgets[name], grid_row, column)
+            self.candidate_grid.addWidget(widgets["generation_field"], grid_row + 1, 0, 1, 6)
             widgets["remove"].setEnabled(len(self._candidate_widgets) > 1)
         QTimer.singleShot(0, self._refresh_responsive_geometry)
+        self._on_generation_settings_changed()
 
     def _refresh_model_suggestions(self, widgets: dict, preferred: str = ""):
         combo = widgets["model"]
@@ -1621,6 +1686,62 @@ class EvaluationTab(QWidget):
             current_index = combo.findText(current)
         combo.setCurrentIndex(current_index if current_index >= 0 else 0)
         combo.blockSignals(False)
+        self._refresh_reasoning_options(widgets)
+
+    def _refresh_reasoning_options(self, widgets: dict, preferred: str | None = None):
+        candidate = {
+            "provider": self._provider_for_endpoint(widgets["endpoint"].text()),
+            "model": widgets["model"].currentText().strip(),
+        }
+        levels, default = reasoning_profile(candidate)
+        combo = widgets["reasoning"]
+        previous = preferred if preferred is not None else combo.currentData() or "auto"
+        combo.blockSignals(True)
+        combo.clear()
+        default_label = (
+            f"Low-cost default ({EFFORT_LABELS[default]})" if levels else "Provider default"
+        )
+        combo.addItem(default_label, "auto")
+        for effort in levels:
+            combo.addItem(EFFORT_LABELS[effort], effort)
+        index = combo.findData(previous)
+        if index < 0 and preferred is not None:
+            # Keep invalid imported/saved choices visible for correction;
+            # validation must reject them before a paid request can start.
+            combo.addItem(f"Unsupported: {preferred}", preferred)
+            index = combo.count() - 1
+        combo.setCurrentIndex(max(0, index))
+        combo.setEnabled(bool(levels) or index > 0)
+        combo.blockSignals(False)
+        combo.setToolTip(
+            "Only supported effort levels are offered. Off is unavailable when reasoning is required. "
+            "Higher effort may improve quality and use more output tokens."
+            if levels else "Reasoning controls are not known for this model; provider defaults are used."
+        )
+        widgets["generation_hint"].setText(
+            "Effort reset for this model. Includes reasoning and translation."
+            if index < 0 else "Includes reasoning and translation."
+        )
+        signature = (candidate["provider"], candidate["model"], combo.currentData())
+        previous_signature = widgets.get("reasoning_signature")
+        widgets["reasoning_signature"] = signature
+        if previous_signature is not None and signature != previous_signature:
+            self._on_generation_settings_changed()
+
+    def _on_generation_settings_changed(self):
+        for widgets in self._candidate_widgets:
+            widgets["reasoning_signature"] = (
+                self._provider_for_endpoint(widgets["endpoint"].text()),
+                widgets["model"].currentText().strip(),
+                widgets["reasoning"].currentData(),
+            )
+        if self.current_run_dir and not self._restoring_benchmark_setup:
+            self._generation_setup_dirty = True
+            if hasattr(self, "submit_btn"):
+                self.submit_btn.setEnabled(False)
+                set_status_text(
+                    self.status_label, "Model settings changed. Prepare the benchmark again to apply them.", "info"
+                )
 
     @classmethod
     def _endpoint_for_legacy_provider(cls, endpoint: str) -> str:
@@ -1793,6 +1914,7 @@ class EvaluationTab(QWidget):
         combo.setToolTip(
             "Models available from the selected API URL and saved key"
         )
+        self._refresh_reasoning_options(widgets)
         selected = combo.currentText().strip() or "none"
         self._append_log(
             f"Found {len(unique_models):,} models; selected “{selected}”."
@@ -1900,6 +2022,8 @@ class EvaluationTab(QWidget):
                 "execution": widgets["execution"].currentData(),
                 "model": model,
                 "label": model,
+                "reasoning_effort": widgets["reasoning"].currentData(),
+                "max_output_tokens": widgets["max_output_tokens"].value(),
             })
         return candidates
 
@@ -2190,6 +2314,12 @@ class EvaluationTab(QWidget):
             )
             return
         candidates = self._candidate_config()
+        try:
+            for candidate in candidates:
+                generation_settings(candidate)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Evaluation settings", str(exc))
+            return
         if any(not candidate["model"] for candidate in candidates):
             QMessageBox.warning(
                 self, "Evaluation", "Enter a model ID for every comparison row."
@@ -2279,6 +2409,7 @@ class EvaluationTab(QWidget):
         def done(payload):
             run_dir, state = payload
             self.current_run_dir = Path(run_dir)
+            self._generation_setup_dirty = False
             self._last_review_path = None
             self._display_state(state)
             summary = state.get("corpus_summary") or {}
@@ -2307,6 +2438,9 @@ class EvaluationTab(QWidget):
     def submit_batches(self):
         if not self.current_run_dir:
             return
+        if self._generation_setup_dirty:
+            QMessageBox.warning(self, "Evaluation settings", "Prepare the benchmark again to apply changed model settings.")
+            return
         try:
             state, manifest = evaluation.refresh_run_estimates(
                 self.current_run_dir
@@ -2317,8 +2451,9 @@ class EvaluationTab(QWidget):
         if state["status"] not in {"prepared", "partially_submitted"}:
             return
         lines = [
-            f"{candidate['label']} ({candidate.get('execution', 'batch').title()}): "
-            f"${candidate['estimate']['cost_usd']:.2f} likely upper bound; "
+            f"{evaluation.candidate_label(candidate)} ({candidate.get('execution', 'batch').title()}): "
+            f"${candidate['estimate']['cost_usd']:.2f} text estimate"
+            f"{' + reasoning' if candidate['estimate'].get('reasoning_tokens_unestimated') else ''}; "
             f"${candidate['estimate']['maximum_cost_usd']:.2f} theoretical ceiling"
             for candidate in state["candidates"]
             if not candidate.get("batch_id")
@@ -3334,8 +3469,12 @@ class EvaluationTab(QWidget):
                 )
                 for metric in evaluation.REVIEW_QUALITY_METRICS
             ]
+            model_display = str(candidate.get("label") or candidate.get("model") or "")
+            if "max_output_tokens" in candidate:
+                settings = generation_settings(candidate)
+                model_display += f"\n{EFFORT_LABELS[settings['effective_reasoning_effort']]} · {settings['max_output_tokens']:,}"
             values = (
-                candidate.get("model", ""),
+                model_display,
                 candidate.get("endpoint") or candidate.get("provider", ""),
                 candidate.get("execution", "batch").title(),
                 display_status,
@@ -3362,7 +3501,14 @@ class EvaluationTab(QWidget):
                 column_name = self.COLUMNS[column]
                 if column_name in self.COLUMN_TOOLTIPS:
                     item.setToolTip(self.COLUMN_TOOLTIPS[column_name])
+                if column == 0:
+                    item.setToolTip(evaluation.candidate_label(candidate))
+                elif column == 1:
+                    item.setToolTip(str(value))
+                elif column_name == "Text estimate" and candidate.get("estimate", {}).get("method"):
+                    item.setToolTip(str(candidate.get("estimate", {}).get("method", "")))
                 self.table.setItem(row, column, item)
+            self.table.setRowHeight(row, self.table.fontMetrics().lineSpacing() * (2 if "max_output_tokens" in candidate else 1) + 14)
         has_pending_batch = any(
             candidate.get("batch_id")
             and candidate.get("status") not in {"completed", "failed"}
@@ -3402,7 +3548,7 @@ class EvaluationTab(QWidget):
         )
         self.prepare_btn.setEnabled(not busy)
         self.submit_btn.setEnabled(
-            not busy and status in {"prepared", "partially_submitted"}
+            not busy and not self._generation_setup_dirty and status in {"prepared", "partially_submitted"}
         )
         self.refresh_btn.setEnabled(
             not busy and (

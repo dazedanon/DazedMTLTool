@@ -117,6 +117,35 @@ class BatchProviderDetectionTests(unittest.TestCase):
             for m in params["messages"]
         ))
 
+        cases = (
+            ("gpt-6-astra", "low"),
+            ("gpt-6-astra-20260915", "low"),
+            ("gpt-6-sol", "none"),
+            ("gpt-6-luna", "none"),
+            ("gpt-6-sol-20260915", "none"),
+            ("openai/gpt-6-astra", "low"),
+            ("openai/gpt-6-sol", "none"),
+            ("gpt-5.6-terra", "none"),
+            ("gpt-5", "minimal"),
+            ("gpt-4.1", None),
+        )
+        with mock.patch.dict("os.environ", {}, clear=True):
+            for model, effort in cases:
+                with self.subTest(model=model):
+                    params = T.buildOpenAIRequest(
+                        "system", '{"Line1":"猫"}', [], 0.05, "json", model, 1,
+                        api_provider="openrouter" if "/" in model else "openai",
+                    )
+                    body = BP._openai_batch_body("openai", params)
+                    self.assertEqual(body.get("reasoning_effort"), effort)
+                    if effort is None:
+                        self.assertEqual(body["temperature"], 0)
+                        self.assertEqual(body["frequency_penalty"], 0.05)
+                    else:
+                        self.assertNotIn("temperature", body)
+                        self.assertNotIn("frequency_penalty", body)
+                    self.assertEqual(body["response_format"]["json_schema"]["schema"]["required"], ["Line1"])
+
     def test_every_provider_route_has_safe_output_bounds(self):
         payload = '{"Line1":"猫"}'
         expected = T.MIN_TRANSLATION_OUTPUT_TOKENS

@@ -32,6 +32,9 @@ from typing import Any, Callable, Iterable
 
 from util import batch_providers as batch_api
 from util.api_errors import concise_api_error
+from util.evaluation_settings import (
+    DEFAULT_MAX_OUTPUT_TOKENS, SETTING_FIELDS, candidate_label, generation_settings,
+)
 from util.paths import (
     GAME_GLOSSARY_RELATIVE,
     GAME_SKILLS_RELATIVE,
@@ -62,7 +65,7 @@ from util.translation import (
 )
 
 
-EVALUATION_VERSION = 7
+EVALUATION_VERSION = 8
 EVALUATION_ARCHIVE_VERSION = 1
 MANIFEST_HASH_VERSION = 2
 ARTIFACT_BINDING_VERSION = 5
@@ -84,7 +87,7 @@ REVIEW_QUALITY_METRICS = (
     "glossary_prompt",
     "natural_contextual",
 )
-MAX_OUTPUT_TOKENS_PER_REQUEST = 4096
+MAX_OUTPUT_TOKENS_PER_REQUEST = DEFAULT_MAX_OUTPUT_TOKENS
 LIVE_REQUEST_MAX_ATTEMPTS = 3
 ATOMIC_REPLACE_MAX_ATTEMPTS = 8
 ATOMIC_REPLACE_INITIAL_DELAY_SECONDS = 0.05
@@ -335,7 +338,7 @@ def _requires_artifact_binding(state: dict, manifest: dict) -> bool:
 
 
 def _candidate_artifact_identity(candidate: dict, manifest: dict) -> dict[str, str]:
-    return {
+    identity = {
         "candidate_id": str(candidate.get("id") or ""),
         "model": str(candidate.get("model") or ""),
         "provider": str(candidate.get("provider") or ""),
@@ -345,6 +348,9 @@ def _candidate_artifact_identity(candidate: dict, manifest: dict) -> dict[str, s
             manifest.get("manifest_sha256") or _manifest_digest(manifest)
         ),
     }
+    if int(manifest.get("version", 0) or 0) >= 8 or any(field in candidate for field in SETTING_FIELDS):
+        identity.update({key: str(value) for key, value in generation_settings(candidate).items()})
+    return identity
 
 
 def _validate_result_artifact(
@@ -1405,6 +1411,8 @@ def _request_lookup(manifest: dict) -> dict[str, dict]:
 
 
 def estimate_candidate(manifest: dict, candidate: dict) -> dict:
+    settings = generation_settings(candidate)
+    output_limit = settings["max_output_tokens"]
     requests = _request_lookup(manifest)
     execution_counts: dict[str, int] = defaultdict(int)
     for execution in manifest["executions"]:
@@ -1427,7 +1435,7 @@ def estimate_candidate(manifest: dict, candidate: dict) -> dict:
     estimated_input = round(input_tokens * tokenizer_factor)
     estimated_output = min(
         round(output_tokens * tokenizer_factor * thinking_factor),
-        len(manifest["executions"]) * MAX_OUTPUT_TOKENS_PER_REQUEST,
+        len(manifest["executions"]) * output_limit,
     )
     rates = _candidate_rates(candidate)
     raw_cost = (
@@ -1442,7 +1450,7 @@ def estimate_candidate(manifest: dict, candidate: dict) -> dict:
     single_attempt_ceiling = (
         estimated_input * 1.25 * rates["input"]
         + len(manifest["executions"])
-        * MAX_OUTPUT_TOKENS_PER_REQUEST
+        * output_limit
         * rates["output"]
     ) / 1_000_000
     maximum_cost = single_attempt_ceiling * automatic_attempts
@@ -1453,11 +1461,12 @@ def estimate_candidate(manifest: dict, candidate: dict) -> dict:
         "cost_usd": likely_upper_cost,
         "maximum_cost_usd": maximum_cost,
         "automatic_attempts": automatic_attempts,
-        "output_token_cap_per_request": MAX_OUTPUT_TOKENS_PER_REQUEST,
+        "output_token_cap_per_request": output_limit,
+        "reasoning_tokens_unestimated": settings["effective_reasoning_effort"] != "none",
         "rates": rates,
         "method": (
-            f"provider-neutral {candidate.get('execution', 'batch')} likely "
-            "upper bound with tokenizer/thinking and 25% contingency; "
+            f"provider-neutral {candidate.get('execution', 'batch')} text "
+            "estimate with 25% contingency, excluding unpredictable reasoning; "
             f"theoretical ceiling includes {automatic_attempts} automatic "
             f"attempt{'s' if automatic_attempts != 1 else ''}"
         ),
@@ -1533,7 +1542,7 @@ def _validate_candidates(candidates: list[dict]) -> None:
     if len(candidates) < 2:
         raise ValueError("Add at least two models to compare")
     supported = {"openai", "gemini", "anthropic"}
-    seen: set[tuple[str, str, str, str]] = set()
+    seen: set[tuple] = set()
     for candidate in candidates:
         provider = candidate.get("provider")
         if provider not in supported:
@@ -1551,11 +1560,15 @@ def _validate_candidates(candidates: list[dict]) -> None:
             )
         if not str(candidate.get("model") or "").strip():
             raise ValueError(f"Model is required for {provider}")
+        settings = generation_settings(candidate)
         identity = (
             str(provider),
             endpoint.casefold(),
             str(candidate.get("key_name") or ""),
             str(candidate["model"]).strip().casefold(),
+            execution,
+            settings["effective_reasoning_effort"],
+            settings["max_output_tokens"],
         )
         if identity in seen:
             raise ValueError(
@@ -1819,6 +1832,7 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
             "keyless": bool(candidate.get("keyless", False)),
             "execution": str(candidate.get("execution") or "batch").lower(),
             "status": "prepared",
+            **generation_settings(candidate),
         }
         clean["estimate"] = estimate_candidate(manifest, clean)
         _validate_candidate_budget(clean, budget_usd)
@@ -2161,6 +2175,9 @@ def import_run_archive(
         if not isinstance(candidates, list):
             raise ValueError("Evaluation archive candidate list is invalid")
         _validate_candidate_ids(candidates)
+        if int(state.get("version", 0) or 0) >= 8:
+            for candidate in candidates:
+                generation_settings(candidate)
         result_names: set[str] = set()
         for candidate in candidates:
             if not isinstance(candidate, dict):
@@ -2334,6 +2351,9 @@ def sync_run_history(run_dir: str | Path) -> int:
 
 
 def _provider_params(candidate: dict, request: dict) -> dict:
+    settings = generation_settings(candidate)
+    effort = settings["effective_reasoning_effort"]
+    output_limit = settings["max_output_tokens"]
     provider = candidate["provider"]
     dynamic_context = request["glossary"] + request.get("sfx_reference", "")
     if provider == "anthropic":
@@ -2349,10 +2369,12 @@ def _provider_params(candidate: dict, request: dict) -> dict:
             # batch request to pay the 2x one-hour cache-write rate.
             cache_ttl=None if is_batch else "5m",
         )
-        # Translation does not need expensive adaptive reasoning. More
-        # importantly, this matches GPT reasoning=none and Gemini=minimal.
-        params["thinking"] = {"type": "disabled"}
-        params["max_tokens"] = MAX_OUTPUT_TOKENS_PER_REQUEST
+        if effort == "none":
+            params["thinking"] = {"type": "disabled"}
+        elif effort != "provider_default":
+            params["thinking"] = {"type": "adaptive"}
+            params["output_config"]["effort"] = effort
+        params["max_tokens"] = output_limit
         return params
 
     request_provider = (
@@ -2375,10 +2397,17 @@ def _provider_params(candidate: dict, request: dict) -> dict:
         # file validator rejects that transport-internal shape.
         params.pop("temperature", None)
         params.pop("extra_body", None)
-        params["reasoning_effort"] = "minimal"
-        params["max_tokens"] = MAX_OUTPUT_TOKENS_PER_REQUEST
+        if effort != "provider_default":
+            params["reasoning_effort"] = effort
+        params["max_tokens"] = output_limit
     else:
-        params["max_completion_tokens"] = MAX_OUTPUT_TOKENS_PER_REQUEST
+        if effort != "provider_default":
+            params["reasoning_effort"] = effort
+            for field in ("temperature", "top_p", "frequency_penalty"):
+                params.pop(field, None)
+        else:
+            params.pop("reasoning_effort", None)
+        params["max_completion_tokens"] = output_limit
         if (
             candidate.get("execution") == "live"
             and "api.openai.com" not in str(candidate.get("endpoint") or "").lower()
@@ -3349,9 +3378,7 @@ def blind_review_candidates(run_dir: str | Path) -> list[dict]:
         available = valid_primary > 0
         choices.append({
             "id": candidate_id,
-            "label": str(
-                candidate.get("label") or candidate.get("model") or candidate_id
-            ),
+            "label": candidate_label(candidate),
             "status": str(candidate.get("status") or "unknown"),
             "valid_primary": valid_primary,
             "available": available,
@@ -3516,11 +3543,7 @@ def load_comparison_data(run_dir: str | Path) -> dict:
     candidates = [
         {
             "id": str(candidate["id"]),
-            "label": str(
-                candidate.get("label")
-                or candidate.get("model")
-                or candidate["id"]
-            ),
+            "label": candidate_label(candidate),
             "model": str(candidate.get("model") or ""),
             "status": str(candidate.get("status") or "unknown"),
         }

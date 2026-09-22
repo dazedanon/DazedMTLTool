@@ -4826,6 +4826,7 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
 
     provider = (api_provider or os.getenv("API_PROVIDER", "openai")).lower()
     model_l = str(model or "").lower()
+    gpt6_family = re.search(r"(?:^|/)gpt-6-(astra|sol|luna)(?:-|$)", model_l)
     is_deepseek = "deepseek" in model_l
     is_mistral = provider == "mistral" or isMistralAPI()
     system_blocks = _provider_system_blocks(system, vocab_text)
@@ -4912,6 +4913,11 @@ def buildOpenAIRequest(system, user, history, penalty, formatType, model,
                 pass
     elif is_mistral:
         params["temperature"] = 0
+    elif gpt6_family:
+        # Astra requires reasoning; Sol and Luna also support none. Omit
+        # sampling/penalty overrides instead of taking the legacy chat path.
+        # https://developers.openai.com/api/docs/guides/latest-model
+        params["reasoning_effort"] = "low" if gpt6_family.group(1) == "astra" else "none"
     elif "gpt-5" in model_l:
         params["reasoning_effort"] = "none" if "gpt-5.6" in model_l else "minimal"
     else:

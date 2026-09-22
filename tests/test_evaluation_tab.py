@@ -565,6 +565,33 @@ class EvaluationTabTests(unittest.TestCase):
         )
         self.assertEqual(self.tab._provider_for_endpoint(added["endpoint"].text()), "gemini")
         self.assertEqual(added["model"].currentText(), "gemini-3.6-flash")
+        self.assertEqual(added["reasoning"].findData("none"), -1)
+        added["reasoning"].setCurrentIndex(added["reasoning"].findData("high"))
+        added["max_output_tokens"].setValue(16384)
+        configured = self.tab._candidate_config()[-1]
+        self.assertEqual(configured["reasoning_effort"], "high")
+        self.assertEqual(configured["max_output_tokens"], 16384)
+        self.tab._apply_endpoint_preset(added, "https://api.openai.com/v1")
+        added["model"].setEditText("gpt-6-sol")
+        added["reasoning"].setCurrentIndex(added["reasoning"].findData("none"))
+        added["model"].setEditText("gpt-6-astra")
+        self.assertEqual(added["reasoning"].findData("none"), -1)
+        self.assertEqual(added["reasoning"].currentData(), "auto")
+        self.tab.current_run_dir = self.project_root / "prepared"
+        self.tab._generation_setup_dirty = False
+        self.tab._apply_candidate_models(added, ["gpt-6-astra"])
+        self.assertFalse(self.tab._generation_setup_dirty)
+        added["reasoning"].setCurrentIndex(added["reasoning"].findData("medium"))
+        self.assertTrue(self.tab._generation_setup_dirty)
+        self.assertFalse(self.tab.submit_btn.isEnabled())
+        with mock.patch("gui.evaluation_tab.QMessageBox.warning") as warning, mock.patch.object(self.tab, "_run_task") as run:
+            self.tab.submit_batches()
+        warning.assert_called_once()
+        run.assert_not_called()
+        self.tab._generation_setup_dirty = False
+        self.tab._apply_candidate_models(added, ["gpt-6-astra"])
+        self.assertFalse(self.tab._generation_setup_dirty)
+        self.tab.current_run_dir = None
         self.tab._remove_candidate_row(added)
         self.assertEqual(len(self.tab._candidate_widgets), 1)
 
@@ -575,14 +602,24 @@ class EvaluationTabTests(unittest.TestCase):
                 {
                     "endpoint": "https://api.openai.com/v1",
                     "key_name": "OpenAI",
-                    "model": "gpt-restored",
+                    "model": "gpt-6-sol",
+                    "id": "candidate-1",
+                    "provider": "openai",
                     "execution": "batch",
+                    "reasoning_effort": "high",
+                    "effective_reasoning_effort": "high",
+                    "max_output_tokens": 16384,
                 },
                 {
                     "endpoint": "https://api.anthropic.com",
                     "key_name": "Claude",
-                    "model": "claude-restored",
+                    "model": "claude-opus-5-5",
+                    "id": "candidate-2",
+                    "provider": "anthropic",
                     "execution": "live",
+                    "reasoning_effort": "low",
+                    "effective_reasoning_effort": "low",
+                    "max_output_tokens": 8192,
                 },
             ],
         }
@@ -601,7 +638,7 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertEqual(self.tab.budget_spin.value(), 7.5)
         self.assertEqual(
             [row["model"].currentText() for row in self.tab._candidate_widgets],
-            ["gpt-restored", "claude-restored"],
+            ["gpt-6-sol", "claude-opus-5-5"],
         )
         self.assertEqual(
             [row["key"].currentText() for row in self.tab._candidate_widgets],
@@ -611,6 +648,12 @@ class EvaluationTabTests(unittest.TestCase):
             [row["execution"].currentData() for row in self.tab._candidate_widgets],
             ["batch", "live"],
         )
+        self.assertEqual([row["reasoning"].currentData() for row in self.tab._candidate_widgets], ["high", "low"])
+        self.assertEqual([row["max_output_tokens"].value() for row in self.tab._candidate_widgets], [16384, 8192])
+        self.assertFalse(self.tab._generation_setup_dirty)
+        self.tab._display_state({**state, "status": "prepared"})
+        self.assertIn("High", self.tab.table.item(0, 0).text())
+        self.assertIn("16,384", self.tab.table.item(0, 0).text())
 
     def test_saved_run_restores_custom_content_filter(self):
         state = {"budget_usd_per_model": 10, "candidates": []}
