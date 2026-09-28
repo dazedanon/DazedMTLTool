@@ -132,7 +132,7 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertFalse(self.tab.export_btn.isEnabled())
         self.assertFalse(self.tab.copy_review_skill_btn.isEnabled())
         self.assertFalse(self.tab.history_combo.isEnabled())
-        self.assertTrue(self.tab.import_evaluation_btn.isEnabled())
+        self.assertTrue(self.tab.import_evaluation_action.isEnabled())
 
     def test_content_presets_and_custom_map_selection_are_explicit(self):
         inventory = {
@@ -428,17 +428,17 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertTrue(inventory_started.wait(0.5))
             self.assertEqual(evaluation_page.history_combo.count(), 2)
             self.assertIn(
-                "model-a, model-b", evaluation_page.history_combo.itemText(0)
+                "model-a, model-b", evaluation_page.history_combo.itemData(0, Qt.ToolTipRole)
             )
             self.assertIn(
-                "Batch, Live", evaluation_page.history_combo.itemText(0)
+                "Batch, Live", evaluation_page.history_combo.itemData(0, Qt.ToolTipRole)
             )
             self.assertIn(
                 "Review complete (357 eligible lines)",
-                evaluation_page.history_combo.itemText(0),
+                evaluation_page.history_combo.itemData(0, Qt.ToolTipRole),
             )
             self.assertTrue(evaluation_page.history_combo.isEnabled())
-            self.assertTrue(evaluation_page.export_evaluation_btn.isEnabled())
+            self.assertTrue(evaluation_page.export_evaluation_action.isEnabled())
 
             # Scrolling the page over any Evaluation dropdown must not mutate
             # its value or activate expensive selection callbacks.
@@ -563,9 +563,9 @@ class EvaluationTabTests(unittest.TestCase):
             self.tab._refresh_history(prepared)
 
         self.assertEqual(self.tab._selected_history_run(), prepared)
-        self.assertIn("current-model", self.tab.history_combo.currentText())
+        self.assertIn("current-model", self.tab.history_combo.currentData(Qt.ToolTipRole))
         self.assertIn("Prepared", self.tab.history_combo.currentText())
-        self.assertFalse(self.tab.export_evaluation_btn.isEnabled())
+        self.assertFalse(self.tab.export_evaluation_action.isEnabled())
 
     def test_key_suggestions_are_provider_specific(self):
         self.tab._add_candidate_row("gemini", "gemini-3.6-flash")
@@ -896,7 +896,7 @@ class EvaluationTabTests(unittest.TestCase):
         })
 
         self.assertTrue(self.tab.submit_btn.isEnabled())
-        self.assertFalse(self.tab.refresh_btn.isEnabled())
+        self.assertFalse(self.tab.refresh_action.isEnabled())
         self.assertFalse(self.tab._poll_timer.isActive())
 
     def test_model_scan_uses_selected_provider_key_and_endpoint(self):
@@ -989,12 +989,13 @@ class EvaluationTabTests(unittest.TestCase):
         payload = {
             "has_imported_review": True,
             "candidates": [
-                {"id": "candidate-1", "label": "model-one"},
-                {"id": "candidate-2", "label": "model-two"},
+                {"id": "candidate-1", "model": "model-one", "label": "model-one / Low / 4,096 tokens"},
+                {"id": "candidate-2", "model": "model-two", "label": "model-two / High / 16,384 tokens"},
             ],
             "samples": [{
                 "id": "sample-1", "scene_id": "Map001", "stratum": "dialogue",
                 "sources": ["猫だ。", "行こう。"],
+                "context": {"history": ["ここにいる。"], "glossary": "猫 → cat"},
                 "blind_labels": {"candidate-1": "B", "candidate-2": "A"},
                 "has_problems": True,
                 "review": {
@@ -1082,6 +1083,28 @@ class EvaluationTabTests(unittest.TestCase):
         second_header = self.tab.comparison_table.horizontalHeaderItem(2).text()
         self.assertIn("A · model-two", first_header)
         self.assertEqual(second_header, "B · model-one")
+        self.assertIn("16,384", self.tab.comparison_table.horizontalHeaderItem(1).toolTip())
+        # The quieter default must keep evidence and context reachable without
+        # losing the selected sample or its translations.
+        self.assertTrue(self.tab.comparison_table.isVisible())
+        self.assertFalse(self.tab.comparison_review_notes.isVisible())
+        self.tab.comparison_notes_btn.click()
+        self.assertTrue(self.tab.comparison_review_notes.isVisible())
+        self.tab.comparison_review_dialog.accept()
+        self.tab.comparison_context_btn.click()
+        self.assertTrue(self.tab.comparison_context.isVisible())
+        self.assertIn("猫 → cat", self.tab.comparison_context.toPlainText())
+        self.tab.comparison_context_dialog.accept()
+        self.assertFalse(self.tab.comparison_sample_list.isVisible())
+        self.tab.comparison_samples_btn.click()
+        self.assertTrue(self.tab.comparison_sample_list.isVisible())
+        self.assertEqual(self.tab.comparison_sample_list.currentItem().data(Qt.UserRole), "sample-1")
+        self.tab.comparison_browser.accept()
+        self.assertFalse(self.tab.export_btn.isVisible())
+        self.tab.review_tools_btn.click()
+        self.assertTrue(self.tab.export_btn.isVisible())
+        self.assertTrue(self.tab.import_btn.isVisible())
+        self.tab.review_dialog.accept()
         self.assertIn(
             "Model A keeps the intended tone",
             self.tab.comparison_review_notes.text(),
@@ -1106,8 +1129,18 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertEqual(
             self.tab.comparison_table.horizontalHeaderItem(2).text(), "Candidate B"
         )
+        for action in self.tab.comparison_models_menu.actions():
+            self.assertNotIn("model-", action.text() + action.toolTip())
+        self.assertNotIn("model-", self.tab.comparison_table.horizontalHeaderItem(1).toolTip())
         overall = self.tab.comparison_review_values["overall"].text()
         self.assertLess(overall.index("Candidate A"), overall.index("Candidate B"))
+        # Menu actions survive rebuilding and cannot hide the last output.
+        self.tab.comparison_models_menu.actions()[0].setChecked(False)
+        self.assertEqual(self.tab.comparison_table.columnCount(), 2)
+        self.tab.comparison_models_menu.actions()[1].setChecked(False)
+        self.assertTrue(self.tab.comparison_models_menu.actions()[1].isChecked())
+        self.tab.comparison_models_menu.actions()[0].setChecked(True)
+        self.assertEqual(self.tab.comparison_table.columnCount(), 3)
         self.tab.comparison_filter.setCurrentIndex(
             self.tab.comparison_filter.findData("problems")
         )
@@ -1132,6 +1165,16 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertIn(
             "not included", self.tab.comparison_review_notes.text()
         )
+        # Reserved outputs are excluded from normal browsing and must never
+        # appear in the reader, even when the user explicitly browses all samples.
+        payload["samples"][0]["paired_holdout_locked"] = True
+        self.tab.comparison_filter.setCurrentIndex(self.tab.comparison_filter.findData("available"))
+        self.assertEqual(self.tab.comparison_sample_list.count(), 0)
+        self.tab.comparison_filter.setCurrentIndex(self.tab.comparison_filter.findData("all"))
+        self.assertEqual(self.tab.comparison_sample_list.count(), 1)
+        self.assertFalse(self.tab.comparison_table.isVisible())
+        self.assertEqual(self.tab.comparison_table.rowCount(), 0)
+        self.assertTrue(self.tab.comparison_empty_title.isVisible())
         # The v3 variant must expose editing requirements and paired source
         # evidence while the existing legacy score table still works.
         root = paired_cases.fixture(self.project_root, "paired-ui", groups=2)
@@ -1139,9 +1182,11 @@ class EvaluationTabTests(unittest.TestCase):
         paired_cases.write(path, paired_cases.fill(paired_cases.read(path)))
         evaluation.import_blind_review(root, path, reviewer="ui-fixture")
         self.tab.current_run_dir = root
-        self.tab.results_tabs.setCurrentIndex(self.tab._paired_tab_index)
+        self.tab.results_tabs.setCurrentIndex(0)
+        self.tab.details_tabs.setCurrentIndex(self.tab._paired_tab_index)
         self.tab._display_state(evaluation.load_run(root)[0])
         self.assertEqual(self.tab.paired_table.rowCount(), 3)
+        self.assertEqual(self.tab.overview_table.rowCount(), 3)
         self.assertIn("1/1", self.tab.paired_table.item(0, 2).text())
         self.tab._last_review_path = path
         self.tab.copy_review_skill()
@@ -1153,7 +1198,9 @@ class EvaluationTabTests(unittest.TestCase):
             worker.wait(1_000)
         self.app.processEvents()
         self.assertEqual(self.tab.comparison_sample_list.count(), 1)
-        self.assertTrue(self.tab.paired_sample_evidence.toPlainText())
+        self.tab.comparison_notes_btn.click()
+        self.assertTrue(self.tab.paired_sample_evidence.isVisible())
+        self.assertTrue(self.tab.paired_sample_evidence.text())
         self.assertTrue(self.tab._paired_evidence_scope)
         self.tab._clear_paired_evidence_scope()
         self.assertIsNone(self.tab._paired_evidence_scope)

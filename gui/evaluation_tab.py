@@ -17,8 +17,8 @@ from util.evaluation_settings import (
     generation_settings, reasoning_profile,
 )
 
-from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
-from PyQt5.QtGui import QBrush, QColor
+from PyQt5.QtCore import QEvent, QPointF, QSize, Qt, QThread, QTimer, pyqtSignal
+from PyQt5.QtGui import QBrush, QColor, QPalette, QTextLayout, QTextOption
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QAction,
@@ -40,7 +40,10 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
-    QSplitter,
+    QStackedWidget,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTabWidget,
     QFrame,
     QScrollArea,
@@ -56,7 +59,6 @@ from PyQt5.QtWidgets import (
 )
 
 from gui.ui_components import (
-    PageHeader,
     SectionCard,
     configure_action_button,
     configure_icon_button,
@@ -65,11 +67,24 @@ from gui.ui_components import (
 )
 from gui.config_tab import API_URL_PRESETS, ConfigComboBox, ConfigMenu, ModelFetchThread
 from gui.theme import COLORS
+from gui.workflow_components import DisclosureSection
 from util import api_keys as api_key_vault
 from util import evaluation
 from util import evaluation_pairwise as paired
 from util.paths import game_glossary_path
 from util.skills import load_clipboard_skill
+
+
+class _EvaluationStatusLabel(QLabel):
+    text_updated = pyqtSignal(str)
+
+    def setText(self, text):
+        super().setText(text)
+        self.setVisible(bool(text))
+        self.text_updated.emit(text)
+
+    def clear(self):
+        self.setText("")
 
 
 class _EvaluationWorker(QThread):
@@ -133,6 +148,49 @@ class _EvaluationComboBox(_IgnoreClosedComboWheel, QComboBox):
 
 class _EvaluationModelComboBox(_IgnoreClosedComboWheel, ConfigComboBox):
     pass
+
+
+class _TranslationDelegate(QStyledItemDelegate):
+    """Measure and paint with the same wrapping rules, including at large fonts."""
+
+    def _text_layout(self, option, index):
+        padding = max(10, option.fontMetrics.height() // 2)
+        width = max(1, self.parent().columnWidth(index.column()) - 2 * padding)
+        layout = QTextLayout(str(index.data(Qt.DisplayRole) or "").replace("\n", "\u2028"), option.font)
+        text_option = QTextOption()
+        text_option.setWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
+        layout.setTextOption(text_option)
+        layout.beginLayout()
+        height = 0
+        while True:
+            line = layout.createLine()
+            if not line.isValid():
+                break
+            line.setLineWidth(width)
+            line.setPosition(QPointF(0, height))
+            height += line.height()
+        layout.endLayout()
+        return layout, padding, int(height + 1)
+
+    def sizeHint(self, option, index):
+        option = QStyleOptionViewItem(option)
+        self.initStyleOption(option, index)
+        _layout, padding, height = self._text_layout(option, index)
+        return QSize(self.parent().columnWidth(index.column()), height + 2 * padding + 1)
+
+    def paint(self, painter, option, index):
+        option = QStyleOptionViewItem(option)
+        self.initStyleOption(option, index)
+        layout, padding, _height = self._text_layout(option, index)
+        painter.save()
+        painter.setClipRect(option.rect)
+        option.widget.style().drawPrimitive(QStyle.PE_PanelItemViewItem, option, painter, option.widget)
+        color_role = QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Text
+        painter.setPen(option.palette.color(color_role))
+        layout.draw(painter, QPointF(option.rect.left() + padding, option.rect.top() + padding))
+        painter.setPen(QColor(COLORS.border))
+        painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
+        painter.restore()
 
 
 class EvaluationTab(QWidget):
@@ -315,51 +373,394 @@ class EvaluationTab(QWidget):
         }
 
     def _init_ui(self):
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
+        outer = make_page_layout(self)
+        outer.setSpacing(12)
+        self.status_label = _EvaluationStatusLabel()
+        self.status_label.setWordWrap(True)
+        self.status_label.hide()
+
+        header = QHBoxLayout()
+        title = QLabel("Evaluation")
+        title.setObjectName("appPageTitle")
+        header.addWidget(title)
+        self.history_combo = _EvaluationComboBox()
+        self.history_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.history_combo.setMinimumContentsLength(18)
+        self.history_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.history_combo.setAccessibleName("Saved evaluation")
+        self.history_combo.setPlaceholderText("No saved evaluations")
+        self.history_combo.currentIndexChanged.connect(self._update_history_actions)
+        self.history_combo.activated.connect(lambda _index: self._open_selected_history())
+        header.addWidget(self.history_combo, 1)
+        self.new_evaluation_btn = QPushButton("New evaluation")
+        configure_action_button(self.new_evaluation_btn, variant="secondary")
+        header.addWidget(self.new_evaluation_btn)
+        self.review_tools_btn = QPushButton("Get review…")
+        configure_action_button(self.review_tools_btn, variant="primary")
+        header.addWidget(self.review_tools_btn)
+        self.run_actions_btn = QToolButton()
+        self.run_actions_btn.setText("More")
+        self.run_actions_btn.setPopupMode(QToolButton.InstantPopup)
+        self.run_actions_btn.setAccessibleName("More evaluation actions")
+        menu = QMenu(self.run_actions_btn)
+        self.run_actions_btn.setMenu(menu)
+        header.addWidget(self.run_actions_btn)
+        outer.addLayout(header)
+
+        self.export_evaluation_action = QAction("Export evaluation…", self)
+        self.import_evaluation_action = QAction("Import evaluation…", self)
+        self.refresh_action = QAction("Refresh results", self)
+        self.export_evaluation_action.triggered.connect(self._export_evaluation_archive)
+        self.import_evaluation_action.triggered.connect(self._import_evaluation_archive)
+        self.refresh_action.triggered.connect(self.refresh_results)
+
+        self._build_setup_dialog()
+        self._build_review_dialog()
+        self._build_run_details_dialog()
+        self.new_evaluation_btn.clicked.connect(lambda: self._show_dialog(self.setup_dialog))
+        self.review_tools_btn.clicked.connect(lambda: self._show_dialog(self.review_dialog))
+        menu.addAction("Run details…", lambda: self._show_dialog(self.details_dialog))
+        self.activity_dialog, activity_layout = self._make_dialog("Evaluation activity")
+        self.log = QTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setPlaceholderText("Evaluation activity will appear here.")
+        activity_layout.addWidget(self.log)
+        menu.addAction("Activity…", lambda: self._show_dialog(self.activity_dialog))
+        menu.addSeparator()
+        menu.addActions((self.refresh_action, self.export_evaluation_action, self.import_evaluation_action))
+
+        self.results_tabs = QTabWidget()
+        self.results_tabs.setObjectName("evaluationResults")
+        self.results_tabs.setDocumentMode(True)
+        self.results_tabs.tabBar().setDrawBase(False)
+        self.results_tabs.setStyleSheet(f"""
+            QTabWidget#evaluationResults::pane {{ border: none; }}
+            QTabBar::tab {{ background: transparent; border: none; padding: 10px 18px;
+                border-bottom: 2px solid transparent; color: {COLORS.text_muted}; }}
+            QTabBar::tab:selected {{ color: {COLORS.text_primary}; border-bottom-color: {COLORS.accent_text}; }}
+        """)
+        self.results_tabs.addTab(self._build_overview(), "Overview")
+        self._comparison_tab_index = self.results_tabs.addTab(self._build_comparison(), "Translations")
+        self.results_tabs.setTabEnabled(self._comparison_tab_index, False)
+        self.results_tabs.currentChanged.connect(self._on_results_tab_changed)
+        outer.addWidget(self.results_tabs, 1)
+        outer.addWidget(self.status_label)
+        self._update_actions()
+        QTimer.singleShot(0, self._refresh_responsive_geometry)
+
+    def _make_dialog(self, title):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.resize(880, 640)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+        return dialog, layout
+
+    def _show_dialog(self, dialog):
+        available = self.window().size()
+        dialog.resize(min(dialog.width(), max(600, available.width() - 80)),
+                      min(dialog.height(), max(420, available.height() - 80)))
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _build_review_dialog(self):
+        self.review_dialog, layout = self._make_dialog("Review translations")
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        body = QWidget()
+        steps = QVBoxLayout(body)
+        steps.setContentsMargins(0, 0, 0, 0)
+        steps.setSpacing(20)
+        scroll.setWidget(body)
+        layout.addWidget(scroll)
+        self.export_btn = QPushButton("Export review file…")
+        self.copy_review_skill_btn = QPushButton("Copy reviewer instructions")
+        self.import_btn = QPushButton("Import completed review…")
+        self.judge_check_btn = QPushButton("Export judge check…")
+        self.export_btn.clicked.connect(self.export_review)
+        self.copy_review_skill_btn.clicked.connect(self.copy_review_skill)
+        self.import_btn.clicked.connect(self.import_review)
+        self.judge_check_btn.clicked.connect(self.export_judge_check)
+        for button in (self.export_btn, self.copy_review_skill_btn, self.import_btn, self.judge_check_btn):
+            configure_action_button(button, variant="secondary")
+        for title, description, button in (
+            ("1. Export", "Choose the models to review. Their names are hidden in the file.", self.export_btn),
+            ("2. Get a review", "Give the file and these instructions to your reviewer.", self.copy_review_skill_btn),
+        ):
+            section = SectionCard(title, description, compact=True)
+            section.add_widget(button)
+            steps.addWidget(section)
+        section = SectionCard("3. Import", "Bring the completed file back to see the results.", compact=True)
+        self.reviewer_name = QLineEdit()
+        self.reviewer_name.setPlaceholderText("Reviewer name or session (optional)")
+        self.reviewer_name.setAccessibleName("Reviewer name")
+        self.reviewer_kind = _EvaluationComboBox()
+        for label, value in (("Reviewer type", "unspecified"), ("AI", "ai"), ("Human", "human")):
+            self.reviewer_kind.addItem(label, value)
+        reviewer = QHBoxLayout()
+        reviewer.addWidget(self.reviewer_name, 1)
+        reviewer.addWidget(self.reviewer_kind)
+        section.add_layout(reviewer)
+        section.add_widget(self.import_btn)
+        steps.addWidget(section)
+
+        self._paired_policy = copy.deepcopy(paired.DEFAULT_POLICY)
+        self._paired_challenge_ids = []
+        advanced = QWidget()
+        options = QGridLayout(advanced)
+        self.review_mode = _EvaluationComboBox()
+        self.review_mode.addItem("Paired review", "paired")
+        self.review_mode.addItem("Legacy rankings", "legacy")
+        self.review_stage = _EvaluationComboBox()
+        for title, value in (("Screening", "screening"), ("Confirmation", "confirmation"),
+                             ("Challenge cases", "challenge"), ("Reversed-order audit", "order_swap"),
+                             ("Independent judge", "judge_check"), ("Human adjudication", "adjudication"),
+                             ("Calibration", "calibration")):
+            self.review_stage.addItem(title, value)
+        self.paired_new_campaign = QCheckBox("Start a new campaign")
+        self.paired_new_campaign.setToolTip("Freeze a new policy and source split. Previous campaign results are retained.")
+        self.paired_policy_btn = QPushButton("Review policy…")
+        self.paired_calibration_btn = QPushButton("Load human calibration…")
+        self.paired_policy_btn.clicked.connect(self._edit_paired_policy)
+        self.paired_calibration_btn.clicked.connect(self._load_paired_calibration)
+        options.addWidget(QLabel("Format"), 0, 0)
+        options.addWidget(self.review_mode, 0, 1)
+        options.addWidget(QLabel("Stage"), 1, 0)
+        options.addWidget(self.review_stage, 1, 1)
+        options.addWidget(self.paired_new_campaign, 2, 0, 1, 2)
+        options.addWidget(self.paired_policy_btn, 3, 0)
+        options.addWidget(self.paired_calibration_btn, 3, 1)
+        options.addWidget(self.judge_check_btn, 4, 0, 1, 2)
+        steps.addWidget(DisclosureSection("Advanced review options", advanced))
+        steps.addStretch()
+        self.review_status = _EvaluationStatusLabel()
+        self.review_status.setWordWrap(True)
+        self.review_status.hide()
+        self.status_label.text_updated.connect(self.review_status.setText)
+        layout.addWidget(self.review_status)
+        self.review_mode.currentIndexChanged.connect(self._refresh_comparison_presenter)
+
+    def _build_overview(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 24, 0, 0)
+        layout.setSpacing(16)
+        self.overview_title = QLabel("Compare translation models")
+        self.overview_title.setObjectName("appPageTitle")
+        self.overview_title.setTextFormat(Qt.PlainText)
+        self.overview_title.setWordWrap(True)
+        self.overview_description = QLabel("Start a new evaluation or choose a saved one above.")
+        self.overview_description.setWordWrap(True)
+        self.overview_description.setStyleSheet(f"color: {COLORS.text_muted};")
+        layout.addWidget(self.overview_title)
+        layout.addWidget(self.overview_description)
+        self.overview_table = QTableWidget(0, 5)
+        self.overview_table.setHorizontalHeaderLabels(("Model", "Review", "Ready samples", "Major meaning errors", "Run cost"))
+        self.overview_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.overview_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.overview_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.overview_table.setShowGrid(False)
+        self.overview_table.setWordWrap(True)
+        self.overview_table.verticalHeader().hide()
+        self.overview_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.overview_table.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.overview_table.setStyleSheet(f"QTableWidget::item {{ padding: 14px; border-bottom: 1px solid {COLORS.border}; }}")
+        self.overview_table.itemDoubleClicked.connect(self._open_overview_evidence)
+        self.overview_table.viewport().installEventFilter(self)
+        layout.addWidget(self.overview_table)
+        self.overview_read_btn = QPushButton("Read translations →")
+        configure_action_button(self.overview_read_btn, variant="primary")
+        self.overview_read_btn.clicked.connect(lambda: self.results_tabs.setCurrentIndex(self._comparison_tab_index))
+        self.overview_read_btn.setEnabled(False)
+        row = QHBoxLayout()
+        row.addWidget(self.overview_read_btn)
+        row.addStretch()
+        details = QPushButton("Detailed results…")
+        configure_action_button(details, variant="quiet")
+        details.clicked.connect(lambda: self._show_dialog(self.details_dialog))
+        row.addWidget(details)
+        layout.addLayout(row)
+        layout.addStretch(1)
+        return page
+
+    def _build_comparison(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(12)
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
+        self.comparison_samples_btn = QPushButton("Choose a sample ▾")
+        self.comparison_samples_btn.setAccessibleName("Browse samples")
+        self.comparison_samples_btn.setToolTip("Choose a sample or search the translations")
+        configure_action_button(self.comparison_samples_btn, variant="quiet")
+        self.comparison_previous_btn = QPushButton("←")
+        self.comparison_next_btn = QPushButton("→")
+        configure_icon_button(self.comparison_previous_btn, accessible_name="Previous sample", tooltip="Previous sample")
+        configure_icon_button(self.comparison_next_btn, accessible_name="Next sample", tooltip="Next sample")
+        toolbar.addWidget(self.comparison_previous_btn)
+        toolbar.addWidget(self.comparison_samples_btn)
+        toolbar.addWidget(self.comparison_next_btn)
+        self.comparison_sample_heading = QLabel()
+        self.comparison_sample_heading.setTextFormat(Qt.PlainText)
+        self.comparison_sample_heading.setStyleSheet(f"color: {COLORS.text_muted};")
+        self.comparison_sample_heading.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        toolbar.addWidget(self.comparison_sample_heading, 1)
+        self.comparison_models_btn = QToolButton()
+        self.comparison_models_btn.setText("Models")
+        self.comparison_models_btn.setPopupMode(QToolButton.InstantPopup)
+        self.comparison_models_menu = QMenu(self.comparison_models_btn)
+        self.comparison_models_menu.setToolTipsVisible(True)
+        self.comparison_models_btn.setMenu(self.comparison_models_menu)
+        self.comparison_reveal_models = QAction("Show model names", self)
+        self.comparison_reveal_models.setCheckable(True)
+        self.comparison_reveal_models.toggled.connect(self._refresh_comparison_presenter)
+        toolbar.addWidget(self.comparison_models_btn)
+        self.comparison_notes_btn = QPushButton("Review notes…")
+        self.comparison_context_btn = QPushButton("Context…")
+        for button in (self.comparison_notes_btn, self.comparison_context_btn):
+            configure_action_button(button, variant="quiet")
+            toolbar.addWidget(button)
+        layout.addLayout(toolbar)
+        self.comparison_clear_scope = QPushButton("Clear model filter")
+        self.comparison_clear_scope.clicked.connect(self._clear_paired_evidence_scope)
+        self.comparison_clear_scope.hide()
+        layout.addWidget(self.comparison_clear_scope)
+
+        self.comparison_browser, browser_layout = self._make_dialog("Browse samples")
+        self.comparison_browser.resize(680, 600)
+        self.comparison_search = QLineEdit()
+        self.comparison_search.setPlaceholderText("Search source, translations or notes")
+        self.comparison_search.setClearButtonEnabled(True)
+        browser_layout.addWidget(self.comparison_search)
+        self.comparison_filter = _EvaluationComboBox()
+        for label, value in (("Available translations", "available"), ("All samples, including reserved", "all"),
+                             ("Reviewed", "reviewed"), ("Ties", "ties"), ("Has notes", "notes"),
+                             ("Missing or invalid", "problems"), ("Needs human follow-up", "follow_up")):
+            self.comparison_filter.addItem(label, value)
+        browser_layout.addWidget(self.comparison_filter)
+        self.comparison_sample_list = QListWidget()
+        self.comparison_sample_list.setWordWrap(False)
+        self.comparison_sample_list.setTextElideMode(Qt.ElideRight)
+        self.comparison_sample_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.comparison_sample_list.setStyleSheet("QListWidget::item { padding: 10px; }")
+        browser_layout.addWidget(self.comparison_sample_list, 1)
+        self.comparison_status = QLabel("Choose a completed evaluation to read its translations.")
+        self.comparison_status.setWordWrap(True)
+        self.comparison_status.setStyleSheet(f"color: {COLORS.text_muted};")
+        browser_layout.addWidget(self.comparison_status)
+        self.comparison_sample_list.itemActivated.connect(lambda _item: self.comparison_browser.accept())
+        self.comparison_sample_list.itemClicked.connect(lambda _item: self.comparison_browser.accept())
+        self.comparison_samples_btn.clicked.connect(lambda: self._show_dialog(self.comparison_browser))
+        self.comparison_search.textChanged.connect(self._refresh_comparison_sample_list)
+        self.comparison_filter.currentIndexChanged.connect(self._refresh_comparison_sample_list)
+        self.comparison_sample_list.currentRowChanged.connect(self._display_comparison_selection)
+        self.comparison_previous_btn.clicked.connect(lambda: self._move_comparison_selection(-1))
+        self.comparison_next_btn.clicked.connect(lambda: self._move_comparison_selection(1))
+
+        self.comparison_views = QStackedWidget()
+        layout.addWidget(self.comparison_views, 1)
+        self.comparison_table = QTableWidget(0, 0)
+        self.comparison_table.setObjectName("evaluationTranslations")
+        self.comparison_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.comparison_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.comparison_table.setWordWrap(True)
+        self.comparison_table.setTextElideMode(Qt.ElideNone)
+        self.comparison_table.setShowGrid(False)
+        self.comparison_table.setFrameShape(QFrame.NoFrame)
+        self.comparison_table.setStyleSheet(f"""
+            QTableWidget#evaluationTranslations {{ border: none; border-radius: 0; }}
+            QHeaderView::section {{ padding: 12px; border: none; background: {COLORS.surface_1}; }}
+        """)
+        self.comparison_table.setItemDelegate(_TranslationDelegate(self.comparison_table))
+        self.comparison_table.verticalHeader().setDefaultAlignment(Qt.AlignCenter)
+        self.comparison_table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self._comparison_row_timer = QTimer(self)
+        self._comparison_row_timer.setSingleShot(True)
+        self._comparison_row_timer.setInterval(0)
+        self._comparison_row_timer.timeout.connect(self.comparison_table.resizeRowsToContents)
+        self.comparison_table.horizontalHeader().sectionResized.connect(lambda *_args: self._comparison_row_timer.start())
+        self.comparison_table.viewport().installEventFilter(self)
+        self.comparison_views.addWidget(self.comparison_table)
+        empty = QWidget()
+        empty_layout = QVBoxLayout(empty)
+        empty_layout.addStretch()
+        self.comparison_empty_title = QLabel("Choose an evaluation")
+        self.comparison_empty_title.setObjectName("appPageTitle")
+        self.comparison_empty_title.setAlignment(Qt.AlignCenter)
+        self.comparison_empty_message = QLabel("Completed translations will appear here.")
+        self.comparison_empty_message.setWordWrap(True)
+        self.comparison_empty_message.setAlignment(Qt.AlignCenter)
+        empty_layout.addWidget(self.comparison_empty_title)
+        empty_layout.addWidget(self.comparison_empty_message)
+        empty_layout.addStretch()
+        self.comparison_views.addWidget(empty)
+        self.comparison_views.setCurrentIndex(1)
+
+        self.comparison_review_dialog, review_dialog_layout = self._make_dialog("Sample review")
+        self.comparison_sample_meta = QLabel()
+        self.comparison_sample_meta.setWordWrap(True)
+        review_dialog_layout.addWidget(self.comparison_sample_meta)
+        self.comparison_review_status = QLabel()
+        self.comparison_review_status.setObjectName("appSectionTitle")
+        review_dialog_layout.addWidget(self.comparison_review_status)
+        self.comparison_review_scroll = QScrollArea()
+        self.comparison_review_scroll.setWidgetResizable(True)
+        self.comparison_review_scroll.setFrameShape(QFrame.NoFrame)
+        self.comparison_review_card = QWidget()
+        review_layout = QGridLayout(self.comparison_review_card)
+        review_layout.setContentsMargins(0, 0, 0, 0)
+        review_layout.setVerticalSpacing(12)
+        self.comparison_review_metric_labels = {}
+        self.comparison_review_values = {}
+        for row, (metric, label_text) in enumerate((("overall", "Overall"), ("meaning_accuracy", "Meaning"),
+                ("glossary_prompt", "Glossary & prompt"), ("natural_contextual", "Naturalness"))):
+            label = QLabel(label_text)
+            label.setStyleSheet(f"color: {COLORS.text_muted};")
+            value = QLabel("—")
+            value.setTextFormat(Qt.RichText)
+            value.setWordWrap(True)
+            value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            review_layout.addWidget(label, row, 0)
+            review_layout.addWidget(value, row, 1)
+            self.comparison_review_metric_labels[metric] = label
+            self.comparison_review_values[metric] = value
+        self.comparison_review_notes = QLabel()
+        self.paired_sample_evidence = QLabel()
+        for row, label in enumerate((self.comparison_review_notes, self.paired_sample_evidence), start=4):
+            label.setTextFormat(Qt.PlainText)
+            label.setWordWrap(True)
+            label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            review_layout.addWidget(label, row, 0, 1, 2)
+        review_layout.setColumnStretch(1, 1)
+        review_layout.setRowStretch(6, 1)
+        self.comparison_review_scroll.setWidget(self.comparison_review_card)
+        review_dialog_layout.addWidget(self.comparison_review_scroll, 1)
+        self.comparison_notes_btn.clicked.connect(lambda: self._show_dialog(self.comparison_review_dialog))
+        self.comparison_context_dialog, context_layout = self._make_dialog("Sample context")
+        self.comparison_context = QTextEdit()
+        self.comparison_context.setReadOnly(True)
+        context_layout.addWidget(self.comparison_context)
+        self.comparison_context_btn.clicked.connect(lambda: self._show_dialog(self.comparison_context_dialog))
+        return page
+
+    def _build_setup_dialog(self):
+        self.setup_dialog, dialog_layout = self._make_dialog("Set up an evaluation")
+        self.setup_dialog.resize(880, 760)
         self.page_scroll = QScrollArea()
         self.page_scroll.setWidgetResizable(True)
         self.page_scroll.setFrameShape(QFrame.NoFrame)
-        self.page_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         page = QWidget()
-        layout = make_page_layout(page)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.page_scroll.setWidget(page)
-        outer.addWidget(self.page_scroll)
-        layout.addWidget(PageHeader(
-            "Translation Evaluation",
-            "Compare batch or live models on the same Japanese game text. No normal translation cache is reused.",
-        ))
-
-        self.history_combo = _EvaluationComboBox()
-        self.history_combo.setSizeAdjustPolicy(
-            QComboBox.AdjustToMinimumContentsLengthWithIcon
-        )
-        self.history_combo.setMinimumContentsLength(32)
-        self.history_combo.setMinimumWidth(300)
-        self.history_combo.setMaxVisibleItems(15)
-        self.history_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.history_combo.setToolTip("Choose a saved evaluation to view")
-        self.history_combo.currentIndexChanged.connect(
-            self._update_history_actions
-        )
-        self.history_combo.activated.connect(
-            lambda _index: self._open_selected_history()
-        )
-        self.export_evaluation_btn = QPushButton("Export evaluation")
-        self.import_evaluation_btn = QPushButton("Import evaluation")
-        for button in (
-            self.export_evaluation_btn,
-            self.import_evaluation_btn,
-        ):
-            configure_action_button(button, variant="secondary")
-            button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        self.export_evaluation_btn.clicked.connect(self._export_evaluation_archive)
-        self.import_evaluation_btn.clicked.connect(self._import_evaluation_archive)
-
+        dialog_layout.addWidget(self.page_scroll, 1)
         setup = SectionCard(
-            "Benchmark setup",
-            "Add at least two models. Preparing scans the selected game offline; running always shows each model's projected cost first.",
+            "Models",
+            "Choose the models you want to compare.",
             compact=True,
         )
         self.setup_card = setup
@@ -367,18 +768,6 @@ class EvaluationTab(QWidget):
         self.candidate_grid = QGridLayout()
         self.candidate_grid.setHorizontalSpacing(12)
         self.candidate_grid.setVerticalSpacing(8)
-        for column, text in enumerate((
-            "API URL", "Saved API key", "Model", "Run as", "", ""
-        )):
-            label = QLabel(text)
-            label.setStyleSheet("font-weight: 600;")
-            self.candidate_grid.addWidget(label, 0, column)
-        self.candidate_grid.setColumnMinimumWidth(0, 320)
-        self.candidate_grid.setColumnMinimumWidth(3, 104)
-        self.candidate_grid.setColumnMinimumWidth(4, 72)
-        self.candidate_grid.setColumnMinimumWidth(5, 88)
-        self.candidate_grid.setColumnStretch(1, 2)
-        self.candidate_grid.setColumnStretch(2, 3)
         setup.add_layout(self.candidate_grid)
 
         candidate = self._default_candidate()
@@ -413,10 +802,12 @@ class EvaluationTab(QWidget):
         source_row.addWidget(self.source_btn, 0, 2)
         source_row.setColumnMinimumWidth(0, 132)
         source_row.setColumnStretch(1, 1)
-        setup.add_layout(source_row)
+        source_card = SectionCard("Game", compact=True)
+        layout.insertWidget(0, source_card)
+        source_card.add_layout(source_row)
         self.source_resolution_label = QLabel()
         self.source_resolution_label.setWordWrap(True)
-        setup.add_widget(self.source_resolution_label)
+        source_card.add_widget(self.source_resolution_label)
 
         content_grid = QGridLayout()
         content_grid.setHorizontalSpacing(12)
@@ -450,7 +841,7 @@ class EvaluationTab(QWidget):
         self.content_preview_label = QLabel()
         self.content_preview_label.setWordWrap(True)
         content_grid.addWidget(self.content_preview_label, 2, 0, 1, 2)
-        setup.add_layout(content_grid)
+        source_card.add_layout(content_grid)
         self.content_preset_combo.currentIndexChanged.connect(
             self._on_content_preset_changed
         )
@@ -524,6 +915,8 @@ class EvaluationTab(QWidget):
             ("Repeated samples", self.custom_repeated_samples_spin),
             ("Runs per repeated sample", self.custom_repetitions_spin),
         )
+        self.custom_size_options = QWidget()
+        custom_options = QGridLayout(self.custom_size_options)
         self.benchmark_size_labels = {}
         for index, (label_text, widget) in enumerate(custom_widgets):
             tooltip = self.BENCHMARK_SIZE_TOOLTIPS[label_text]
@@ -532,124 +925,45 @@ class EvaluationTab(QWidget):
             label.setToolTip(tooltip)
             widget.setToolTip(tooltip)
             self.benchmark_size_labels[label_text] = label
-            options.addWidget(label, 2, index)
-            options.addWidget(widget, 3, index)
+            row, column = divmod(index, 2)
+            custom_options.addWidget(label, row * 2, column)
+            custom_options.addWidget(widget, row * 2 + 1, column)
             options.setColumnStretch(index, 1)
-        setup.add_layout(options)
+        sampling_card = SectionCard("Sample set", compact=True)
+        sampling_card.add_layout(options)
+        sampling_card.add_widget(self.custom_size_options)
+        layout.addWidget(sampling_card)
         self._apply_test_template()
         self.custom_target_spin.valueChanged.connect(
             lambda _value: self._update_content_preview()
         )
 
-        actions = QGridLayout()
-        actions.setHorizontalSpacing(8)
-        self.prepare_btn = QPushButton("Prepare benchmark")
-        self.submit_btn = QPushButton("Run evaluation")
-        self.cancel_btn = QPushButton("Stop live evaluation")
-        self.refresh_btn = QPushButton("Refresh results")
-        self.export_btn = QPushButton("Export blind review")
-        self.copy_review_skill_btn = QPushButton("Copy review skill")
-        self.import_btn = QPushButton("Import reviewed CSV")
-        self.judge_check_btn = QPushButton("Export judge check")
-        configure_action_button(self.prepare_btn, variant="primary")
-        for button in (
-            self.submit_btn, self.cancel_btn, self.refresh_btn, self.export_btn,
-            self.copy_review_skill_btn, self.import_btn,
-            self.judge_check_btn,
-        ):
-            configure_action_button(button, variant="secondary")
-        self.copy_review_skill_btn.setToolTip(
-            "Copy instructions for an AI helper to review the blinded CSV. "
-            "AI judgments can be biased and should be treated as a second opinion."
-        )
-        self.export_btn.setToolTip(
-            "Choose which models to compare, then export their translations "
-            "with randomized labels. Models with no usable output are unavailable."
-        )
+        layout.addStretch()
+        self.setup_status = _EvaluationStatusLabel()
+        self.setup_status.setWordWrap(True)
+        self.setup_status.hide()
+        self.status_label.text_updated.connect(self.setup_status.setText)
+        dialog_layout.addWidget(self.setup_status)
+        actions = QHBoxLayout()
+        self.prepare_btn = QPushButton("Prepare sample set")
+        self.submit_btn = QPushButton("Run evaluation…")
+        self.cancel_btn = QPushButton("Stop evaluation")
+        configure_action_button(self.prepare_btn, variant="secondary")
+        configure_action_button(self.submit_btn, variant="primary")
+        configure_action_button(self.cancel_btn, variant="quiet")
         self.prepare_btn.clicked.connect(self.prepare_benchmark)
         self.submit_btn.clicked.connect(self.submit_batches)
         self.cancel_btn.clicked.connect(self.cancel_evaluation)
-        self.refresh_btn.clicked.connect(self.refresh_results)
-        self.export_btn.clicked.connect(self.export_review)
-        self.copy_review_skill_btn.clicked.connect(self.copy_review_skill)
-        self.import_btn.clicked.connect(self.import_review)
-        self.judge_check_btn.clicked.connect(self.export_judge_check)
-        self.judge_check_btn.setToolTip(
-            "Export a fresh blind review of a subset and flagged samples with changed "
-            "candidate positions. Use a fresh judge session or a qualified human reviewer."
-        )
-        for column, button in enumerate((
-            self.prepare_btn, self.submit_btn, self.cancel_btn, self.refresh_btn,
-        )):
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            actions.addWidget(button, 0, column * 2, 1, 2)
-        for column in range(8):
-            actions.setColumnStretch(column, 1)
-        for column, button in enumerate((
-            self.export_btn, self.copy_review_skill_btn, self.import_btn, self.judge_check_btn,
-        )):
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            actions.addWidget(button, 1, column * 2, 1, 2)
-        setup.add_layout(actions)
-        reviewer_row = QHBoxLayout()
-        reviewer_row.addWidget(QLabel("Reviewer for import:"))
-        self.reviewer_name = QLineEdit()
-        self.reviewer_name.setPlaceholderText("Judge name and session, or human reviewer")
-        self.reviewer_kind = _EvaluationComboBox()
-        for label, value in (("Unspecified", "unspecified"), ("AI", "ai"), ("Human", "human")):
-            self.reviewer_kind.addItem(label, value)
-        reviewer_row.addWidget(self.reviewer_name, 1)
-        reviewer_row.addWidget(self.reviewer_kind)
-        setup.add_layout(reviewer_row)
+        actions.addWidget(self.prepare_btn)
+        actions.addWidget(self.submit_btn)
+        actions.addWidget(self.cancel_btn)
+        dialog_layout.addLayout(actions)
 
-        self._paired_policy = copy.deepcopy(paired.DEFAULT_POLICY)
-        self._paired_challenge_ids = []
-        review_options = QHBoxLayout()
-        self.review_mode = _EvaluationComboBox()
-        self.review_mode.addItem("Paired review v3", "paired")
-        self.review_mode.addItem("Legacy rankings v2", "legacy")
-        self.review_stage = _EvaluationComboBox()
-        for title, value in (("Screening", "screening"), ("Confirmation", "confirmation"),
-                             ("Challenge cases", "challenge"), ("Reversed-order audit", "order_swap"),
-                             ("Independent judge", "judge_check"), ("Human adjudication", "adjudication"),
-                             ("Calibration", "calibration")):
-            self.review_stage.addItem(title, value)
-        self.paired_new_campaign = QCheckBox("New campaign")
-        self.paired_new_campaign.setToolTip("Freeze a new policy and source split. Previous campaign results are retained.")
-        self.paired_policy_btn = QPushButton("Review policy")
-        self.paired_calibration_btn = QPushButton("Load human calibration")
-        self.paired_policy_btn.clicked.connect(self._edit_paired_policy)
-        self.paired_calibration_btn.clicked.connect(self._load_paired_calibration)
-        for widget in (self.review_mode, self.review_stage, self.paired_new_campaign,
-                       self.paired_policy_btn, self.paired_calibration_btn):
-            review_options.addWidget(widget)
-        review_options.addStretch(1)
-        setup.add_layout(review_options)
-
-        self.status_label = QLabel()
-        self.status_label.setWordWrap(True)
-        set_status_text(
-            self.status_label,
-            "Prepare the test set before any provider requests are sent.",
-            "neutral",
-        )
-        setup.add_widget(self.status_label)
-
-        results = SectionCard(
-            "Evaluation results",
-            "Choose a saved run or inspect the current one. Translation quality is decided from the blinded CSV, not model names.",
-        )
-        layout.addWidget(results, 1)
-        history_bar = QGridLayout()
-        history_bar.setHorizontalSpacing(8)
-        history_bar.addWidget(QLabel("Saved evaluation:"), 0, 0)
-        history_bar.addWidget(self.history_combo, 0, 1)
-        history_bar.addWidget(self.export_evaluation_btn, 0, 2)
-        history_bar.addWidget(self.import_evaluation_btn, 0, 3)
-        history_bar.setColumnStretch(1, 1)
-        results.add_layout(history_bar)
-        self.results_tabs = QTabWidget()
-        self.results_tabs.setMinimumHeight(540)
+    def _build_run_details_dialog(self):
+        self.details_dialog, layout = self._make_dialog("Detailed evaluation results")
+        self.details_dialog.resize(1100, 700)
+        self.details_tabs = QTabWidget()
+        layout.addWidget(self.details_tabs)
         summary_page = QWidget()
         summary_layout = QVBoxLayout(summary_page)
         summary_layout.setContentsMargins(0, 8, 0, 0)
@@ -677,7 +991,7 @@ class EvaluationTab(QWidget):
             header.setSectionResizeMode(index, QHeaderView.Fixed)
         self.table.viewport().installEventFilter(self)
         summary_layout.addWidget(self.table, 1)
-        self.results_tabs.addTab(summary_page, "Score summary")
+        self.details_tabs.addTab(summary_page, "Score summary")
         decision_page = QWidget()
         decision_layout = QVBoxLayout(decision_page)
         decision_toolbar = QHBoxLayout()
@@ -708,7 +1022,7 @@ class EvaluationTab(QWidget):
         hint = QLabel("Double-click a result to inspect its source scenes. Equivalent quality can still require editing.")
         hint.setWordWrap(True)
         decision_layout.addWidget(hint)
-        self._paired_tab_index = self.results_tabs.addTab(decision_page, "Model decision")
+        self._paired_tab_index = self.details_tabs.addTab(decision_page, "Model decision")
         self.paired_pool.currentIndexChanged.connect(self._refresh_paired_results)
         self.paired_comparator.currentIndexChanged.connect(self._refresh_paired_results)
         self._paired_state = None
@@ -716,228 +1030,16 @@ class EvaluationTab(QWidget):
         self.review_statistics = QTextEdit()
         self.review_statistics.setReadOnly(True)
         self.review_statistics.setPlainText("Import a reviewed CSV to see scene statistics and review coverage.")
-        self.results_tabs.addTab(self.review_statistics, "Review statistics")
+        self.details_tabs.addTab(self.review_statistics, "Review statistics")
 
-        comparison_page = QWidget()
-        comparison_layout = QVBoxLayout(comparison_page)
-        comparison_layout.setContentsMargins(10, 10, 10, 10)
-        comparison_layout.setSpacing(10)
-        comparison_toolbar = QGridLayout()
-        comparison_toolbar.setHorizontalSpacing(10)
-        comparison_toolbar.setVerticalSpacing(8)
-        self.comparison_search = QLineEdit()
-        self.comparison_search.setPlaceholderText(
-            "Search source, translations, scenes, or review notes…"
-        )
-        self.comparison_search.setClearButtonEnabled(True)
-        self.comparison_filter = _EvaluationComboBox()
-        for label, value in (
-            ("All samples", "all"),
-            ("Reviewed", "reviewed"),
-            ("Ties", "ties"),
-            ("Has notes", "notes"),
-            ("Missing or invalid", "problems"),
-            ("Needs human follow-up", "follow_up"),
-        ):
-            self.comparison_filter.addItem(label, value)
-        self.comparison_models_btn = QToolButton()
-        self.comparison_models_btn.setText("Models")
-        self.comparison_models_btn.setPopupMode(QToolButton.InstantPopup)
-        self.comparison_models_menu = QMenu(self.comparison_models_btn)
-        self.comparison_models_btn.setMenu(self.comparison_models_menu)
-        self.comparison_reveal_models = QCheckBox("Show model names")
-        self.comparison_reveal_models.setToolTip(
-            "Before importing a blind review, hiding names helps avoid model-name bias."
-        )
-        self.comparison_previous_btn = QPushButton("←")
-        self.comparison_next_btn = QPushButton("→")
-        configure_icon_button(
-            self.comparison_previous_btn,
-            accessible_name="Previous comparison sample",
-            tooltip="Previous sample",
-        )
-        configure_icon_button(
-            self.comparison_next_btn,
-            accessible_name="Next comparison sample",
-            tooltip="Next sample",
-        )
-        self.comparison_counter = QLabel("—")
-        self.comparison_counter.setAlignment(Qt.AlignCenter)
-        self.comparison_counter.setMinimumWidth(72)
-        self.comparison_status = QLabel(
-            "Choose a completed evaluation to compare model outputs."
-        )
-        self.comparison_status.setWordWrap(True)
-        self.comparison_status.setStyleSheet(f"color: {COLORS.text_muted};")
-        comparison_toolbar.addWidget(self.comparison_search, 0, 0)
-        comparison_toolbar.addWidget(self.comparison_filter, 0, 1)
-        comparison_toolbar.addWidget(self.comparison_models_btn, 0, 2)
-        comparison_toolbar.addWidget(self.comparison_reveal_models, 0, 3)
-        comparison_toolbar.addWidget(self.comparison_status, 1, 0, 1, 2)
-        navigation = QHBoxLayout()
-        navigation.setSpacing(6)
-        navigation.addStretch(1)
-        navigation.addWidget(self.comparison_previous_btn)
-        navigation.addWidget(self.comparison_counter)
-        navigation.addWidget(self.comparison_next_btn)
-        comparison_toolbar.addLayout(navigation, 1, 2, 1, 2)
-        self.comparison_clear_scope = QPushButton("Show all source evidence")
-        self.comparison_clear_scope.clicked.connect(self._clear_paired_evidence_scope)
-        self.comparison_clear_scope.hide()
-        comparison_toolbar.addWidget(self.comparison_clear_scope, 2, 0, 1, 4)
-        comparison_toolbar.setColumnStretch(0, 1)
-        comparison_layout.addLayout(comparison_toolbar)
-
-        self.comparison_splitter = QSplitter(Qt.Horizontal)
-        self.comparison_splitter.setObjectName("evaluationComparisonSplitter")
-        self.comparison_sample_list = QListWidget()
-        self.comparison_sample_list.setAlternatingRowColors(True)
-        self.comparison_sample_list.setWordWrap(True)
-        self.comparison_sample_list.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarAlwaysOff
-        )
-        self.comparison_sample_list.setMinimumWidth(280)
-        self.comparison_sample_list.setMaximumWidth(380)
-        self.comparison_splitter.addWidget(self.comparison_sample_list)
-
-        comparison_detail = QWidget()
-        detail_layout = QVBoxLayout(comparison_detail)
-        detail_layout.setContentsMargins(12, 0, 0, 0)
-        detail_layout.setSpacing(10)
-        self.comparison_sample_heading = QLabel("Select a sample")
-        self.comparison_sample_heading.setStyleSheet(
-            f"color: {COLORS.text_primary}; font-weight: 600; font-size: 14px;"
-        )
-        self.comparison_sample_heading.setTextInteractionFlags(
-            Qt.TextSelectableByMouse
-        )
-        detail_layout.addWidget(self.comparison_sample_heading)
-        self.comparison_sample_meta = QLabel()
-        self.comparison_sample_meta.setStyleSheet(f"color: {COLORS.text_muted};")
-        self.comparison_sample_meta.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        detail_layout.addWidget(self.comparison_sample_meta)
-        self.comparison_context = QTextEdit()
-        self.comparison_context.setReadOnly(True)
-        self.comparison_context.setMaximumHeight(130)
-        detail_layout.addWidget(self.comparison_context)
-
-        self.comparison_review_card = QFrame()
-        self.comparison_review_card.setObjectName("evaluationReviewCard")
-        self.comparison_review_card.setStyleSheet(f"""
-            QFrame#evaluationReviewCard {{
-                background-color: {COLORS.surface_1};
-                border: 1px solid {COLORS.border};
-                border-radius: 6px;
-            }}
-            QLabel#evaluationReviewTitle {{
-                color: {COLORS.text_primary};
-                font-weight: 600;
-            }}
-            QLabel#evaluationReviewMetric {{
-                color: {COLORS.text_muted};
-                font-weight: 600;
-            }}
-        """)
-        review_layout = QGridLayout(self.comparison_review_card)
-        review_layout.setContentsMargins(12, 10, 12, 10)
-        review_layout.setHorizontalSpacing(16)
-        review_layout.setVerticalSpacing(5)
-        review_title = QLabel("Blind review verdict")
-        review_title.setObjectName("evaluationReviewTitle")
-        self.comparison_review_status = QLabel()
-        self.comparison_review_status.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        review_layout.addWidget(review_title, 0, 0)
-        review_layout.addWidget(self.comparison_review_status, 0, 1)
-        self.comparison_review_metric_labels = {}
-        self.comparison_review_values = {}
-        metric_rows = (
-            ("overall", "Overall"),
-            ("meaning_accuracy", "Meaning accuracy"),
-            ("glossary_prompt", "Glossary & prompt"),
-            ("natural_contextual", "Natural & contextual"),
-        )
-        for row, (metric, label_text) in enumerate(metric_rows, start=1):
-            label = QLabel(label_text)
-            label.setObjectName("evaluationReviewMetric")
-            value = QLabel("—")
-            value.setTextFormat(Qt.RichText)
-            value.setWordWrap(True)
-            value.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            review_layout.addWidget(label, row, 0)
-            review_layout.addWidget(value, row, 1)
-            self.comparison_review_metric_labels[metric] = label
-            self.comparison_review_values[metric] = value
-        self.comparison_review_notes = QLabel()
-        self.comparison_review_notes.setWordWrap(True)
-        self.comparison_review_notes.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.comparison_review_notes.setStyleSheet(
-            f"color: {COLORS.text_secondary}; border-top: 1px solid {COLORS.border}; "
-            "padding-top: 7px;"
-        )
-        review_layout.addWidget(self.comparison_review_notes, 5, 0, 1, 2)
-        self.paired_sample_evidence = QTextEdit()
-        self.paired_sample_evidence.setReadOnly(True)
-        self.paired_sample_evidence.setMaximumHeight(220)
-        self.paired_sample_evidence.hide()
-        review_layout.addWidget(self.paired_sample_evidence, 6, 0, 1, 2)
-        review_layout.setColumnStretch(1, 1)
-        detail_layout.addWidget(self.comparison_review_card)
-        self.comparison_table = QTableWidget(0, 0)
-        self.comparison_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.comparison_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.comparison_table.setWordWrap(True)
-        self.comparison_table.setAlternatingRowColors(True)
-        self.comparison_table.verticalHeader().setVisible(True)
-        self.comparison_table.verticalHeader().setDefaultAlignment(Qt.AlignCenter)
-        self.comparison_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.comparison_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.comparison_table.viewport().installEventFilter(self)
-        detail_layout.addWidget(self.comparison_table, 1)
-        self.comparison_splitter.addWidget(comparison_detail)
-        self.comparison_splitter.setStretchFactor(0, 0)
-        self.comparison_splitter.setStretchFactor(1, 1)
-        comparison_layout.addWidget(self.comparison_splitter, 1)
-        self.comparison_splitter.hide()
-        self._comparison_tab_index = self.results_tabs.addTab(
-            comparison_page, "Output comparison"
-        )
-        self.results_tabs.setTabEnabled(self._comparison_tab_index, False)
-        self.results_tabs.currentChanged.connect(self._on_results_tab_changed)
-        self.review_mode.currentIndexChanged.connect(self._refresh_comparison_presenter)
-        self.comparison_search.textChanged.connect(
-            self._refresh_comparison_sample_list
-        )
-        self.comparison_filter.currentIndexChanged.connect(
-            self._refresh_comparison_sample_list
-        )
-        self.comparison_reveal_models.toggled.connect(
-            self._refresh_comparison_presenter
-        )
-        self.comparison_sample_list.currentRowChanged.connect(
-            self._display_comparison_selection
-        )
-        self.comparison_previous_btn.clicked.connect(
-            lambda: self._move_comparison_selection(-1)
-        )
-        self.comparison_next_btn.clicked.connect(
-            lambda: self._move_comparison_selection(1)
-        )
-        results.add_widget(self.results_tabs, 2)
-
-        self.log = QTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setMaximumHeight(150)
-        self.log.setPlaceholderText("Evaluation activity…")
-        results.add_widget(self.log, 1)
-        QTimer.singleShot(0, self._refresh_responsive_geometry)
-
-        self._update_actions()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         QTimer.singleShot(0, self._refresh_responsive_geometry)
 
     def eventFilter(self, watched, event):
+        if hasattr(self, "overview_table") and watched is self.overview_table.viewport() and event.type() == QEvent.Resize:
+            QTimer.singleShot(0, self._resize_overview)
         if hasattr(self, "paired_table") and watched is self.paired_table.viewport() and event.type() == QEvent.Resize:
             QTimer.singleShot(0, self._resize_paired_columns)
         if (
@@ -949,7 +1051,7 @@ class EvaluationTab(QWidget):
         if (
             hasattr(self, "comparison_table")
             and watched is self.comparison_table.viewport()
-            and event.type() == QEvent.Resize
+            and event.type() in (QEvent.Resize, QEvent.FontChange)
         ):
             QTimer.singleShot(0, self._resize_comparison_columns)
         return super().eventFilter(watched, event)
@@ -959,25 +1061,8 @@ class EvaluationTab(QWidget):
             self.setup_card.setMinimumHeight(0)
             self.setup_card.setMinimumHeight(self.setup_card.sizeHint().height())
         self._resize_result_columns()
-        self._resize_comparison_controls()
         self._resize_comparison_columns()
         self._resize_paired_columns()
-
-    def _resize_comparison_controls(self):
-        if not hasattr(self, "comparison_filter"):
-            return
-        peer_dropdowns = (
-            self.comparison_filter,
-            self.comparison_models_btn,
-        )
-        peer_height = max(widget.sizeHint().height() for widget in (
-            self.comparison_search, *peer_dropdowns,
-        ))
-        peer_width = max(widget.sizeHint().width() for widget in peer_dropdowns)
-        for widget in (self.comparison_search, *peer_dropdowns):
-            widget.setFixedHeight(peer_height)
-        for widget in peer_dropdowns:
-            widget.setFixedWidth(peer_width)
 
     def _resize_result_columns(self):
         """Keep every result column visible within the table viewport."""
@@ -1034,10 +1119,10 @@ class EvaluationTab(QWidget):
             self.history_combo.currentData(Qt.UserRole + 1) or ""
         )
         self.history_combo.setEnabled(not busy and has_selection)
-        self.export_evaluation_btn.setEnabled(
+        self.export_evaluation_action.setEnabled(
             not busy and has_selection and selected_status != "prepared"
         )
-        self.import_evaluation_btn.setEnabled(not busy)
+        self.import_evaluation_action.setEnabled(not busy)
 
     def _refresh_history(self, select_run: str | Path | None = None):
         self._populate_history(
@@ -1092,7 +1177,8 @@ class EvaluationTab(QWidget):
                     label += f" ({reviewed_lines:,} eligible lines)"
             elif reviewed_lines:
                 label += f"  ·  {reviewed_lines:,} lines reviewed"
-            self.history_combo.addItem(label, str(run_dir))
+            short_label = f"{created or run_dir.name} · {len(run.get('models') or []):,} models · {status}"
+            self.history_combo.addItem(short_label, str(run_dir))
             self.history_combo.setItemData(index, label, Qt.ToolTipRole)
             self.history_combo.setItemData(
                 index, str(run.get("status") or ""), Qt.UserRole + 1
@@ -1147,11 +1233,7 @@ class EvaluationTab(QWidget):
         self.log.clear()
         self._append_log(f"Opened evaluation: {state.get('run_id', path.name)}")
         self._display_state(state)
-        set_status_text(
-            self.status_label,
-            f"Viewing saved evaluation {state.get('run_id', path.name)}.",
-            "neutral",
-        )
+        self.status_label.clear()
         try:
             evaluation.sync_run_history(path)
         except Exception as history_exc:
@@ -1372,6 +1454,7 @@ class EvaluationTab(QWidget):
         )
         self.content_tree.blockSignals(False)
         self.content_tree.setEnabled(selection["preset"] == "custom")
+        self.content_tree.setVisible(selection["preset"] == "custom")
         self._update_content_preview()
 
     def _content_selection(self) -> dict:
@@ -1500,7 +1583,7 @@ class EvaluationTab(QWidget):
             "API base URL. Custom URLs use OpenAI-compatible requests; Batch "
             "mode also requires the provider to expose OpenAI's Batch API."
         )
-        endpoint_edit.setMinimumWidth(220)
+        endpoint_edit.setMinimumWidth(160)
         endpoint_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         preset_btn = QToolButton()
@@ -1521,11 +1604,11 @@ class EvaluationTab(QWidget):
         endpoint_field.setStyleSheet(
             "QWidget#evaluationEndpointField { background-color: transparent; }"
         )
-        endpoint_field.setMinimumWidth(320)
         endpoint_field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         key_combo = _EvaluationComboBox()
-        key_combo.setMinimumWidth(220)
+        key_combo.setMinimumContentsLength(12)
+        key_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         key_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         model_combo = _EvaluationModelComboBox()
@@ -1536,7 +1619,8 @@ class EvaluationTab(QWidget):
         model_combo.setToolTip(
             "Models available from the selected API URL and saved key"
         )
-        model_combo.setMinimumWidth(260)
+        model_combo.setMinimumContentsLength(16)
+        model_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         execution_combo = _EvaluationComboBox()
@@ -1559,7 +1643,8 @@ class EvaluationTab(QWidget):
         execution_combo.setMinimumWidth(104)
 
         reasoning_combo = _EvaluationComboBox()
-        reasoning_combo.setMinimumWidth(285)
+        reasoning_combo.setMinimumContentsLength(16)
+        reasoning_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         reasoning_combo.setAccessibleName("Reasoning effort")
         output_tokens = QSpinBox()
         output_tokens.setRange(1, MAX_OUTPUT_TOKEN_LIMIT)
@@ -1576,30 +1661,55 @@ class EvaluationTab(QWidget):
         generation_field = QWidget()
         generation_field.setObjectName("evaluationGenerationField")
         generation_field.setStyleSheet("QWidget#evaluationGenerationField { background-color: transparent; }")
-        generation_layout = QHBoxLayout(generation_field)
-        generation_layout.setContentsMargins(0, 0, 0, 12)
-        generation_layout.setSpacing(12)
+        generation_layout = QGridLayout(generation_field)
+        generation_layout.setContentsMargins(0, 8, 0, 0)
         reasoning_label = QLabel("Reasoning effort")
         reasoning_label.setBuddy(reasoning_combo)
         token_label = QLabel("Output token limit")
         token_label.setBuddy(output_tokens)
-        generation_layout.addWidget(reasoning_label)
-        generation_layout.addWidget(reasoning_combo)
-        generation_layout.addSpacing(12)
-        generation_layout.addWidget(token_label)
-        generation_layout.addWidget(output_tokens)
+        generation_layout.addWidget(QLabel("API URL"), 0, 0)
+        generation_layout.addWidget(endpoint_field, 0, 1)
+        generation_layout.addWidget(QLabel("Run as"), 1, 0)
+        generation_layout.addWidget(execution_combo, 1, 1)
+        generation_layout.addWidget(reasoning_label, 2, 0)
+        generation_layout.addWidget(reasoning_combo, 2, 1)
+        generation_layout.addWidget(token_label, 3, 0)
+        generation_layout.addWidget(output_tokens, 3, 1)
         generation_hint = QLabel("Includes reasoning and translation.")
         generation_hint.setWordWrap(True)
-        generation_layout.addWidget(generation_hint, 1)
+        generation_layout.addWidget(generation_hint, 4, 1)
 
-        scan_btn = QPushButton("Scan")
+        scan_btn = QPushButton("Refresh available models")
         scan_btn.setToolTip("Fetch models available to this saved API key")
         configure_action_button(scan_btn, variant="secondary")
 
-        remove_btn = QPushButton("Remove")
-        configure_action_button(remove_btn, variant="quiet")
+        generation_layout.addWidget(scan_btn, 5, 1)
+        remove_btn = QPushButton("×")
+        configure_icon_button(remove_btn, accessible_name="Remove model", tooltip="Remove model")
+        card = SectionCard(compact=True)
+        fields = QGridLayout()
+        fields.addWidget(QLabel("API key"), 0, 0)
+        fields.addWidget(QLabel("Model"), 0, 1)
+        fields.addWidget(key_combo, 1, 0)
+        fields.addWidget(model_combo, 1, 1)
+        settings_btn = QToolButton()
+        settings_btn.setText("Settings")
+        settings_btn.setCheckable(True)
+        settings_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        settings_btn.setArrowType(Qt.RightArrow)
+        settings_btn.toggled.connect(generation_field.setVisible)
+        settings_btn.toggled.connect(lambda checked: settings_btn.setArrowType(Qt.DownArrow if checked else Qt.RightArrow))
+        fields.addWidget(settings_btn, 1, 2)
+        fields.addWidget(remove_btn, 1, 3)
+        fields.setColumnStretch(0, 1)
+        fields.setColumnStretch(1, 2)
+        card.add_layout(fields)
+        card.add_widget(generation_field)
+        generation_field.hide()
 
         widgets = {
+            "card": card,
+            "settings": settings_btn,
             "endpoint_field": endpoint_field,
             "endpoint": endpoint_edit,
             "preset": preset_btn,
@@ -1658,17 +1768,15 @@ class EvaluationTab(QWidget):
     def _clear_candidate_rows(self):
         for widgets in list(self._candidate_widgets):
             widgets["scan_timer"].stop()
-            for name in (
-                "endpoint_field", "key", "model", "execution", "scan", "remove", "generation_field"
-            ):
-                widget = widgets[name]
-                self.candidate_grid.removeWidget(widget)
-                widget.deleteLater()
+            self.candidate_grid.removeWidget(widgets["card"])
+            widgets["card"].hide()
+            widgets["card"].deleteLater()
         self._candidate_widgets.clear()
 
     def _apply_test_template(self, _index: int | None = None):
         values = self.test_size_combo.currentData()
         custom = values is None
+        self.custom_size_options.setVisible(custom)
         if values is not None:
             target, sample_size, repeated_samples, repetitions = values
             self.custom_target_spin.setValue(int(target))
@@ -1758,22 +1866,14 @@ class EvaluationTab(QWidget):
             return
         self._candidate_widgets.remove(widgets)
         widgets["scan_timer"].stop()
-        for name in (
-            "endpoint_field", "key", "model", "execution", "scan", "remove", "generation_field"
-        ):
-            widget = widgets[name]
-            self.candidate_grid.removeWidget(widget)
-            widget.deleteLater()
+        self.candidate_grid.removeWidget(widgets["card"])
+        widgets["card"].hide()
+        widgets["card"].deleteLater()
         self._reflow_candidate_rows()
 
     def _reflow_candidate_rows(self):
-        for row_index, widgets in enumerate(self._candidate_widgets, start=1):
-            grid_row = row_index * 2 - 1
-            for column, name in enumerate((
-                "endpoint_field", "key", "model", "execution", "scan", "remove"
-            )):
-                self.candidate_grid.addWidget(widgets[name], grid_row, column)
-            self.candidate_grid.addWidget(widgets["generation_field"], grid_row + 1, 0, 1, 6)
+        for row_index, widgets in enumerate(self._candidate_widgets):
+            self.candidate_grid.addWidget(widgets["card"], row_index, 0)
             widgets["remove"].setEnabled(len(self._candidate_widgets) > 1)
         QTimer.singleShot(0, self._refresh_responsive_geometry)
         self._on_generation_settings_changed()
@@ -2175,14 +2275,18 @@ class EvaluationTab(QWidget):
 
     def _set_busy(self, busy: bool):
         for button in (
-            self.prepare_btn, self.submit_btn, self.refresh_btn,
+            self.new_evaluation_btn, self.review_tools_btn,
+            self.prepare_btn, self.submit_btn, self.refresh_action,
             self.export_btn, self.copy_review_skill_btn, self.import_btn,
             self.judge_check_btn,
-            self.export_evaluation_btn, self.import_evaluation_btn,
+            self.export_evaluation_action, self.import_evaluation_action,
             self.paired_policy_btn, self.paired_calibration_btn,
         ):
             button.setEnabled(not busy)
         self.cancel_btn.setEnabled(busy and self._worker_cancelable)
+        self.cancel_btn.setVisible(busy and self._worker_cancelable)
+        if busy:
+            self.history_combo.setEnabled(False)
         if not busy:
             self._update_actions()
             self._update_history_actions()
@@ -2531,12 +2635,8 @@ class EvaluationTab(QWidget):
                 sampling_message += " Dialogue coverage is limited; select more scenes or content."
             set_status_text(
                 self.status_label,
-                f"Selected {summary.get('selected_segments', 0):,} of "
-                f"{summary.get('eligible_segments', 0):,} eligible lines from "
-                f"{summary.get('review_samples', 0):,} samples across "
-                f"{summary.get('selected_scenes', 0):,} scenes and "
-                f"{summary.get('selected_files', 0):,} files. Review the estimates, "
-                "then submit the model batches together." + sampling_message,
+                f"Prepared {summary.get('selected_segments', 0):,} lines in "
+                f"{summary.get('review_samples', 0):,} samples. Run evaluation to review the cost before sending.",
                 "success",
             )
             self._append_log(
@@ -2544,7 +2644,7 @@ class EvaluationTab(QWidget):
                 f"{summary.get('selected_files', 0):,} of "
                 f"{summary.get('eligible_files', 0):,} eligible files in "
                 f"{summary.get('selected_scenes', 0):,} scenes and "
-                f"{summary.get('review_samples', 0):,} review samples."
+                f"{summary.get('review_samples', 0):,} review samples." + sampling_message
             )
             self._append_log(f"Manifest: {self.current_run_dir / 'manifest.json'}")
             self._refresh_history(self.current_run_dir)
@@ -3078,6 +3178,104 @@ class EvaluationTab(QWidget):
             f"{pool.title()} · {conclusion}{calibration}. Recommendations compare all contenders using {next(iter(report['recommendations'].values()))['pool']} results. "
             "Uncertainty ranges do not include judge bias.")
 
+    def _refresh_overview(self, state):
+        candidates = state.get("candidates") or []
+        campaign = state.get("paired_review") or {}
+        report = campaign.get("analysis") or (paired.summarize(campaign) if campaign else {})
+        recommendations = report.get("recommendations") or {}
+        pool = next(iter(recommendations.values()), {}).get("pool", "screening")
+        stats = (report.get("pools", {}).get(pool) or {}).get("candidates") or {}
+        labels = {c["id"]: str(c.get("label") or c.get("model") or c["id"]) for c in candidates}
+        value = report.get("value_recommendation")
+        human = state.get("human_review") or {}
+        reviewed_ids = set(human.get("reviewed_candidate_ids") or []) if "reviewed_candidate_ids" in human else set((human.get("points") or {}).keys())
+        if value:
+            title = f"Best supported value: {labels.get(value, value)}"
+            description = "Quality and cost support this choice. Read the translations to check the fit for your game."
+        elif report.get("production_status") == "no_production_ready_candidate":
+            title = "Every model needs corrections"
+            description = "The review found issues that need attention before using these translations."
+        elif recommendations:
+            title = "No confirmed winner yet"
+            leaders = [cid for cid, r in recommendations.items() if r["status"] == "supported_quality_leader"]
+            if leaders:
+                title = f"Quality leader: {labels.get(leaders[0], leaders[0])}"
+            description = f"{pool.title()} review · Open a model's translations to inspect the evidence."
+        elif reviewed_ids:
+            title = "Translation review complete" if human.get("review_complete") else "Translation review results"
+            description = "Read the translations, or open detailed results for the legacy rankings."
+        elif state.get("status") == "prepared":
+            title = "Ready to run"
+            description = "Your sample set is prepared. Run the evaluation from the setup window."
+        elif state.get("status") in {"completed", "failed"}:
+            title = "Translations ready for review"
+            description = "Read the outputs yourself, or use Review to get a blinded comparison."
+        else:
+            title = "Evaluation in progress"
+            description = "Use More → Activity for progress and More → Refresh results to collect batch outputs."
+        self.overview_title.setText(title)
+        self.overview_description.setText(description)
+        self.overview_table.setRowCount(len(candidates))
+        review_labels = {
+            "supported_quality_leader": "Quality leader", "practically_equivalent": "Equivalent quality",
+            "provisional_leader": "Early lead", "contender": "In contention",
+            "no_demonstrated_difference": "No clear difference", "lower_observed_preference": "Less preferred",
+            "trade_off": "Mixed results", "disputed": "Review disputed",
+        }
+        name_counts = Counter(labels.values())
+        for row, candidate in enumerate(candidates):
+            cid = candidate["id"]
+            info = stats.get(cid) or {}
+            recommendation = recommendations.get(cid) or {}
+            judged = info.get("judged", 0)
+            summary = candidate.get("summary") or {}
+            status = review_labels.get(recommendation.get("status"), "Awaiting review")
+            if recommendation.get("production") == "correction_required":
+                status = "Needs correction"
+            elif not recommendation and cid in reviewed_ids:
+                status = "Reviewed"
+            elif candidate.get("status") not in {"completed", "failed"}:
+                status = str(candidate.get("status") or "Pending").replace("_", " ").title()
+            elif candidate.get("status") == "failed" and not recommendation:
+                status = "Generation failed"
+            values = (
+                labels[cid] if name_counts[labels[cid]] == 1 else evaluation.candidate_label(candidate), status,
+                f"{info.get('editing', {}).get('ready', 0)} / {judged} reviewed" if judged else "Not assessed",
+                str(info.get("major_fidelity_blocks", 0)) if judged else "Not assessed",
+                f"${summary['actual_cost_usd']:.2f}" if "actual_cost_usd" in summary else "Not recorded",
+            )
+            for column, text in enumerate(values):
+                item = QTableWidgetItem(text)
+                item.setData(Qt.UserRole, cid)
+                item.setData(Qt.UserRole + 1, pool)
+                if column == 0:
+                    item.setToolTip(evaluation.candidate_label(candidate))
+                elif column == 2:
+                    item.setToolTip("Samples judged ready without editing, out of the assessed samples.")
+                elif column == 3:
+                    item.setToolTip("Assessed samples with major or critical meaning errors.")
+                elif column == 4:
+                    item.setToolTip("Observed cost, including repeats and reported retries.")
+                self.overview_table.setItem(row, column, item)
+        self._resize_overview()
+
+    def _resize_overview(self):
+        self.overview_table.resizeRowsToContents()
+        height = self.overview_table.horizontalHeader().height() + 2 * self.overview_table.frameWidth()
+        height += sum(self.overview_table.rowHeight(row) for row in range(self.overview_table.rowCount()))
+        self.overview_table.setMaximumHeight(height + 2)
+
+    def _open_overview_evidence(self, item):
+        self.comparison_search.clear()
+        self.comparison_filter.setCurrentIndex(0)
+        if (self._paired_state or {}).get("paired_review"):
+            self._paired_evidence_scope = {"candidate": item.data(Qt.UserRole), "opponent": None,
+                                           "pool": item.data(Qt.UserRole + 1)}
+            self.comparison_clear_scope.setText("Clear model filter")
+            self.comparison_clear_scope.show()
+        self.results_tabs.setCurrentIndex(self._comparison_tab_index)
+        self._refresh_comparison_sample_list()
+
     def _resize_paired_columns(self):
         if not hasattr(self, "paired_table"):
             return
@@ -3088,6 +3286,7 @@ class EvaluationTab(QWidget):
         self.paired_table.resizeRowsToContents()
 
     def _open_paired_evidence(self, item):
+        self.details_dialog.hide()
         candidate = item.data(Qt.UserRole)
         comparator = self.paired_comparator.currentData()
         self._paired_evidence_scope = {"candidate": candidate,
@@ -3143,7 +3342,7 @@ class EvaluationTab(QWidget):
         self.comparison_review_values["glossary_prompt"].setText(html.escape("; ".join(rule_text) or "No recorded violations; see assessment coverage"))
         self.comparison_review_values["natural_contextual"].setText(f"{len(judged)}/{len(comparisons)} pairs judged · {html.escape(review['pool'])}")
         self.comparison_review_notes.hide()
-        self.paired_sample_evidence.setPlainText("\n\n".join(evidence))
+        self.paired_sample_evidence.setText("\n\n".join(evidence))
         self.paired_sample_evidence.show()
 
     def _review_csv_path(self) -> Path | None:
@@ -3273,11 +3472,12 @@ class EvaluationTab(QWidget):
             state, _manifest = evaluation.load_run(self.current_run_dir)
             self._display_state(state)
             self._refresh_history(self.current_run_dir)
+            self.results_tabs.setCurrentIndex(0)
+            self.review_dialog.accept()
+            set_status_text(self.status_label, "Review imported. Results have been updated.", "success")
             if review.get("version") == paired.VERSION:
                 self._append_log("Imported paired review. Editing requirements, compliance and pairwise preferences are shown separately.")
                 self.review_mode.setCurrentIndex(self.review_mode.findData("paired"))
-                self.results_tabs.setCurrentIndex(self._paired_tab_index)
-                set_status_text(self.status_label, "Paired review imported. Open Model decision or double-click a result for source evidence.", "success")
                 return
             self._append_log(
                 f"Imported {review['reviewed']} sample rankings covering "
@@ -3295,10 +3495,15 @@ class EvaluationTab(QWidget):
             QMessageBox.warning(self, "Blind review", str(exc))
 
     def _on_results_tab_changed(self, index: int):
-        if hasattr(self, "log"):
-            self.log.setVisible(index not in (self._comparison_tab_index, self._paired_tab_index))
         if index == self._comparison_tab_index:
             self._start_comparison_load()
+
+    def _set_comparison_empty(self, title, message):
+        self.comparison_empty_title.setText(title)
+        self.comparison_empty_message.setText(message)
+        self.comparison_views.setCurrentIndex(1)
+        self.comparison_notes_btn.setEnabled(False)
+        self.comparison_context_btn.setEnabled(False)
 
     def _invalidate_comparison(self):
         self._paired_evidence_scope = None
@@ -3315,10 +3520,11 @@ class EvaluationTab(QWidget):
         self.comparison_table.clear()
         self.comparison_table.setRowCount(0)
         self.comparison_table.setColumnCount(0)
-        self.comparison_splitter.hide()
-        self.comparison_counter.setText("—")
+        self._set_comparison_empty("Choose an evaluation", "Completed translations will appear here.")
+        self.comparison_samples_btn.setText("Choose a sample ▾")
         self.comparison_sample_heading.setText("Select a sample")
         self.comparison_sample_meta.clear()
+        self.comparison_context.clear()
         self.comparison_review_status.clear()
         self.comparison_review_notes.clear()
         self.paired_sample_evidence.clear()
@@ -3349,7 +3555,7 @@ class EvaluationTab(QWidget):
             return
         self._comparison_generation += 1
         generation = self._comparison_generation
-        self.comparison_splitter.hide()
+        self._set_comparison_empty("Loading translations…", "")
         self.comparison_status.setText("Loading source and model outputs…")
         worker = _EvaluationReadWorker(
             lambda path=run_dir: evaluation.load_comparison_data(path), parent=self
@@ -3389,7 +3595,7 @@ class EvaluationTab(QWidget):
                 "Could not load output comparison: "
                 + (error or "comparison data is invalid")
             )
-            self.comparison_splitter.hide()
+            self._set_comparison_empty("Could not load translations", error or "Comparison data is invalid.")
             return
         self._comparison_data = payload
         self._comparison_run_dir = run_dir
@@ -3398,29 +3604,33 @@ class EvaluationTab(QWidget):
             for candidate in payload.get("candidates") or []
         ]
         self._comparison_visible_candidates = candidate_ids
-        self._rebuild_comparison_model_menu()
         self.comparison_reveal_models.blockSignals(True)
         self.comparison_reveal_models.setChecked(
             bool(payload.get("has_imported_review"))
         )
         self.comparison_reveal_models.blockSignals(False)
+        self._rebuild_comparison_model_menu()
         samples = payload.get("samples") or []
         if not samples:
             self.comparison_status.setText(
                 "This evaluation has no source samples to compare."
             )
-            self.comparison_splitter.hide()
+            self._set_comparison_empty("No samples", "This evaluation has no source samples to compare.")
             return
-        self.comparison_splitter.show()
         self._refresh_comparison_sample_list()
 
     def _rebuild_comparison_model_menu(self):
         self.comparison_models_menu.clear()
         candidates = (self._comparison_data or {}).get("candidates") or []
         visible = set(self._comparison_visible_candidates)
+        row = self.comparison_sample_list.currentRow()
+        samples = self._comparison_filtered_samples
+        sample = samples[row] if 0 <= row < len(samples) else {}
         for candidate in candidates:
             candidate_id = str(candidate["id"])
-            action = QAction(str(candidate.get("label") or candidate_id), self)
+            action = QAction(self._comparison_display_name(candidate_id, sample), self.comparison_models_menu)
+            if self.comparison_reveal_models.isChecked():
+                action.setToolTip(self._comparison_candidate_label(candidate_id))
             action.setData(candidate_id)
             action.setCheckable(True)
             action.setChecked(candidate_id in visible)
@@ -3429,10 +3639,11 @@ class EvaluationTab(QWidget):
                 self._toggle_comparison_candidate(value, checked)
             )
             self.comparison_models_menu.addAction(action)
+        self.comparison_models_menu.addSeparator()
+        self.comparison_models_menu.addAction(self.comparison_reveal_models)
         self.comparison_models_btn.setText(
             f"Models ({len(self._comparison_visible_candidates)})"
         )
-        self._resize_comparison_controls()
 
     def _toggle_comparison_candidate(self, candidate_id: str, checked: bool):
         visible = list(self._comparison_visible_candidates)
@@ -3454,7 +3665,6 @@ class EvaluationTab(QWidget):
             visible.remove(candidate_id)
         self._comparison_visible_candidates = visible
         self.comparison_models_btn.setText(f"Models ({len(visible)})")
-        self._resize_comparison_controls()
         self._display_comparison_selection(self.comparison_sample_list.currentRow())
 
     def _comparison_candidate(self, candidate_id: str) -> dict:
@@ -3482,7 +3692,12 @@ class EvaluationTab(QWidget):
 
     def _comparison_display_name(self, candidate_id: str, sample: dict) -> str:
         if self.comparison_reveal_models.isChecked():
-            return self._comparison_candidate_label(candidate_id)
+            candidate = self._comparison_candidate(candidate_id)
+            model = str(candidate.get("model") or candidate.get("label") or candidate_id)
+            # Keep configurations distinguishable when the same model is tested twice.
+            peers = [c for c in (self._comparison_data or {}).get("candidates") or []
+                     if str(c.get("model") or c.get("label") or c["id"]) == model]
+            return self._comparison_candidate_label(candidate_id) if len(peers) > 1 else model
         blind_label = (sample.get("blind_labels") or {}).get(candidate_id)
         if blind_label:
             return f"Candidate {blind_label}"
@@ -3528,7 +3743,7 @@ class EvaluationTab(QWidget):
             (sample.get("blind_labels") or {}).get(candidate_id) or ""
         )
         if self.comparison_reveal_models.isChecked():
-            model = self._comparison_candidate_label(candidate_id)
+            model = self._comparison_display_name(candidate_id, sample)
             return f"{blind_label} · {model}" if blind_label else model
         if blind_label:
             return f"Candidate {blind_label}"
@@ -3597,6 +3812,8 @@ class EvaluationTab(QWidget):
             elif not any(r["pool"] == scope["pool"] and r["candidate"] == scope["candidate"] for r in assessments):
                 return False
         selected_filter = str(self.comparison_filter.currentData() or "all")
+        if selected_filter == "available" and sample.get("paired_holdout_locked"):
+            return False
         review = sample.get("review")
         v3 = sample.get("paired_review")
         if v3 and self.review_mode.currentData() == "paired":
@@ -3691,12 +3908,12 @@ class EvaluationTab(QWidget):
             stratum = self._comparison_stratum_label(sample.get("stratum", ""))
             line_count = len(sample.get("lines") or [])
             item = QListWidgetItem(
-                f"{marker}  {sample_number}. {scene}\n"
-                f"    {line_count:,} lines · {stratum} · {status}"
+                f"{sample_number}. {scene.split(' / Page ')[0]}\n{marker} {status}"
             )
             item.setData(Qt.UserRole, sample["id"])
-            item.setForeground(QBrush(QColor(status_color)))
-            tooltip = str(sample.get("scene_id") or scene)
+            attention = sample.get("has_problems") or status in ("Disputed", "Not judgeable")
+            item.setForeground(QBrush(QColor(status_color if attention else COLORS.text_secondary)))
+            tooltip = f"{scene}\n{line_count:,} lines · {stratum}\n{status}\nSample ID: {sample['id']}"
             if review:
                 tooltip += "\nOverall: " + self._format_comparison_tiers(
                     review.get("overall") or [], sample
@@ -3733,7 +3950,10 @@ class EvaluationTab(QWidget):
 
     def _display_comparison_selection(self, row: int):
         samples = self._comparison_filtered_samples
+        self._rebuild_comparison_model_menu()
+        self.comparison_review_scroll.verticalScrollBar().setValue(0)
         if row < 0 or row >= len(samples):
+            self._set_comparison_empty("No matching samples", "Use Browse samples to change the search or filter.")
             self.comparison_sample_heading.setText("No matching sample")
             self.comparison_sample_meta.clear()
             self.comparison_context.clear()
@@ -3750,22 +3970,23 @@ class EvaluationTab(QWidget):
             self.comparison_table.clear()
             self.comparison_table.setRowCount(0)
             self.comparison_table.setColumnCount(0)
-            self.comparison_counter.setText(f"0 / {len(samples):,}")
+            self.comparison_samples_btn.setText("Choose a sample ▾")
             self.comparison_previous_btn.setEnabled(False)
             self.comparison_next_btn.setEnabled(False)
             return
         sample = samples[row]
-        self.comparison_counter.setText(f"{row + 1:,} / {len(samples):,}")
+        self.comparison_samples_btn.setText(f"Sample {row + 1:,} of {len(samples):,} ▾")
         self.comparison_previous_btn.setEnabled(row > 0)
         self.comparison_next_btn.setEnabled(row + 1 < len(samples))
         self.comparison_sample_heading.setText(
-            self._comparison_scene_label(sample.get("scene_id", ""))
+            self._comparison_scene_label(sample.get("scene_id", "")).split(" / Page ")[0]
         )
+        self.comparison_sample_heading.setToolTip(self._comparison_scene_label(sample.get("scene_id", "")))
         self.comparison_sample_meta.setText(
             f"{len(sample.get('lines') or []):,} source lines  ·  "
-            f"{self._comparison_stratum_label(sample.get('stratum', ''))}  ·  "
-            f"Sample ID: {sample.get('id') or '—'}"
+            f"{self._comparison_stratum_label(sample.get('stratum', ''))}"
         )
+        self.comparison_sample_meta.setToolTip(f"Sample ID: {sample.get('id') or '—'}")
         review = sample.get("review")
         context = sample.get("context") or {}
         history = "\n".join(context.get("history") or [])
@@ -3781,7 +4002,7 @@ class EvaluationTab(QWidget):
             self._display_paired_sample(sample, v3)
             if sample.get("paired_holdout_locked"):
                 self.comparison_review_status.setText("Reserved confirmation")
-                self.paired_sample_evidence.setPlainText("Confirmation translations remain hidden until screening is complete and contenders are frozen by confirmation export.")
+                self.paired_sample_evidence.setText("Confirmation translations remain hidden until screening is complete and contenders are frozen by confirmation export.")
             review = None
         elif review:
             self._set_comparison_review_metrics_visible(True)
@@ -3845,6 +4066,16 @@ class EvaluationTab(QWidget):
                 "This sample was not included in the exported blind review."
             )
 
+        self.comparison_notes_btn.setEnabled(True)
+        self.comparison_context_btn.setEnabled(True)
+        if sample.get("paired_holdout_locked"):
+            self._set_comparison_empty("Reserved for confirmation",
+                "These translations unlock after screening is complete and the confirmation review is exported.")
+            self.comparison_context_btn.setEnabled(True)
+            self.comparison_table.clear()
+            self.comparison_table.setRowCount(0)
+            return
+        self.comparison_views.setCurrentIndex(0)
         candidate_ids = self._comparison_ordered_candidate_ids(sample)
         self.comparison_table.clear()
         self.comparison_table.setColumnCount(1 + len(candidate_ids))
@@ -3860,8 +4091,10 @@ class EvaluationTab(QWidget):
             header_item.setForeground(
                 QBrush(QColor(self._comparison_candidate_color(candidate_id)))
             )
+            tooltip = self._comparison_candidate_label(candidate_id) if self.comparison_reveal_models.isChecked() else display_name
             if candidate_id in first_place:
-                header_item.setToolTip("Ranked first overall for this sample")
+                tooltip += "\nRanked first overall for this sample"
+            header_item.setToolTip(tooltip)
             self.comparison_table.setHorizontalHeaderItem(column, header_item)
         lines = sample.get("lines") or []
         self.comparison_table.setRowCount(len(lines))
@@ -3870,6 +4103,7 @@ class EvaluationTab(QWidget):
         ])
         for line_index, line in enumerate(lines):
             source_item = QTableWidgetItem(str(line.get("source") or ""))
+            source_item.setTextAlignment(Qt.AlignLeft | Qt.AlignTop)
             source_item.setToolTip(str(line.get("segment_id") or ""))
             source_item.setForeground(QBrush(QColor(COLORS.text_primary)))
             source_item.setBackground(QBrush(QColor(COLORS.surface_1)))
@@ -3877,15 +4111,14 @@ class EvaluationTab(QWidget):
             for column, candidate_id in enumerate(candidate_ids, start=1):
                 output = (line.get("outputs") or {}).get(candidate_id) or {}
                 text = str(output.get("translation") or "")
-                if sample.get("paired_holdout_locked"):
-                    display = "Reserved until confirmation export"
-                elif output.get("missing"):
+                if output.get("missing"):
                     display = "⚠ Missing output"
                 elif not output.get("valid", True):
                     display = "⚠ Invalid output\n" + text
                 else:
                     display = text
                 item = QTableWidgetItem(display)
+                item.setTextAlignment(Qt.AlignLeft | Qt.AlignTop)
                 details = [
                     *[str(value) for value in output.get("issues") or []],
                     *[str(value) for value in output.get("warnings") or []],
@@ -3900,7 +4133,6 @@ class EvaluationTab(QWidget):
                 self.comparison_table.setItem(line_index, column, item)
         header = self.comparison_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Interactive)
-        self.comparison_table.resizeRowsToContents()
         self._resize_comparison_columns()
         self._reset_comparison_table_scrollbars()
         QTimer.singleShot(0, self._reset_comparison_table_scrollbars)
@@ -3918,18 +4150,20 @@ class EvaluationTab(QWidget):
         viewport_width = self.comparison_table.viewport().width()
         if column_count < 2 or viewport_width <= 0:
             return
-        usable_width = max(0, viewport_width - 20)
-        source_width = max(220, min(320, int(usable_width * 0.24)))
+        usable_width = max(0, viewport_width - 2)
+        source_width = max(160, min(300, usable_width // column_count))
         candidate_count = column_count - 1
         remaining = max(0, usable_width - source_width)
-        candidate_width = max(250, remaining // candidate_count)
+        candidate_width = max(160, remaining // candidate_count)
         self.comparison_table.setColumnWidth(0, source_width)
         for column in range(1, column_count):
             self.comparison_table.setColumnWidth(column, candidate_width)
+        self.comparison_table.resizeRowsToContents()
 
     def _display_state(self, state: dict):
         self._paired_state = state
         self._refresh_paired_results()
+        self._refresh_overview(state)
         self._invalidate_comparison()
         self.table.setRowCount(len(state.get("candidates", [])))
         human_review = state.get("human_review") or {}
@@ -4037,14 +4271,13 @@ class EvaluationTab(QWidget):
         self.results_tabs.setTabEnabled(
             self._comparison_tab_index, comparison_ready
         )
+        self.overview_read_btn.setEnabled(comparison_ready)
         if (
             comparison_ready
             and self.results_tabs.currentIndex() == self._comparison_tab_index
         ):
             QTimer.singleShot(0, self._start_comparison_load)
         self._update_actions(state)
-        if (state.get("paired_review") or {}).get("analysis") and self.review_mode.currentData() == "paired" and self.results_tabs.currentIndex() == 0:
-            self.results_tabs.setCurrentIndex(self._paired_tab_index)
 
     def _update_actions(self, state: dict | None = None):
         if state is None and self.current_run_dir:
@@ -4061,10 +4294,12 @@ class EvaluationTab(QWidget):
             for candidate in candidates or []
         )
         self.prepare_btn.setEnabled(not busy)
+        self.new_evaluation_btn.setEnabled(not busy)
+        self.review_tools_btn.setEnabled(not busy and status in {"completed", "failed"})
         self.submit_btn.setEnabled(
             not busy and not self._generation_setup_dirty and status in {"prepared", "partially_submitted"}
         )
-        self.refresh_btn.setEnabled(
+        self.refresh_action.setEnabled(
             not busy and (
                 status == "imported_paused"
                 or (
@@ -4074,6 +4309,7 @@ class EvaluationTab(QWidget):
             )
         )
         self.cancel_btn.setEnabled(busy and self._worker_cancelable)
+        self.cancel_btn.setVisible(busy and self._worker_cancelable)
         self.export_btn.setEnabled(not busy and status in {"completed", "failed"})
         self.judge_check_btn.setEnabled(
             not busy and status in {"completed", "failed"}
