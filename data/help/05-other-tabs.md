@@ -200,6 +200,32 @@ The text estimate excludes unpredictable reasoning costs; the ceiling includes t
 Prepare the benchmark again after changing a model's settings.
 Saved evaluations and exported evaluation archives retain the selected settings, and results identify each model's effort and output limit.
 
+Sampling aims for at least eight independent dialogue scenes when the selected content permits it.
+The line count per sample is a maximum; small budgets may produce shorter contiguous blocks to
+cover more scenes. Preparation shows the largest scene's share and reports limited dialogue coverage.
+
+**Export blind review** includes each sample's preceding Japanese dialogue and the exact matched
+prompt, glossary and SFX context. Exact duplicate output blocks are grouped; fully identical
+samples start with tied rankings. A tie means equal preference, not necessarily correct translation.
+Use **Copy review skill** for the review instructions. Complete all four rankings on judged rows,
+or select `insufficient_context` / `needs_human_review` and leave all rankings blank. Record concrete
+errors and severity in `error_evidence`; do not score individual lines separately.
+
+Set the reviewer name/session and AI/Human type before **Import reviewed CSV**. The **Review statistics**
+tab shows judged and abstained coverage, category scores, pairwise wins/ties/losses, recorded errors,
+and scores that weight scenes equally. Its 95% intervals resample whole scenes and do not measure
+judge bias. With fewer than two judged scenes an interval is unavailable. Quality scores cover only
+complete valid outputs; consider the existing **Valid** and cost columns too. Randomized A/B/C labels
+change identity across rows and should never be totaled as if they were fixed models.
+
+After importing a baseline, **Export judge check** selects a quarter of its non-identical judged
+samples plus all samples flagged for human follow-up. It changes every candidate's position and
+omits previous verdicts. Review it in a fresh AI session or with a qualified Japanese reviewer,
+then import it to see agreement and disagreements without replacing baseline quality scores.
+The comparison's **Needs human follow-up** filter finds uncertain samples, major/critical errors,
+and judge disagreements. Reimporting a corrected baseline invalidates checks exported against the
+old decisions; export a fresh check. Saved evaluation archives retain review history and mappings.
+
 ## Configuration
 
 This is where you save your AI service, private API key, model, text width, and game-specific
@@ -221,3 +247,78 @@ For standard Workflow projects, Git should track `.dazedtl/glossary.txt`, `.daze
 `.dazedtl/skills/`. DazedTL keeps the rest of `.dazedtl` ignored because it contains local working
 files, backups, and caches. You normally do not need to edit those local folders by hand.
 Len runtime-patch projects keep all `.dazedtl` work local and separately backed up, as described above.
+# Paired translation evaluation (v3)
+
+Choose **Paired review v3** for new reviews. **Legacy rankings v2** preserves the old
+rank-based workflow and scores. Legacy full and partial ties now have distinct labels.
+
+1. Finish generation, choose **Screening**, and export. The preview shows assessment
+   and pair counts before saving. Invalid outputs stay in reliability coverage.
+2. Use **Copy review skill** in a fresh judge session, then import its reviewed CSV
+   with a reviewer/session name. Assess editing requirements and compare two scenes at
+   a time. Slight preferences between accurate translations do not require an error.
+3. Open **Model decision** for editing needs, major fidelity errors, mandatory-rule
+   compliance, validity, paired preferences, observed cost and available live latency.
+   Double-click a model or paired result to inspect its underlying source evidence.
+4. Export **Confirmation** for the statistically plausible contenders on reserved,
+   unexposed content groups. Candidates and the confirmation set are then frozen.
+   Previously exported scenes cannot become fresh holdouts. A run without fresh groups
+   can support screening, but needs new source material for confirmation.
+5. Review **Challenge cases** separately. The default source-only selection uses
+   code-bearing scenes; **Review policy** also accepts explicit challenge sample IDs.
+6. Use **Reversed-order audit** and **Independent judge** for fresh checks. Disagreements
+   stay disputed and do not add independent votes. Use a different reviewer/session for
+   independent checks. **Load human calibration** accepts a human-authored JSON suite;
+   choose **Calibration** to export it without the expected answers.
+7. Export **Human adjudication** for flagged scenes when qualified review is needed.
+   Import it with reviewer kind **Human**. Adjudication preserves the earlier verdicts,
+   applies the human decision, and retires only stale audit records. A fresh audit can
+   then check the revised baseline. Identical outputs share the adjudicated assessment.
+
+**Review policy** sets group budgets, practical and fidelity margins, mandatory rules,
+and review conventions. Changing policy starts a new campaign while retaining earlier
+results. These are pilot settings, not validated claims about Japanese game translation.
+Mandatory rules remain production requirements even when their linguistic impact is small.
+
+The primary results show wins/equivalents/losses and net paired preference, not Borda
+points. Equivalents stay in the denominator; abstentions do not become half-wins.
+Multiple chunks from an event/page and repeated judge votes do not increase scene weight.
+Uncertainty uses conservative, simultaneous bounds over independent content groups, so
+small samples and all-equivalent samples cannot produce false certainty. Sampling bounds
+do not include judge bias. A provisional leader is not a supported winner, and failure to
+find a difference is not evidence of practical equivalence.
+
+For ordinary win/equivalent/loss content-group outcomes, v3 uses exact binomial marginal
+bounds and combines them conservatively. Fractional group averages or explicit stratum
+weights use bounded-mean intervals. The error budget covers the planned pairs and both
+preference and fidelity claims. Legacy scene-bootstrap scores remain legacy results.
+
+Human calibration JSON format (the following is a structural example, not human gold):
+
+```json
+{
+  "version": 1,
+  "author": "Qualified reviewer's name",
+  "author_kind": "human",
+  "cases": [{
+    "id": "calibration-01",
+    "source": ["Japanese source"],
+    "context": {"history": [], "system": "Applicable translation instructions", "glossary": "", "sfx_reference": ""},
+    "left": ["One translation"],
+    "right": ["Another translation"],
+    "decision": "equivalent"
+  }]
+}
+```
+
+Supply actual qualified human judgments covering errors, valid alternatives, voice,
+ambiguity and formatting. Calibration outcomes are excluded from model scores. AI review
+remains a second opinion and requires human confirmation for consequential choices.
+
+Calibration also needs assessment cases to check error-impact judgments. An assessment
+case uses `"type":"assessment"`, `source`, `context`, and `output` arrays, plus:
+`"expected":{"editing":"ready","major_linguistic":false,"critical":false,"violated_rules":[]}`.
+Replace these expected values with the human judgment. Supported conclusions require
+both comparison and assessment calibration for each participating judge identifier.
+Use the same reviewer identifier when importing that judge's calibration; an independent
+   judge uses a different identifier. Fresh sessions still must not see earlier verdicts.

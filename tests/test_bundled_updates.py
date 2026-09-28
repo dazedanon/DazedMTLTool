@@ -55,6 +55,7 @@ _SHIPPED_DATA_FILES = (
     "data/skills/ace_script_translation.md",
     "data/skills/rpgmaker_translation_qa.md",
     "data/skills/evaluation_csv_review.md",
+    "data/skills/evaluation_pairwise_review.md",
     "data/skills/image_translation.md",
     "data/skills/risky_codes.md",
     "data/skills/wolf_speakers.md",

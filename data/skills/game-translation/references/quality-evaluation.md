@@ -100,6 +100,10 @@ Take `code_heavy` **last**, excluding ids already selected, so it never double-c
 
 Round-robin across files and then across scenes within each file, ordering both by `sha256(f"{seed}:file:{name}")`, sorting scenes holding at least `per_scene` items first, and taking up to `per_scene` **contiguous** items per visit so each draw carries local context. Enforce a floor of about **60 eligible lines** before a benchmark is worth running at all.
 
+Aim for at least eight dialogue scenes when available, shortening the maximum block length
+within small budgets before revisiting scenes. Show selected scene counts and the largest
+scene's share before provider submission. A large line count from two scenes is weak coverage.
+
 ### Samples are contiguous same-scene blocks
 
 **A review sample must be a contiguous run of one scene.** Map each selected segment to its position in the full scene and start a new chunk whenever the next selected line is not at `previous_position + 1`, or the chunk hit `sample_size`. Judging isolated lines cannot detect the failures that matter most in game text: speaker continuity, pronoun and gender drift, terminology consistency across a scene.
@@ -118,6 +122,11 @@ assert all(len(r["history"]) <= 10 for r in requests)
 
 One chunk = one translation request = one review row. Tell the judge to review the row **as a whole** and not to rank individual lines.
 
+Export that request's exact preceding history, system, matched glossary and SFX reference in
+the row's protected `context` JSON. Aggregate snapshots are legacy reference material, not
+permission to apply another sample's context. Deduplicate only complete context blocks so
+repeated headings and SFX senses stay attached to their entries.
+
 ### Apples to apples
 
 Admit a sample into the blind review only when **every** one of its segments has a valid first-repetition translation from **every** candidate. Report eligible against total samples and lines, so the exclusion cannot become silent survivorship bias.
@@ -128,13 +137,16 @@ Admit a sample into the blind review only when **every** one of its segments has
 
 **Reshuffle the candidate labels independently on every sample row, not once per run.** A single global A/B/C assignment lets the judge lock onto one column's style and score by identity for the whole file, and fixed column order triggers LLM position bias, a documented and strong judge failure mode.
 
-Spreadsheet labels A, B, C ... AA, AB. Seed deterministically from run and sample so the shuffle is reproducible and a lost key can be regenerated:
+Spreadsheet labels A, B, C ... AA, AB. Give each export an immutable review ID and bind its
+sample mappings in the private run state. Seed each export/sample shuffle reproducibly:
 
 ```python
-random.Random(f"{run_id}:{sample_id}").shuffle(shuffled)
+random.Random(f"{review_id}:{sample_id}").shuffle(shuffled)
 ```
 
-Write the per-sample label→candidate map to a separate `blind_key.json` next to the CSV, atomically and **after** the CSV. In the judge prompt:
+Retain `blind_key.json` for the canonical imported baseline, and keep other export mappings
+in private `review_exports` state. Fresh exports and judge checks must not overwrite an
+imported baseline's CSV or mapping. In the judge prompt:
 
 - state that labels are shuffled per row,
 - forbid opening `blind_key.json` or any file other than the CSV and the context snapshots,
@@ -180,7 +192,15 @@ merely because you prefer another style.
 Ignore tiny punctuation or wording preferences when meaning and voice are equivalent.
 ```
 
-Allow `=` only for genuine equivalence, including `A=B=C` when the available context cannot support a defensible distinction. **Require every label to appear exactly once in every ranking column, and enforce that on import** - a parser that accepts a ranking missing a label is scoring a candidate that was never judged.
+Allow `=` only for genuine equivalence. Use `status=insufficient_context` or
+`needs_human_review`, blank rankings and an explanatory note when judgment is unsafe.
+Abstentions receive no points and have separate coverage counts. Require every label exactly
+once in every judged ranking and enforce it on import. Exact duplicate candidate blocks
+must tie; all-identical rows can be prefilled while still allowing shared errors to be recorded.
+
+Supplement rankings with per-candidate `error_evidence`: category, minor/major/critical
+severity, source-line location, exact source and translation quotes, and an explanation.
+Validate quotations on import. These are evidence annotations, not independent line scores.
 
 ---
 
@@ -211,6 +231,13 @@ Accumulate weighted Borda separately for **each** axis. Report alongside it:
 - **full ties** (one tier),
 - **partial ties** (any tier with more than one member).
 
+Resolve row labels to actual candidates privately before summing. Never total shuffled
+A/B/C labels across rows. Also report category scores and whole-sample pairwise wins/ties/losses.
+For scene-balanced scores, average normalized block ranks within each scene, then across scenes.
+Compute paired 95% bootstrap intervals by resampling whole scenes, preserving their blocks;
+line-weighted awards are not independent observations. With fewer than two scenes, omit the
+interval. Report validity/exclusion coverage and cost beside successful-output quality.
+
 Naive win-counting throws the tie information away and lets an indecisive judge look decisive.
 
 **Version the scheme in the saved state** so an old run's totals are never silently compared against a new formula:
@@ -222,6 +249,12 @@ Naive win-counting throws the tie information away and lets an indecisive judge 
 ---
 
 ## 6. Repeatability is a separate metric from quality
+
+Judge repeatability is separate from translation repeatability. After a baseline import,
+export a fresh quarter of non-identical judged samples plus flagged samples, changing candidate
+positions and stripping prior decisions. Use an independent session or qualified human reviewer.
+Compare mapped pairwise preferences and identify disagreements without replacing baseline scores.
+Preserve reviewer/session metadata and review history in portable evaluation archives.
 
 **Re-run a subset 3 times and compare exact normalized strings, at whole-sample granularity.**
 
@@ -292,8 +325,8 @@ State this limitation in your final report.
 
 - reviewed output path,
 - total sample rows and total source lines,
-- fixed-sum points per randomized label, for all four ranking columns,
-- overall unique first places, partial ties, full ties,
+- judged and abstention counts, partial ties and full ties,
+- consequential errors and their sample IDs,
 - **any rows the judge could not judge safely**,
 - an explicit warning that the review may be biased and should be confirmed by a qualified human before a high-stakes model choice.
 
@@ -305,3 +338,18 @@ Carry that same warning to every point of use, at warning severity and not infor
 - A **full tie or a fluency-only win** is not a decision. Pick on cost, rate limit, or repeatability instead, and say that is what you did.
 - Rows the judge flagged as unjudgeable are the shortlist for the human pass, ahead of anything else.
 - Winning the benchmark does not clear the UI strings. Dump every button, choice, notice and tooltip as `JP → EN` side by side and read them (`references/llm-pipeline.md`). A few hundred lines, minutes of reading, and it is the only pass that catches a short verb rendered as the wrong part of speech.
+# Paired editorial review
+
+The Evaluation tab supports a v3 paired review alongside legacy rankings. Use the v3
+exported instructions for records with `schema_version=3`; do not convert them to old
+rankings. Assess editing requirements and evidence independently from a left/right
+linguistic preference. A source-grounded slight preference is allowed between two
+correct translations. Policy-only violations remain visible in compliance and production
+eligibility; severity follows impact rather than the mere presence of a mandatory rule.
+
+Keep screening, fresh confirmation, source-selected challenges, judge audits and human
+calibration separate. All-equivalent outputs can share serious errors. Missing context,
+uncertain Japanese and policy conflicts require abstention. Do not reveal run mappings,
+infer model identity, inspect calibration answers, or reuse prior verdicts for a fresh
+judge check. The application validates the protected CSV contract and retains legacy
+scores without interpreting them as v3 editing requirements or preferences.

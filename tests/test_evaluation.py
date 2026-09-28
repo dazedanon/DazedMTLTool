@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from util import batch_providers, evaluation
+from tests import evaluation_pairwise_cases as paired_cases
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,6 +97,8 @@ class EvaluationAtomicWriteTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "already being submitted"):
                     with evaluation._evaluation_submit_lock(run_dir):
                         pass
+                with self.assertRaisesRegex(RuntimeError, "already being submitted"):
+                    evaluation.export_paired_review(run_dir)
 
     def test_refresh_uses_the_same_run_mutation_lock(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -388,7 +391,7 @@ class EvaluationContentSelectionTests(unittest.TestCase):
             Counter({"Map001.json": 20, "Map002.json": 20, "Map003.json": 20}),
         )
 
-    def test_sampling_uses_full_scene_chunks_instead_of_touching_every_file(self):
+    def test_sampling_spreads_contiguous_blocks_across_independent_scenes(self):
         pool = []
         for file_index in range(1, 21):
             filename = f"Map{file_index:03d}.json"
@@ -419,10 +422,17 @@ class EvaluationContentSelectionTests(unittest.TestCase):
             item["review_sample_id"] for item in grouped
         ).values()
 
-        self.assertEqual(
-            len({item["source_location"]["file"] for item in selected}), 6
-        )
-        self.assertEqual(list(sample_sizes), [10] * 6)
+        self.assertGreaterEqual(len({item["scene_id"] for item in selected}), 8)
+        self.assertEqual(sum(sample_sizes), 60)
+        self.assertTrue(all(1 < size <= 10 for size in sample_sizes))
+        for scene in {item["scene_id"] for item in selected}:
+            positions = [item["source_location"]["item"] for item in selected if item["scene_id"] == scene]
+            self.assertEqual(positions, list(range(1, len(positions) + 1)))
+        # A large per-request maximum must not spend most of a small run on two scenes.
+        long_pool = [dict(item, id=f"{item['id']}-{offset}") for offset in range(4) for item in pool]
+        larger = evaluation.build_corpus(".", target_segments=120, sample_size=40,
+            content_selection={"preset": "events"}, _pool=long_pool)
+        self.assertGreaterEqual(len({item["scene_id"] for item in larger}), 8)
 
     def test_game_fingerprint_changes_stable_order_between_games(self):
         first = [
@@ -2774,6 +2784,7 @@ class BlindReviewTests(unittest.TestCase):
             "logical_requests": [{
                 "id": "logical-0001", "segment_ids": ["segment-1"],
                 "system": "Preserve the established character voice.",
+                "history": ["彼女は猫を見つけた。"],
                 "glossary": "猫 (Cat) - approved character name",
                 "sfx_reference": (
                     "Japanese SFX reference (contextual suggestions, not approved fixed translations).\n"
@@ -2877,6 +2888,9 @@ class BlindReviewTests(unittest.TestCase):
         with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
             rows = list(csv.DictReader(stream))
         self.assertEqual(len(rows), 1)
+        context = json.loads(rows[0]["context"])
+        self.assertEqual(context["history"], ["彼女は猫を見つけた。"])
+        self.assertEqual(context["glossary"], "猫 (Cat) - approved character name")
         self.assertEqual(
             {
                 json.loads(rows[0][label])[0]
@@ -2946,6 +2960,7 @@ class BlindReviewTests(unittest.TestCase):
             sample["review"]["notes"],
             "B best preserves the speaker's intent.",
         )
+        self._check_independent_judge_roundtrip()
 
     def test_comparison_retains_invalid_and_missing_primary_outputs(self):
         state = evaluation._read_json(self.run_dir / "state.json")
@@ -2976,6 +2991,7 @@ class BlindReviewTests(unittest.TestCase):
         self.assertTrue(
             sample["lines"][0]["outputs"]["candidate-2"]["missing"]
         )
+        paired_cases.check_coverage(self)
 
     def test_import_rejects_blank_review_without_overwriting_existing_review(self):
         review_path = evaluation.export_blind_review(
@@ -3000,12 +3016,15 @@ class BlindReviewTests(unittest.TestCase):
         )
         saved = evaluation._read_json(state_path)
         self.assertEqual(saved["human_review"], existing_review)
+        self._check_abstention_statuses()
 
     def test_import_rejects_modified_source_or_candidate_cells(self):
         for field, replacement, message in (
             ("source", json.dumps(["rewritten source"]), "source text changed"),
             ("A", json.dumps(["rewritten candidate"]), "candidate text"),
             ("segment_ids", json.dumps(["other-segment"]), "segment IDs changed"),
+            ("context", json.dumps({"history": []}), "context changed"),
+            ("identical_candidates", json.dumps([["A", "B"]]), "identical candidates changed"),
         ):
             with self.subTest(field=field):
                 review_path = evaluation.export_blind_review(self.run_dir)
@@ -3024,6 +3043,8 @@ class BlindReviewTests(unittest.TestCase):
 
                 with self.assertRaisesRegex(ValueError, message):
                     evaluation.import_blind_review(self.run_dir, review_path)
+        self._check_error_evidence()
+        paired_cases.check_protection(self)
 
     def test_multi_line_sample_is_exported_and_scored_once_as_a_block(self):
         manifest_path = self.run_dir / "manifest.json"
@@ -3080,6 +3101,9 @@ class BlindReviewTests(unittest.TestCase):
         self.assertEqual(
             review["scoring"], "fixed-sum-borda-average-per-line-v2"
         )
+        self._check_scene_statistics()
+        paired_cases.check_contract(self)
+        paired_cases.check_statistics(self)
 
     def test_import_rejects_changed_sample_line_count(self):
         review_path = evaluation.export_blind_review(self.run_dir)
@@ -3119,6 +3143,8 @@ class BlindReviewTests(unittest.TestCase):
         })
         self.assertEqual(review["partial_ties"], 1)
 
+        self._check_identical_output_ties()
+
     def test_import_rejects_incomplete_or_duplicate_ranking(self):
         review_path = evaluation.export_blind_review(self.run_dir)
         with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
@@ -3153,6 +3179,7 @@ class BlindReviewTests(unittest.TestCase):
         quality_fields = {
             f"{metric}_ranking" for metric in evaluation.REVIEW_QUALITY_METRICS
         }
+        quality_fields.update({"review_id", "context", "identical_candidates", "status", "error_evidence"})
         legacy_fields = [
             "winner" if field == "ranking" else field
             for field in rows[0].keys() if field not in quality_fields
@@ -3290,6 +3317,141 @@ class BlindReviewTests(unittest.TestCase):
             review_path.read_text(encoding="utf-8"), "existing review\n"
         )
         self.assertFalse((self.run_dir / "blind_key.json").exists())
+
+    def _read_csv(self, path):
+        with open(path, encoding="utf-8-sig", newline="") as stream:
+            return list(csv.DictReader(stream))
+
+    def _write_csv(self, path, rows):
+        with open(path, "w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def _check_abstention_statuses(self):
+        for status in ("insufficient_context", "needs_human_review"):
+            with self.subTest(status=status):
+                path = evaluation.export_blind_review(self.run_dir)
+                rows = self._read_csv(path)
+                rows[0].update(status=status, notes="The preceding reference is unresolved.")
+                self._write_csv(path, rows)
+                review = evaluation.import_blind_review(self.run_dir, path)
+                self.assertEqual(review["reviewed"], 0)
+                self.assertEqual(review["ties"], 0)
+                self.assertEqual(sum(review["points"].values()), 0)
+                self.assertEqual(review["analysis"]["coverage"], {status: 1})
+                sample = evaluation.load_comparison_data(self.run_dir)["samples"][0]
+                self.assertEqual(sample["review"]["status"], status)
+                self.assertTrue(sample["human_follow_up"])
+                rows[0]["ranking"] = "A=B=C=D"
+                self._write_csv(path, rows)
+                with self.assertRaisesRegex(ValueError, "rankings blank"):
+                    evaluation.import_blind_review(self.run_dir, path)
+
+    def _check_identical_output_ties(self):
+        state = evaluation._read_json(self.run_dir / "state.json")
+        for candidate in state["candidates"]:
+            path = self.run_dir / candidate["result_file"]
+            result = evaluation._read_json(path)
+            result["executions"]["rep-1:logical-0001"]["lines"][0]["translation"] = "A cat."
+            evaluation._atomic_write_json(path, result)
+        path = evaluation.export_blind_review(self.run_dir)
+        rows = self._read_csv(path)
+        self.assertEqual(rows[0]["status"], "judged")
+        self.assertEqual(rows[0]["ranking"], "A=B=C=D")
+        self.assertEqual(evaluation.import_blind_review(self.run_dir, path)["ties"], 1)
+        self._fill_rankings(rows[0], "A>B=C=D")
+        self._write_csv(path, rows)
+        with self.assertRaisesRegex(ValueError, "Identical candidate blocks"):
+            evaluation.import_blind_review(self.run_dir, path)
+
+    def _check_error_evidence(self):
+        path = evaluation.export_blind_review(self.run_dir)
+        rows = self._read_csv(path)
+        self._fill_rankings(rows[0], "A>B>C>D")
+        evidence = json.loads(rows[0]["error_evidence"])
+        evidence["D"] = [{"category": "meaning", "severity": "major", "line": 1,
+            "source_quote": "猫", "translation_quote": json.loads(rows[0]["D"])[0],
+            "explanation": "The animal identity is lost."}]
+        rows[0]["error_evidence"] = json.dumps(evidence)
+        self._write_csv(path, rows)
+        review = evaluation.import_blind_review(self.run_dir, path)
+        mapping = evaluation._read_json(self.run_dir / "blind_key.json")[self.review_id]
+        self.assertEqual(review["analysis"]["errors"][mapping["D"]]["major"], 1)
+        self.assertEqual(review["analysis"]["human_follow_up"], [self.review_id])
+        for change in ({"line": 2}, {"source_quote": "犬"}, {"translation_quote": "invented"}, {"severity": "huge"}):
+            with self.subTest(change=change):
+                bad = json.loads(json.dumps(evidence))
+                bad["D"][0].update(change)
+                rows[0]["error_evidence"] = json.dumps(bad)
+                self._write_csv(path, rows)
+                with self.assertRaises(ValueError):
+                    evaluation.import_blind_review(self.run_dir, path)
+
+    def _check_independent_judge_roundtrip(self):
+        path = evaluation.export_blind_review(self.run_dir)
+        rows = self._read_csv(path)
+        self._fill_rankings(rows[0], "A>B>C>D")
+        self._write_csv(path, rows)
+        baseline = evaluation.import_blind_review(self.run_dir, path, reviewer="first session", reviewer_kind="ai")
+        key = evaluation._read_json(self.run_dir / "blind_key.json")
+        original = (self.run_dir / "blind_review.csv").read_bytes()
+        check_path = evaluation.export_blind_review(self.run_dir, judge_check=True)
+        check = self._read_csv(check_path)
+        self.assertEqual(check[0]["notes"], "")
+        self.assertEqual(check[0]["ranking"], "")
+        self.assertTrue(all(check[0][label] != rows[0][label] for label in "ABCD"))
+        state = evaluation._read_json(self.run_dir / "state.json")
+        check_key = state["review_exports"][check[0]["review_id"]]["key"][self.review_id]
+        labels = {candidate: label for label, candidate in check_key.items()}
+        rank = ">".join(labels[tier[0]] for tier in baseline["rows"][0]["rankings"]["overall"])
+        self._fill_rankings(check[0], rank)
+        self._write_csv(check_path, check)
+        imported = evaluation.import_blind_review(self.run_dir, check_path, reviewer="second session", reviewer_kind="ai")
+        self.assertEqual(imported["judge_agreement"]["pair_agreement_rate"], 1)
+        self.assertEqual((self.run_dir / "blind_review.csv").read_bytes(), original)
+        self.assertEqual(evaluation._read_json(self.run_dir / "blind_key.json"), key)
+        state = evaluation._read_json(self.run_dir / "state.json")
+        self.assertEqual(state["human_review"]["points"], baseline["points"])
+        self._fill_rankings(check[0], ">".join(reversed(rank.split(">"))))
+        self._write_csv(check_path, check)
+        imported = evaluation.import_blind_review(self.run_dir, check_path)
+        self.assertEqual(imported["judge_agreement"]["pair_agreement_rate"], 0)
+        self.assertEqual(imported["judge_agreement"]["disputed_samples"], [self.review_id])
+        # Review history and export bindings survive a portable archive round trip.
+        archive = evaluation.export_run_archive(self.run_dir, self.run_dir / "portable.dazedeval")
+        restored = evaluation.import_run_archive(self.run_dir / "other-project", archive)
+        restored_state, _ = evaluation.load_run(restored)
+        self.assertEqual(restored_state["review_history"], evaluation._read_json(self.run_dir / "state.json")["review_history"])
+        self._fill_rankings(rows[0], "D>C>B>A")
+        self._write_csv(path, rows)
+        evaluation.import_blind_review(self.run_dir, path)
+        with self.assertRaisesRegex(ValueError, "baseline review changed"):
+            evaluation.import_blind_review(self.run_dir, check_path)
+        paired_cases.check_stages_and_audits(self)
+    def _check_scene_statistics(self):
+        stats = evaluation.review_stats
+        def row(identifier, scene, count, tiers, status="judged"):
+            return dict(sample_id=identifier, scene_id=scene, stratum="event_text", line_count=count,
+                rankings={"overall": tiers}, status=status, evidence={})
+        rows = [row("one", "scene-a", 40, [["a"], ["b"]]),
+                row("two", "scene-b", 1, [["b"], ["a"]]),
+                row("three", "scene-c", 50, [], "insufficient_context")]
+        report = stats.summarize_reviews(rows, ["a", "b"])
+        self.assertEqual(report["by_stratum"]["event_text"]["points"], {"a": 40, "b": 1})
+        self.assertEqual(report["scene_scores"]["overall"]["a"]["score"], 50)
+        self.assertEqual(report["scene_count"], 2)
+        pair = report["pairwise"][0]
+        self.assertEqual((pair["wins"], pair["ties"], pair["losses"]), (1, 0, 1))
+        self.assertLess(pair["scene_difference_ci95"][0], 0)
+        self.assertGreater(pair["scene_difference_ci95"][1], 0)
+        self.assertEqual(stats.summarize_reviews(rows[:1], ["a", "b"])["scene_scores"]["overall"]["a"]["ci95"], None)
+        # Splitting a scene into equivalent blocks must not give it more weight.
+        split = [*rows, row("four", "scene-a", 1, [["a"], ["b"]])]
+        self.assertEqual(stats.summarize_reviews(split, ["a", "b"])["scene_scores"], report["scene_scores"])
+        text = stats.format_review_summary({"analysis": report}, {"a": "First", "b": "Second"})
+        self.assertIn("First", text)
+        self.assertNotIn("candidate-", text)
 
 
 if __name__ == "__main__":

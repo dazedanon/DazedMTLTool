@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import QApplication, QMessageBox, QStackedWidget, QWidget
 from gui.config_tab import ModelFetchThread
 from gui.evaluation_tab import EvaluationTab, _EvaluationWorker
 from util import evaluation
+from tests import evaluation_pairwise_cases as paired_cases
 
 
 class EvaluationTabTests(unittest.TestCase):
@@ -250,6 +251,7 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertIn("biased", warning.call_args.args[2])
 
     def test_export_review_uses_selected_candidate_subset(self):
+        self.tab.review_mode.setCurrentIndex(self.tab.review_mode.findData("legacy"))
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
             output = run_dir / "selected-review.csv"
@@ -291,6 +293,29 @@ class EvaluationTabTests(unittest.TestCase):
                 run_dir, str(output), selected_ids
             )
             self.assertEqual(self.tab._last_review_path, output)
+            with (
+                mock.patch("gui.evaluation_tab.QFileDialog.getSaveFileName", return_value=(str(output), "CSV files (*.csv)")),
+                mock.patch("gui.evaluation_tab.evaluation.export_blind_review", return_value=output) as judge_export,
+                mock.patch.object(self.tab, "_update_actions"),
+            ):
+                self.tab.export_judge_check()
+            judge_export.assert_called_once_with(run_dir, str(output), judge_check=True)
+            self.assertEqual(self.tab._last_review_path, output)
+
+            self.tab.reviewer_name.setText("Independent session")
+            self.tab.reviewer_kind.setCurrentIndex(self.tab.reviewer_kind.findData("ai"))
+            (run_dir / "blind_key.json").write_text("{}", encoding="utf-8")
+            with (
+                mock.patch("gui.evaluation_tab.QFileDialog.getOpenFileName", return_value=(str(output), "CSV files (*.csv)")),
+                mock.patch("gui.evaluation_tab.evaluation.import_blind_review", return_value={
+                    "reviewed": 1, "reviewed_lines": 8, "ties": 0, "partial_ties": 0,
+                }) as review_import,
+                mock.patch("gui.evaluation_tab.evaluation.load_run", return_value=({"status": "completed"}, {})),
+                mock.patch.object(self.tab, "_display_state"),
+                mock.patch.object(self.tab, "_refresh_history"),
+            ):
+                self.tab.import_review()
+            review_import.assert_called_once_with(run_dir, str(output), reviewer="Independent session", reviewer_kind="ai")
 
     def test_hidden_page_initializes_and_selects_history_only_once(self):
         (self.project_root / "files" / "Actors.json").write_text(
@@ -1107,6 +1132,31 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertIn(
             "not included", self.tab.comparison_review_notes.text()
         )
+        # The v3 variant must expose editing requirements and paired source
+        # evidence while the existing legacy score table still works.
+        root = paired_cases.fixture(self.project_root, "paired-ui", groups=2)
+        path = evaluation.export_paired_review(root)
+        paired_cases.write(path, paired_cases.fill(paired_cases.read(path)))
+        evaluation.import_blind_review(root, path, reviewer="ui-fixture")
+        self.tab.current_run_dir = root
+        self.tab.results_tabs.setCurrentIndex(self.tab._paired_tab_index)
+        self.tab._display_state(evaluation.load_run(root)[0])
+        self.assertEqual(self.tab.paired_table.rowCount(), 3)
+        self.assertIn("1/1", self.tab.paired_table.item(0, 2).text())
+        self.tab._last_review_path = path
+        self.tab.copy_review_skill()
+        self.assertIn(str(path), QApplication.clipboard().text())
+        self.assertNotIn("{{PAIRED_REVIEW_CSV}}", QApplication.clipboard().text())
+        self.tab._open_paired_evidence(self.tab.paired_table.item(1, 6))
+        worker = self.tab._comparison_load_worker
+        if worker:
+            worker.wait(1_000)
+        self.app.processEvents()
+        self.assertEqual(self.tab.comparison_sample_list.count(), 1)
+        self.assertTrue(self.tab.paired_sample_evidence.toPlainText())
+        self.assertTrue(self.tab._paired_evidence_scope)
+        self.tab._clear_paired_evidence_scope()
+        self.assertIsNone(self.tab._paired_evidence_scope)
 
     def test_model_excluded_from_blind_review_does_not_show_zero_wins(self):
         candidates = [

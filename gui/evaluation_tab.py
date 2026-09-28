@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import html
+import copy
+import json
 import os
 import re
 import threading
+from collections import Counter
 from pathlib import Path
 
 from util.evaluation_settings import (
@@ -64,6 +67,7 @@ from gui.config_tab import API_URL_PRESETS, ConfigComboBox, ConfigMenu, ModelFet
 from gui.theme import COLORS
 from util import api_keys as api_key_vault
 from util import evaluation
+from util import evaluation_pairwise as paired
 from util.paths import game_glossary_path
 from util.skills import load_clipboard_skill
 
@@ -546,10 +550,12 @@ class EvaluationTab(QWidget):
         self.export_btn = QPushButton("Export blind review")
         self.copy_review_skill_btn = QPushButton("Copy review skill")
         self.import_btn = QPushButton("Import reviewed CSV")
+        self.judge_check_btn = QPushButton("Export judge check")
         configure_action_button(self.prepare_btn, variant="primary")
         for button in (
             self.submit_btn, self.cancel_btn, self.refresh_btn, self.export_btn,
             self.copy_review_skill_btn, self.import_btn,
+            self.judge_check_btn,
         ):
             configure_action_button(button, variant="secondary")
         self.copy_review_skill_btn.setToolTip(
@@ -567,6 +573,11 @@ class EvaluationTab(QWidget):
         self.export_btn.clicked.connect(self.export_review)
         self.copy_review_skill_btn.clicked.connect(self.copy_review_skill)
         self.import_btn.clicked.connect(self.import_review)
+        self.judge_check_btn.clicked.connect(self.export_judge_check)
+        self.judge_check_btn.setToolTip(
+            "Export a fresh blind review of a subset and flagged samples with changed "
+            "candidate positions. Use a fresh judge session or a qualified human reviewer."
+        )
         for column, button in enumerate((
             self.prepare_btn, self.submit_btn, self.cancel_btn, self.refresh_btn,
         )):
@@ -575,11 +586,45 @@ class EvaluationTab(QWidget):
         for column in range(8):
             actions.setColumnStretch(column, 1)
         for column, button in enumerate((
-            self.export_btn, self.copy_review_skill_btn, self.import_btn,
+            self.export_btn, self.copy_review_skill_btn, self.import_btn, self.judge_check_btn,
         )):
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             actions.addWidget(button, 1, column * 2, 1, 2)
         setup.add_layout(actions)
+        reviewer_row = QHBoxLayout()
+        reviewer_row.addWidget(QLabel("Reviewer for import:"))
+        self.reviewer_name = QLineEdit()
+        self.reviewer_name.setPlaceholderText("Judge name and session, or human reviewer")
+        self.reviewer_kind = _EvaluationComboBox()
+        for label, value in (("Unspecified", "unspecified"), ("AI", "ai"), ("Human", "human")):
+            self.reviewer_kind.addItem(label, value)
+        reviewer_row.addWidget(self.reviewer_name, 1)
+        reviewer_row.addWidget(self.reviewer_kind)
+        setup.add_layout(reviewer_row)
+
+        self._paired_policy = copy.deepcopy(paired.DEFAULT_POLICY)
+        self._paired_challenge_ids = []
+        review_options = QHBoxLayout()
+        self.review_mode = _EvaluationComboBox()
+        self.review_mode.addItem("Paired review v3", "paired")
+        self.review_mode.addItem("Legacy rankings v2", "legacy")
+        self.review_stage = _EvaluationComboBox()
+        for title, value in (("Screening", "screening"), ("Confirmation", "confirmation"),
+                             ("Challenge cases", "challenge"), ("Reversed-order audit", "order_swap"),
+                             ("Independent judge", "judge_check"), ("Human adjudication", "adjudication"),
+                             ("Calibration", "calibration")):
+            self.review_stage.addItem(title, value)
+        self.paired_new_campaign = QCheckBox("New campaign")
+        self.paired_new_campaign.setToolTip("Freeze a new policy and source split. Previous campaign results are retained.")
+        self.paired_policy_btn = QPushButton("Review policy")
+        self.paired_calibration_btn = QPushButton("Load human calibration")
+        self.paired_policy_btn.clicked.connect(self._edit_paired_policy)
+        self.paired_calibration_btn.clicked.connect(self._load_paired_calibration)
+        for widget in (self.review_mode, self.review_stage, self.paired_new_campaign,
+                       self.paired_policy_btn, self.paired_calibration_btn):
+            review_options.addWidget(widget)
+        review_options.addStretch(1)
+        setup.add_layout(review_options)
 
         self.status_label = QLabel()
         self.status_label.setWordWrap(True)
@@ -633,6 +678,45 @@ class EvaluationTab(QWidget):
         self.table.viewport().installEventFilter(self)
         summary_layout.addWidget(self.table, 1)
         self.results_tabs.addTab(summary_page, "Score summary")
+        decision_page = QWidget()
+        decision_layout = QVBoxLayout(decision_page)
+        decision_toolbar = QHBoxLayout()
+        self.paired_pool = _EvaluationComboBox()
+        for pool in paired.POOLS[:3]:
+            self.paired_pool.addItem(pool.title(), pool)
+        self.paired_comparator = _EvaluationComboBox()
+        decision_toolbar.addWidget(QLabel("Review set:"))
+        decision_toolbar.addWidget(self.paired_pool)
+        decision_toolbar.addWidget(QLabel("Compare with:"))
+        decision_toolbar.addWidget(self.paired_comparator, 1)
+        decision_layout.addLayout(decision_toolbar)
+        self.paired_decision_status = QLabel("Import a paired review to compare editing needs, fidelity and compliance.")
+        self.paired_decision_status.setWordWrap(True)
+        decision_layout.addWidget(self.paired_decision_status)
+        self.paired_table = QTableWidget(0, 9)
+        self.paired_table.setHorizontalHeaderLabels(("Model", "Recommendation", "Editing\nrequired",
+            "Major\nfidelity", "Compliance", "Valid\nblocks", "Paired preference", "Observed\ncost", "Live\nlatency"))
+        self.paired_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.paired_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.paired_table.setWordWrap(True)
+        self.paired_table.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.paired_table.horizontalHeader().setMinimumSectionSize(40)
+        self.paired_table.horizontalHeader().setMinimumHeight(self.paired_table.fontMetrics().lineSpacing() * 2 + 12)
+        self.paired_table.viewport().installEventFilter(self)
+        self.paired_table.itemDoubleClicked.connect(self._open_paired_evidence)
+        decision_layout.addWidget(self.paired_table, 1)
+        hint = QLabel("Double-click a result to inspect its source scenes. Equivalent quality can still require editing.")
+        hint.setWordWrap(True)
+        decision_layout.addWidget(hint)
+        self._paired_tab_index = self.results_tabs.addTab(decision_page, "Model decision")
+        self.paired_pool.currentIndexChanged.connect(self._refresh_paired_results)
+        self.paired_comparator.currentIndexChanged.connect(self._refresh_paired_results)
+        self._paired_state = None
+        self._paired_evidence_scope = None
+        self.review_statistics = QTextEdit()
+        self.review_statistics.setReadOnly(True)
+        self.review_statistics.setPlainText("Import a reviewed CSV to see scene statistics and review coverage.")
+        self.results_tabs.addTab(self.review_statistics, "Review statistics")
 
         comparison_page = QWidget()
         comparison_layout = QVBoxLayout(comparison_page)
@@ -653,6 +737,7 @@ class EvaluationTab(QWidget):
             ("Ties", "ties"),
             ("Has notes", "notes"),
             ("Missing or invalid", "problems"),
+            ("Needs human follow-up", "follow_up"),
         ):
             self.comparison_filter.addItem(label, value)
         self.comparison_models_btn = QToolButton()
@@ -696,6 +781,10 @@ class EvaluationTab(QWidget):
         navigation.addWidget(self.comparison_counter)
         navigation.addWidget(self.comparison_next_btn)
         comparison_toolbar.addLayout(navigation, 1, 2, 1, 2)
+        self.comparison_clear_scope = QPushButton("Show all source evidence")
+        self.comparison_clear_scope.clicked.connect(self._clear_paired_evidence_scope)
+        self.comparison_clear_scope.hide()
+        comparison_toolbar.addWidget(self.comparison_clear_scope, 2, 0, 1, 4)
         comparison_toolbar.setColumnStretch(0, 1)
         comparison_layout.addLayout(comparison_toolbar)
 
@@ -727,6 +816,10 @@ class EvaluationTab(QWidget):
         self.comparison_sample_meta.setStyleSheet(f"color: {COLORS.text_muted};")
         self.comparison_sample_meta.setTextInteractionFlags(Qt.TextSelectableByMouse)
         detail_layout.addWidget(self.comparison_sample_meta)
+        self.comparison_context = QTextEdit()
+        self.comparison_context.setReadOnly(True)
+        self.comparison_context.setMaximumHeight(130)
+        detail_layout.addWidget(self.comparison_context)
 
         self.comparison_review_card = QFrame()
         self.comparison_review_card.setObjectName("evaluationReviewCard")
@@ -782,6 +875,11 @@ class EvaluationTab(QWidget):
             "padding-top: 7px;"
         )
         review_layout.addWidget(self.comparison_review_notes, 5, 0, 1, 2)
+        self.paired_sample_evidence = QTextEdit()
+        self.paired_sample_evidence.setReadOnly(True)
+        self.paired_sample_evidence.setMaximumHeight(220)
+        self.paired_sample_evidence.hide()
+        review_layout.addWidget(self.paired_sample_evidence, 6, 0, 1, 2)
         review_layout.setColumnStretch(1, 1)
         detail_layout.addWidget(self.comparison_review_card)
         self.comparison_table = QTableWidget(0, 0)
@@ -805,6 +903,7 @@ class EvaluationTab(QWidget):
         )
         self.results_tabs.setTabEnabled(self._comparison_tab_index, False)
         self.results_tabs.currentChanged.connect(self._on_results_tab_changed)
+        self.review_mode.currentIndexChanged.connect(self._refresh_comparison_presenter)
         self.comparison_search.textChanged.connect(
             self._refresh_comparison_sample_list
         )
@@ -839,6 +938,8 @@ class EvaluationTab(QWidget):
         QTimer.singleShot(0, self._refresh_responsive_geometry)
 
     def eventFilter(self, watched, event):
+        if hasattr(self, "paired_table") and watched is self.paired_table.viewport() and event.type() == QEvent.Resize:
+            QTimer.singleShot(0, self._resize_paired_columns)
         if (
             hasattr(self, "table")
             and watched is self.table.viewport()
@@ -860,6 +961,7 @@ class EvaluationTab(QWidget):
         self._resize_result_columns()
         self._resize_comparison_controls()
         self._resize_comparison_columns()
+        self._resize_paired_columns()
 
     def _resize_comparison_controls(self):
         if not hasattr(self, "comparison_filter"):
@@ -1024,6 +1126,9 @@ class EvaluationTab(QWidget):
         self.current_run_dir = path
         canonical_review = path / "blind_review.csv"
         self._last_review_path = canonical_review if canonical_review.is_file() else None
+        if state.get("paired_review"):
+            self._last_review_path = None
+            self.review_mode.setCurrentIndex(self.review_mode.findData("paired"))
         source_dir = Path(str(manifest.get("source_dir") or ""))
         saved_game_root_text = str(manifest.get("game_root") or "").strip()
         saved_game_root = Path(saved_game_root_text) if saved_game_root_text else None
@@ -2072,7 +2177,9 @@ class EvaluationTab(QWidget):
         for button in (
             self.prepare_btn, self.submit_btn, self.refresh_btn,
             self.export_btn, self.copy_review_skill_btn, self.import_btn,
+            self.judge_check_btn,
             self.export_evaluation_btn, self.import_evaluation_btn,
+            self.paired_policy_btn, self.paired_calibration_btn,
         ):
             button.setEnabled(not busy)
         self.cancel_btn.setEnabled(busy and self._worker_cancelable)
@@ -2413,6 +2520,15 @@ class EvaluationTab(QWidget):
             self._last_review_path = None
             self._display_state(state)
             summary = state.get("corpus_summary") or {}
+            sampling = summary.get("sampling") or {}
+            concentration = sampling.get("largest_scene_share", 0)
+            dialogue = (sampling.get("by_stratum") or {}).get("event_text") or {}
+            sampling_message = (
+                f" Largest scene contributes {concentration:.1%} of selected lines."
+                + (f" Dialogue spans {dialogue['scenes']} scenes." if dialogue else "")
+            )
+            if dialogue and dialogue["scenes"] < evaluation.MINIMUM_SAMPLE_SCENES:
+                sampling_message += " Dialogue coverage is limited; select more scenes or content."
             set_status_text(
                 self.status_label,
                 f"Selected {summary.get('selected_segments', 0):,} of "
@@ -2420,7 +2536,7 @@ class EvaluationTab(QWidget):
                 f"{summary.get('review_samples', 0):,} samples across "
                 f"{summary.get('selected_scenes', 0):,} scenes and "
                 f"{summary.get('selected_files', 0):,} files. Review the estimates, "
-                "then submit the model batches together.",
+                "then submit the model batches together." + sampling_message,
                 "success",
             )
             self._append_log(
@@ -2634,13 +2750,15 @@ class EvaluationTab(QWidget):
         """Show the candidate selector used for a new blinded export."""
         if not self.current_run_dir:
             return None
-        choices = evaluation.blind_review_candidates(self.current_run_dir)
+        use_paired = self.review_mode.currentData() == "paired"
+        choices = evaluation.blind_review_candidates(self.current_run_dir, include_unavailable=True) if use_paired else evaluation.blind_review_candidates(self.current_run_dir)
         dialog = QDialog(self)
         dialog.setWindowTitle("Choose blind review models")
         dialog.setMinimumWidth(560)
         layout = QVBoxLayout(dialog)
         explanation = QLabel(
-            "Select at least two models. Only the selected translations will "
+            "Select at least two models. Missing or invalid outputs remain in v3 reliability coverage."
+            if use_paired else "Select at least two models. Only the selected translations will "
             "appear in the blinded CSV; failed models with no usable output "
             "cannot be selected."
         )
@@ -2714,6 +2832,9 @@ class EvaluationTab(QWidget):
     def export_review(self):
         if not self.current_run_dir:
             return
+        if self.review_mode.currentData() == "paired":
+            self._export_paired_review()
+            return
         try:
             candidate_ids = self._choose_review_candidates()
             if candidate_ids is None:
@@ -2780,14 +2901,298 @@ class EvaluationTab(QWidget):
         except Exception as exc:
             QMessageBox.warning(self, "Blind review", str(exc))
 
+    def _edit_paired_policy(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Paired review policy")
+        dialog.resize(740, 620)
+        layout = QVBoxLayout(dialog)
+        label = QLabel("Policy and source splits are frozen at export. Changing policy starts a new campaign and retains previous results. Rates use 0–1; thresholds are pilot settings requiring calibration.")
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        editor = QTextEdit()
+        editor.setAcceptRichText(False)
+        current = ((self._paired_state or {}).get("paired_review") or {}).get("policy", self._paired_policy)
+        editor.setPlainText(json.dumps(current, ensure_ascii=False, indent=2))
+        layout.addWidget(editor, 1)
+        layout.addWidget(QLabel("Source-selected challenge sample IDs (optional, comma separated):"))
+        challenge = QLineEdit(", ".join(self._paired_challenge_ids))
+        layout.addWidget(challenge)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        def save():
+            try:
+                policy = paired.validate_policy(json.loads(editor.toPlainText()))
+            except (ValueError, TypeError) as exc:
+                QMessageBox.warning(dialog, "Review policy", str(exc))
+                return
+            self._paired_policy = policy
+            self._paired_challenge_ids = [s.strip() for s in challenge.text().split(",") if s.strip()]
+            self.paired_new_campaign.setChecked(True)
+            self.review_stage.setCurrentIndex(self.review_stage.findData("screening"))
+            dialog.accept()
+        buttons.accepted.connect(save)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec_()
+
+    def _load_paired_calibration(self):
+        if not self.current_run_dir:
+            return
+        selected, _ = QFileDialog.getOpenFileName(self, "Load human-authored calibration", "", "JSON files (*.json)")
+        if not selected:
+            return
+        try:
+            result = evaluation.load_review_calibration(self.current_run_dir, selected)
+            set_status_text(self.status_label, f"Loaded {result['cases']} human-authored calibration cases. Choose Calibration and export a fresh blind judge task.", "success")
+            self.review_stage.setCurrentIndex(self.review_stage.findData("calibration"))
+            self._display_state(evaluation.load_run(self.current_run_dir)[0])
+        except Exception as exc:
+            QMessageBox.warning(self, "Calibration", str(exc))
+
+    def _export_paired_review(self, stage=None):
+        if not self.current_run_dir:
+            return
+        stage = stage or self.review_stage.currentData()
+        new = self.paired_new_campaign.isChecked()
+        if new and stage != "screening":
+            QMessageBox.warning(self, "Paired review", "Start a new campaign with Screening first.")
+            return
+        try:
+            state, _ = evaluation.load_run(self.current_run_dir)
+            current = state.get("paired_review")
+            candidate_ids = None
+            if new or not current:
+                candidate_ids = self._choose_review_candidates()
+                if candidate_ids is None:
+                    return
+            options = dict(stage=stage, candidate_ids=candidate_ids,
+                           policy=self._paired_policy if new or not current else None,
+                           new_campaign=new, challenge_samples=self._paired_challenge_ids)
+            preview = evaluation.paired_review_preview(self.current_run_dir, **options)
+            counts = preview["counts"]
+            message = (f"{stage.replace('_', ' ').title()}: {counts.get('assessment', 0)} assessments and "
+                       f"{counts.get('comparison', 0)} paired comparisons. Reserved content groups: "
+                       + ", ".join(f"{k} {v}" for k, v in preview["groups"].items())
+                       + ". Missing outputs remain in reliability coverage; no provider calls are made.")
+            self._append_log(message)
+            set_status_text(self.status_label, message, "info")
+            selected, _ = QFileDialog.getSaveFileName(self, "Export paired review", str(self.current_run_dir / f"paired_review.{stage}.csv"), "CSV files (*.csv)")
+            if not selected:
+                return
+            path = evaluation.export_paired_review(self.current_run_dir, selected, **options)
+            self._last_review_path = Path(path)
+            self.paired_new_campaign.setChecked(False)
+            self._paired_challenge_ids = []
+            self._display_state(evaluation.load_run(self.current_run_dir)[0])
+            self._append_log(f"Paired review exported: {path}")
+            set_status_text(self.status_label, message + " Use Copy review skill, then import the reviewed CSV.", "success")
+        except Exception as exc:
+            QMessageBox.warning(self, "Paired review", str(exc))
+
+    def _refresh_paired_results(self, *_args):
+        state = getattr(self, "_paired_state", None)
+        if not state:
+            return
+        campaign = state.get("paired_review")
+        self.paired_table.setRowCount(0)
+        if not campaign:
+            self.paired_decision_status.setText("Export a paired screening review to begin. Legacy rankings stay in Score summary.")
+            return
+        report = campaign.get("analysis") or paired.summarize(campaign)
+        chosen = self.paired_comparator.currentData()
+        self.paired_comparator.blockSignals(True)
+        self.paired_comparator.clear()
+        candidates = [c for c in state.get("candidates", []) if c["id"] in campaign["candidate_ids"]]
+        for c in candidates:
+            self.paired_comparator.addItem(evaluation.candidate_label(c), c["id"])
+        index = self.paired_comparator.findData(chosen)
+        if index >= 0:
+            self.paired_comparator.setCurrentIndex(index)
+        comparator = self.paired_comparator.currentData()
+        self.paired_comparator.blockSignals(False)
+        pool = self.paired_pool.currentData()
+        data = report["pools"][pool]
+        self.paired_table.setRowCount(len(candidates))
+        for row, candidate in enumerate(candidates):
+            cid = candidate["id"]
+            info = data["candidates"][cid]
+            recommendation = report["recommendations"][cid]
+            editing = "\n".join(f"{v} {k.replace('_', ' ')}" for k, v in info["editing"].items() if v) or "Unassessed"
+            compliance_details = "\n".join(f"{rule}: {v['violations']}/{v['opportunities']} violations, {v['reviewed_blocks']} blocks checked" for rule, v in info["rules"].items())
+            opportunity_count = sum(v["opportunities"] for v in info["rules"].values())
+            violations = sum(v["violations"] for v in info["rules"].values())
+            compliance = (f"{violations}/{opportunity_count} violations" if opportunity_count else "Not applicable") if info["judged"] else "Unassessed"
+            pair = next((p for p in data["pairs"] if {p["a"], p["b"]} == {cid, comparator}), None)
+            preference = "Comparator" if cid == comparator else "No comparison"
+            preference_details = preference
+            if pair:
+                sign = 1 if pair["a"] == cid else -1
+                wins = pair["wins_clear"] + pair["wins_slight"]
+                losses = pair["losses_clear"] + pair["losses_slight"]
+                win_details = (pair["wins_clear"], pair["wins_slight"])
+                loss_details = (pair["losses_clear"], pair["losses_slight"])
+                if sign < 0:
+                    wins, losses = losses, wins
+                    win_details, loss_details = loss_details, win_details
+                net = "unavailable" if pair["net_preference"] is None else f"{sign * pair['net_preference']:+.1%}" if pair["net_preference"] else "0.0%"
+                interval = pair["interval"]
+                if interval and sign < 0:
+                    interval = [-interval[1], -interval[0]]
+                ci = f"{interval[0]:+.1%}…{interval[1]:+.1%}" if interval else "unavailable"
+                preference_details = f"{wins} preferred ({win_details[0]} clear, {win_details[1]} slight) / {pair['equivalent']} equivalent / {losses} other ({loss_details[0]} clear, {loss_details[1]} slight)\nNet {net}; interval {ci}\n{pair['groups']} groups; {pair['abstentions']} abstained; {pair['disputed']} disputed; {pair['unavailable']} unavailable; {pair['unreviewed']} pending"
+                preference = f"{wins} preferred · {pair['equivalent']} equal · {losses} other\nNet {net}\nRange {ci}"
+                if pair["disputed"] or pair["abstentions"] or pair["unreviewed"]:
+                    preference += "\nReview incomplete / disputed"
+            summary = candidate.get("summary") or {}
+            latency = summary.get("live_latency") or {}
+            cost = f"${summary['actual_cost_usd']:.4f}" if "actual_cost_usd" in summary else "Unavailable"
+            speed = f"{latency['median_seconds']:.2f}s median" if latency else "—"
+            validity = info["validity"]
+            values = (evaluation.candidate_label(candidate),
+                      recommendation["status"].replace("_", " ").title() + "\n" + recommendation["production"].replace("_", " "),
+                      f"{editing}\n{info['judged']}/{info['total']} assessed",
+                      f"{info['major_fidelity_blocks']}/{info['judged']} blocks" if info["judged"] else "Unassessed",
+                      compliance, f"{validity.get('valid', 0)}/{validity.get('total', 0)}",
+                      preference, cost, speed)
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                item.setData(Qt.UserRole, cid)
+                item.setToolTip(str(value))
+                if col == 4:
+                    item.setToolTip(compliance_details)
+                elif col == 6:
+                    item.setToolTip(preference_details)
+                elif col == 7:
+                    item.setToolTip("Observed cost for the recorded run, including repeated requests and reported retry usage.")
+                elif col == 8:
+                    item.setToolTip(str(latency) if latency else "Latency was not recorded for this run. Batch turnaround is not live request latency.")
+                self.paired_table.setItem(row, col, item)
+        self._resize_paired_columns()
+        calibration = "checked against human gold" if report["calibrated"] else "human-gold calibration incomplete"
+        conclusion = ""
+        if report.get("production_status") == "no_production_ready_candidate":
+            conclusion = "No production-ready candidate under this policy. "
+        elif report.get("value_recommendation"):
+            value_candidate = next(c for c in candidates if c["id"] == report["value_recommendation"])
+            conclusion = f"Best supported value: {evaluation.candidate_label(value_candidate)}. "
+        self.paired_decision_status.setText(
+            f"{pool.title()} · {conclusion}{calibration}. Recommendations compare all contenders using {next(iter(report['recommendations'].values()))['pool']} results. "
+            "Uncertainty ranges do not include judge bias.")
+
+    def _resize_paired_columns(self):
+        if not hasattr(self, "paired_table"):
+            return
+        weights = (1.10, 1.50, 1.25, .80, 1., .65, 2., .75, .85)
+        width = max(820, self.paired_table.viewport().width() - 2)
+        for column, weight in enumerate(weights):
+            self.paired_table.setColumnWidth(column, int(width * weight / sum(weights)))
+        self.paired_table.resizeRowsToContents()
+
+    def _open_paired_evidence(self, item):
+        candidate = item.data(Qt.UserRole)
+        comparator = self.paired_comparator.currentData()
+        self._paired_evidence_scope = {"candidate": candidate,
+            "opponent": comparator if item.column() == 6 and comparator != candidate else None,
+            "pool": self.paired_pool.currentData()}
+        self.comparison_search.clear()
+        self.comparison_filter.setCurrentIndex(0)
+        self.comparison_clear_scope.setText("Clear selected model / pair evidence filter")
+        self.comparison_clear_scope.show()
+        self.results_tabs.setCurrentIndex(self._comparison_tab_index)
+        self._refresh_comparison_sample_list()
+
+    def _clear_paired_evidence_scope(self):
+        self._paired_evidence_scope = None
+        self.comparison_clear_scope.hide()
+        self._refresh_comparison_sample_list()
+
+    def _display_paired_sample(self, sample, review):
+        self._set_comparison_review_metrics_visible(True)
+        self.comparison_review_status.setText(paired.sample_status(review))
+        self.comparison_review_status.setStyleSheet(f"color: {COLORS.accent_text};")
+        labels = {"overall": "Paired preference", "meaning_accuracy": "Editing required",
+                  "glossary_prompt": "Compliance", "natural_contextual": "Review coverage"}
+        for key, label in labels.items():
+            self.comparison_review_metric_labels[key].setText(label)
+        name = lambda c: self._comparison_display_name(c, sample)
+        comparisons = review["comparisons"]
+        judged = [r for r in comparisons if r["status"] == "judged"]
+        choices = Counter((r["strength"] + " preference") if r["decision"] != "equivalent" else "equivalent" for r in judged)
+        self.comparison_review_values["overall"].setText(html.escape(", ".join(f"{v} {k}" for k, v in choices.items()) or "Awaiting review"))
+        assessment_text, rule_text, evidence = [], [], []
+        for r in review["assessments"]:
+            assessment_text.append(f"{name(r['candidate'])}: {(r['editing'] or r['status']).replace('_', ' ')}" + (" (disputed)" if r.get("disputed") else ""))
+            for rule in r["rules"]:
+                count = len(rule["opportunities"])
+                failed = sum(not o["passed"] for o in rule["opportunities"])
+                if failed:
+                    rule_text.append(f"{name(r['candidate'])}: {rule['rule_id']} {failed}/{count}")
+            if r["notes"]:
+                evidence.append(f"{name(r['candidate'])}: {r['notes']}")
+            for e in r["evidence"]:
+                evidence.append(f"{name(r['candidate'])}: {e['severity']} {e['category']}, line {e['line']}: {e['source_quote']} → {e['translation_quote']}\n{e['explanation']}")
+        for r in comparisons:
+            outcome = r["status"]
+            if r["status"] == "judged":
+                outcome = "Equivalent" if r["decision"] == "equivalent" else f"{name(r['left'] if r['decision'] == 'left' else r['right'])} {r['strength']} preference"
+            if r.get("disputed"):
+                outcome += " · disputed by audit"
+            evidence.append(f"{name(r['left'])} / {name(r['right'])}: {outcome}\n{r['notes']}")
+            for e in r["evidence"]:
+                evidence.append(f"Line {e['line']} Japanese: {e['source_quote']}\n{name(r['left'])}: {e['A_quote']}\n{name(r['right'])}: {e['B_quote']}\n{e['explanation']}")
+        self.comparison_review_values["meaning_accuracy"].setText(html.escape("; ".join(assessment_text) or "Awaiting assessment"))
+        self.comparison_review_values["glossary_prompt"].setText(html.escape("; ".join(rule_text) or "No recorded violations; see assessment coverage"))
+        self.comparison_review_values["natural_contextual"].setText(f"{len(judged)}/{len(comparisons)} pairs judged · {html.escape(review['pool'])}")
+        self.comparison_review_notes.hide()
+        self.paired_sample_evidence.setPlainText("\n\n".join(evidence))
+        self.paired_sample_evidence.show()
+
     def _review_csv_path(self) -> Path | None:
         if self._last_review_path and self._last_review_path.is_file():
             return self._last_review_path.resolve()
         if self.current_run_dir:
+            if self.review_mode.currentData() == "paired":
+                try:
+                    state, _ = evaluation.load_run(self.current_run_dir)
+                    current = state.get("paired_review") or {}
+                    exports = [e for e in state.get("paired_exports", {}).values()
+                               if e["campaign_id"] == current.get("campaign_id")]
+                    for export in reversed(exports):
+                        path = self.current_run_dir / export.get("file", "")
+                        if path.is_file():
+                            return path.resolve()
+                    path = Path(current.get("last_export_path") or "")
+                    if path.is_file():
+                        return path.resolve()
+                except (OSError, ValueError):
+                    pass
             canonical = self.current_run_dir / "blind_review.csv"
             if canonical.is_file():
                 return canonical.resolve()
         return None
+
+    def export_judge_check(self):
+        if not self.current_run_dir:
+            return
+        if self.review_mode.currentData() == "paired":
+            self._export_paired_review(stage="judge_check")
+            return
+        selected, _ = QFileDialog.getSaveFileName(
+            self, "Export independent judge check",
+            str(self.current_run_dir / "judge_check.csv"), "CSV files (*.csv)"
+        )
+        if not selected:
+            return
+        try:
+            path = evaluation.export_blind_review(self.current_run_dir, selected, judge_check=True)
+            self._last_review_path = Path(path)
+            self._append_log(f"Independent judge check exported: {path}")
+            set_status_text(self.status_label,
+                "Judge check exported with changed candidate positions and no prior verdicts. "
+                "Use Copy review skill in a fresh session, or send flagged samples to a qualified "
+                "Japanese reviewer. Importing this check preserves the baseline scores.", "success")
+            self._update_actions()
+        except Exception as exc:
+            QMessageBox.warning(self, "Judge check", str(exc))
 
     def copy_review_skill(self):
         review_path = self._review_csv_path()
@@ -2799,6 +3204,13 @@ class EvaluationTab(QWidget):
             )
             return
         try:
+            from util.evaluation_pairwise_io import is_paired_csv
+            if is_paired_csv(review_path):
+                prompt = load_clipboard_skill("evaluation_pairwise_review.md")
+                QApplication.clipboard().setText(prompt.replace("{{PAIRED_REVIEW_CSV}}", str(review_path)))
+                self._append_log(f"Paired review instructions copied for: {review_path}")
+                set_status_text(self.status_label, "Paired review instructions copied. Use a fresh judge session; model identities and earlier verdicts are excluded.", "success")
+                return
             prompt = load_clipboard_skill("evaluation_csv_review.md")
             system_path, glossary_path, sfx_path = evaluation.export_blind_review_context(
                 self.current_run_dir, review_path.parent
@@ -2833,7 +3245,11 @@ class EvaluationTab(QWidget):
     def import_review(self):
         if not self.current_run_dir:
             return
-        if not (self.current_run_dir / "blind_key.json").is_file():
+        try:
+            state, _ = evaluation.load_run(self.current_run_dir)
+        except (OSError, ValueError):
+            state = {}
+        if not (self.current_run_dir / "blind_key.json").is_file() and not state.get("paired_exports"):
             QMessageBox.information(
                 self,
                 "Export required",
@@ -2850,26 +3266,44 @@ class EvaluationTab(QWidget):
         if not selected:
             return
         try:
-            review = evaluation.import_blind_review(self.current_run_dir, selected)
+            review = evaluation.import_blind_review(
+                self.current_run_dir, selected, reviewer=self.reviewer_name.text(),
+                reviewer_kind=self.reviewer_kind.currentData(),
+            )
             state, _manifest = evaluation.load_run(self.current_run_dir)
             self._display_state(state)
             self._refresh_history(self.current_run_dir)
+            if review.get("version") == paired.VERSION:
+                self._append_log("Imported paired review. Editing requirements, compliance and pairwise preferences are shown separately.")
+                self.review_mode.setCurrentIndex(self.review_mode.findData("paired"))
+                self.results_tabs.setCurrentIndex(self._paired_tab_index)
+                set_status_text(self.status_label, "Paired review imported. Open Model decision or double-click a result for source evidence.", "success")
+                return
             self._append_log(
                 f"Imported {review['reviewed']} sample rankings covering "
                 f"{review.get('reviewed_lines', review['reviewed'])} lines "
                 f"({review['ties']} full "
                 f"ties, {review['partial_ties']} partial ties)."
             )
+            if review.get("judge_agreement"):
+                agreement = review["judge_agreement"]
+                self._append_log(
+                    f"Judge agreement: {agreement['pair_agreements']}/{agreement['pair_comparisons']} "
+                    f"pairwise decisions. {len(agreement['disputed_samples'])} samples need adjudication."
+                )
         except Exception as exc:
             QMessageBox.warning(self, "Blind review", str(exc))
 
     def _on_results_tab_changed(self, index: int):
         if hasattr(self, "log"):
-            self.log.setVisible(index != self._comparison_tab_index)
+            self.log.setVisible(index not in (self._comparison_tab_index, self._paired_tab_index))
         if index == self._comparison_tab_index:
             self._start_comparison_load()
 
     def _invalidate_comparison(self):
+        self._paired_evidence_scope = None
+        if hasattr(self, "comparison_clear_scope"):
+            self.comparison_clear_scope.hide()
         self._comparison_generation += 1
         self._comparison_data = None
         self._comparison_run_dir = None
@@ -2887,6 +3321,8 @@ class EvaluationTab(QWidget):
         self.comparison_sample_meta.clear()
         self.comparison_review_status.clear()
         self.comparison_review_notes.clear()
+        self.paired_sample_evidence.clear()
+        self.paired_sample_evidence.hide()
         for value in self.comparison_review_values.values():
             value.setText("—")
         self._set_comparison_review_metrics_visible(False)
@@ -3151,9 +3587,28 @@ class EvaluationTab(QWidget):
         return str(stratum or "Uncategorized").replace("_", " ").title()
 
     def _comparison_sample_matches(self, sample: dict) -> bool:
+        scope = self._paired_evidence_scope
+        if scope:
+            records = (sample.get("paired_review") or {}).get("comparisons", [])
+            assessments = (sample.get("paired_review") or {}).get("assessments", [])
+            if scope.get("opponent"):
+                if not any(r["pool"] == scope["pool"] and {r["left"], r["right"]} == {scope["candidate"], scope["opponent"]} for r in records):
+                    return False
+            elif not any(r["pool"] == scope["pool"] and r["candidate"] == scope["candidate"] for r in assessments):
+                return False
         selected_filter = str(self.comparison_filter.currentData() or "all")
         review = sample.get("review")
+        v3 = sample.get("paired_review")
+        if v3 and self.review_mode.currentData() == "paired":
+            if selected_filter == "reviewed" and not any(r["status"] == "judged" for r in v3["comparisons"]):
+                return False
+            if selected_filter == "ties" and paired.sample_status(v3) not in ("Equivalent quality", "Identical outputs"):
+                return False
+            review = {"notes": "\n".join(r.get("notes", "") for r in v3["comparisons"]),
+                      "overall": [["equivalent", "equivalent"]]} if v3["comparisons"] else None
         if selected_filter == "reviewed" and not review:
+            return False
+        if selected_filter == "follow_up" and not sample.get("human_follow_up"):
             return False
         if selected_filter == "ties" and not (
             review and any(len(tier) > 1 for tier in review.get("overall") or [])
@@ -3174,10 +3629,11 @@ class EvaluationTab(QWidget):
             str((review or {}).get("notes") or ""),
         ]
         for line in sample.get("lines") or []:
-            values.extend(
+            if not sample.get("paired_holdout_locked"):
+                values.extend(
                 output.get("translation", "")
                 for output in (line.get("outputs") or {}).values()
-            )
+                )
         return query in "\n".join(str(value) for value in values).casefold()
 
     def _refresh_comparison_sample_list(self, *_args):
@@ -3208,15 +3664,26 @@ class EvaluationTab(QWidget):
                 tied = any(
                     len(tier) > 1 for tier in review.get("overall") or []
                 )
-                status = "Reviewed · Tie" if tied else "Reviewed"
+                status = paired.legacy_status(review)
                 status_color = COLORS.warning if tied else COLORS.success
                 marker = "●"
+                if review.get("status", "judged") != "judged":
+                    status = review["status"].replace("_", " ").title()
+                    status_color = COLORS.warning
             elif sample.get("blind_labels"):
                 status = "Awaiting review"
                 status_color = COLORS.accent_text
                 marker = "○"
             else:
                 status = "Not reviewed"
+                status_color = COLORS.text_muted
+                marker = "○"
+            if sample.get("paired_review") and self.review_mode.currentData() == "paired" and not sample.get("has_problems"):
+                status = paired.sample_status(sample["paired_review"])
+                status_color = COLORS.warning if status in ("Disputed", "Not judgeable", "Mixed preferences") else COLORS.accent_text
+                marker = "●"
+            if sample.get("paired_holdout_locked"):
+                status = "Reserved confirmation"
                 status_color = COLORS.text_muted
                 marker = "○"
             sample_number = sample_numbers.get(str(sample.get("id")), index + 1)
@@ -3269,6 +3736,10 @@ class EvaluationTab(QWidget):
         if row < 0 or row >= len(samples):
             self.comparison_sample_heading.setText("No matching sample")
             self.comparison_sample_meta.clear()
+            self.comparison_context.clear()
+            self.paired_sample_evidence.clear()
+            self.paired_sample_evidence.hide()
+            self.comparison_review_notes.show()
             self.comparison_review_status.clear()
             self.comparison_review_notes.setText(
                 "Adjust the search or filter to show samples."
@@ -3296,12 +3767,31 @@ class EvaluationTab(QWidget):
             f"Sample ID: {sample.get('id') or '—'}"
         )
         review = sample.get("review")
-        if review:
+        context = sample.get("context") or {}
+        history = "\n".join(context.get("history") or [])
+        self.comparison_context.setPlainText(
+            "Preceding Japanese context:\n" + (history or "None supplied")
+            + "\n\nMatched glossary:\n" + (context.get("glossary") or "None supplied")
+            + "\n\nSFX suggestions:\n" + (context.get("sfx_reference") or "None supplied")
+        )
+        v3 = sample.get("paired_review") if self.review_mode.currentData() == "paired" else None
+        self.paired_sample_evidence.setVisible(bool(v3))
+        self.comparison_review_notes.setVisible(not v3)
+        if v3:
+            self._display_paired_sample(sample, v3)
+            if sample.get("paired_holdout_locked"):
+                self.comparison_review_status.setText("Reserved confirmation")
+                self.paired_sample_evidence.setPlainText("Confirmation translations remain hidden until screening is complete and contenders are frozen by confirmation export.")
+            review = None
+        elif review:
             self._set_comparison_review_metrics_visible(True)
+            for metric, label in (("overall", "Overall"), ("meaning_accuracy", "Meaning accuracy"),
+                                  ("glossary_prompt", "Glossary & prompt"), ("natural_contextual", "Natural & contextual")):
+                self.comparison_review_metric_labels[metric].setText(label)
             overall = review.get("overall") or []
             tied = bool(overall and len(overall[0]) > 1)
             self.comparison_review_status.setText(
-                "●  Reviewed · Tie" if tied else "●  Reviewed"
+                "●  " + paired.legacy_status(review)
             )
             self.comparison_review_status.setStyleSheet(
                 f"color: {COLORS.warning if tied else COLORS.success}; "
@@ -3319,6 +3809,19 @@ class EvaluationTab(QWidget):
             self.comparison_review_notes.setText(
                 f"Reviewer note: {notes}" if notes else "No reviewer note for this sample."
             )
+            evidence = []
+            for candidate, errors in (review.get("evidence") or {}).items():
+                for error in errors:
+                    evidence.append(
+                        f"{self._comparison_display_name(candidate, sample)}: {error['severity']} "
+                        f"{error['category']}, line {error['line']}: {error['explanation']}"
+                    )
+            if evidence:
+                self.comparison_review_notes.setText(self.comparison_review_notes.text() + "\n" + "\n".join(evidence))
+            if review.get("status", "judged") != "judged":
+                self._set_comparison_review_metrics_visible(False)
+                self.comparison_review_status.setText(review["status"].replace("_", " ").title())
+                self.comparison_review_status.setStyleSheet(f"color: {COLORS.warning};")
         elif sample.get("blind_labels"):
             self._set_comparison_review_metrics_visible(False)
             self.comparison_review_status.setText("○  Awaiting review")
@@ -3374,7 +3877,9 @@ class EvaluationTab(QWidget):
             for column, candidate_id in enumerate(candidate_ids, start=1):
                 output = (line.get("outputs") or {}).get(candidate_id) or {}
                 text = str(output.get("translation") or "")
-                if output.get("missing"):
+                if sample.get("paired_holdout_locked"):
+                    display = "Reserved until confirmation export"
+                elif output.get("missing"):
                     display = "⚠ Missing output"
                 elif not output.get("valid", True):
                     display = "⚠ Invalid output\n" + text
@@ -3423,9 +3928,16 @@ class EvaluationTab(QWidget):
             self.comparison_table.setColumnWidth(column, candidate_width)
 
     def _display_state(self, state: dict):
+        self._paired_state = state
+        self._refresh_paired_results()
         self._invalidate_comparison()
         self.table.setRowCount(len(state.get("candidates", [])))
         human_review = state.get("human_review") or {}
+        labels = {c["id"]: evaluation.candidate_label(c) for c in state.get("candidates") or []}
+        if state.get("paired_review"):
+            self.review_statistics.setPlainText(paired.format_summary(state["paired_review"], labels))
+        else:
+            self.review_statistics.setPlainText(evaluation.review_stats.format_review_summary(human_review, labels))
         human_points = human_review.get("points")
         has_review_subset = "reviewed_candidate_ids" in human_review
         reviewed_candidate_ids = set(
@@ -3457,7 +3969,7 @@ class EvaluationTab(QWidget):
                 isinstance(human_points, dict)
                 and candidate["id"] in reviewed_candidate_ids
             ):
-                review_score = human_points.get(candidate["id"], "—")
+                review_score = human_points.get(candidate["id"], "—") if human_review.get("reviewed", 1) else "—"
             elif candidate["id"] in legacy_wins:
                 review_score = f"{legacy_wins[candidate['id']]} wins"
             else:
@@ -3465,7 +3977,7 @@ class EvaluationTab(QWidget):
             quality_scores = [
                 (
                     (quality_points.get(metric) or {}).get(candidate["id"], "—")
-                    if candidate["id"] in reviewed_candidate_ids else "—"
+                    if candidate["id"] in reviewed_candidate_ids and human_review.get("reviewed", 1) else "—"
                 )
                 for metric in evaluation.REVIEW_QUALITY_METRICS
             ]
@@ -3531,6 +4043,8 @@ class EvaluationTab(QWidget):
         ):
             QTimer.singleShot(0, self._start_comparison_load)
         self._update_actions(state)
+        if (state.get("paired_review") or {}).get("analysis") and self.review_mode.currentData() == "paired" and self.results_tabs.currentIndex() == 0:
+            self.results_tabs.setCurrentIndex(self._paired_tab_index)
 
     def _update_actions(self, state: dict | None = None):
         if state is None and self.current_run_dir:
@@ -3561,6 +4075,11 @@ class EvaluationTab(QWidget):
         )
         self.cancel_btn.setEnabled(busy and self._worker_cancelable)
         self.export_btn.setEnabled(not busy and status in {"completed", "failed"})
+        self.judge_check_btn.setEnabled(
+            not busy and status in {"completed", "failed"}
+            and bool(((state or {}).get("human_review") or {}).get("rows")
+                     or ((state or {}).get("paired_review") or {}).get("comparisons"))
+        )
         self.copy_review_skill_btn.setEnabled(
             not busy
             and status in {"completed", "failed"}

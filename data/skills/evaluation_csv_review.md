@@ -4,99 +4,100 @@ Review this exported evaluation CSV:
 
 `{{BLIND_REVIEW_CSV}}`
 
-Before judging, read these model-blind snapshots from the evaluation run:
+Read each row's `context` JSON before judging. It contains the exact preceding Japanese
+`history`, translation `system`, matched `glossary`, and `sfx_reference` supplied for that
+sample. History provides context; do not score it as additional lines. Keep context scoped
+to its sample instead of importing facts or glossary requirements from other rows.
 
-- Effective translation system prompt: `{{REVIEW_SYSTEM_PROMPT}}`
-- Matched game glossary context: `{{REVIEW_GLOSSARY}}`
-- Matched Japanese SFX reference suggestions: `{{REVIEW_SFX_REFERENCE}}`
+For legacy CSVs without a context column, read these model-blind snapshots:
 
-Treat the system prompt's translation requirements and the glossary's approved names and terms
-as authoritative review criteria. Penalize candidates that violate them when the relevant rule or
-term applies. These snapshots contain the exact merged system instructions and glossary context
-used by the normal translation engine for the reviewed samples.
-Treat the SFX snapshot only as contextual possibilities. It is not authoritative wording, and
-candidates may choose a different natural rendering when supported by the scene.
+- Translation system prompt: `{{REVIEW_SYSTEM_PROMPT}}`
+- Glossary context: `{{REVIEW_GLOSSARY}}`
+- SFX suggestions: `{{REVIEW_SFX_REFERENCE}}`
 
-## Important limitation
+Treat the applicable translation prompt and glossary's approved names and terms as
+authoritative review criteria. Penalize violations when a rule or term applies. For modern
+CSVs the row's context takes precedence over the aggregate snapshots. SFX references are
+contextual possibilities, not authoritative wording; accept other scene-supported renderings.
+
+## Limitations and blinding
 
 AI judging is not objective. You may share stylistic preferences, training biases, or failure
-modes with the models that produced these translations. Treat this review as a useful second
-opinion, not a replacement for a fluent human Japanese reviewer. State this limitation in your
-final report.
+modes with the candidate models. This review is a second opinion, not a replacement for a
+qualified human Japanese reviewer. State this limitation in your final report.
 
-## Preserve the blind
-
-- Judge only the randomized candidate columns in the CSV.
-- Do not open `blind_key.json` or other files beyond the CSV and the three review-context snapshots
-  above to discover which model produced a candidate.
+- Judge only randomized candidate columns. Labels may shuffle independently for each row.
+- Do not open `blind_key.json`, state, manifests, other reviewed CSVs, or other run files.
+  Only the supplied CSV and the three snapshots above are authorized review inputs.
 - Do not infer or speculate about model identity from writing style.
-- Candidate labels may be shuffled independently for every sample row.
+- For an independent judge check, use a fresh session without previous verdicts. Apply the
+  same rubric rather than seeking agreement with an earlier judge.
 
-## Task
+## Review complete blocks
 
-Read the CSV as UTF-8 with BOM support. Each row is one complete review sample. It contains
-identifying/context columns such as `sample_id`, `scene_id`, `stratum`, `line_count`, and
-`segment_ids`; a Japanese `source` block; randomized candidate blocks such as `A`, `B`, and `C`;
-followed by three quality-ranking columns, the overall `ranking`, and `notes`. The source and
-candidate blocks are JSON arrays whose entries are aligned in order.
+Read the CSV as UTF-8 with BOM support. Each row is one complete sample. `source` and
+candidate columns such as A/B/C are JSON arrays aligned in order. Modern CSVs also contain
+protected `review_id`, `context`, and `identical_candidates` fields.
 
-Review every sample row as a whole. Compare each candidate's complete ordered translation block
-with the complete Japanese source block and use the limited scene/stratum metadata only as
-supporting context. Do not rank or score individual lines separately. Judge how well each block
-maintains context, speaker continuity, terminology, tone, and relationships across its lines.
-Rank candidate blocks in this order:
+Compare each complete ordered translation block with the Japanese source and its preceding
+history. Assess context, speaker continuity, terminology, tone and relationships across lines.
+Do not rank or score individual lines separately. Use scene/stratum metadata only as context.
 
-1. Fidelity: preserved meaning, intent, polarity, subject, quantity, relationships, and tone.
-2. Runtime safety: preserved placeholders and RPG Maker control codes with sensible scope.
-3. Contextual appropriateness: suitable speaker voice, register, terminology, and choice wording.
-4. Natural English: clear, fluent dialogue without model commentary or unjustified additions.
+Apply these priorities: fidelity to meaning, intent, polarity, subjects, quantities,
+relationships and tone; runtime safety including placeholder/control-code scope; contextual
+voice and terminology; then natural English. Do not reward literal syntax or invented wit,
+slang, hostility, or explanations. Natural delivery of source-supported attitude and subtext
+is part of fidelity. Preserve formal, awkward, restrained and distinctive speech where
+evidenced. Ignore tiny punctuation or wording preferences when meaning and voice are equivalent.
 
-Do not reward literalness by itself, and do not penalize a valid localization merely because you
-prefer another style. Ignore tiny punctuation or wording preferences when meaning and voice are
-equivalent.
+For each sample:
 
-Natural delivery of source-supported attitude and subtext is part of fidelity. Among candidates
-that preserve meaning and required controls, prefer the one whose English exchange flows and
-whose speakers retain their evidenced rhythm and register. Do not give literal syntax an accuracy
-advantage by itself, or reward added wit, slang, hostility, or explanation. Preserve deliberately
-formal, awkward, or restrained speech. Name the specific lost nuance or reading defect in notes.
+- Set `status` to `judged` when a defensible judgment is possible. Use `insufficient_context`
+  when missing context prevents judgment, or `needs_human_review` when ambiguity or your
+  Japanese understanding makes judgment unsafe. In either abstention, leave ALL four rankings
+  blank and explain the issue in `notes`. Abstentions earn no points and are not ties.
+  For legacy CSVs without status fields, leave rankings blank for unsafe samples and list
+  them in the report; do not add columns.
+- On judged rows, fill `meaning_accuracy_ranking` for meaning and tone, `glossary_prompt_ranking`
+  for applicable terminology and prompt rules, `natural_contextual_ranking` for fluency and
+  voice, and `ranking` for overall quality using the priorities above, including runtime safety.
+- Include every candidate label exactly once in each judged ranking. Use `>` best to worst
+  and `=` for genuine equivalence: `A>B>C`, `A=B>C`, `A>B=C`, or `A=B=C`. Do not force small
+  stylistic differences into strict rankings, or use a tie to hide an inability to judge.
+- `identical_candidates` groups exact output duplicates. Keep each group tied in all
+  dimensions. Fully identical rows are prefilled as ties; retain equality unless abstaining.
+  Equality does not establish correctness: identical candidates may share serious errors.
+- Fill `error_evidence` as a JSON object with every candidate label mapped to an array.
+  Use empty arrays when no concrete error is identified. Each error object requires
+  `category` (meaning, omission, addition, terminology, voice, grammar, runtime), `severity`
+  (minor, major, critical), `line` (1-based within the sample), `source_quote`,
+  `translation_quote`, and `explanation`. Both quotes must be nonempty exact substrings of
+  the indicated lines; for an omission, quote the affected translated clause. These are
+  evidence locations, not line scores. Minor means local awkwardness without substantial
+  meaning change; major alters meaning, relationships, required terminology, or important
+  voice; critical makes the block unusable or breaks essential runtime behavior. Do not mark
+  valid stylistic alternatives as errors. Confidently identified major errors can be judged
+  and will also be flagged for qualified human follow-up.
+- Add concise block-level `notes` with specific evidence for meaningful distinctions. Avoid
+  generic claims like "sounds better." Explain uncertain interpretations instead of inventing
+  context. Every strict distinction should have a defensible meaning, compliance or voice basis.
+- Edit only the four rankings, `status`, `error_evidence`, and `notes` where present. Never
+  change source/candidate text, identifiers, context, duplicate groups, rows or column order.
 
-For each sample row:
+## Save and verify
 
-- Fill all four ranking columns using every randomized candidate label, ordered best to worst
-  with `>`. For three candidates, a strict ranking looks like `A>B>C`:
-  - `meaning_accuracy_ranking`: fidelity to meaning, intent, polarity, subjects, quantities,
-    relationships, and tone. Do not reward literal wording by itself.
-  - `glossary_prompt_ranking`: compliance with applicable system-prompt requirements and the
-    glossary's approved names and terms.
-  - `natural_contextual_ranking`: fluent English, suitable speaker voice and register, and
-    continuity across the complete sample.
-  - `ranking`: best overall, applying the priority order above, including runtime safety.
-- Use `=` only for candidates that are genuinely equivalent. Examples: `A=B>C` for a tied
-  best pair, `A>B=C` for a tied lower pair, and `A=B=C` when all candidates are equivalent or
-  the available context cannot support a defensible distinction.
-- Include every candidate label exactly once in every ranking column.
-- Add a short, evidence-based `notes` explanation about the block as a whole. You may cite a
-  specific line as evidence, but do not create separate line-level rankings. Avoid generic
-  comments such as "sounds better."
-- Never change source text, candidate text, identifiers, or column order. Edit only the four
-  ranking columns and `notes`.
+Create a sibling filename ending in `.ai-reviewed.csv`; never overwrite the original.
+Preserve UTF-8 encoding, quoting and embedded newlines. Reopen it and verify every judged
+ranking contains every label exactly once with only `>`/`=` separators; abstention rankings
+are blank; evidence quotes match their lines; and every protected column and row matches
+the original exactly.
 
-Create a sibling CSV whose filename ends in `.ai-reviewed.csv`; do not overwrite the original.
-Preserve UTF-8 encoding, quoting, embedded newlines, and every row. Re-open the written file and
-verify that every quality and overall ranking contains every candidate-column label exactly once
-using only `>` and `=`, and that the row count and all protected columns exactly match the source
-CSV.
+Report the output path, total samples/source lines, judged and abstention counts, full and
+partial ties, and major/critical findings with sample IDs. List any samples you could not
+judge safely. Do not sum points or wins by A/B/C across rows: those labels change identity.
+The application privately maps candidates on import and computes line-weighted Borda points,
+category results, pairwise wins/ties/losses, and scene-bootstrap intervals. Do not inspect
+the key to calculate model scores yourself.
 
-Finally report:
-
-- The reviewed output path.
-- Total sample rows and source lines; fixed-sum points per randomized label for Meaning Accuracy,
-  Glossary & Prompt, Natural & Contextual, and Best Overall; plus overall unique first-place
-  finishes, partial ties, and full ties. For three candidates, score strict ranks as 2/1/0 and average
-  the occupied points for tied ranks (`A=B>C` gives 1.5/1.5/0; `A>B=C` gives 2/0.5/0.5;
-  `A=B=C` gives 1/1/1). Apply that whole-sample award once for every source line shown in
-  `line_count` when calculating total points; do not make separate line-level judgments.
-- Any rows you could not judge safely.
-- The explicit warning that this AI review may be biased and should be confirmed by a qualified
-  human reviewer before making a high-stakes model choice.
+Explicitly warn that the AI review may be biased and should be confirmed by a qualified
+human Japanese reviewer before a high-stakes model choice.

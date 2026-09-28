@@ -12,16 +12,20 @@ from __future__ import annotations
 import copy
 import csv
 import hashlib
+import io
 import json
+import math
 import os
 import random
 import re
 import shutil
+import statistics
 import tempfile
 import threading
 import time
 import urllib.parse
 import urllib.request
+import uuid
 import zipfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -31,6 +35,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 
 from util import batch_providers as batch_api
+from util import evaluation_review as review_stats
+from util import evaluation_pairwise as paired_review
 from util.api_errors import concise_api_error
 from util.evaluation_settings import (
     DEFAULT_MAX_OUTPUT_TOKENS, SETTING_FIELDS, candidate_label, generation_settings,
@@ -65,11 +71,12 @@ from util.translation import (
 )
 
 
-EVALUATION_VERSION = 8
+EVALUATION_VERSION = 9
 EVALUATION_ARCHIVE_VERSION = 1
 MANIFEST_HASH_VERSION = 2
 ARTIFACT_BINDING_VERSION = 5
 DEFAULT_SAMPLE_SIZE = 10
+MINIMUM_SAMPLE_SCENES = 8
 DEFAULT_BATCH_SIZE = DEFAULT_SAMPLE_SIZE  # Backward-compatible public alias.
 DEFAULT_SEGMENTS = 360
 DEFAULT_STABILITY_SEGMENTS = 120
@@ -926,7 +933,8 @@ def content_inventory(files_dir: str | Path, *, _pool: list[dict] | None = None)
 
 def _balanced_take(items: Iterable[dict], count: int,
                    *, excluded: set[str] | None = None,
-                   per_scene: int = 12, sampling_seed: str = "") -> list[dict]:
+                   per_scene: int = 12, sampling_seed: str = "",
+                   minimum_scenes: int = 0) -> list[dict]:
     """Take a deterministic file- and scene-balanced subset with local context."""
     if count <= 0:
         return []
@@ -937,6 +945,10 @@ def _balanced_take(items: Iterable[dict], count: int,
             continue
         filename = str((item.get("source_location") or {}).get("file") or "")
         groups[filename][item["scene_id"]].append(item)
+    scene_goal = min(minimum_scenes, count, sum(len(scenes) for scenes in groups.values()))
+    if scene_goal:
+        per_scene = min(per_scene, max(1, count // scene_goal))
+    visited_scenes: set[str] = set()
     file_order = sorted(
         groups,
         key=lambda filename: (
@@ -972,6 +984,8 @@ def _balanced_take(items: Iterable[dict], count: int,
                 position = scene_positions[filename] % len(scenes)
                 scene_positions[filename] += 1
                 candidate = scenes[position]
+                if len(visited_scenes) < scene_goal and candidate in visited_scenes:
+                    continue
                 if (
                     item_offsets[(filename, candidate)]
                     < len(groups[filename][candidate])
@@ -988,6 +1002,7 @@ def _balanced_take(items: Iterable[dict], count: int,
                 count - len(selected),
             )
             selected.extend(scene_items[offset:offset + take])
+            visited_scenes.add(available_scene)
             item_offsets[(filename, available_scene)] += take
             progressed = progressed or take > 0
             if len(selected) >= count:
@@ -1030,7 +1045,7 @@ def build_corpus(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGMEN
         selected: list[dict] = []
         selected.extend(_balanced_take(
             event_text, quotas["event_text"], per_scene=sample_size,
-            sampling_seed=seed,
+            sampling_seed=seed, minimum_scenes=MINIMUM_SAMPLE_SCENES,
         ))
         selected.extend(_balanced_take(
             database, quotas["database"], per_scene=sample_size,
@@ -1043,7 +1058,8 @@ def build_corpus(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGMEN
         ))
     else:
         selected = _balanced_take(
-            eligible, selected_target, per_scene=sample_size, sampling_seed=seed
+            eligible, selected_target, per_scene=sample_size, sampling_seed=seed,
+            minimum_scenes=MINIMUM_SAMPLE_SCENES,
         )
     if len(selected) < selected_target:
         used = {item["id"] for item in selected}
@@ -1383,6 +1399,7 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         "stability_request_ids": stability_ids,
         "executions": executions,
         "corpus_summary": {
+            "sampling": review_stats.sampling_summary(segments),
             "eligible_segments": len(eligible_segments),
             "available_segments": len(all_segments),
             "selected_segments": len(segments),
@@ -1947,6 +1964,15 @@ def _run_history_entry(root: Path, state: dict, manifest: dict) -> dict:
             eligible_review_samples = len(_read_json(blind_key_path))
         except (OSError, ValueError, json.JSONDecodeError):
             pass
+    paired = state.get("paired_review")
+    if paired:
+        grouped = defaultdict(list)
+        for record in (*paired.get("assessments", {}).values(), *paired.get("comparisons", {}).values()):
+            grouped[record["sample_id"]].append(record)
+        completed = {sid for sid, records in grouped.items() if records and all(r["status"] != "unreviewed" for r in records)}
+        reviewed_samples = len(completed)
+        reviewed_lines = sum(len(r.get("segment_ids", [])) for r in manifest.get("logical_requests", []) if r["id"] in completed)
+        eligible_review_samples = sum(pool != "reserve" for pool in paired["plan"]["pools"].values())
     created_at = str(state.get("created_at") or "")
     if not created_at:
         created_at = datetime.fromtimestamp(
@@ -2026,6 +2052,10 @@ def export_run_archive(
     ):
         if (root / optional).is_file():
             relative_files.append(Path(optional))
+    for export in state.get("paired_exports", {}).values():
+        name = str(export.get("file") or "")
+        if re.fullmatch(r"paired_review\.[a-z_]+\.[a-f0-9]{8}\.csv", name) and (root / name).is_file():
+            relative_files.append(Path(name))
     for candidate in state.get("candidates") or []:
         result_file = Path(str(candidate.get("result_file") or ""))
         if (
@@ -2128,7 +2158,9 @@ def _validated_archive_members(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo
         unix_mode = info.external_attr >> 16
         if unix_mode and (unix_mode & 0o170000) == 0o120000:
             raise ValueError("Evaluation archive may not contain symbolic links")
-        allowed = info.filename in allowed_root or (
+        allowed = info.filename in allowed_root or bool(re.fullmatch(
+            r"paired_review\.[a-z_]+\.[a-f0-9]{8}\.csv", info.filename
+        )) or (
             len(path.parts) == 2
             and path.parts[0] == "results"
             and path.suffix.lower() == ".json"
@@ -2668,6 +2700,7 @@ def _execute_live_candidate(
             )
             return False, checkpoint_path
         request = requests[execution["logical_request_id"]]
+        request_started = time.perf_counter()
         try:
             result = None
             for attempt in range(1, LIVE_REQUEST_MAX_ATTEMPTS + 1):
@@ -2732,6 +2765,14 @@ def _execute_live_candidate(
                 f"{candidate['label']} live request {index}/{total} failed: "
                 f"{concise_api_error(exc)}"
             )
+        finally:
+            timings = candidate.setdefault("live_request_timings", {})
+            timings[execution_id] = float(timings.get(execution_id, 0)) + max(0., time.perf_counter() - request_started)
+            if execution_id in raw_results:
+                raw_results[execution_id]["latency_seconds"] = timings[execution_id]
+            # A retry pause can return from the try block. Preserve its elapsed
+            # attempts too, while excluding idle time before the next resume.
+            persist_live_progress()
         completed_ids.add(execution_id)
         candidate["live_completed_requests"] = len(completed_ids)
         state["updated_at"] = _utc_now()
@@ -3143,6 +3184,8 @@ def _process_results(manifest: dict, raw_results: dict,
                 )
             },
         }
+        if type(raw.get("latency_seconds")) in (int, float) and math.isfinite(raw["latency_seconds"]) and raw["latency_seconds"] >= 0:
+            processed[execution_id]["latency_seconds"] = raw["latency_seconds"]
 
     expected_requests = len(manifest["executions"])
     missing_requests = max(0, expected_requests - len(processed))
@@ -3160,6 +3203,11 @@ def _process_results(manifest: dict, raw_results: dict,
         "validation_failures": validation_failures,
         "valid_rate": (valid_segments / total_segments) if total_segments else 0.0,
     }
+    latencies = sorted(r["latency_seconds"] for r in processed.values() if "latency_seconds" in r)
+    if latencies:
+        summary["live_latency"] = {"requests": len(latencies), "median_seconds": statistics.median(latencies),
+            "p95_seconds": latencies[math.ceil(.95 * len(latencies)) - 1],
+            "scope": "client request time including retries/backoff, excluding paused idle time"}
     return processed, summary
 
 
@@ -3347,7 +3395,7 @@ def _review_candidate_ids(state: dict, candidate_ids: list[str] | None) -> list[
     return selected
 
 
-def blind_review_candidates(run_dir: str | Path) -> list[dict]:
+def blind_review_candidates(run_dir: str | Path, *, include_unavailable: bool = False) -> list[dict]:
     """Return candidate availability for the blind-review model selector."""
     root = Path(run_dir)
     state, manifest = load_run(root)
@@ -3375,7 +3423,7 @@ def blind_review_candidates(run_dir: str | Path) -> list[dict]:
                 reason = "No valid primary translations"
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
             reason = str(exc)
-        available = valid_primary > 0
+        available = valid_primary > 0 or include_unavailable
         choices.append({
             "id": candidate_id,
             "label": candidate_label(candidate),
@@ -3383,7 +3431,7 @@ def blind_review_candidates(run_dir: str | Path) -> list[dict]:
             "valid_primary": valid_primary,
             "available": available,
             "selected_by_default": (
-                available and candidate.get("status") == "completed"
+                available and (include_unavailable or candidate.get("status") == "completed")
             ),
             "reason": reason,
         })
@@ -3492,12 +3540,15 @@ def _blind_review_data(
             "sources": list(request.get("sources") or [
                 segment["source"] for segment in sample_segments
             ]),
+            "context": review_stats.sample_context(request),
         })
     total = len(manifest.get("segments") or [])
+    exported_lines = sum(len(sample["segment_ids"]) for sample in review_samples)
     coverage = {
         "total_segments": total,
-        "eligible_segments": len(eligible),
-        "excluded_segments": total - len(eligible),
+        "eligible_segments": exported_lines,
+        "excluded_segments": total - exported_lines,
+        "valid_intersection_segments": len(eligible),
         "total_samples": len(logical_requests),
         "eligible_samples": len(review_samples),
         "excluded_samples": len(logical_requests) - len(review_samples),
@@ -3633,6 +3684,7 @@ def load_comparison_data(run_dir: str | Path) -> dict:
             ),
             "segment_ids": segment_ids,
             "sources": sources,
+            "context": review_stats.sample_context(request),
             "lines": lines,
             "has_problems": has_problems,
             "blind_labels": {},
@@ -3707,10 +3759,28 @@ def load_comparison_data(run_dir: str | Path) -> dict:
                     "notes": str(row.get("notes") or "").strip(),
                 }
 
+    for record in human_review.get("rows") or []:
+        sample = sample_by_id.get(record["sample_id"])
+        if sample is None or record["status"] == "unreviewed":
+            continue
+        sample["review"] = {
+            "overall": record["rankings"].get("overall", []),
+            "metrics": {k: v for k, v in record["rankings"].items() if k != "overall"},
+            "notes": record["notes"], "status": record["status"],
+            "evidence": record.get("evidence", {}),
+        }
+        sample["human_follow_up"] = record["sample_id"] in (human_review.get("analysis") or {}).get("human_follow_up", [])
+
+    paired = state.get("paired_review")
+    if paired:
+        from util.evaluation_pairwise_io import enrich_comparison
+        enrich_comparison(samples, paired)
+
     return {
         "run_id": str(state.get("run_id") or root.name),
         "status": str(state.get("status") or "unknown"),
-        "has_imported_review": bool(human_review),
+        "has_imported_review": bool(human_review or (paired or {}).get("analysis")),
+        "paired_review": paired,
         "reviewed_candidate_ids": [
             str(value) for value in human_review.get("reviewed_candidate_ids") or []
         ],
@@ -3745,29 +3815,20 @@ def export_blind_review_context(
     if not system_text:
         raise ValueError("Evaluation manifest has no translation system prompt")
 
-    glossary_lines: list[str] = []
-    seen_lines: set[str] = set()
-    for request in requests:
-        for line in str(request.get("glossary") or "").splitlines():
-            normalized = line.rstrip()
-            if normalized in seen_lines:
-                continue
-            seen_lines.add(normalized)
-            glossary_lines.append(normalized)
-    glossary_text = "\n".join(glossary_lines).strip()
+    # Deduplicate whole blocks, never individual lines: repeated headings and
+    # SFX descriptions belong to their own entries. Exact per-sample context
+    # is also embedded in the CSV; these files are legacy/reference snapshots.
+    glossary_text = "\n\n".join(dict.fromkeys(
+        str(request.get("glossary") or "") for request in requests
+        if request.get("glossary")
+    )).strip()
     if not glossary_text:
         glossary_text = "(No glossary entries matched the reviewed source text.)"
 
-    sfx_lines: list[str] = []
-    seen_sfx_lines: set[str] = set()
-    for request in requests:
-        for line in str(request.get("sfx_reference") or "").splitlines():
-            normalized = line.rstrip()
-            if normalized in seen_sfx_lines:
-                continue
-            seen_sfx_lines.add(normalized)
-            sfx_lines.append(normalized)
-    sfx_text = "\n".join(sfx_lines).strip()
+    sfx_text = "\n\n".join(dict.fromkeys(
+        str(request.get("sfx_reference") or "") for request in requests
+        if request.get("sfx_reference")
+    )).strip()
     if not sfx_text:
         sfx_text = (
             "(No Japanese SFX reference entries matched the reviewed source text.)"
@@ -3786,61 +3847,103 @@ def export_blind_review_context(
 def export_blind_review(
     run_dir: str | Path, output_path: str | Path | None = None,
     candidate_ids: list[str] | None = None,
+    *, judge_check: bool = False,
 ) -> Path:
     root = Path(run_dir)
     state, manifest = load_run(root)
     if state.get("status") not in {"completed", "failed"}:
         raise ValueError("All comparison models must finish before blind export")
+    baseline = state.get("human_review") or {}
+    if judge_check:
+        if not baseline.get("rows"):
+            raise ValueError("Import a baseline reviewed CSV before exporting a judge check")
+        candidate_ids = baseline["reviewed_candidate_ids"]
     candidate_ids = _review_candidate_ids(state, candidate_ids)
     _results, primary, review_samples, _coverage = _blind_review_data(
         root, state, manifest, candidate_ids
     )
 
-    output = Path(output_path) if output_path else root / "blind_review.csv"
+    review_id = uuid.uuid4().hex
+    if judge_check:
+        baseline_rows = baseline["rows"]
+        ranked = [row for row in baseline_rows if row["status"] == "judged" and not row.get("all_identical")]
+        rng = random.Random(review_id)
+        rng.shuffle(ranked)
+        chosen = {row["sample_id"] for row in ranked[:max(1, (len(ranked) + 3) // 4)]}
+        chosen.update((baseline.get("analysis") or {}).get("human_follow_up") or [])
+        if not chosen:
+            raise ValueError("No non-identical or flagged samples are available for a judge check")
+        review_samples = [sample for sample in review_samples if sample["id"] in chosen]
+    output = Path(output_path) if output_path else root / (
+        f"judge_check.{review_id[:8]}.csv" if judge_check else "blind_review.csv"
+    )
+    canonical_review = root / "blind_review.csv"
+    if (baseline or judge_check) and output.resolve() == canonical_review.resolve():
+        output = root / f"blind_review.{review_id[:8]}.csv"
     key: dict[str, dict[str, str]] = {}
     blind_labels = [_blind_label(index) for index in range(len(candidate_ids))]
     quality_fields = [f"{metric}_ranking" for metric in REVIEW_QUALITY_METRICS]
     output.parent.mkdir(parents=True, exist_ok=True)
-    with open(output, "w", encoding="utf-8-sig", newline="") as stream:
+    with io.StringIO(newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=(
-            "sample_id", "scene_id", "stratum", "line_count", "segment_ids",
-            "source",
-            *blind_labels, *quality_fields, "ranking", "notes",
+            "review_id", "sample_id", "scene_id", "stratum", "line_count", "segment_ids",
+            "source", "context", "identical_candidates",
+            *blind_labels, *quality_fields, "ranking", "status", "error_evidence", "notes",
         ))
         writer.writeheader()
         for sample in review_samples:
             shuffled = list(candidate_ids)
-            random.Random(f"{state['run_id']}:{sample['id']}").shuffle(shuffled)
+            random.Random(f"{review_id}:{sample['id']}").shuffle(shuffled)
+            if judge_check:
+                baseline_export = (state.get("review_exports") or {}).get(baseline.get("review_id"), {})
+                old_key = baseline_export.get("key") or _read_json(root / "blind_key.json")
+                previous = list(old_key[sample["id"]].values())
+                shift = random.Random(f"{review_id}:{sample['id']}").randrange(1, len(previous))
+                shuffled = previous[shift:] + previous[:shift]
             labels = {
                 label: candidate_id
                 for label, candidate_id in zip(blind_labels, shuffled)
             }
             key[sample["id"]] = labels
+            outputs = {
+                label: [primary[segment_id][candidate_id] for segment_id in sample["segment_ids"]]
+                for label, candidate_id in labels.items()
+            }
+            identical = review_stats.identical_groups(outputs)
+            all_identical = len(identical) == 1 and len(identical[0]) == len(labels)
+            auto_ranking = "=".join(labels) if all_identical else ""
             writer.writerow({
+                "review_id": review_id,
                 "sample_id": sample["id"],
                 "scene_id": sample["scene_id"],
                 "stratum": sample["stratum"],
                 "line_count": len(sample["segment_ids"]),
                 "segment_ids": json.dumps(sample["segment_ids"], ensure_ascii=False),
                 "source": json.dumps(sample["sources"], ensure_ascii=False, indent=2),
-                **{
-                    label: json.dumps([
-                        primary[segment_id][candidate_id]
-                        for segment_id in sample["segment_ids"]
-                    ], ensure_ascii=False, indent=2)
-                    for label, candidate_id in labels.items()
-                },
-                **{field: "" for field in quality_fields},
-                "ranking": "",
-                "notes": "",
+                "context": json.dumps(sample["context"], ensure_ascii=False, indent=2),
+                "identical_candidates": json.dumps(identical),
+                **{label: json.dumps(block, ensure_ascii=False, indent=2) for label, block in outputs.items()},
+                **{field: auto_ranking for field in quality_fields},
+                "ranking": auto_ranking,
+                "status": "judged" if all_identical else "",
+                "error_evidence": json.dumps({label: [] for label in labels}),
+                "notes": "Identical output blocks; equal preference does not establish correctness." if all_identical else "",
             })
-    canonical_review = root / "blind_review.csv"
-    if output.resolve() != canonical_review.resolve():
+        _atomic_write_text_exact(output, "\ufeff" + stream.getvalue())
+    if not baseline and not judge_check and output.resolve() != canonical_review.resolve():
         shutil.copyfile(output, canonical_review)
     export_blind_review_context(root, output.parent)
     if output.parent.resolve() != root.resolve():
         export_blind_review_context(root, root)
-    _atomic_write_json(root / "blind_key.json", key)
+    if not baseline and not judge_check:
+        _atomic_write_json(root / "blind_key.json", key)
+    state.setdefault("review_exports", {})[review_id] = {
+        "key": key, "kind": "judge_check" if judge_check else "primary",
+        "baseline_review_id": baseline.get("review_id") if judge_check else None,
+        "baseline_sha256": _sha256(baseline["rows"]) if judge_check else None,
+        "created_at": _utc_now(),
+    }
+    _atomic_write_json(root / "state.json", state)
     return output
 
 
@@ -3886,245 +3989,213 @@ def _ranking_points(tiers: list[list[str]]) -> dict[str, float]:
     return points
 
 
-def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
+def import_blind_review(
+    run_dir: str | Path, review_path: str | Path, *,
+    reviewer: str = "", reviewer_kind: str = "unspecified",
+) -> dict:
+    """Validate frozen inputs before scoring or persisting any review decision."""
+    from util.evaluation_pairwise_io import is_paired_csv, import_review
+    if is_paired_csv(review_path):
+        return import_review(run_dir, review_path, reviewer=reviewer, reviewer_kind=reviewer_kind)
     root = Path(run_dir)
     state, manifest = load_run(root)
-    key = _read_json(root / "blind_key.json")
-    keyed_candidates = {
-        str(candidate_id)
-        for labels in key.values() if isinstance(labels, dict)
-        for candidate_id in labels.values()
-    }
-    candidate_ids = [
-        str(candidate["id"]) for candidate in state.get("candidates") or []
-        if str(candidate["id"]) in keyed_candidates
-    ]
-    _results, primary, review_samples, _coverage = _blind_review_data(
-        root, state, manifest, candidate_ids
-    )
-    expected_samples = {
-        str(sample["id"]): sample for sample in review_samples
-    }
-    expected_line_counts = {
-        str(request.get("id")): len(request.get("segment_ids") or [])
-        for request in manifest.get("logical_requests") or []
-        if request.get("id")
-    }
-    expected_line_counts.update({
-        str(segment.get("id")): 1
-        for segment in manifest.get("segments") or []
-        if segment.get("id")
-    })
-    wins = {candidate["id"]: 0 for candidate in state["candidates"]}
-    points = {candidate["id"]: 0.0 for candidate in state["candidates"]}
-    first_place = {candidate["id"]: 0 for candidate in state["candidates"]}
-    ties = 0
-    partial_ties = 0
-    reviewed = 0
-    reviewed_lines = 0
-    seen_samples: set[str] = set()
-    quality_points = {
-        metric: {candidate["id"]: 0.0 for candidate in state["candidates"]}
-        for metric in REVIEW_QUALITY_METRICS
-    }
-    quality_first_place = {
-        metric: {candidate["id"]: 0 for candidate in state["candidates"]}
-        for metric in REVIEW_QUALITY_METRICS
-    }
+    if reviewer_kind not in {"unspecified", "ai", "human"}:
+        raise ValueError("Reviewer kind must be unspecified, ai or human")
     with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)
-        fieldnames = set(reader.fieldnames or [])
-        quality_fields = {
-            metric: f"{metric}_ranking" for metric in REVIEW_QUALITY_METRICS
-        }
-        has_quality_rankings = any(
-            field in fieldnames for field in quality_fields.values()
-        )
-        if has_quality_rankings:
-            missing_fields = sorted(set(quality_fields.values()) - fieldnames)
-            if missing_fields:
-                raise ValueError(
-                    "Reviewed CSV is missing quality ranking columns: "
-                    + ", ".join(missing_fields)
-                )
-        for row in reader:
-            ranking_value = str(row.get("ranking") or "").strip()
-            legacy_winner = str(row.get("winner") or "").strip().upper()
-            if not ranking_value and not legacy_winner:
-                continue
-            review_id = str(
-                row.get("sample_id") or row.get("segment_id") or ""
-            )
-            if review_id in seen_samples:
-                raise ValueError(f"Duplicate reviewed sample {review_id!r}")
-            labels_to_candidates = key.get(review_id) or {}
-            labels = list(labels_to_candidates)
-            if not labels or any(
-                candidate_id not in wins
-                for candidate_id in labels_to_candidates.values()
-            ):
-                raise ValueError(f"Unknown reviewed sample {review_id!r}")
-
-            # Rankings are meaningful only when the reviewer saw the exact
-            # frozen source and candidate outputs that were exported. CSV and
-            # spreadsheet tools may rewrite cells, so validate every protected
-            # field against the run artifacts before attributing a score.
-            sample = expected_samples.get(review_id)
-            if sample is None:
-                raise ValueError(f"Unknown reviewed sample {review_id!r}")
-
-            def _review_json(field: str):
-                value = str(row.get(field) or "").strip()
-                try:
-                    return json.loads(value)
-                except json.JSONDecodeError as exc:
-                    raise ValueError(
-                        f"Protected review field {field!r} is invalid for "
-                        f"sample {review_id!r}"
-                    ) from exc
-
-            protected_scalars = {
-                "scene_id": str(sample["scene_id"]),
-                "stratum": str(sample["stratum"]),
-            }
-            for field, expected_value in protected_scalars.items():
-                if str(row.get(field) or "") != expected_value:
-                    raise ValueError(
-                        f"Protected review field {field!r} changed for "
-                        f"sample {review_id!r}"
-                    )
-            if _review_json("segment_ids") != list(sample["segment_ids"]):
-                raise ValueError(
-                    f"Protected segment IDs changed for sample {review_id!r}"
-                )
-            if _review_json("source") != list(sample["sources"]):
-                raise ValueError(
-                    f"Protected source text changed for sample {review_id!r}"
-                )
-            for label, candidate_id in labels_to_candidates.items():
-                expected_translations = [
-                    primary[segment_id][candidate_id]
-                    for segment_id in sample["segment_ids"]
-                ]
-                if _review_json(label) != expected_translations:
-                    raise ValueError(
-                        f"Protected candidate text {label!r} changed for "
-                        f"sample {review_id!r}"
-                    )
-            try:
-                if ranking_value:
-                    tiers = _parse_blind_ranking(ranking_value, labels)
-                elif legacy_winner in {"TIE", "="}:
-                    tiers = [labels]
-                else:
-                    if legacy_winner not in labels_to_candidates:
-                        raise ValueError(f"Invalid winner {legacy_winner!r}")
-                    remaining = [
-                        label for label in labels if label != legacy_winner
-                    ]
-                    tiers = [[legacy_winner]]
-                    if remaining:
-                        tiers.append(remaining)
-            except ValueError as exc:
-                raise ValueError(
-                    f"{exc} for sample {review_id!r}"
-                ) from exc
-
-            expected_line_count = expected_line_counts.get(review_id, 1)
-            line_count_value = str(row.get("line_count") or "").strip()
-            try:
-                line_count = (
-                    int(line_count_value)
-                    if line_count_value else expected_line_count
-                )
-            except ValueError as exc:
-                raise ValueError(
-                    f"Invalid line count {line_count_value!r} for sample "
-                    f"{review_id!r}"
-                ) from exc
-            if line_count < 1:
-                raise ValueError(
-                    f"Invalid line count {line_count!r} for sample {review_id!r}"
-                )
-            if line_count != expected_line_count:
-                raise ValueError(
-                    f"Protected line count changed for sample {review_id!r}: "
-                    f"expected {expected_line_count}, found {line_count}"
-                )
-
-            if has_quality_rankings:
-                for metric, field in quality_fields.items():
-                    try:
-                        metric_tiers = _parse_blind_ranking(
-                            str(row.get(field) or ""), labels
-                        )
-                    except ValueError as exc:
-                        raise ValueError(
-                            f"Invalid {field} for sample {review_id!r}: {exc}"
-                        ) from exc
-                    if not metric_tiers:
-                        raise ValueError(
-                            f"Missing {field} for sample {review_id!r}"
-                        )
-                    for label, award in _ranking_points(metric_tiers).items():
-                        candidate_id = labels_to_candidates[label]
-                        quality_points[metric][candidate_id] += award * line_count
-                    for label in metric_tiers[0]:
-                        quality_first_place[metric][labels_to_candidates[label]] += 1
-
-            row_points = _ranking_points(tiers)
-            for label, award in row_points.items():
-                points[labels_to_candidates[label]] += award * line_count
-            for label in tiers[0]:
-                first_place[labels_to_candidates[label]] += 1
-            if len(tiers[0]) == 1:
-                wins[labels_to_candidates[tiers[0][0]]] += 1
-            if len(tiers) == 1:
-                ties += 1
-            elif any(len(tier) > 1 for tier in tiers):
-                partial_ties += 1
-            seen_samples.add(review_id)
-            reviewed += 1
-            reviewed_lines += line_count
-    if reviewed == 0:
-        raise ValueError("Reviewed CSV contains no completed rankings")
-    points = {
-        candidate_id: int(score) if score.is_integer() else score
-        for candidate_id, score in points.items()
-    }
-    if has_quality_rankings:
-        quality_points = {
-            metric: {
-                candidate_id: int(score) if score.is_integer() else score
-                for candidate_id, score in scores.items()
-            }
-            for metric, scores in quality_points.items()
-        }
+        headers = reader.fieldnames or []
+        raw_rows = list(reader)
+    if len(headers) != len(set(headers)):
+        raise ValueError("Reviewed CSV contains duplicate columns")
+    new_fields = {"review_id", "context", "identical_candidates", "status", "error_evidence"}
+    versioned = bool(new_fields & set(headers))
+    if versioned and not new_fields <= set(headers):
+        raise ValueError("Reviewed CSV is missing protected review context or status columns")
+    review_ids = {row.get("review_id") for row in raw_rows}
+    if versioned:
+        if len(review_ids) != 1 or not next(iter(review_ids), None):
+            raise ValueError("Reviewed CSV must belong to one exported review")
+        review_id = next(iter(review_ids))
+        export = (state.get("review_exports") or {}).get(review_id)
+        if not export:
+            raise ValueError("Unknown exported review ID")
+        key = export["key"]
     else:
-        quality_points = {}
-        quality_first_place = {}
+        review_id = "legacy-" + _sha256(Path(review_path).read_bytes())[:20]
+        export = {"kind": "primary"}
+        key = _read_json(root / "blind_key.json")
+    keyed_candidates = {c for labels in key.values() for c in labels.values()}
+    candidate_ids = [c["id"] for c in state["candidates"] if c["id"] in keyed_candidates]
+    _results, primary, samples, coverage = _blind_review_data(root, state, manifest, candidate_ids)
+    expected = {sample["id"]: sample for sample in samples}
+    quality_fields = {metric: f"{metric}_ranking" for metric in REVIEW_QUALITY_METRICS}
+    has_quality = bool(set(quality_fields.values()) & set(headers))
+    if has_quality and not set(quality_fields.values()) <= set(headers):
+        raise ValueError("Reviewed CSV is missing quality ranking columns")
+    seen, rows = set(), []
+    for row in raw_rows:
+        sample_id = str(row.get("sample_id") or row.get("segment_id") or "")
+        if sample_id in seen:
+            raise ValueError(f"Duplicate reviewed sample {sample_id!r}")
+        seen.add(sample_id)
+        sample, mapping = expected.get(sample_id), key.get(sample_id)
+        if not sample or not mapping:
+            raise ValueError(f"Unknown reviewed sample {sample_id!r}")
+        labels = list(mapping)
+
+        def read_json(field):
+            try:
+                return json.loads(str(row.get(field) or ""))
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise ValueError(f"Protected review field {field!r} is invalid for sample {sample_id!r}") from exc
+
+        for field in ("scene_id", "stratum"):
+            if row.get(field) != sample[field]:
+                raise ValueError(f"Protected review field {field!r} changed for sample {sample_id!r}")
+        if read_json("segment_ids") != sample["segment_ids"]:
+            raise ValueError(f"Protected segment IDs changed for sample {sample_id!r}")
+        if read_json("source") != sample["sources"]:
+            raise ValueError(f"Protected source text changed for sample {sample_id!r}")
+        outputs = {}
+        for label, candidate in mapping.items():
+            outputs[label] = [primary[segment_id][candidate] for segment_id in sample["segment_ids"]]
+            if read_json(label) != outputs[label]:
+                raise ValueError(f"Protected candidate text {label!r} changed for sample {sample_id!r}")
+        if versioned and not str(row.get("line_count") or "").strip():
+            raise ValueError(f"Protected line count changed for sample {sample_id!r}")
+        try:
+            count = int(row.get("line_count") or len(sample["segment_ids"]))
+        except ValueError as exc:
+            raise ValueError(f"Invalid line count for sample {sample_id!r}") from exc
+        if count != len(sample["segment_ids"]):
+            raise ValueError(f"Protected line count changed for sample {sample_id!r}")
+        identical = review_stats.identical_groups(outputs)
+        if versioned:
+            if read_json("context") != sample["context"]:
+                raise ValueError(f"Protected context changed for sample {sample_id!r}")
+            if read_json("identical_candidates") != identical:
+                raise ValueError(f"Protected identical candidates changed for sample {sample_id!r}")
+            try:
+                evidence = review_stats.validate_evidence(read_json("error_evidence"), sample["sources"], outputs)
+            except ValueError as exc:
+                raise ValueError(f"{exc} for sample {sample_id!r}") from exc
+        else:
+            evidence = {label: [] for label in labels}
+        ranking = str(row.get("ranking") or "").strip()
+        winner = str(row.get("winner") or "").strip().upper()
+        status = str(row.get("status") or "").strip() or ("judged" if ranking or winner else "unreviewed")
+        if status not in (*review_stats.REVIEW_STATUSES, "unreviewed"):
+            raise ValueError(f"Unknown review status {status!r} for sample {sample_id!r}")
+        rankings = {}
+        if status != "judged":
+            if ranking or winner or any(str(row.get(field) or "").strip() for field in quality_fields.values()):
+                raise ValueError(f"Abstained sample {sample_id!r} must leave all rankings blank")
+            if status != "unreviewed" and not str(row.get("notes") or "").strip():
+                raise ValueError(f"Abstained sample {sample_id!r} requires an explanation in notes")
+        else:
+            if ranking:
+                tiers = _parse_blind_ranking(ranking, labels)
+            elif winner in {"TIE", "="}:
+                tiers = [labels]
+            elif winner in labels:
+                tiers = [[winner], [label for label in labels if label != winner]]
+            else:
+                raise ValueError(f"Missing ranking for judged sample {sample_id!r}")
+            rankings["overall"] = tiers
+            if has_quality:
+                for metric, field in quality_fields.items():
+                    metric_tiers = _parse_blind_ranking(str(row.get(field) or ""), labels)
+                    if not metric_tiers:
+                        raise ValueError(f"Missing {field} for sample {sample_id!r}")
+                    rankings[metric] = metric_tiers
+            for tiers in rankings.values():
+                places = {label: i for i, tier in enumerate(tiers) for label in tier}
+                if any(len({places[label] for label in group}) != 1 for group in identical):
+                    raise ValueError(f"Identical candidate blocks must be tied for sample {sample_id!r}")
+        rows.append({
+            "sample_id": sample_id, "scene_id": sample["scene_id"], "stratum": sample["stratum"],
+            "line_count": count, "status": status,
+            "rankings": {metric: [[mapping[label] for label in tier] for tier in tiers] for metric, tiers in rankings.items()},
+            "evidence": {mapping[label]: errors for label, errors in evidence.items()},
+            "notes": str(row.get("notes") or "").strip(),
+            "all_identical": len(identical) == 1 and len(identical[0]) == len(labels),
+        })
+    if versioned and seen != set(key):
+        raise ValueError("Reviewed CSV must preserve every exported sample row")
+    completed = [row for row in rows if row["status"] != "unreviewed"]
+    judged = [row for row in rows if row["status"] == "judged"]
+    if not completed:
+        raise ValueError("Reviewed CSV contains no completed rankings or abstentions")
+    all_ids = [c["id"] for c in state["candidates"]]
+    points = {c: 0.0 for c in all_ids}
+    wins = {c: 0 for c in all_ids}
+    first_place = dict(wins)
+    quality_points = {metric: dict(points) for metric in REVIEW_QUALITY_METRICS} if has_quality else {}
+    quality_first = {metric: dict(wins) for metric in REVIEW_QUALITY_METRICS} if has_quality else {}
+    ties = partial_ties = 0
+    for row in judged:
+        for metric, tiers in row["rankings"].items():
+            scores = points if metric == "overall" else quality_points[metric]
+            first = first_place if metric == "overall" else quality_first[metric]
+            for candidate, award in _ranking_points(tiers).items():
+                scores[candidate] += award * row["line_count"]
+            for candidate in tiers[0]:
+                first[candidate] += 1
+        tiers = row["rankings"]["overall"]
+        if len(tiers[0]) == 1:
+            wins[tiers[0][0]] += 1
+        ties += len(tiers) == 1
+        partial_ties += len(tiers) > 1 and any(len(tier) > 1 for tier in tiers)
     human = {
-        "reviewed": reviewed,
-        "reviewed_lines": reviewed_lines,
-        "ties": ties,
-        "partial_ties": partial_ties,
-        "wins": wins,
-        "first_place": first_place,
-        "points": points,
-        "quality_points": quality_points,
-        "quality_first_place": quality_first_place,
-        "reviewed_candidate_ids": candidate_ids,
-        "scoring": "fixed-sum-borda-average-per-line-v2",
-        "imported_at": _utc_now(),
+        "review_id": review_id, "review_kind": export["kind"],
+        "reviewer": str(reviewer).strip(), "reviewer_kind": reviewer_kind,
+        "reviewed": len(judged), "reviewed_lines": sum(r["line_count"] for r in judged),
+        "ties": ties, "partial_ties": partial_ties, "wins": wins, "first_place": first_place,
+        "points": points, "quality_points": quality_points, "quality_first_place": quality_first,
+        "reviewed_candidate_ids": candidate_ids, "rows": rows,
+        "scoring": "fixed-sum-borda-average-per-line-v2", "imported_at": _utc_now(),
+        "analysis": review_stats.summarize_reviews(rows, candidate_ids), "export_coverage": coverage,
     }
-    review_source = Path(review_path)
-    canonical_review = root / "blind_review.csv"
-    if review_source.resolve() != canonical_review.resolve():
-        shutil.copyfile(review_source, canonical_review)
-    state["human_review"] = human
+    if export["kind"] == "judge_check":
+        baseline_id = export.get("baseline_review_id")
+        baseline = (state.get("review_history") or {}).get(baseline_id)
+        if not baseline or _sha256(baseline["rows"]) != export.get("baseline_sha256"):
+            raise ValueError("The baseline review changed; export a fresh judge check")
+        agreement = review_stats.judge_agreement(baseline["rows"], rows)
+        human["judge_agreement"] = agreement
+        current = state.get("human_review") or {}
+        if current.get("review_id") == baseline_id:
+            current["judge_agreement"] = agreement
+            current["judge_check_review_id"] = review_id
+            current["analysis"]["human_follow_up"] = sorted(set(
+                current["analysis"]["human_follow_up"] + agreement["disputed_samples"]
+                + human["analysis"]["human_follow_up"]
+            ))
+    else:
+        canonical = root / "blind_review.csv"
+        if Path(review_path).resolve() != canonical.resolve():
+            _atomic_write_text_exact(canonical, Path(review_path).read_bytes().decode("utf-8"))
+        _atomic_write_json(root / "blind_key.json", key)
+        state["human_review"] = human
+    state.setdefault("review_history", {})[review_id] = copy.deepcopy(human)
     state["updated_at"] = _utc_now()
     _atomic_write_json(root / "state.json", state)
     return human
+
+
+def paired_review_preview(run_dir: str | Path, **options) -> dict:
+    from util.evaluation_pairwise_io import preview
+    return preview(run_dir, **options)
+
+
+def export_paired_review(run_dir: str | Path, output_path=None, **options) -> Path:
+    from util.evaluation_pairwise_io import export_review
+    return export_review(run_dir, output_path, **options)
+
+
+def load_review_calibration(run_dir: str | Path, suite_path: str | Path) -> dict:
+    from util.evaluation_pairwise_io import load_calibration_suite
+    return load_calibration_suite(run_dir, suite_path)
 
 
 def context_audit(manifest: dict) -> dict:
