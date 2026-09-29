@@ -1,4 +1,50 @@
-# Len's Method review after SEQUEL thirst
+# Len's Method: one-prompt review (2026-09-29)
+
+The previous flow exposed internal phases to the user and required an API preparation prompt,
+a return to the GUI for a quote, and another translation prompt. That did not meet a copy-and-go workflow.
+
+The current flow offers one **Copy translation prompt** action with game, mode, image/glossary/Forge
+options and optional instructions. Task selection is removed from both the UI and saved project model.
+Old settings retain their mode/options; task labels and old GUI quote approvals are retired.
+The skill inspects artifacts, resumes valid work, owns each phase and reports progress through local delivery.
+The starting prompt routes procedural details to the maintained skill and references.
+
+API preparation and cost review now happen in the same assistant conversation. The `api-estimate`
+helper creates a source-bound, unapproved quote without translation calls. Actual paid submission
+still requires applicable user authorization and revalidation against the current source, settings
+and request plan. The skill then continues through collection, QA and packaging without another prompt.
+
+Removing task labels also removed a source-safety signal. Missing Git baselines now always require
+the agent to attest `--current-is-untranslated` after inspecting the selected folder, or provide a
+verified separate source. Existing baselines are reused. The user does not manage this check.
+
+The existing handoff, GUI and Git lifecycle tests cover migration, copying before a quote exists,
+preservation of saved progress, agent-side quote generation, stale/unapproved quote rejection and
+protection against treating translated bytes as an original. No test cases or runtime budgets were added.
+The panel still reads assistant-written evidence; it does not launch a background translation agent.
+Native runtime access and actual engine adapter support remain environment-specific.
+
+Validation for this change:
+
+| Command | Tests | Total elapsed / ceiling |
+|---|---:|---:|
+| `./tests/run_tests.sh core` | 780, with 5 existing skips | 4.590s / 8s |
+| `./tests/run_tests.sh integration` | 130 | 16.888s / 20s |
+| `./tests/run_tests.sh extended` | 100 | 18.782s / 30s |
+
+All passed their existing count and runtime ceilings. One unrelated extended navigation
+test took 1.003s against a 1s per-test target, within its 1.5s ceiling; no budgets were changed.
+The existing Len component tests and GUI/bundled-data checks passed. The initial focused
+GUI invocation used the wrong test-class capitalization; rerunning the correct target passed.
+Skill validation, all 21 entrypoint reference paths, changed-data ignore checks and whitespace checks passed.
+Offscreen Agent/API/progress views were inspected; API clipboard copy worked before extraction.
+No actual game translation, paid provider submission or native game playtest was performed.
+
+---
+
+## Earlier review after SEQUEL thirst (historical)
+
+The API handoff/UI findings below describe the earlier implementation and are superseded by the one-prompt flow above.
 
 This review addresses the September 2026 run's unclear progress, repeated context/QA overhead, RPG Maker locale behavior and ambiguous API/direct handoff.
 The changes are in DazedMTLTool and its bundled skill; this review does not modify the game's translation or resume its playthrough.

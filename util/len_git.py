@@ -40,8 +40,8 @@ def setup_git(project: LenProject, *, original_game: Path | None = None, version
               current_is_untranslated: bool = False) -> dict:
     """Use the selected untranslated game for fresh baselines, including normal tool preparation.
 
-    Resume/QA must identify another source or explicitly attest that the current
-    game remains untranslated. Merely selecting a resume stage is not that attestation.
+    With no original baseline, the agent must identify another source or explicitly
+    attest that the selected game remains untranslated after inspecting its artifacts.
     """
     before = git_status(project)
     repo = before["repo_root"]
@@ -83,12 +83,11 @@ def setup_git(project: LenProject, *, original_game: Path | None = None, version
         else:
             if not version:
                 raise GitWorkflowError("Supply --version with the starting game's release label.")
-            resuming = project.stage in {"continue", "qa"}
-            if original_game is None and resuming and not current_is_untranslated:
+            if original_game is None and not current_is_untranslated:
                 raise GitWorkflowError("Supply --original for an existing translation, or --current-is-untranslated after verifying that only preparation occurred.")
             original = original_game.expanduser().resolve() if original_game is not None else project.game_root
-            if original == project.game_root and resuming and not current_is_untranslated:
-                raise GitWorkflowError("Resume and QA require a separate clean original, or --current-is-untranslated after checking that translation has not begun.")
+            if original == project.game_root and not current_is_untranslated:
+                raise GitWorkflowError("Supply a separate clean original, or --current-is-untranslated after checking that translation has not begun.")
             bootstrap_repository(project.game_root, original, version, preserve_game_files=True)
             action = "created"
     return {"action": action, **git_status(project)}

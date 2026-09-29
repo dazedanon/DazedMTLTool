@@ -40,6 +40,9 @@ def main(argv=None) -> int:
     many.add_argument("--game-root", type=Path, required=True)
     many.add_argument("--input", type=Path, required=True, help="JSON object with complete, inputs and batches")
     many.add_argument("--output", type=Path)
+    estimate = commands.add_parser("api-estimate", help="Save an unapproved source-bound quote for cost review in the assistant conversation")
+    estimate.add_argument("--game-root", type=Path, required=True)
+    estimate.add_argument("--requests", default=".dazedtl/len-method/api-requests.json", help="Complete compiled request plan, relative to the game")
     importer = commands.add_parser("import-glossary", help="Merge reviewed names/terms; reject conflicting existing decisions")
     importer.add_argument("--game-root", type=Path, required=True)
     importer.add_argument("--input", type=Path, required=True)
@@ -47,8 +50,8 @@ def main(argv=None) -> int:
     git_inspect.add_argument("--game-root", type=Path, required=True)
     git_setup = commands.add_parser("git-setup", help="Create or reuse local original/translation baselines, preserving native game bytes")
     git_setup.add_argument("--game-root", type=Path, required=True)
-    git_setup.add_argument("--original", type=Path, help="Separate untranslated source if needed; fresh tasks default to the selected game")
-    git_setup.add_argument("--current-is-untranslated", action="store_true", help="Use the selected game when resuming preparation after verifying it is still untranslated")
+    git_setup.add_argument("--original", type=Path, help="Verified matching untranslated source when the selected game is already translated")
+    git_setup.add_argument("--current-is-untranslated", action="store_true", help="Agent attestation after checking the selected game is still untranslated; required when using it for a missing baseline")
     git_setup.add_argument("--version", help="Release label belonging to the starting game")
     scope = commands.add_parser("git-scope", help="Stage only reviewed patch files and align their untranslated original backup")
     scope.add_argument("--game-root", type=Path, required=True)
@@ -93,6 +96,17 @@ def main(argv=None) -> int:
             output.parent.mkdir(parents=True, exist_ok=True)
             _write_atomic(output, json.dumps(result, ensure_ascii=False, indent=2) + "\n")
             print(output)
+        elif args.command == "api-estimate":
+            from util.len_api import create_estimate, estimate_summary
+
+            if project.mode != "api":
+                raise ValueError("API estimates require API Batch Translation mode.")
+            result = create_estimate(project, args.requests)
+            output = project.workspace / "api-estimate.json"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _write_atomic(output, json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+            print(json.dumps({"estimate_file": str(output), "summary": estimate_summary(result),
+                              "estimate": result}, ensure_ascii=False, indent=2))
         elif args.command in {"progress", "progress-update"}:
             from util.len_progress import read_progress, update_progress
 

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import QSettings, QThread, QTimer, Qt, QUrl, pyqtSignal
+from PyQt5.QtCore import QSettings, QTimer, Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout,
@@ -15,26 +14,10 @@ from PyQt5.QtWidgets import (
 
 from gui.ui_components import PageHeader, SectionCard, make_action_button, make_page_layout, set_status_text
 from gui.workflow_components import DisclosureSection
-from util.len_translation import BUNDLED_SKILL, MODES, STAGES, LenProject, load_project, prepare_project
+from util.len_translation import BUNDLED_SKILL, MODES, LenProject, load_project, prepare_project
 from util.len_progress import PHASES, STATES, empty_progress, estimate_display, metric_display, read_progress
 from util.paths import APP_NAME, ORG_NAME
-from util.len_api import create_estimate, estimate_summary
 from util.project_preparation import rpgmaker_layout
-
-
-class LenEstimateWorker(QThread):
-    ready = pyqtSignal(object, object)
-    failed = pyqtSignal(str)
-
-    def __init__(self, project, parent=None):
-        super().__init__(parent)
-        self.project = project
-
-    def run(self):
-        try:
-            self.ready.emit(self.project, create_estimate(self.project))
-        except Exception as exc:
-            self.failed.emit(str(exc))
 
 
 class LenTranslationTab(QWidget):
@@ -45,8 +28,6 @@ class LenTranslationTab(QWidget):
         self._open_version_tracking = open_version_tracking
         self._open_api_settings = open_api_settings
         self._open_batch_history = open_batch_history
-        self._api_estimate = None
-        self._estimate_worker = None
         self._loaded_game = ""
         self._context_dialog = None
         self._references_dialog = None
@@ -76,7 +57,7 @@ class LenTranslationTab(QWidget):
         ))
 
         project_card = SectionCard(
-            "1. Choose the game and scope",
+            "1. Choose the game and options",
             "Your AI assistant follows the engine-specific playbook and uses the bundled tools. "
             "Choose the game’s root folder, including its executable and assets.",
         )
@@ -91,11 +72,6 @@ class LenTranslationTab(QWidget):
         folder_row.addWidget(self.game_edit, 1)
         folder_row.addWidget(browse)
         form.addRow("Game folder", folder_row)
-        self.stage_combo = QComboBox()
-        for key, title in STAGES.items():
-            self.stage_combo.addItem(title, key)
-        self.stage_combo.currentIndexChanged.connect(self._invalidate)
-        form.addRow("Task", self.stage_combo)
         self.mode_combo = QComboBox()
         for key, title in MODES.items():
             self.mode_combo.addItem(title, key)
@@ -129,36 +105,26 @@ class LenTranslationTab(QWidget):
         self.mode_explanation = QLabel()
         self.mode_explanation.setWordWrap(True)
         root.addWidget(self.mode_explanation)
-        self.api_card = SectionCard("API setup and estimate", "Uses the same saved provider and model as the API GUI.")
+        self.api_card = SectionCard("API settings", "Your assistant prepares the requests and reviews cost with you in the same conversation.")
         api_actions = QHBoxLayout()
         self.api_settings_button = make_action_button("API settings")
         self.api_settings_button.setEnabled(self._open_api_settings is not None)
         self.api_settings_button.clicked.connect(lambda: self._open_api_settings() if self._open_api_settings else None)
-        self.api_estimate_button = make_action_button("Estimate prepared requests")
-        self.api_estimate_button.clicked.connect(self._estimate_api)
         self.api_history_button = make_action_button("Batch history")
         self.api_history_button.setEnabled(self._open_batch_history is not None)
         self.api_history_button.clicked.connect(lambda: self._open_batch_history() if self._open_batch_history else None)
-        for button in (self.api_settings_button, self.api_estimate_button, self.api_history_button):
+        for button in (self.api_settings_button, self.api_history_button):
             api_actions.addWidget(button)
         self.api_card.add_layout(api_actions)
-        self.api_quote = QLabel()
-        self.api_quote.setTextFormat(Qt.PlainText)
-        self.api_quote.setWordWrap(True)
-        self.api_card.add_widget(self.api_quote)
-        self.api_accept = QCheckBox("I reviewed this estimate and want the API Batch Translation handoff")
-        self.api_accept.toggled.connect(self._refresh_mode)
-        self.api_card.add_widget(self.api_accept)
         root.addWidget(self.api_card)
 
         handoff_card = SectionCard(
-            "2. Copy the selected handoff",
+            "2. Copy one prompt",
             "Copy the prompt and paste it into your coding assistant with the game folder open. "
-            "Your assistant preserves the original and prepares the game. RPG Maker uses Workflow’s "
-            "formatting, GameUpdate, Git tracking, then speaker and game-guidance setup.",
+            "Your assistant handles setup, translation, QA and packaging, and resumes existing work automatically.",
         )
         actions = QHBoxLayout()
-        self.copy_button = make_action_button("Copy starting prompt", variant="primary")
+        self.copy_button = make_action_button("Copy translation prompt", variant="primary")
         self.copy_button.clicked.connect(self._copy)
         self.open_game_button = make_action_button("Open game folder")
         self.open_game_button.clicked.connect(lambda: self._open("game"))
@@ -214,7 +180,7 @@ class LenTranslationTab(QWidget):
         root.addWidget(self.guidance_section)
 
         evidence_card = SectionCard(
-            "3. Review progress and playtest results",
+            "3. Watch progress and results",
             "Counts come from saved translation records. Phase checkpoints are reported by your assistant. "
             "Translation, review and in-game QA are tracked separately.",
         )
@@ -274,16 +240,14 @@ class LenTranslationTab(QWidget):
 
     def _invalidate(self, *_):
         self._prepared = None
-        self._api_estimate = None
         if not hasattr(self, "copy_button"):
             return
-        self.api_accept.setChecked(False)
         self._refresh_mode()
         for button in (self.open_game_button, self.open_skill_button, self.open_workspace_button):
             button.setEnabled(False)
         self.preview.clear()
         self._refresh_progress()
-        message = "Copy the starting prompt for the selected task." if self._loaded_game else "Choose a game folder to get started."
+        message = "Copy one prompt to start or resume the translation." if self._loaded_game else "Choose a game folder to get started."
         set_status_text(self.status, message, "info")
 
     def _game_changed(self, *_):
@@ -306,11 +270,10 @@ class LenTranslationTab(QWidget):
             raise ValueError("Choose a game folder first.")
         return LenProject(
             Path(raw).expanduser().resolve(),
-            stage=self.stage_combo.currentData(), mode=self.mode_combo.currentData(),
+            mode=self.mode_combo.currentData(),
             include_images=self.images_check.isChecked(), instructions=self.instructions_edit.toPlainText(),
             include_glossary_base=self.base_check.isChecked(),
             install_forge=self.forge_check.isChecked(),
-            api_estimate={**self._api_estimate, "approved": self.api_accept.isChecked()} if self._api_estimate else None,
         )
 
     def _browse(self):
@@ -327,15 +290,12 @@ class LenTranslationTab(QWidget):
             if self._loaded_game == str(project.game_root):
                 self._refresh_mode()
                 return
-            self.stage_combo.setCurrentIndex(self.stage_combo.findData(project.stage))
             self.mode_combo.setCurrentIndex(self.mode_combo.findData(project.mode))
             self.images_check.setChecked(project.include_images)
             self.base_check.setChecked(project.include_glossary_base)
             self.forge_check.setChecked(project.install_forge)
             self.instructions_edit.setPlainText(project.instructions)
             self._loaded_game = str(project.game_root)
-            self._api_estimate = project.api_estimate
-            self.api_accept.setChecked(False)
             for button in (self.copy_button, self.review_button, self.references_button, self.git_button):
                 button.setEnabled(True)
             self._refresh_mode()
@@ -363,7 +323,7 @@ class LenTranslationTab(QWidget):
             for button in (self.open_game_button, self.open_skill_button, self.open_workspace_button):
                 button.setEnabled(True)
             self._refresh_progress()
-            set_status_text(self.status, "Starting prompt copied. Paste it into your coding assistant to begin or continue the selected task.", "success")
+            set_status_text(self.status, "Translation prompt copied. Paste it into your coding assistant; it handles every phase and updates progress here.", "success")
         except Exception as exc:
             set_status_text(self.status, f"Could not prepare the starting prompt: {exc}", "error")
         finally:
@@ -373,58 +333,15 @@ class LenTranslationTab(QWidget):
         layout = rpgmaker_layout(Path(self._loaded_game)) if self._loaded_game else None
         self.forge_check.setEnabled(bool(layout and layout["engine"] == "MVMZ"))
         api = self.mode_combo.currentData() == "api"
-        preparing = self.stage_combo.currentData() == "prepare"
         self.api_card.setVisible(api)
         self.mode_explanation.setText(
-            "API Batch Translation: prepare the extraction and prompts first, review the cost estimate here, then copy the API handoff. Preparation sends no translation requests."
+            "API Batch Translation: your assistant prepares the game, presents the cost for approval, "
+            "then handles translation, QA and delivery in the same conversation. Save your provider and model in API settings."
             if api else
-            "Agent / Sub Direct Translation: your coding assistant authors the translation. DazedTL sends no translation API requests; your assistant's usage limits still apply. Delegation follows your task instructions."
+            "Agent Translation: your coding assistant handles the whole workflow using its existing access. "
+            "DazedTL sends no translation API requests; your assistant's usage limits still apply."
         )
-        busy = self._estimate_worker is not None and self._estimate_worker.isRunning()
-        self.api_estimate_button.setEnabled(bool(self._loaded_game) and not busy)
-        self.api_accept.setEnabled(self._api_estimate is not None and not busy)
-        if self._api_estimate is None and not busy:
-            self.api_quote.setText("Estimate unavailable until extraction and guidance produce the complete request plan. Choose ‘Prepare extraction and guidance’ for the preparation-only prompt, then return here. No paid calls are authorized by that prompt.")
-        elif self._api_estimate is not None:
-            self.api_quote.setText(estimate_summary(self._api_estimate))
-        self.copy_button.setText("Copy preparation-only prompt" if preparing else "Copy API translation prompt" if api else "Copy direct translation prompt")
-        self.copy_button.setEnabled(bool(self._loaded_game) and not busy and
-                                    (not api or preparing or self._api_estimate is not None and self.api_accept.isChecked()))
-
-    def _estimate_api(self):
-        try:
-            project = replace(self._project(), api_estimate=None)
-            self._api_estimate = None
-            self.api_accept.setChecked(False)
-            self.api_quote.setText("Estimating the saved request plan. No translation requests are sent.")
-            worker = LenEstimateWorker(project, self)
-            self._estimate_worker = worker
-            worker.ready.connect(self._estimate_ready)
-            worker.failed.connect(self._estimate_failed)
-            worker.finished.connect(self._estimate_finished)
-            worker.start()
-            self._refresh_mode()
-        except (OSError, ValueError) as exc:
-            self._estimate_failed(str(exc))
-
-    def _estimate_ready(self, project, estimate):
-        if not self._loaded_game or replace(self._project(), api_estimate=None) != project:
-            return
-        self._api_estimate = estimate
-        self.api_accept.setChecked(False)
-        self._refresh_mode()
-
-    def _estimate_failed(self, message):
-        self._api_estimate = None
-        self.api_quote.setText("Could not estimate: " + message)
-        set_status_text(self.status, "Could not estimate: " + message, "error")
-
-    def _estimate_finished(self):
-        worker = self._estimate_worker
-        self._estimate_worker = None
-        if worker is not None:
-            worker.deleteLater()
-        self._refresh_mode()
+        self.copy_button.setEnabled(bool(self._loaded_game))
 
     def _review_context(self):
         from gui.translation_context_dialog import TranslationContextDialog

@@ -8,17 +8,20 @@ Use this tab to translate a whole game with an AI coding assistant. Len’s play
 engine detection, extraction, guidance, translation, fitting, injection, images,
 playtesting and building a local translation patch.
 
-1. Choose the game's root folder, task and image scope.
-2. Choose **Agent / Sub Direct Translation** or **API Batch Translation** before copying a prompt.
-3. For Direct, copy its starting prompt and paste it into your coding assistant with the game folder open.
-4. For API Batch, open **API Settings** to choose the provider/model.
-   If requests have not been prepared, choose preparation only and run that prompt first.
-   Return here for **Estimate prepared requests**, review the quote and accept it to enable the API translation prompt.
-5. Follow counted progress and remaining active-work estimates in the Len panel.
+1. Choose the game's root folder, **Agent Translation** or **API Batch Translation**, and any scope options.
+   API mode uses the provider/model saved in **API Settings**.
+2. Click **Copy translation prompt** and paste it into your coding assistant with the game folder open.
+   The skill starts or resumes the work automatically and handles every phase through local patch delivery.
+3. Follow counted progress and remaining active-work estimates in the Len panel.
    Use **View detailed log** for evidence or **Refresh progress** for an immediate update.
 
-One starting prompt includes setup. You do not need to copy guidance between tabs or run
-a separate setup prompt. **Optional: project tools and references** contains the shared
+In API mode, the assistant prepares requests and presents their cost in the same conversation.
+It obtains any missing spending approval before submission, then continues through collection and QA.
+There is no task selector, return trip for estimates or second translation prompt.
+The panel displays saved progress from the assistant; it does not keep an ended assistant session running.
+If interrupted, use the same prompt to resume from saved work.
+
+**Optional: project tools and references** contains the shared
 editors, reference translations and **Git version tracking** for this game.
 
 For RPG Maker, the assistant uses Workflow's preparation sequence: JSON formatting,

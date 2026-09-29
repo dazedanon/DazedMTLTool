@@ -1,6 +1,6 @@
 # Direct translation and efficient context preparation
 
-Use this for Agent / Sub Direct Translation and local request compilation in either mode.
+Use this for Agent Translation and local request compilation in either mode.
 Direct work runs through the coding assistant's existing access; no DazedTL provider client, API key or hosted image generation is needed.
 The user's instructions determine whether other agents may participate.
 Translation mode never overrides a request to work alone.

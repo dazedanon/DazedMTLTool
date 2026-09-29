@@ -219,6 +219,20 @@ class LenTranslationTests(unittest.TestCase):
             progress.write_text("Extraction reviewed; translation pending.\n")
             exercise_progress(self, project)
             saved_progress = (project.workspace / "progress.json").read_bytes()
+            # Old phase choices/GUI approvals must not make a copied prompt stop
+            # early or authorize an unknown new API bill. Keep all other options/work.
+            settings_file = project.workspace / "project.json"
+            current_settings = json.loads(settings_file.read_text())
+            for version in (1, 2):
+                for stage in ("translate", "prepare", "continue", "qa"):
+                    settings_file.write_text(json.dumps({**current_settings, "version": version,
+                                                         "stage": stage, "api_estimate": {"approved": True}}))
+                    self.assertEqual(load_project(game), project)
+            prepare_project(load_project(game), skill)
+            refreshed_settings = json.loads(settings_file.read_text())
+            self.assertNotIn("stage", refreshed_settings)
+            self.assertNotIn("api_estimate", refreshed_settings)
+            self.assertEqual((project.workspace / "progress.json").read_bytes(), saved_progress)
             overlays = game / ".dazedtl/skills"
             overlays.mkdir(exist_ok=True)
             for name, body in {"game": "Space opera.", "quirks": "Keep rhetorical questions.", "battle": "Short battle labels."}.items():
@@ -287,7 +301,7 @@ class LenTranslationTests(unittest.TestCase):
             unidentified = request_context(project, ["待って。"], speakers=[" "], source_context="レオンの前の台詞")
             self.assertEqual(unidentified["speakers"], [None])
             self.assertNotIn("レオン (Leon)", unidentified["glossary"])
-            revised = replace(project, stage="continue", mode="local", include_images=False, include_glossary_base=False)
+            revised = replace(project, mode="local", include_images=False, include_glossary_base=False)
             self.assertNotIn("魔法 (Magic)", request_context(revised, sources)["glossary"])
             (overlays / "quirks.md").write_text("Keep pauses.")
             updated = request_context(project, sources)
@@ -387,7 +401,7 @@ class LenTranslationTests(unittest.TestCase):
             game = root / "game"
             game.mkdir()
             project = LenProject(game, mode="api")
-            prepare_project(replace(project, stage="prepare"), make_skill(root / "skill"))
+            prepare_project(project, make_skill(root / "skill"))
             source = project.work_root / "sources.json"
             source.write_text('{"line":"鍵"}')
             batches = [{"id": "scene-a", "sources": {"a": "鍵"}, "speakers": {"a": "レオン"}},
@@ -402,8 +416,9 @@ class LenTranslationTests(unittest.TestCase):
             add_paired_reference(game, title="Earlier game", source_data=jp, translated_data=en)
             self.assertEqual([item["context"] for item in request_contexts(project, batches)],
                              [request_context(project, **{k: v for k, v in batch.items() if k != "id"}) for batch in batches])
-            with self.assertRaises(ValueError):
-                build_handoff(project)
+            # Copying the full workflow must work before extraction or a paid quote.
+            self.assertTrue(build_handoff(project))
+            self.assertEqual(load_project(game), project)
             plan = {"complete": True, "inputs": [source.relative_to(game).as_posix()], "batches": batches}
             compiled = compile_plan(project, plan)
             path = project.workspace / "api-requests.json"
@@ -419,10 +434,21 @@ class LenTranslationTests(unittest.TestCase):
                     validate_estimate(project, estimate)
                 estimate["approved"] = True
                 validate_estimate(project, estimate)
-                approved = replace(project, api_estimate=estimate)
                 with self.assertRaises(ValueError):
-                    validate_estimate(replace(approved, install_forge=False), estimate)
-                self.assertTrue(build_handoff(approved))
+                    validate_estimate(replace(project, install_forge=False), estimate)
+                # The assistant can quote the compiled plan without a GUI round trip.
+                from scripts.len_translation import main
+                output = StringIO()
+                with redirect_stdout(output):
+                    self.assertEqual(main(["api-estimate", "--game-root", str(game)]), 0)
+                quoted = json.loads(output.getvalue())
+                saved_quote = json.loads(Path(quoted["estimate_file"]).read_text())
+                self.assertEqual(quoted["estimate"], saved_quote)
+                self.assertEqual(saved_quote["request_sha256"], estimate["request_sha256"])
+                self.assertFalse(saved_quote["approved"])
+                with self.assertRaises(ValueError):
+                    validate_estimate(project, saved_quote)
+                self.assertTrue(build_handoff(project))
                 with self.assertRaises(ValueError):
                     validate_estimate(project, estimate, settings={**settings, "model": "different"})
                 source.write_text('{"line":"新しい鍵"}')

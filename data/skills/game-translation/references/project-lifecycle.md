@@ -1,7 +1,7 @@
 # Project lifecycle shared with DazedTL
 
 Perform these phases inside the one starting prompt. Read existing artifacts first
-on resume or QA. A preparation-only task completes discovery, source preservation,
+on resume or QA. An explicitly requested preparation-only run completes discovery, source preservation,
 Git setup, extraction and guidance, then stops before translation or injection.
 
 ## 1. Establish the source and local Git baseline
@@ -68,11 +68,11 @@ Git setup, extraction and guidance, then stops before translation or injection.
   The helper supplies `* -text` when no attributes file exists and keeps existing
   attributes intact. Check those existing rules against the engine before proceeding.
 - Run `git-setup --game-root <game> --version <label>` through that same application
-  script. Fresh tasks default to the selected folder as the original; use
-  `--original <source>` only when a different untranslated source is needed.
-  If resuming preparation and the current game remains untranslated, the agent can
-  add `--current-is-untranslated` after checking that fact; the task label alone does
-  not establish that translation occurred. An actual translated game without a
+  script. When creating a missing original baseline from the selected folder, the
+  agent must pass `--current-is-untranslated` after checking that fact. This is an
+  agent attestation, not another user confirmation. Existing baselines are reused
+  without this flag. Use `--original <source>` when a different untranslated source
+  is needed. An actual translated game without a
   suitable baseline still needs an untranslated source. Never call a known
   translation the original merely to bypass this requirement.
   Use a verified release label; when none exists, `initial-unversioned` labels a
@@ -148,7 +148,8 @@ Check extraction coverage independently of the extractor. Preserve uncertainty,
 placeholder/control-code contracts and reveal-sensitive identities.
 
 The setup phase's guidance-only edit boundary ends when that phase is complete.
-Continue into the selected task automatically; do not ask for another setup prompt.
+Continue through the remaining translation and delivery phases automatically, unless
+the user explicitly limited the scope; do not ask for another setup prompt.
 
 ## 4. Translate and resume from verified artifacts
 

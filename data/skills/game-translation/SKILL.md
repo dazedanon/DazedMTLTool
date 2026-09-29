@@ -13,6 +13,33 @@ description: >-
 End-to-end playbook for translating a Japanese game to English: **detect engine → extract player-facing text → translate behind a locked glossary + game bible → inject/patch → validate in-game**.
 The translation must preserve meaning and character voice in natural English, alongside complete text coverage, stable terminology, and intact game controls.
 
+## One prompt owns the whole run
+
+The default request is a complete local translation and patch delivery. The user selects
+the game and a few options, copies one prompt, and watches progress. Preparation,
+translation, review and delivery are internal phases, not tasks the user must select.
+Inspect saved status, source/translation stores, Git baselines, QA evidence and any
+persisted API jobs before deciding where to begin. Resume valid work automatically;
+repair missing or stale work without restarting completed phases. If the delivery is
+already current and verified, report its paths and evidence instead of retranslating it.
+
+Handle tools, backups, extraction, speaker mapping, references, glossary, game guidance,
+translation batches, scoped images, fitting, injection, targeted QA, checkpoint commits,
+packaging and progress reports yourself. Completing setup.md's guidance-only phase is
+the transition into translation, not a stopping point. Do not ask for another prompt,
+task selection, manual file transfer or permission to continue at routine phase boundaries.
+Explicitly narrower user instructions, such as preparation only or a targeted correction,
+still define the scope; a legacy project.json task label does not.
+
+Continue until the local delivery is verified or a concrete blocker needs user input.
+Ask only for missing information or authorization that materially blocks progress;
+finish independent work while waiting. In API mode, handle cost review in the same
+conversation and carry forward valid spending authorization. Do not ask the user to
+return to the app to estimate requests or copy a second prompt. Resume after the answer.
+When a session or environment limit forces a handoff, save exact next actions and current
+progress; the same starting prompt resumes the work. Do not promise background execution
+after the assistant session ends. Uploading and publishing remain separate requests.
+
 ## DazedTL shared integration
 
 Read `references/project-lifecycle.md` for the required source preservation, local Git
@@ -26,7 +53,7 @@ Use the live `git-scope` helper described in the lifecycle before patch checkpoi
 Read `references/progress-reporting.md` and maintain the compact progress panel after
 each saved batch or milestone, and at least every 10 minutes during active work. Export saved unit records and call the live
 `scripts/len_translation.py progress-update` helper; keep the narrative in `status.md`.
-The agent maintains this within the selected task without another user prompt.
+The agent maintains this throughout the run without another user prompt.
 For a fresh task, use the selected untranslated game as the initial source baseline.
 Normal preparation such as `TranslationUpdateCheck` does not make it an existing
 translation. Create any needed backup from that folder; do not demand a separately
@@ -126,21 +153,21 @@ equivalent source and injection sidecars in the separately backed-up workspace w
 
 ## Select the work mode before translation
 
-The handoff explicitly names **Agent / Sub Direct Translation** or **API Batch Translation**.
+The handoff explicitly names **Agent Translation** or **API Batch Translation**.
 Keep that choice visible in the opening update and resume notes.
 Direct work uses the coding assistant's access and plan limits; DazedTL makes no translation API calls.
-“Sub” in the mode name does not authorize spawning agents.
 Follow the user's delegation instructions and read `references/direct-workflow.md` for batching, context reuse and validation cadence.
 
 API Batch work reads `references/api-batch.md` first.
 Reuse the app's API Settings, pricing helpers and supported Batch backend.
-Preparation may extract, compile and measure locally; it must not submit requests or implement a provider driver before the preparation-only stopping point.
+Prepare extraction, shared guidance, engine adapters and request compilation locally before paid submission.
 A whole-job price remains unavailable until the complete planned request corpus exists; do not label missing prices as $0.
-Return to the Len tab to display and accept the estimate before copying an API translation handoff.
+Run the live `api-estimate` helper, present its source-bound quote in the conversation,
+and obtain any missing spending authorization before submitting the actual collected requests.
 Changed source, scope, guidance, references or API settings require a fresh estimate.
 Review the actual collected adapter requests before submission; a preliminary allowance is not a spending cap.
 
-Preparation-only work ends with the extraction, glossary, game bible, request plan and validation plan.
+Only an explicit preparation-only request ends with extraction, guidance, request plan and validation plan.
 For every mode, images follow the user's selected scope; finding Japanese art does not expand it.
 
 ## Age evidence in cartoony and stylized games
@@ -213,7 +240,7 @@ If you can't tell, run Detect It Easy (`tools/.NET/die/diec.exe`, a download lis
 ## Read only the relevant supporting references
 
 - `references/direct-workflow.md`: direct translation batching, bulk context compilation, compact lossless requests, caching and milestone validation.
-- `references/api-batch.md`: API preparation, saved request plan, GUI estimate/approval and supported provider execution.
+- `references/api-batch.md`: agent-managed API preparation, in-conversation cost review and supported provider execution.
 - `references/progress-reporting.md`: report schema, provisional/audited denominators, active time, bounded phase estimates and resume invalidation.
 - `references/project-lifecycle.md`: source baselines, runtime patch Git scope, checkpointing, backup and delivery.
 - `references/review-decisions.md`: disputed exclusions, source evidence, prior corrections, restored translations and visible omission counts.

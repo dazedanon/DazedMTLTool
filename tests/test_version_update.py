@@ -155,7 +155,7 @@ class GitVersionUpdateTests(unittest.TestCase):
             with redirect_stdout(output), patch.object(Path, "read_bytes", read_small_files):
                 # An updater-prepared game is still the default untranslated
                 # source. No separately supplied --original is required.
-                self.assertEqual(len_main(["git-setup", "--game-root", str(native), "--version", "1.00"]), 0)
+                self.assertEqual(len_main(["git-setup", "--game-root", str(native), "--version", "1.00", "--current-is-untranslated"]), 0)
             state = json.loads(output.getvalue())
             self.assertEqual(state["action"], "created")
             self.assertTrue(state["configured"])
@@ -187,7 +187,7 @@ class GitVersionUpdateTests(unittest.TestCase):
             self.assertEqual((cloned / "data.json").read_bytes(), metadata)
             # Local original/translation registration config does not clone;
             # reuse its existing remote-tracking original without fetching.
-            restored = setup_git(LenProject(cloned, stage="continue"))
+            restored = setup_git(LenProject(cloned))
             self.assertTrue(restored["configured"])
             self.assertTrue(restored["preserve_game_files"])
             self.assertEqual(restored["original_commit"], state["original_commit"])
@@ -236,7 +236,7 @@ class GitVersionUpdateTests(unittest.TestCase):
                 self.assertEqual((rpg / "data/System.json").read_bytes(), before_data)
                 self.assertFalse((rpg / "GameUpdate.bat").exists())
                 self.assertEqual(len_main(["rpgmaker-prep", "--game-root", str(rpg)]), 0)
-                self.assertEqual(len_main(["git-setup", "--game-root", str(rpg), "--version", "1.00"]), 0)
+                self.assertEqual(len_main(["git-setup", "--game-root", str(rpg), "--version", "1.00", "--current-is-untranslated"]), 0)
             source_blob = self.git(rpg, "show", "original:data/System.json")
             self.assertEqual(json.loads(source_blob), {"gameTitle": "元の題名"})
             self.assertEqual(source_blob, (rpg / "data/System.json").read_text())
@@ -255,7 +255,7 @@ class GitVersionUpdateTests(unittest.TestCase):
                 self.assertEqual(len_main(["rpgmaker-prep", "--game-root", str(rpg)]), 0)
                 install_forge.assert_not_called()
             self.assertEqual((rpg / "js/plugins/Forge_MZ.js").read_bytes(), forge_bytes)
-            self.assertEqual(setup_git(replace(project, stage="continue"))["action"], "reused")
+            self.assertEqual(setup_git(project)["action"], "reused")
             self.assertEqual(self.git(rpg, "rev-parse", "original"), original_commit)
             self.assertEqual(self.git(rpg, "show", "original:data/System.json"), source_blob)
             self.assertEqual(json.loads((rpg / "data/System.json").read_text())["gameTitle"], "English title")
@@ -1277,7 +1277,7 @@ class GitVersionUpdateTests(unittest.TestCase):
         self.git(self.translated, "add", ".")
         self.git(self.translated, "commit", "-m", "existing translation")
 
-        project = LenProject(self.translated, stage="continue")
+        project = LenProject(self.translated)
         head = self.git(self.translated, "rev-parse", "HEAD")
         with self.assertRaisesRegex(GitWorkflowError, "separate clean"):
             setup_git(project, original_game=self.translated, version="1.00")
@@ -1323,7 +1323,7 @@ class GitVersionUpdateTests(unittest.TestCase):
         # Resuming setup is not the same as resuming an injected translation.
         # A reviewed declaration permits the still-Japanese folder in this case.
         self.new.joinpath("game.txt").write_text("未翻訳の台詞。\n", encoding="utf-8")
-        preparation = LenProject(self.new, stage="continue")
+        preparation = LenProject(self.new)
         with self.assertRaisesRegex(GitWorkflowError, "Supply --original"):
             setup_git(preparation, version="1.03")
         self.assertFalse(self.new.joinpath(".git").exists())

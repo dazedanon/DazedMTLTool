@@ -1,19 +1,27 @@
 # Len’s Method integration
 
 Len’s Method shares Workflow's project guidance while a coding assistant carries out extraction, translation, fitting, injection and QA.
-Choose the game, task, image scope and translation mode before copying a prompt.
-**Agent / Sub Direct Translation** uses the coding assistant's access and plan limits, with no DazedTL translation API calls.
-The mode name does not itself authorize delegation.
-**API Batch Translation** uses the app's existing API Settings and supported Batch backend.
+Choose the game, translation mode and optional scope settings, then click **Copy translation prompt**.
+Paste it into a coding assistant with access to the game and DazedMTLTool folders.
+The skill handles setup, extraction, guidance, translation, images in scope, fitting, injection,
+targeted QA and local patch packaging in the same run. It checks existing artifacts and resumes
+valid work automatically. There is no task selector or separate preparation/continue/QA prompt.
+Use **Instructions** for game-specific requirements or an explicitly narrower request.
 
-API mode has a separate preflight card with **API Settings**, **Estimate prepared requests** and **Batch history**.
-If no complete source request plan exists, choose preparation only, run that prompt in the assistant and return to Len's Method for a quote.
-Preparation extracts and compiles locally; it does not call a translation provider.
-An unavailable quote is not a $0 price.
-The quote shows model/provider, request and unit counts, estimated input/output tokens, Batch cost, Live comparison and rates.
-Review and accept it before copying an API translation prompt.
-Changing source, shared guidance, references, compiler/templates, scope or API settings invalidates the estimate.
-A saved quote must be accepted again when reopening the game.
+**Agent Translation** uses the coding assistant's access and plan limits, with no DazedTL
+translation API calls. Delegation follows the user's instructions.
+**API Batch Translation** uses the app's saved API Settings and supported Batch backend.
+API Settings and Batch history remain accessible in the Len panel.
+The assistant prepares the full request plan, runs `api-estimate`, presents the cost in the
+conversation and obtains any missing spending authorization before paid submission. It then
+continues through collection, review and delivery without sending the user back for a second prompt.
+Copying a prompt is available before preparation or a quote; it does not approve an unknown bill.
+
+The quote shows model/provider, request and unit counts, estimated input/output tokens, Batch cost,
+Live comparison and rates. Changing source, shared guidance, references, compiler/templates, scope
+or API settings invalidates the estimate. Valid authorization can carry across a resumed session
+when its dependencies and authorized scope still match. Legacy saved GUI approvals are not
+imported as authorization for new work.
 
 The estimate reuses application pricing rules and a 2.5× source-token output allowance, with no assumed cache savings.
 Rates can come from the pricing catalog or configured/built-in fallbacks; verify the displayed rates for the selected model.
@@ -22,17 +30,22 @@ The actual engine adapter must collect and review its final provider requests be
 Len does not automatically submit arbitrary engine request plans through the existing Translation tab; compatible adapters reuse that backend and persisted Batch lifecycle.
 Unsupported Batch routes cannot silently fall back to Live translation.
 
+The assistant owns progress updates and phase transitions. The panel displays saved reports; it does
+not launch or keep an external assistant running. If a session ends, paste the same prompt to resume
+from verified checkpoints. Missing access, unavailable native runtime checks or an unapproved API
+cost may still need user input; routine implementation and phase management belong to the skill.
+
 Copying a prompt prepares or refreshes the workspace and makes no translation API calls.
-The assistant performs source preservation, local Git setup, investigation and validated checkpoints within the selected task.
+The assistant performs source preservation, local Git setup, investigation and validated checkpoints within the same run.
 Git operations run when the assistant starts, rather than when the prompt is copied.
 
-RPG Maker projects use Workflow's preparation sequence within that same starting task:
+RPG Maker projects use Workflow's preparation sequence within that same run:
 format game JSON, format `plugins.js`, install GameUpdate and its MV/MZ startup check,
 then establish Git tracking and run the RPG Maker speaker/guidance setup.
 
 ```bash
 python scripts/len_translation.py rpgmaker-prep --game-root '/path/to/game'
-python scripts/len_translation.py git-setup --game-root '/path/to/game' --version '1.00'
+python scripts/len_translation.py git-setup --game-root '/path/to/game' --version '1.00' --current-is-untranslated
 ```
 
 The formatters and installation helpers are shared with Workflow. Saved Config
@@ -67,7 +80,7 @@ or reuse existing baselines and branch names:
 
 ```bash
 python scripts/len_translation.py git-status --game-root '/path/to/game'
-python scripts/len_translation.py git-setup --game-root '/path/to/game' --version '1.00'
+python scripts/len_translation.py git-setup --game-root '/path/to/game' --version '1.00' --current-is-untranslated
 ```
 
 For fresh tasks, the selected game folder is the original by default. Normal DazedTL
@@ -77,8 +90,9 @@ The assistant records those additions, keeps them intact and creates a backup fr
 selected folder when needed. It does not require a pre-existing second copy or claim
 that a prepared snapshot is byte-identical to a separately verified vendor archive.
 
-When continuing preparation on a still-untranslated game, the assistant can use
-`--current-is-untranslated`. Actual translated games without a suitable baseline need
+Before creating a missing baseline from the selected folder, the assistant checks that it is
+still untranslated and passes `--current-is-untranslated`. Existing baselines are reused without
+that flag. This verification belongs to the assistant and does not require another user prompt. Actual translated games without a suitable baseline need
 `--original '/path/to/untranslated-source'`. The assistant checks for concrete evidence
 of prior injected translation or an unsuitable source, rather than treating every
 tool-generated file or English label as a reason to reject the selected folder. Setup
@@ -199,10 +213,11 @@ inside new dialogue that has no complete-line match in any prequel. The shipped
 
 Each game’s `.dazedtl/len-method/` contains:
 
-- `project.json`: local scope settings, restored when reopening the game.
+- `project.json`: local mode and scope settings, restored when reopening the game. Legacy task labels are retired.
 - `setup.md`: current shared setup and investigation instructions.
 - `context.json`: current assembled system prompt, glossary and reference registry.
-- `handoff.md`: scoped instructions and paths for the coding assistant.
+- `handoff.md`: the complete starting/resume prompt and paths for the coding assistant.
+- `api-requests.json` / `api-estimate.json`: agent-maintained API request plan and source-bound quote, when applicable.
 - `progress.json`: counted progress, reported phase checkpoints and artifact fingerprints.
 - `status.md`: detailed progress and evidence, available under **View detailed log**.
 - `work/`: local authored tools, translation records and QA/provenance notes.
@@ -291,7 +306,16 @@ python scripts/len_translation.py context-many --game-root '/path/to/game' \
 The input has `complete`, game-relative `inputs` and `batches`; each batch has a unique `id`, `sources`, and optional `speakers`, `instruction_key` and `source_context`.
 See `references/direct-workflow.md` for the full example.
 The compiler reads shared guidance/reference data once per operation, verifies dependencies again and produces the same contexts as single-batch calls.
-The output binds source inputs, scope, payloads and compiler/templates for estimate invalidation.
+The output binds source inputs, scope, payloads and compiler/templates for estimate invalidation. In API mode, the assistant then runs:
+
+```bash
+python scripts/len_translation.py api-estimate --game-root '/path/to/game'
+```
+
+This writes an unapproved `api-estimate.json` and prints its summary and structured quote.
+The assistant reviews the actual adapter request cost, records the user's spending authorization,
+and calls `util.len_api.validate_estimate` with the authorized quote immediately before submission.
+See the bundled skill's `references/api-batch.md` for the full in-conversation procedure.
 Only an audited complete plan can be priced as the whole API job.
 
 The importer accepts Len’s `names` entries with `en`, or legacy `characters` entries with

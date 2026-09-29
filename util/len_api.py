@@ -163,7 +163,7 @@ def create_estimate(project, relative=".dazedtl/len-method/api-requests.json", *
 
 def validate_estimate(project, estimate, *, settings=None):
     if not isinstance(estimate, dict) or estimate.get("schema") != 1 or estimate.get("approved") is not True:
-        raise ValueError("Review and accept the API estimate before copying the translation prompt, or choose preparation only.")
+        raise ValueError("Review and authorize the API estimate before paid submission.")
     if estimate.get("scope_sha256") != _scope(project):
         raise ValueError("Project scope changed. Review a new API estimate.")
     settings = api_settings() if settings is None else settings

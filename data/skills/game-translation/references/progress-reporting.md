@@ -40,7 +40,7 @@ report template in the pipeline if needed, updating checkpoints as work advances
   that a process is currently running.
 - `phases`: those same keys with `pending`, `active`, `complete`, `blocked`, or
   `out_of_scope`. Several phases can be active when work overlaps; `phase` identifies the current focus and defaults to active.
-  Set preparation-only tasks' later phases out of scope. Report QA/playtesting and
+  Set later phases out of scope only for an explicit preparation-only request. Report QA/playtesting and
   patch checkpoints from actual evidence, never from a translation count.
 - `text`, `images`: game-relative paths to saved unit exports below, or null before
   measurement. Omit images when the project's image scope is disabled.
