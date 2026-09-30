@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import stat
 import tempfile
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 # Product identity (QSettings / desktop / window titles).
@@ -31,6 +33,43 @@ ENV_PATH = PROJECT_ROOT / ".env"
 ICON_PATH = PROJECT_ROOT / "assets" / "icon.png"
 TRANSLATION_CONTEXTS_PATH = DATA_DIR / "translation_contexts.json"
 SFX_REFERENCE_PATH = DATA_DIR / "sfx_reference" / "j_ono.json"
+_RUNTIME_DATA_PROFILE = ContextVar("dazedtl_runtime_data_profile", default=None)
+
+
+@contextmanager
+def runtime_data_profile(profile):
+    """Scope desktop overrides to one operation without changing Qt defaults."""
+    token = _RUNTIME_DATA_PROFILE.set(Path(profile).resolve() if profile else None)
+    try:
+        yield
+    finally:
+        _RUNTIME_DATA_PROFILE.reset(token)
+
+
+def runtime_data_file(default: Path, profile=None) -> Path:
+    """Resolve an optional profile copy of a bundled file at read time.
+
+    Frozen run files live outside DATA_DIR and are never redirected. Child
+    processes may explicitly select a desktop profile through their environment.
+    """
+    default = Path(default)
+    selected = profile or _RUNTIME_DATA_PROFILE.get() or os.getenv("DAZEDTL_DESKTOP_WORKSPACE")
+    if not selected:
+        return default
+    try:
+        relative = default.relative_to(DATA_DIR)
+    except ValueError:
+        return default
+    root = Path(selected).resolve()
+    candidate = root / "shared-data" / relative
+    for part in (candidate, *candidate.parents):
+        if part == root:
+            break
+        if part.is_symlink():
+            raise ValueError("Shared instructions cannot use symbolic links.")
+    if candidate.exists() and not candidate.is_file():
+        raise ValueError("Shared instructions must be regular files.")
+    return candidate if candidate.is_file() else default
 # Per-game API overlays. Root-level skills/ from older versions are migrated.
 GAME_SKILLS_RELATIVE = GAME_METADATA_RELATIVE / "skills"
 LEGACY_GAME_SKILLS_RELATIVE = Path("skills")
@@ -280,7 +319,7 @@ migrate_prompt_to_skills()
 
 def glossary_base_path() -> Path:
     """Return the shipped base glossary."""
-    return GLOSSARY_BASE_PATH
+    return runtime_data_file(GLOSSARY_BASE_PATH)
 
 
 def _game_glossary_paths(

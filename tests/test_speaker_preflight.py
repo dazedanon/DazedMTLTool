@@ -520,6 +520,7 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
     def test_automatic_speaker_preflight_cases(self):
         cases = (
             ("RPG Maker workflow already collected", "RPG Maker MV/MZ", {}, False),
+            ("Plugin files are not RPG Maker event JSON", "RPG Maker Plugin", {"batch_mode": True}, False),
             ("RPG Maker fresh batch", "RPG Maker MV/MZ", {"batch_mode": True}, True),
             (
                 "RPG Maker batch resume",

@@ -1,0 +1,68 @@
+name: Desktop package validation
+
+# Kept manual until the replacement's parity gates are complete. This workflow
+# builds and tests locally on each runner; it does not publish applications.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: Electron / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      DAZEDTL_DESKTOP_ALLOW_LIVE: "0"
+      PYTHON_DOTENV_DISABLED: "1"
+      DAZEDTL_TEST_OFFLINE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build and source-test dependencies
+        run: |
+          python -m venv .venv
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            build_python="$PWD/.venv/Scripts/python.exe"
+          else
+            build_python="$PWD/.venv/bin/python"
+          fi
+          "$build_python" -m pip install -r desktop/requirements-build.txt
+          "$build_python" -m pip install --require-hashes -r desktop/requirements-runtime.lock
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Build local application package
+        working-directory: desktop
+        run: |
+          npm run test:updates
+          npm run package
+      - name: Linux source and packaged UI regression
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        run: |
+          xvfb-run -a npm test
+          xvfb-run -a npm run test:packaged
+          xvfb-run -a npm run test:updates:packaged
+      - name: Windows and macOS source and packaged UI regression
+        if: runner.os != 'Linux'
+        working-directory: desktop
+        run: |
+          npm test
+          npm run test:packaged
+          npm run test:updates:packaged

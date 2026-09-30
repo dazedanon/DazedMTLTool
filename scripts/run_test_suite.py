@@ -60,6 +60,7 @@ EXTENDED_TEST_PREFIXES = (
 # are valuable integration coverage, not lightweight unit/component tests.
 INTEGRATION_TEST_MODULES = (
     "test_evaluation",
+    "test_desktop_backend",
 )
 INTEGRATION_TEST_PREFIXES = (
     "test_version_update.GitVersionUpdateTests.",

@@ -200,39 +200,33 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertEqual(tab.model_combo.currentText(), "gemini-3.1-pro")
         auto_save.assert_called_once_with()
 
-    def test_explicit_official_openai_url_filters_non_chat_models(self) -> None:
-        worker = ModelFetchThread(
-            "openai-secret", "https://api.openai.com/v1"
+    def test_model_catalog_routes_and_filters_only_the_configured_provider(self) -> None:
+        from util.model_catalog import ModelCatalog
+        from unittest.mock import Mock
+        cases = (
+            ("https://api.openai.com/v1", ["text-embedding-3-large", "gpt-5.6-terra", "o4-mini", "dall-e-3"], ["gpt-5.6-terra", "o4-mini"]),
+            ("https://provider.example/v1", ["provider-chat", "provider-reasoner"], ["provider-chat", "provider-reasoner"]),
         )
-        models = SimpleNamespace(list=lambda: [
-            SimpleNamespace(id="text-embedding-3-large"),
-            SimpleNamespace(id="gpt-5.6-terra"),
-            SimpleNamespace(id="o4-mini"),
-            SimpleNamespace(id="dall-e-3"),
-        ])
-        with patch(
-            "openai.OpenAI",
-            return_value=SimpleNamespace(models=models),
-        ):
-            fetched = worker._fetch_openai()
-
-        self.assertEqual(fetched, ["gpt-5.6-terra", "o4-mini"])
-
-    def test_custom_openai_compatible_url_keeps_provider_models(self) -> None:
-        worker = ModelFetchThread(
-            "custom-secret", "https://provider.example/v1"
-        )
-        models = SimpleNamespace(list=lambda: [
-            SimpleNamespace(id="provider-chat"),
-            SimpleNamespace(id="provider-reasoner"),
-        ])
-        with patch(
-            "openai.OpenAI",
-            return_value=SimpleNamespace(models=models),
-        ):
-            fetched = worker._fetch_openai()
-
-        self.assertEqual(fetched, ["provider-chat", "provider-reasoner"])
+        for endpoint, models, expected in cases:
+            with self.subTest(endpoint=endpoint):
+                worker = ModelCatalog("fixture-secret", endpoint)
+                client = SimpleNamespace(models=SimpleNamespace(list=lambda: [SimpleNamespace(id=name) for name in models]))
+                with patch("openai.OpenAI", return_value=client):
+                    self.assertEqual(worker._fetch_openai(), expected)
+        for endpoint, provider in (("", "openai"), ("https://api.anthropic.com/v1", "anthropic"),
+                                   ("https://generativelanguage.googleapis.com/v1beta/openai/", "gemini"),
+                                   ("https://anthropic.proxy.example/v1", "openai")):
+            with self.subTest(route=endpoint):
+                worker = ModelCatalog("fixture-secret", endpoint)
+                results = []
+                worker.models_fetched.connect(results.append)
+                fetchers = {name: Mock(return_value=[name + "-model"]) for name in ("openai", "anthropic", "gemini")}
+                for name, fetcher in fetchers.items():
+                    setattr(worker, "_fetch_" + name, fetcher)
+                worker.run()
+                self.assertEqual(results, [[provider + "-model"]])
+                for name, fetcher in fetchers.items():
+                    self.assertEqual(fetcher.call_count, int(name == provider))
 
     def test_manual_model_refresh_preserves_custom_model(self) -> None:
         tab = self.make_tab()

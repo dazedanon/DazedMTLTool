@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import csv
 import json
 import tempfile
@@ -45,70 +46,49 @@ def _mock_live_translation_response(_provider, params, **_kwargs):
 
 
 class EvaluationAtomicWriteTests(unittest.TestCase):
-    def test_atomic_json_write_retries_transient_replace_lock(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "checkpoint.json"
-            real_replace = evaluation.os.replace
-            replace_attempts = 0
+    def test_atomic_json_write_retries_only_transient_replace_locks(self):
+        for transient in (True, False):
+            with self.subTest(transient=transient), tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary) / "checkpoint.json"
+                real_replace = evaluation.os.replace
+                attempts = 0
 
-            def intermittently_locked(source, destination):
-                nonlocal replace_attempts
-                replace_attempts += 1
-                if replace_attempts < 3:
-                    raise PermissionError("checkpoint is temporarily locked")
-                return real_replace(source, destination)
+                def replace(source, destination):
+                    nonlocal attempts
+                    attempts += 1
+                    if not transient:
+                        raise OSError("disk error")
+                    if attempts < 3:
+                        raise PermissionError("checkpoint is temporarily locked")
+                    return real_replace(source, destination)
 
-            with (
-                mock.patch.object(
-                    evaluation.os, "replace", side_effect=intermittently_locked
-                ),
-                mock.patch.object(evaluation.time, "sleep") as sleep,
-            ):
-                evaluation._atomic_write_json(path, {"finished": 46})
+                with mock.patch.object(evaluation.os, "replace", side_effect=replace), mock.patch.object(evaluation.time, "sleep") as sleep:
+                    if transient:
+                        evaluation._atomic_write_json(path, {"finished": 46})
+                    else:
+                        with self.assertRaisesRegex(OSError, "disk error"):
+                            evaluation._atomic_write_json(path, {"finished": 46})
+                if transient:
+                    self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"finished": 46})
+                    self.assertEqual(attempts, 3)
+                    self.assertEqual([call.args[0] for call in sleep.call_args_list], [0.05, 0.1])
+                    self.assertEqual(list(Path(temporary).iterdir()), [path])
+                else:
+                    self.assertEqual(attempts, 1)
+                    sleep.assert_not_called()
+                    self.assertEqual(list(Path(temporary).iterdir()), [])
 
-            self.assertEqual(
-                json.loads(path.read_text(encoding="utf-8")), {"finished": 46}
-            )
-            self.assertEqual(replace_attempts, 3)
-            self.assertEqual(
-                [call.args[0] for call in sleep.call_args_list], [0.05, 0.1]
-            )
-            self.assertEqual(list(Path(temporary).iterdir()), [path])
-
-    def test_atomic_json_write_does_not_retry_unrelated_os_error(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "checkpoint.json"
-            with (
-                mock.patch.object(
-                    evaluation.os, "replace", side_effect=OSError("disk error")
-                ),
-                mock.patch.object(evaluation.time, "sleep") as sleep,
-            ):
-                with self.assertRaisesRegex(OSError, "disk error"):
-                    evaluation._atomic_write_json(path, {"finished": 46})
-
-            sleep.assert_not_called()
-            self.assertEqual(list(Path(temporary).iterdir()), [])
-
-    def test_submit_lock_rejects_a_second_submitter(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = Path(temporary)
-            with evaluation._evaluation_submit_lock(run_dir):
-                with self.assertRaisesRegex(RuntimeError, "already being submitted"):
-                    with evaluation._evaluation_submit_lock(run_dir):
-                        pass
-                with self.assertRaisesRegex(RuntimeError, "already being submitted"):
-                    evaluation.export_paired_review(run_dir)
-
-    def test_refresh_uses_the_same_run_mutation_lock(self):
+    def test_submit_refresh_and_review_share_the_run_mutation_lock(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary) / "run-one"
             with evaluation._evaluation_submit_lock(run_dir):
                 with self.assertRaisesRegex(RuntimeError, "already being submitted"):
-                    evaluation.refresh_run(run_dir, {})
-
+                    with evaluation._evaluation_submit_lock(run_dir):
+                        pass
+                for label, action in (('export', lambda: evaluation.export_paired_review(run_dir)), ('refresh', lambda: evaluation.refresh_run(run_dir, {}))):
+                    with self.subTest(action=label), self.assertRaisesRegex(RuntimeError, "already being submitted"):
+                        action()
             self.assertFalse((run_dir / ".submit.lock").exists())
-
 
 class EvaluationSourceFolderTests(unittest.TestCase):
     def test_event_capture_uses_selected_glossary_without_leaking_runtime_state(self):
@@ -154,61 +134,38 @@ class EvaluationSourceFolderTests(unittest.TestCase):
                 mvmz._speakerCache.clear()
                 mvmz._speakerCache.update(original_cache)
 
-    def test_rpg_maker_mz_game_root_resolves_data_folder(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            game = Path(temporary)
-            data = game / "data"
-            data.mkdir()
-            (game / "game.rmmzproject").write_text("RPGMZ 1.0.0", encoding="utf-8")
-            (data / "Items.json").write_text("[]", encoding="utf-8")
+    def test_supported_game_roots_and_direct_json_folders_resolve_data(self):
+        cases = (
+            ("data", "game.rmmzproject", "RPGMZ 1.0.0", "Items.json", "[]"),
+            ("www/data", "Game.rpgproject", "RPGMV 1.6.2", "Map001.json", "{}"),
+            (".", None, None, "CommonEvents.json", "[]"),
+        )
+        for relative, marker, version, filename, content in cases:
+            with self.subTest(layout=relative), tempfile.TemporaryDirectory() as temporary:
+                game = Path(temporary)
+                data = game / relative
+                data.mkdir(parents=True, exist_ok=True)
+                if marker:
+                    (game / marker).write_text(version, encoding="utf-8")
+                (data / filename).write_text(content, encoding="utf-8")
+                self.assertEqual(evaluation.resolve_rpgmaker_data_dir(game), data.resolve())
 
-            self.assertEqual(evaluation.resolve_rpgmaker_data_dir(game), data.resolve())
-
-    def test_rpg_maker_mv_game_root_resolves_www_data_folder(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            game = Path(temporary)
-            data = game / "www" / "data"
-            data.mkdir(parents=True)
-            (game / "Game.rpgproject").write_text("RPGMV 1.6.2", encoding="utf-8")
-            (data / "Map001.json").write_text("{}", encoding="utf-8")
-
-            self.assertEqual(evaluation.resolve_rpgmaker_data_dir(game), data.resolve())
-
-    def test_direct_json_folder_remains_supported(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            data = Path(temporary)
-            (data / "CommonEvents.json").write_text("[]", encoding="utf-8")
-
-            self.assertEqual(evaluation.resolve_rpgmaker_data_dir(data), data.resolve())
-
-    def test_direct_data_folder_resolves_its_own_game_context(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            game = Path(temporary) / "game"
-            data = game / "www" / "data"
-            data.mkdir(parents=True)
-            (data / "Map001.json").write_text("{}", encoding="utf-8")
-
-            self.assertEqual(
-                evaluation.resolve_evaluation_game_root(data), game.resolve()
-            )
-
-    def test_extracted_files_use_configured_workflow_game_context(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            extracted = root / "files"
-            extracted.mkdir()
-            (extracted / "Items.json").write_text("[]", encoding="utf-8")
-            game = root / "game"
-            data = game / "data"
-            data.mkdir(parents=True)
-            (data / "Items.json").write_text("[]", encoding="utf-8")
-
-            self.assertEqual(
-                evaluation.resolve_evaluation_game_root(
-                    extracted, fallback_game_root=game
-                ),
-                game.resolve(),
-            )
+    def test_data_and_extracted_folders_resolve_their_game_context(self):
+        for extracted in (False, True):
+            with self.subTest(extracted=extracted), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                game = root / "game"
+                data = game / ("data" if extracted else "www/data")
+                data.mkdir(parents=True)
+                (data / ("Items.json" if extracted else "Map001.json")).write_text("[]" if extracted else "{}", encoding="utf-8")
+                source = data
+                kwargs = {}
+                if extracted:
+                    source = root / "files"
+                    source.mkdir()
+                    (source / "Items.json").write_text("[]", encoding="utf-8")
+                    kwargs['fallback_game_root'] = game
+                self.assertEqual(evaluation.resolve_evaluation_game_root(source, **kwargs), game.resolve())
 
     def test_unrelated_folder_gets_actionable_error(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -1029,27 +986,20 @@ class EvaluationManifestTests(unittest.TestCase):
             evaluation._no_cache_cost(candidate, usage), 1.6
         )
 
-    def test_default_estimates_stay_below_safe_budget(self):
+    def test_default_estimates_respect_budgets_and_exclude_claude_prewarm(self):
         for candidate in evaluation.DEFAULT_CANDIDATES:
-            estimate = evaluation.estimate_candidate(self.manifest, candidate)
-            self.assertGreater(estimate["cost_usd"], 0)
-            self.assertLess(estimate["cost_usd"], 8.0)
-            self.assertLess(estimate["maximum_cost_usd"], 10.0)
-
-    def test_claude_batch_estimate_excludes_cache_write_and_prewarm(self):
-        candidate = dict(evaluation.DEFAULT_CANDIDATES[2])
-        estimate = evaluation.estimate_candidate(self.manifest, candidate)
-        rates = estimate["rates"]
-        expected_ceiling = (
-            estimate["input_tokens"] * 1.25 * rates["input"]
-            + len(self.manifest["executions"])
-            * evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST
-            * rates["output"]
-        ) / 1_000_000
-
-        self.assertAlmostEqual(estimate["maximum_cost_usd"], expected_ceiling)
-        self.assertNotIn("prewarm_tokens", estimate)
-        self.assertNotIn("prewarm_cost_usd", estimate)
+            with self.subTest(candidate=candidate['model']):
+                estimate = evaluation.estimate_candidate(self.manifest, candidate)
+                self.assertGreater(estimate["cost_usd"], 0)
+                self.assertLess(estimate["cost_usd"], 8.0)
+                self.assertLess(estimate["maximum_cost_usd"], 10.0)
+                if candidate == evaluation.DEFAULT_CANDIDATES[2]:
+                    rates = estimate['rates']
+                    expected_ceiling = (estimate['input_tokens'] * 1.25 * rates['input']
+                        + len(self.manifest['executions']) * evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST * rates['output']) / 1_000_000
+                    self.assertAlmostEqual(estimate['maximum_cost_usd'], expected_ceiling)
+                    self.assertNotIn('prewarm_tokens', estimate)
+                    self.assertNotIn('prewarm_cost_usd', estimate)
 
     def test_live_estimate_uses_undiscounted_rates(self):
         batch_candidate = dict(evaluation.DEFAULT_CANDIDATES[0])
@@ -1181,25 +1131,12 @@ class EvaluationManifestTests(unittest.TestCase):
                 evaluation.LIVE_REQUEST_MAX_ATTEMPTS,
             )
 
-    def test_failed_live_candidate_does_not_hide_submitted_batch(self):
-        candidates = [
-            {"status": "failed", "execution": "live"},
-            {"status": "submitted", "execution": "batch"},
-        ]
-
-        self.assertEqual(
-            evaluation._run_completion_status(candidates), "submitted"
-        )
-
-    def test_running_live_candidate_keeps_mixed_run_actionable(self):
-        candidates = [
-            {"status": "submitted", "execution": "batch"},
-            {"status": "running_live", "execution": "live"},
-        ]
-
-        self.assertEqual(
-            evaluation._run_completion_status(candidates), "partially_submitted"
-        )
+    def test_live_candidate_states_keep_submitted_batches_actionable(self):
+        for live_status, expected in (("failed", "submitted"), ("running_live", "partially_submitted")):
+            with self.subTest(live_status=live_status):
+                candidates = [{"status": live_status, "execution": "live"}, {"status": "submitted", "execution": "batch"}]
+                for ordered in (candidates, candidates[::-1]):
+                    self.assertEqual(evaluation._run_completion_status(ordered), expected)
 
     def test_refresh_finishes_mixed_live_and_batch_candidates(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -2138,101 +2075,44 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertIn("0/", failed["failure_reason"])
             self.assertEqual(upsert.call_args_list[-1].kwargs["status"], "failed")
 
-    def test_load_run_normalizes_legacy_all_error_completion(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = Path(temporary)
-            evaluation._atomic_write_json(run_dir / "manifest.json", {
-                "segments": [],
-            })
-            evaluation._atomic_write_json(run_dir / "state.json", {
-                "run_id": "legacy-failed-test",
-                "status": "completed",
-                "candidates": [{
-                    "id": "candidate-1",
-                    "label": "Broken model",
-                    "status": "completed",
-                    "summary": {
-                        "expected_requests": 3,
-                        "received_requests": 0,
-                        "provider_errors": [
-                            ["eval-1", "invalid"],
-                            ["eval-2", "invalid"],
-                            ["eval-3", "invalid"],
-                        ],
-                    },
-                }],
-            })
+    def test_load_run_normalizes_legacy_failures_without_hiding_pollable_candidates(self):
+        for pollable in (False, True):
+            with self.subTest(pollable=pollable), tempfile.TemporaryDirectory() as temporary:
+                run_dir = Path(temporary)
+                errors = [["eval-1", "invalid"], ["eval-2", "invalid"], ["eval-3", "invalid"]]
+                candidates = [{"id": "candidate-1", "label": "Broken model", "status": "completed",
+                               "summary": {"expected_requests": 2 if pollable else 3, "received_requests": 0,
+                                           "provider_errors": [] if pollable else errors}}]
+                if pollable:
+                    candidates.append({"id": "candidate-2", "status": "submitted"})
+                evaluation._atomic_write_json(run_dir / "manifest.json", {"segments": []})
+                evaluation._atomic_write_json(run_dir / "state.json", {
+                    "run_id": "legacy-failed-test", "status": "submitted" if pollable else "completed", "candidates": candidates})
+                state, _manifest = evaluation.load_run(run_dir)
+                self.assertEqual(state['status'], 'submitted' if pollable else 'failed')
+                self.assertEqual(state['candidates'][0]['status'], 'failed')
+                if pollable:
+                    self.assertEqual(state['candidates'][1]['status'], 'submitted')
+                else:
+                    self.assertIn('0/3', state['candidates'][0]['failure_reason'])
 
-            state, _manifest = evaluation.load_run(run_dir)
-
-            self.assertEqual(state["status"], "failed")
-            self.assertEqual(state["candidates"][0]["status"], "failed")
-            self.assertIn("0/3", state["candidates"][0]["failure_reason"])
-
-    def test_load_run_rejects_changed_hashed_manifest(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = Path(temporary)
-            manifest = {
-                "version": evaluation.EVALUATION_VERSION,
-                "created_at": "2026-08-01T12:00:00+00:00",
-                "segments": [],
-            }
-            manifest["manifest_sha256"] = evaluation._manifest_digest(manifest)
-            state = {
-                "run_id": "changed-manifest-test",
-                "status": "prepared",
-                "manifest_sha256": manifest["manifest_sha256"],
-                "candidates": [],
-            }
-            manifest["segments"] = [{"id": "unexpected-change"}]
-            evaluation._atomic_write_json(run_dir / "manifest.json", manifest)
-            evaluation._atomic_write_json(run_dir / "state.json", state)
-
-            with self.assertRaisesRegex(ValueError, "integrity check failed"):
-                evaluation.load_run(run_dir)
-
-    def test_load_run_rejects_hashless_current_version_manifest(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = Path(temporary)
-            evaluation._atomic_write_json(run_dir / "manifest.json", {
-                "version": evaluation.EVALUATION_VERSION,
-                "segments": [],
-            })
-            evaluation._atomic_write_json(run_dir / "state.json", {
-                "version": evaluation.EVALUATION_VERSION,
-                "run_id": "hashless-modern-run",
-                "status": "prepared",
-                "candidates": [],
-            })
-
-            with self.assertRaisesRegex(ValueError, "missing its saved manifest hash"):
-                evaluation.load_run(run_dir)
-
-    def test_load_run_keeps_pollable_state_when_another_candidate_failed(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = Path(temporary)
-            evaluation._atomic_write_json(run_dir / "manifest.json", {})
-            evaluation._atomic_write_json(run_dir / "state.json", {
-                "run_id": "mixed-state-test",
-                "status": "submitted",
-                "candidates": [
-                    {
-                        "id": "candidate-1",
-                        "status": "completed",
-                        "summary": {
-                            "expected_requests": 2,
-                            "received_requests": 0,
-                            "provider_errors": [],
-                        },
-                    },
-                    {"id": "candidate-2", "status": "submitted"},
-                ],
-            })
-
-            state, _manifest = evaluation.load_run(run_dir)
-
-            self.assertEqual(state["candidates"][0]["status"], "failed")
-            self.assertEqual(state["status"], "submitted")
+    def test_load_run_rejects_changed_or_missing_manifest_hash(self):
+        for changed, message in ((True, "integrity check failed"), (False, "missing its saved manifest hash")):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as temporary:
+                run_dir = Path(temporary)
+                manifest = {"version": evaluation.EVALUATION_VERSION, "segments": []}
+                state = {"run_id": "manifest-integrity-test", "status": "prepared", "candidates": []}
+                if changed:
+                    manifest["created_at"] = "2026-08-01T12:00:00+00:00"
+                    manifest["manifest_sha256"] = evaluation._manifest_digest(manifest)
+                    state["manifest_sha256"] = manifest["manifest_sha256"]
+                    manifest["segments"] = [{"id": "unexpected-change"}]
+                else:
+                    state["version"] = evaluation.EVALUATION_VERSION
+                evaluation._atomic_write_json(run_dir / "manifest.json", manifest)
+                evaluation._atomic_write_json(run_dir / "state.json", state)
+                with self.assertRaisesRegex(ValueError, message):
+                    evaluation.load_run(run_dir)
 
     def test_submitted_evaluation_jobs_are_registered_in_shared_history(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -2846,24 +2726,22 @@ class BlindReviewTests(unittest.TestCase):
                 self.assertEqual(points, expected)
                 self.assertEqual(sum(points.values()), 3)
 
-    def test_export_rejects_result_file_shared_by_two_candidates(self):
+    def test_export_rejects_shared_or_wrongly_owned_result_files(self):
         state_path = self.run_dir / "state.json"
         state = evaluation._read_json(state_path)
-        state["candidates"][1]["result_file"] = state["candidates"][0]["result_file"]
-        evaluation._atomic_write_json(state_path, state)
-
-        with self.assertRaisesRegex(ValueError, "share the same result file"):
-            evaluation.export_blind_review(self.run_dir)
-
-    def test_export_rejects_result_owned_by_another_candidate(self):
-        state = evaluation._read_json(self.run_dir / "state.json")
         result_path = self.run_dir / state["candidates"][0]["result_file"]
         result = evaluation._read_json(result_path)
-        result["candidate_id"] = state["candidates"][1]["id"]
-        evaluation._atomic_write_json(result_path, result)
-
-        with self.assertRaisesRegex(ValueError, "wrong candidate id"):
-            evaluation.export_blind_review(self.run_dir)
+        for shared, message in ((True, "share the same result file"), (False, "wrong candidate id")):
+            with self.subTest(shared=shared):
+                changed_state, changed_result = copy.deepcopy(state), copy.deepcopy(result)
+                if shared:
+                    changed_state["candidates"][1]["result_file"] = state["candidates"][0]["result_file"]
+                else:
+                    changed_result["candidate_id"] = state["candidates"][1]["id"]
+                evaluation._atomic_write_json(state_path, changed_state)
+                evaluation._atomic_write_json(result_path, changed_result)
+                with self.assertRaisesRegex(ValueError, message):
+                    evaluation.export_blind_review(self.run_dir)
 
     def test_export_randomizes_labels_and_import_resolves_hidden_ranking(self):
         review_path = evaluation.export_blind_review(
@@ -2991,6 +2869,16 @@ class BlindReviewTests(unittest.TestCase):
         self.assertTrue(
             sample["lines"][0]["outputs"]["candidate-2"]["missing"]
         )
+        matches = evaluation.paired_review.comparison_sample_matches
+        self.assertTrue(matches(sample, 'problems', 'invalid-but-visible'))
+        reserved = {**sample, 'paired_holdout_locked': True}
+        self.assertFalse(matches(reserved, 'available'))
+        self.assertFalse(matches(reserved, 'all', 'invalid-but-visible'))
+        self.assertTrue(matches(reserved, 'all', sample['sources'][0]))
+        reviewed = {**sample, 'review': {'overall': [['candidate-1', 'candidate-2']], 'notes': 'Read in context'}}
+        self.assertTrue(matches(reviewed, 'ties', 'context'))
+        self.assertTrue(matches(reviewed, 'notes'))
+        self.assertFalse(matches(reviewed, 'unreviewed'))
         paired_cases.check_coverage(self)
 
     def test_import_rejects_blank_review_without_overwriting_existing_review(self):
@@ -3023,6 +2911,7 @@ class BlindReviewTests(unittest.TestCase):
             ("source", json.dumps(["rewritten source"]), "source text changed"),
             ("A", json.dumps(["rewritten candidate"]), "candidate text"),
             ("segment_ids", json.dumps(["other-segment"]), "segment IDs changed"),
+            ("line_count", "10", "Protected line count changed"),
             ("context", json.dumps({"history": []}), "context changed"),
             ("identical_candidates", json.dumps([["A", "B"]]), "identical candidates changed"),
         ):
@@ -3105,20 +2994,6 @@ class BlindReviewTests(unittest.TestCase):
         paired_cases.check_contract(self)
         paired_cases.check_statistics(self)
 
-    def test_import_rejects_changed_sample_line_count(self):
-        review_path = evaluation.export_blind_review(self.run_dir)
-        with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
-            rows = list(csv.DictReader(stream))
-        rows[0]["line_count"] = "10"
-        self._fill_rankings(rows[0], "A>B>C>D")
-        with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
-            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
-            writer.writeheader()
-            writer.writerows(rows)
-
-        with self.assertRaisesRegex(ValueError, "Protected line count changed"):
-            evaluation.import_blind_review(self.run_dir, review_path)
-
     def test_import_ranking_averages_tied_positions_without_inflation(self):
         review_path = evaluation.export_blind_review(self.run_dir)
         with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
@@ -3145,32 +3020,22 @@ class BlindReviewTests(unittest.TestCase):
 
         self._check_identical_output_ties()
 
-    def test_import_rejects_incomplete_or_duplicate_ranking(self):
+    def test_import_requires_complete_unique_rankings_for_every_quality(self):
         review_path = evaluation.export_blind_review(self.run_dir)
         with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
-            rows = list(csv.DictReader(stream))
-        self._fill_rankings(rows[0], "A>B>B>D")
-        with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
-            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
-            writer.writeheader()
-            writer.writerows(rows)
-
-        with self.assertRaisesRegex(ValueError, "use every label exactly once"):
-            evaluation.import_blind_review(self.run_dir, review_path)
-
-    def test_import_requires_every_quality_ranking(self):
-        review_path = evaluation.export_blind_review(self.run_dir)
-        with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
-            rows = list(csv.DictReader(stream))
-        self._fill_rankings(rows[0], "A>B>C>D")
-        rows[0]["glossary_prompt_ranking"] = ""
-        with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
-            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
-            writer.writeheader()
-            writer.writerows(rows)
-
-        with self.assertRaisesRegex(ValueError, "Missing glossary_prompt_ranking"):
-            evaluation.import_blind_review(self.run_dir, review_path)
+            original = list(csv.DictReader(stream))
+        for duplicate, message in ((True, "use every label exactly once"), (False, "Missing glossary_prompt_ranking")):
+            with self.subTest(duplicate=duplicate):
+                rows = copy.deepcopy(original)
+                self._fill_rankings(rows[0], "A>B>B>D" if duplicate else "A>B>C>D")
+                if not duplicate:
+                    rows[0]["glossary_prompt_ranking"] = ""
+                with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
+                    writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+                    writer.writeheader()
+                    writer.writerows(rows)
+                with self.assertRaisesRegex(ValueError, message):
+                    evaluation.import_blind_review(self.run_dir, review_path)
 
     def test_import_accepts_legacy_winner_csv(self):
         review_path = evaluation.export_blind_review(self.run_dir)

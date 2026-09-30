@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-from util.paths import SKILLS_DIR
+from util.paths import SKILLS_DIR, runtime_data_file
 from util.rpgmaker_markers import SUPPORTED_CODE408_MARKERS
 
 _ENGINE_MARKERS = {
@@ -73,7 +73,7 @@ def build_known_speakers_context(
 
 
 def _read_skill_file(name: str) -> str:
-    path = SKILLS_DIR / name
+    path = runtime_data_file(SKILLS_DIR / name)
     if not path.is_file():
         raise FileNotFoundError(f"Skill file missing: {path}")
     return path.read_text(encoding="utf-8")
@@ -169,7 +169,7 @@ def load_walkthrough_skill(game_root: str | Path, engine: str) -> str:
     if not engine_name:
         raise ValueError("An engine hint is required for the walkthrough skill")
 
-    path = SKILLS_DIR / _WALKTHROUGH_SKILL_RELATIVE
+    path = runtime_data_file(SKILLS_DIR / _WALKTHROUGH_SKILL_RELATIVE)
     if not path.is_file():
         raise FileNotFoundError(f"Skill file missing: {path}")
     prompt = path.read_text(encoding="utf-8")
@@ -192,7 +192,7 @@ def load_generic_project_setup(game_root: str | Path) -> str:
     if not root:
         raise ValueError("A project root is required for generic setup")
 
-    path = SKILLS_DIR / _GENERIC_SETUP_SKILL_RELATIVE
+    path = runtime_data_file(SKILLS_DIR / _GENERIC_SETUP_SKILL_RELATIVE)
     if not path.is_file():
         raise FileNotFoundError(f"Skill file missing: {path}")
     prompt = path.read_text(encoding="utf-8")

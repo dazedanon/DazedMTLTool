@@ -14,7 +14,7 @@ from pathlib import Path
 import re
 import unicodedata
 
-from util.paths import SFX_REFERENCE_PATH
+from util.paths import SFX_REFERENCE_PATH, runtime_data_file
 
 
 MAX_MATCHED_ENTRIES = 12
@@ -210,7 +210,7 @@ def _load_cached(path_text: str) -> SfxReference:
 
 
 def load_sfx_reference(path: str | Path | None = None) -> SfxReference:
-    resolved = Path(path or SFX_REFERENCE_PATH).resolve()
+    resolved = Path(path or runtime_data_file(SFX_REFERENCE_PATH)).resolve()
     return _load_cached(str(resolved))
 
 

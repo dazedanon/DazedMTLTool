@@ -18,7 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 def main() -> int:
     print(
         "RPG Maker workflow action harness: "
-        "49 control routes + disposable handler contracts"
+        "53 control routes + disposable handler contracts"
     )
     suite = unittest.defaultTestLoader.loadTestsFromName(
         "tests.test_workflow_actions"

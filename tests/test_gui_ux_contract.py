@@ -363,6 +363,24 @@ class GUIUXContractTests(unittest.TestCase):
             self.assertEqual(content_changes, [])
             guide.close()
 
+            # The Electron guide renders the same local assets without
+            # admitting executable markup or remote image requests.
+            from desktop.backend.guide import GuideHTML
+            with patch("desktop.backend.guide.HELP_DIR", help_dir):
+                rendered = GuideHTML({"extra.md": "extra"})
+                rendered.feed('<p onclick="bad()">Readable</p><script>bad()</script>'
+                              '<img src="https://example.invalid/track.png">'
+                              '<img src="images/choose-project.png" onerror="bad()">'
+                              '<a href="extra.md#section">Continue</a>'
+                              '<a href="https://example.invalid/help">Help</a>'
+                              '<a href="javascript:bad()">Blocked</a>')
+            html = "".join(rendered.output)
+            self.assertIn("data:image/png;base64,", html)
+            self.assertIn('href="guide:extra#section"', html)
+            self.assertEqual(rendered.external, {"https://example.invalid/help"})
+            for forbidden in ("onclick", "onerror", "<script", "javascript:", "track.png", "bad()"):
+                self.assertNotIn(forbidden, html)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,6 @@ Configuration Tab - Handles environment variables, global settings, and engine c
 
 import os
 from pathlib import Path
-from urllib.parse import urlsplit
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLineEdit,
     QSpinBox, QDoubleSpinBox, QComboBox, QPushButton, QGroupBox,
@@ -21,117 +20,25 @@ from gui.wolf_tab import WolfTab
 from gui.csv_tab import CSVTab
 from gui.srpg_tab import SRPGTab
 from util import api_keys as api_key_vault
-from util.api_errors import concise_api_error
+from util.model_catalog import API_URL_PRESETS, ModelCatalogCore
 from gui.theme import COLORS, Geometry, Spacing
 from gui.ui_components import PageHeader, configure_action_button, set_status_text
 
 
-API_URL_PRESETS = (
-    ("OpenAI", "https://api.openai.com/v1"),
-    ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
-    ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-    ("DeepSeek", "https://api.deepseek.com/v1/"),
-    ("Mistral", "https://api.mistral.ai/v1/"),
-    ("Nvidia", "https://integrate.api.nvidia.com/v1/"),
-    ("OpenRouter", "https://openrouter.ai/api/v1"),
-)
 
 
-class ModelFetchThread(QThread):
-    """Background thread that fetches model lists from OpenAI, Anthropic, or Gemini."""
+class ModelFetchThread(QThread, ModelCatalogCore):
+    """Qt adapter for the shared provider model catalog."""
     models_fetched = pyqtSignal(list)
     fetch_error = pyqtSignal(str)
 
-    # Fallback list shown when no API key is set or a fetch fails
-    DEFAULTS = [
-        "gpt-5.6-sol", "gpt-5.6-terra", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini",
-        "o3", "o4-mini",
-        "claude-sonnet-5", "claude-opus-4-5", "claude-sonnet-4-6",
-        "claude-sonnet-4-5", "claude-haiku-4-5",
-        "gemini-3.6-flash", "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro",
-        "deepseek-chat",
-        "mistral-medium-3-5",  # Free-mode recommendation; stable family alias
-    ]
-
     def __init__(self, api_key, api_url, parent=None, provider=None):
-        super().__init__(parent)
-        self.api_key = api_key
-        self.api_url = api_url.strip()
-        self.provider = (provider or "").strip().lower()
+        QThread.__init__(self, parent)
+        self.initialize(api_key, api_url, provider)
 
     def run(self):
-        models = []
-        errors = []
-        _url = self.api_url.lower()
-        # Only attempt each provider's fetcher when the configured URL matches.
-        # Avoids sending a DeepSeek (or other) key to Anthropic and getting a
-        # spurious 401 authentication error.
-        provider_fetchers = {
-            "openai": self._fetch_openai,
-            "anthropic": self._fetch_anthropic,
-            "gemini": self._fetch_gemini,
-        }
-        if self.provider:
-            fetcher = provider_fetchers.get(self.provider)
-            if fetcher is None:
-                self.fetch_error.emit(
-                    f"Unsupported model-list provider: {self.provider}"
-                )
-                return
-            fetchers = [fetcher]
-        else:
-            fetchers = [self._fetch_openai]
-            if not _url or "anthropic" in _url:
-                fetchers.append(self._fetch_anthropic)
-            if not _url or "googleapis" in _url or "gemini" in _url:
-                fetchers.append(self._fetch_gemini)
-        for fetcher in fetchers:
-            try:
-                models.extend(fetcher())
-            except Exception as exc:
-                errors.append(concise_api_error(exc))
-        if models:
-            self.models_fetched.emit(sorted(set(models)))
-        else:
-            self.fetch_error.emit("\n".join(errors))
+        ModelCatalogCore.run(self)
 
-    def _fetch_openai(self):
-        import openai
-        # The SDK requires a non-empty value even when a local server ignores
-        # authentication entirely.
-        kwargs = {"api_key": self.api_key or "not-needed"}
-        if self.api_url:
-            kwargs["base_url"] = self.api_url
-        client = openai.OpenAI(**kwargs)
-        all_models = [m.id for m in client.models.list()]
-        # When using a custom URL (non-OpenAI provider like DeepSeek), return all
-        # model IDs unfiltered. An explicitly configured official OpenAI URL is
-        # still OpenAI and must retain the chat-model filter.
-        hostname = urlsplit(self.api_url).hostname if self.api_url else ""
-        if hostname and hostname.lower() != "api.openai.com":
-            return sorted(all_models)
-        prefixes = ("gpt-", "o1", "o2", "o3", "o4", "chatgpt")
-        return sorted(m for m in all_models if any(m.lower().startswith(p) for p in prefixes))
-
-    def _fetch_anthropic(self):
-        import anthropic
-        kwargs = {"api_key": self.api_key}
-        if self.api_url:
-            base_url = self.api_url.rstrip("/")
-            if "api.anthropic.com" in base_url.lower() and base_url.endswith("/v1"):
-                base_url = base_url[:-3]
-            kwargs["base_url"] = base_url
-        client = anthropic.Anthropic(**kwargs)
-        return sorted(m.id for m in client.models.list(limit=100))
-
-    def _fetch_gemini(self):
-        import openai
-        base = self.api_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
-        client = openai.OpenAI(api_key=self.api_key, base_url=base)
-        return sorted(
-            m.id for m in client.models.list()
-            if "gemini" in m.id.lower()
-        )
 
 
 def create_section_header(title):

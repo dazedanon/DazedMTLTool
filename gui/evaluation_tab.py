@@ -3802,56 +3802,11 @@ class EvaluationTab(QWidget):
         return str(stratum or "Uncategorized").replace("_", " ").title()
 
     def _comparison_sample_matches(self, sample: dict) -> bool:
-        scope = self._paired_evidence_scope
-        if scope:
-            records = (sample.get("paired_review") or {}).get("comparisons", [])
-            assessments = (sample.get("paired_review") or {}).get("assessments", [])
-            if scope.get("opponent"):
-                if not any(r["pool"] == scope["pool"] and {r["left"], r["right"]} == {scope["candidate"], scope["opponent"]} for r in records):
-                    return False
-            elif not any(r["pool"] == scope["pool"] and r["candidate"] == scope["candidate"] for r in assessments):
-                return False
-        selected_filter = str(self.comparison_filter.currentData() or "all")
-        if selected_filter == "available" and sample.get("paired_holdout_locked"):
-            return False
-        review = sample.get("review")
-        v3 = sample.get("paired_review")
-        if v3 and self.review_mode.currentData() == "paired":
-            if selected_filter == "reviewed" and not any(r["status"] == "judged" for r in v3["comparisons"]):
-                return False
-            if selected_filter == "ties" and paired.sample_status(v3) not in ("Equivalent quality", "Identical outputs"):
-                return False
-            review = {"notes": "\n".join(r.get("notes", "") for r in v3["comparisons"]),
-                      "overall": [["equivalent", "equivalent"]]} if v3["comparisons"] else None
-        if selected_filter == "reviewed" and not review:
-            return False
-        if selected_filter == "follow_up" and not sample.get("human_follow_up"):
-            return False
-        if selected_filter == "ties" and not (
-            review and any(len(tier) > 1 for tier in review.get("overall") or [])
-        ):
-            return False
-        if selected_filter == "notes" and not (
-            review and str(review.get("notes") or "").strip()
-        ):
-            return False
-        if selected_filter == "problems" and not sample.get("has_problems"):
-            return False
-        query = self.comparison_search.text().strip().casefold()
-        if not query:
-            return True
-        values = [
-            sample.get("id", ""), sample.get("scene_id", ""),
-            sample.get("stratum", ""), *(sample.get("sources") or []),
-            str((review or {}).get("notes") or ""),
-        ]
-        for line in sample.get("lines") or []:
-            if not sample.get("paired_holdout_locked"):
-                values.extend(
-                output.get("translation", "")
-                for output in (line.get("outputs") or {}).values()
-                )
-        return query in "\n".join(str(value) for value in values).casefold()
+        return paired.comparison_sample_matches(
+            sample, str(self.comparison_filter.currentData() or "all"),
+            self.comparison_search.text(), mode=self.review_mode.currentData(),
+            scope=self._paired_evidence_scope,
+        )
 
     def _refresh_comparison_sample_list(self, *_args):
         if self._comparison_data is None:

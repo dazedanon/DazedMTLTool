@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 
 from util.len_translation import LenProject, request_contexts, shared_context, _reference_subset
@@ -22,7 +23,11 @@ def _canonical(value):
 def api_settings() -> dict:
     """Read the same saved configuration as the API GUI without exporting keys."""
     from dotenv import dotenv_values
-    values = dotenv_values(DATA_DIR.parent / ".env")
+    if os.environ.get("DAZEDTL_DESKTOP_WORKSPACE"):
+        from desktop.backend.cli_environment import public_values
+        values = public_values(os.environ["DAZEDTL_DESKTOP_WORKSPACE"])
+    else:
+        values = dotenv_values(DATA_DIR.parent / ".env")
     # Do not copy the complete environment, key vault, or raw URL into a prompt.
     return {key: str(values.get(key) or default).strip() for key, default in
             (("model", ""), ("api", ""), ("API_PROVIDER", "openai"))}

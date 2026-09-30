@@ -419,6 +419,31 @@ class LenTranslationTests(unittest.TestCase):
             # Copying the full workflow must work before extraction or a paid quote.
             self.assertTrue(build_handoff(project))
             self.assertEqual(load_project(game), project)
+            # Desktop helpers must quote the active profile endpoint, and keep
+            # its private credential out of both settings summaries and handoffs.
+            from desktop.backend.settings import SettingsStore
+            from desktop.backend.cli_environment import configure
+            from util import api_keys
+            from util.len_api import api_settings
+            workspace = root / "desktop-profile"
+            workspace.mkdir()
+            store = SettingsStore(workspace)
+            from desktop.backend.project import atomic_json
+            from desktop.backend.settings import validate_values
+            atomic_json(store.path, {"version": 1, "revision": 0, "engines": {},
+                                    "values": validate_values({"model": "fixture-model", "api": "https://unused.invalid/v1"})})
+            api_keys.upsert_key("Desktop", "private-fixture-key", endpoint="https://fixture.invalid/v1", path=store.vault_path)
+            api_keys.set_active("Desktop", store.vault_path)
+            with patch.dict(os.environ, {"DAZEDTL_DESKTOP_WORKSPACE": str(workspace)}), patch.object(api_keys, "API_KEYS_PATH", store.vault_path):
+                configure(workspace)
+                profile_settings = api_settings()
+                self.assertEqual(profile_settings, {"model": "fixture-model", "api": "https://fixture.invalid/v1", "API_PROVIDER": "openai"})
+                self.assertEqual(os.environ["key"], "private-fixture-key")
+                self.assertEqual(os.environ["PYTHON_DOTENV_DISABLED"], "1")
+                prompt = build_handoff(project, desktop_workspace=workspace)
+                self.assertIn(json.dumps(str(workspace)), prompt)
+                self.assertNotIn("private-fixture-key", prompt)
+                self.assertNotIn("fixture.invalid", prompt)
             plan = {"complete": True, "inputs": [source.relative_to(game).as_posix()], "batches": batches}
             compiled = compile_plan(project, plan)
             path = project.workspace / "api-requests.json"

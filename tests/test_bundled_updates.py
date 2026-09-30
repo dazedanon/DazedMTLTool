@@ -87,6 +87,9 @@ _SHIPPED_DATA_FILES = (
     "data/sfx_reference/j_ono.json",
     "data/sfx_reference/LICENSE.md",
     "data/sfx_reference/SOURCE.md",
+    "data/tokenizers/9b5ad71b2ce5302211f9c61530b329a4922fc6a4",
+    "data/tokenizers/README.md",
+    "data/tokenizers/LICENSE.txt",
 )
 
 

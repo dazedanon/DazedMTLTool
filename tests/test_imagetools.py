@@ -191,12 +191,14 @@ class JobTests(unittest.TestCase):
         entry = job.find("a.png")
         entry.blocks = [block("こんにちは世界", 10, 10, 200, 20)]
         entry.blocks[0].lines = [Line("こんにちは世界", Box.from_xywh(10, 10, 200, 20))]
+        entry.strokes = [{"tool": "paint", "points": [[4, 5]], "size": 3, "color": "#123456"}]
         entry.status = CONFIRMED
         job.save()
 
         reloaded = Job.load(self.root)
         again = reloaded.find("a.png")
         self.assertEqual(again.status, CONFIRMED)
+        self.assertEqual(again.strokes, entry.strokes)
         self.assertEqual(again.blocks[0].source_text, "こんにちは世界")
         self.assertEqual(again.blocks[0].lines[0].text, "こんにちは世界")
 

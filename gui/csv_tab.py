@@ -277,57 +277,22 @@ class CSVTab(QWidget):
         main_layout.addLayout(button_layout)
         self.setLayout(main_layout)
     
+    def _apply_preset(self, name):
+        from util.engine_options import ENGINE_PRESETS
+        self.disconnect_auto_apply()
+        self.set_config({**self.get_config(), **ENGINE_PRESETS["csv"][name]})
+        self.connect_auto_apply()
+        self.apply_to_module(show_messages=False)
+
     def apply_preset_tpp(self):
-        """Apply Translator++ preset."""
-        self.disconnect_auto_apply()
-        self.source_column_spin.setValue(1)  # Display as 1-based
-        self.target_column_spin.setValue(2)
-        self.speaker_column_spin.setValue(0)  # 0 = None
-        self.skip_header_cb.setChecked(True)
-        self.use_target_if_not_empty_cb.setChecked(True)
-        self.skip_if_target_translated_cb.setChecked(False)
-        self.write_next_column_cb.setChecked(False)
-        self.parse_name_tags_cb.setChecked(False)
-        self.parse_m_markers_cb.setChecked(False)
-        self.remove_furigana_cb.setChecked(False)
-        self.skip_comment_rows_cb.setChecked(False)
-        self.connect_auto_apply()
-        self.apply_to_module(show_messages=False)
-    
+        self._apply_preset("Translator++")
+
     def apply_preset_simple(self):
-        """Apply simple two-column preset."""
-        self.disconnect_auto_apply()
-        self.source_column_spin.setValue(1)  # Display as 1-based
-        self.target_column_spin.setValue(2)
-        self.speaker_column_spin.setValue(0)  # 0 = None
-        self.skip_header_cb.setChecked(False)
-        self.use_target_if_not_empty_cb.setChecked(False)
-        self.skip_if_target_translated_cb.setChecked(False)
-        self.write_next_column_cb.setChecked(False)
-        self.parse_name_tags_cb.setChecked(False)
-        self.parse_m_markers_cb.setChecked(False)
-        self.remove_furigana_cb.setChecked(False)
-        self.skip_comment_rows_cb.setChecked(False)
-        self.connect_auto_apply()
-        self.apply_to_module(show_messages=False)
-    
+        self._apply_preset("Simple two-column")
+
     def apply_preset_speaker(self):
-        """Apply speaker & text preset (like old format 4)."""
-        self.disconnect_auto_apply()
-        self.source_column_spin.setValue(10)  # Display as 1-based (was 9)
-        self.target_column_spin.setValue(10)
-        self.speaker_column_spin.setValue(3)  # Display as 1-based (was 2, 0=None so 3=col2)
-        self.skip_header_cb.setChecked(False)
-        self.use_target_if_not_empty_cb.setChecked(False)
-        self.skip_if_target_translated_cb.setChecked(False)
-        self.write_next_column_cb.setChecked(False)
-        self.parse_name_tags_cb.setChecked(False)
-        self.parse_m_markers_cb.setChecked(False)
-        self.remove_furigana_cb.setChecked(True)
-        self.skip_comment_rows_cb.setChecked(False)
-        self.connect_auto_apply()
-        self.apply_to_module(show_messages=False)
-    
+        self._apply_preset("Speaker & text")
+
     def reset_to_defaults(self):
         """Reset all settings to default values."""
         self.disconnect_auto_apply()

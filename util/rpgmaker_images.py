@@ -585,3 +585,74 @@ def encrypt_assets(
     except Exception as exc:
         result.errors.append(f"Runtime image cleanup: {exc}")
     return result
+
+
+def inspect_workflow(game_root: str | Path) -> dict:
+    """Return lightweight MV/MZ image-workflow readiness details."""
+    from util.paths import game_glossary_path
+
+    root = Path(game_root).expanduser().resolve()
+    report = {
+        "root": root,
+        "ok": False,
+        "error": "",
+        "runtime": 0,
+        "encrypted": 0,
+        "editable": 0,
+        "misplaced": 0,
+        # Readiness checks must not migrate guidance or rewrite .gitignore.
+        # Project detection owns that state transition and reports conflicts.
+        "vocab": game_glossary_path(root, migrate=False),
+        "editable_root": None,
+        "key_ok": None,
+    }
+    try:
+        from util.rpgmaker_images import (
+            editable_workspace_root,
+            read_encryption_key,
+            resolve_content_root,
+            scan_image_assets,
+        )
+
+        content_root = resolve_content_root(root)
+        workspace = editable_workspace_root(root)
+        expected_root = workspace / content_root.relative_to(root) / "img"
+        assets = scan_image_assets(root)
+        encrypted = sum(asset.has_encrypted for asset in assets)
+        report.update(
+            {
+                "ok": True,
+                "runtime": sum(
+                    asset.has_encrypted or asset.has_runtime_plain for asset in assets
+                ),
+                "encrypted": encrypted,
+                "editable": sum(asset.has_plain for asset in assets),
+                "editable_root": expected_root,
+            }
+        )
+        if encrypted:
+            try:
+                read_encryption_key(root)
+                report["key_ok"] = True
+            except Exception:
+                report["key_ok"] = False
+
+        if workspace.is_dir():
+            misplaced = 0
+            backup_root = workspace / "backups"
+            for path in workspace.rglob("*"):
+                if not path.is_file() or path.suffix.casefold() != ".png":
+                    continue
+                try:
+                    path.relative_to(backup_root)
+                    continue
+                except ValueError:
+                    pass
+                try:
+                    path.relative_to(expected_root)
+                except ValueError:
+                    misplaced += 1
+            report["misplaced"] = misplaced
+    except Exception as exc:
+        report["error"] = str(exc)
+    return report

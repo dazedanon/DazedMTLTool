@@ -57,6 +57,8 @@ def run_handler(project_root, module_name, filename, estimate_only):
     # Add project root to path
     project_root = Path(project_root)
     sys.path.insert(0, str(project_root))
+    # The job workspace may be separate from the installed engine code.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
     try:
         # Refresh global config first, then restore the active game's portable
@@ -72,72 +74,10 @@ def run_handler(project_root, module_name, filename, estimate_only):
         # Change to project directory
         os.chdir(str(project_root))
         
-        # Import the appropriate module and get handler
-        handler = None
-        if "RPG Maker MV/MZ" in module_name:
-            from modules.rpgmakermvmz import handleMVMZ
-            handler = handleMVMZ
-        elif "CSV" in module_name:
-            from modules.csv import handleCSV
-            handler = handleCSV
-        elif "Tyrano" in module_name:
-            from modules.tyrano import handleTyrano
-            handler = handleTyrano
-        elif "Kirikiri" in module_name:
-            from modules.kirikiri import handleKirikiri
-            handler = handleKirikiri
-        elif "JSON" in module_name:
-            from modules.json import handleJSON
-            handler = handleJSON
-        elif "Lune" in module_name:
-            from modules.lune import handleLune
-            handler = handleLune
-        elif "Yuris" in module_name:
-            from modules.yuris import handleYuris
-            handler = handleYuris
-        elif "NScript" in module_name:
-            from modules.nscript import handleOnscripter
-            handler = handleOnscripter
-        elif "WolfDawn" in module_name:
-            from modules.wolfdawn import handleWolfDawn
-            handler = handleWolfDawn
-        elif "Wolf RPG 2" in module_name:
-            from modules.wolf2 import handleWOLF2
-            handler = handleWOLF2
-        elif "Wolf RPG" in module_name:
-            from modules.wolf import handleWOLF
-            handler = handleWOLF
-        elif "Regex" in module_name:
-            from modules.regex import handleRegex
-            handler = handleRegex
-        # Must stay above the "Text" branch: this chain matches on substrings,
-        # and "Text" is inside "Image Text". Below it, image_text.json would be
-        # handed to the plain-text engine, which translates a JSON file line by
-        # line and destroys it.
-        elif "Image Text" in module_name:
-            from modules.imagetext import handleImageText
-            handler = handleImageText
-        elif "Text" in module_name:
-            from modules.text import handleText
-            handler = handleText
-        elif "RenPy" in module_name:
-            from modules.renpy import handleRenpy
-            handler = handleRenpy
-        elif "Unity" in module_name:
-            from modules.unity import handleUnity
-            handler = handleUnity
-        elif "Plugin" in module_name:
-            from modules.rpgmakerplugin import handlePlugin
-            handler = handlePlugin
-        elif "Aquedi4" in module_name:
-            from modules.aquedi4 import handleAquedi4
-            handler = handleAquedi4
-        elif "SRPG" in module_name:
-            from modules.srpg import handleSRPG
-            handler = handleSRPG
-        else:
-            print(f"ERROR:Unknown module: {module_name}")
-            sys.exit(1)
+        # Share the same exact engine registry as both interfaces.
+        from util.translation_task import translation_module
+
+        handler = translation_module(module_name)[2]
 
         runtime_profile_json = os.getenv("DAZED_BATCH_RUNTIME_PROFILE", "").strip()
         if runtime_profile_json:

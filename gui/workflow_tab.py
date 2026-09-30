@@ -137,86 +137,14 @@ _STEP_PURPOSES = {
 }
 
 # ---------------------------------------------------------------------------
-# Phase profiles applied to rpgmakermvmz.py before each translation run
-# ---------------------------------------------------------------------------
-
-# Core database files — translated first (names/descriptions)
-_DB_FILES = {
-    "Actors.json", "Armors.json", "Classes.json", "Enemies.json",
-    "Items.json",  "MapInfos.json", "Skills.json",  "States.json",
-    "System.json", "Weapons.json",
-}
-
-# Event files — translated in phases 1 / 1b / 2
-_EVENT_FILES_EXACT = {"CommonEvents.json", "Troops.json"}
-# Any Map????.json is also an event file (matched by prefix below)
-
-PHASE0_CONFIG = {
-    # All event codes OFF — DB files use top-level name/description fields
-    "CODE101": False, "CODE401": False, "CODE405": False,
-    "CODE102": False, "CODE408": False,
-    "CODE111": False, "CODE122": False, "CODE357": False,
-    "CODE355655": False, "CODE657": False, "CODE356": False,
-    "CODE320": False, "CODE324": False, "CODE325": False,
-    "CODE108": False,
-}
-
-PHASE1_CONFIG = {
-    # Safe dialogue / choices
-    "CODE101": True,
-    "CODE401": True,
-    "CODE405": True,
-    "CODE102": True,
-    # Comment continuations are project-dependent: plugins sometimes display
-    # them, but most games use them only as internal editor notes.
-    "CODE408": False,
-    # Risky codes OFF
-    "CODE122": False,
-    "CODE355655": False,
-    "CODE357": False,
-    "CODE657": False,
-    "CODE356": False,
-    "CODE320": False,
-    "CODE324": False,
-    "CODE325": False,
-    "CODE111": False,
-    "CODE108": False,
-}
-
-PHASE1B_CONFIG = {
-    # Dialogue OFF (handled by Phase 1)
-    "CODE101": False,
-    "CODE401": False,
-    "CODE405": False,
-    "CODE102": False,
-    "CODE408": False,
-    # Only 111 ON — build the var-translation cache from string comparisons
-    "CODE111": True,
-    "CODE122": False,
-    "CODE357": False,
-    "CODE355655": False,
-    "CODE657": False,
-    "CODE356": False,
-    "CODE320": False,
-    "CODE324": False,
-    "CODE325": False,
-    "CODE108": False,
-}
-
-PHASE2_CONFIG = {
-    # Dialogue OFF (already handled by Phase 1)
-    "CODE101": False,
-    "CODE401": False,
-    "CODE405": False,
-    "CODE102": False,
-    "CODE408": False,
-    # Risky codes ON (111 OFF — cache already built by Phase 1b)
-    "CODE122": True,
-    "CODE357": True,
-    "CODE111": False,
-    "CODE356": False,   # plugin cmd — user can enable manually if needed
-    "CODE108": False,   # comment — rarely needed
-}
+from util.rpgmaker_profiles import (
+    DB_FILES as _DB_FILES,
+    EVENT_FILES_EXACT as _EVENT_FILES_EXACT,
+    PHASE0_CONFIG,
+    PHASE1_CONFIG,
+    PHASE1B_CONFIG,
+    PHASE2_CONFIG,
+)
 
 
 from util.project_preparation import (
@@ -508,73 +436,7 @@ def _make_form_label(text: str, width: int = Geometry.FORM_LABEL) -> QLabel:
     return label
 
 
-def _inspect_image_workflow(game_root: str | Path) -> dict:
-    """Return lightweight MV/MZ image-workflow readiness details."""
-    root = Path(game_root).expanduser().resolve()
-    report = {
-        "root": root,
-        "ok": False,
-        "error": "",
-        "runtime": 0,
-        "encrypted": 0,
-        "editable": 0,
-        "misplaced": 0,
-        # Readiness checks must not migrate guidance or rewrite .gitignore.
-        # Project detection owns that state transition and reports conflicts.
-        "vocab": game_glossary_path(root, migrate=False),
-        "editable_root": None,
-        "key_ok": None,
-    }
-    try:
-        from util.rpgmaker_images import (
-            editable_workspace_root,
-            read_encryption_key,
-            resolve_content_root,
-            scan_image_assets,
-        )
-
-        content_root = resolve_content_root(root)
-        workspace = editable_workspace_root(root)
-        expected_root = workspace / content_root.relative_to(root) / "img"
-        assets = scan_image_assets(root)
-        encrypted = sum(asset.has_encrypted for asset in assets)
-        report.update(
-            {
-                "ok": True,
-                "runtime": sum(
-                    asset.has_encrypted or asset.has_runtime_plain for asset in assets
-                ),
-                "encrypted": encrypted,
-                "editable": sum(asset.has_plain for asset in assets),
-                "editable_root": expected_root,
-            }
-        )
-        if encrypted:
-            try:
-                read_encryption_key(root)
-                report["key_ok"] = True
-            except Exception:
-                report["key_ok"] = False
-
-        if workspace.is_dir():
-            misplaced = 0
-            backup_root = workspace / "backups"
-            for path in workspace.rglob("*"):
-                if not path.is_file() or path.suffix.casefold() != ".png":
-                    continue
-                try:
-                    path.relative_to(backup_root)
-                    continue
-                except ValueError:
-                    pass
-                try:
-                    path.relative_to(expected_root)
-                except ValueError:
-                    misplaced += 1
-            report["misplaced"] = misplaced
-    except Exception as exc:
-        report["error"] = str(exc)
-    return report
+from util.rpgmaker_images import inspect_workflow as _inspect_image_workflow
 
 
 # ─────────────────────────────────────────────────────────────────────────────

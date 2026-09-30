@@ -1,0 +1,32 @@
+{
+  "name": "dazedtl-desktop-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "start": "electron .",
+    "test": "playwright test",
+    "test:updates": "node --test --test-timeout=30000 checks/updater.test.cjs",
+    "test:updates:packaged": "node scripts/check-update.cjs",
+    "package": "node scripts/package.mjs",
+    "test:packaged": "node scripts/test-package.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^1.48.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "@playwright/test": "^1.63.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "electron": "^44.4.5",
+    "prettier": "^3.9.9",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}

@@ -116,19 +116,12 @@ class ImageTextEngineTests(unittest.TestCase):
     ENGINE = "Image Text"
 
     def _spec(self):
-        from gui.translation_tab import TRANSLATION_MODULE_SPECS as specs
+        from util.translation_task import TRANSLATION_MODULE_SPECS as specs
 
         for spec in specs:
             if spec[0] == self.ENGINE:
                 return spec
         self.fail(f"{self.ENGINE} is not registered")
-
-    @unittest.skipUnless(_HAS_QT, "PyQt5 not available")
-    def test_it_is_registered_and_points_at_its_own_module(self):
-        _name, patterns, module_path, handler = self._spec()
-        self.assertEqual(patterns, ("image_text.json",))
-        self.assertEqual(module_path, "modules.imagetext")
-        self.assertEqual(handler, "handleImageText")
 
     @unittest.skipUnless(_HAS_QT, "PyQt5 not available")
     def test_it_offers_its_own_export_and_nothing_else(self):
@@ -147,29 +140,29 @@ class ImageTextEngineTests(unittest.TestCase):
             with self.subTest(other):
                 self.assertFalse(accepted(other))
 
-    def test_the_runner_reaches_the_image_handler_and_not_the_text_one(self):
-        """The dispatch chain matches substrings, and "Text" is inside "Image Text".
+    def test_runner_dispatches_exact_engine_names_without_substring_collisions(self):
+        """Image Text and Aquedi4 JSON must reach their own file handlers."""
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from util.translation_task import translation_module
 
-        Below the plain-text branch this engine's whole JSON export would be
-        fed to ``handleText`` line by line, which silently destroys the file.
-        Ordering is the only thing preventing that, so it is pinned here.
-
-        Read rather than imported: ``util/subprocess_runner.py`` rebinds
-        ``sys.stdout`` at import time, which fails outright under a test runner
-        that has captured it.
-        """
-        from util.paths import PROJECT_ROOT
-
-        source = (PROJECT_ROOT / "util" / "subprocess_runner.py").read_text(
-            encoding="utf-8"
-        )
-        image = source.index('"Image Text" in module_name')
-        text = source.index('"Text" in module_name', image + 1)
-        self.assertLess(
-            image,
-            text,
-            'the "Image Text" branch must come before the "Text" branch',
-        )
+        for name, module_name, handler_name in (
+            ("Image Text", "modules.imagetext", "handleImageText"),
+            ("Text", "modules.text", "handleText"),
+            ("Aquedi4 Prepared JSON", "modules.aquedi4", "handleAquedi4"),
+            ("JSON", "modules.json", "handleJSON"),
+        ):
+            with self.subTest(name=name):
+                handler = Mock(return_value="Success")
+                module = SimpleNamespace(**{handler_name: handler})
+                with patch("util.translation_task.import_module", return_value=module) as load:
+                    selected = translation_module(name)
+                    load.assert_not_called()
+                    self.assertEqual(selected[2]("fixture.json", True), "Success")
+                    load.assert_called_once_with(module_name)
+                    handler.assert_called_once_with("fixture.json", True)
+        with self.assertRaises(ValueError):
+            translation_module("Unknown JSON")
 
     def test_the_image_handler_exists_under_the_name_the_registry_uses(self):
         """A registry row that names a handler nothing exports fails at run time.
@@ -182,8 +175,9 @@ class ImageTextEngineTests(unittest.TestCase):
 
         settings = {"model": "gpt-4o-mini", "language": "English"}
         with patch.dict(os.environ, settings):
-            module = importlib.import_module("modules.imagetext")
-        self.assertTrue(callable(getattr(module, "handleImageText")))
+            _name, _patterns, module_path, handler = self._spec()
+            module = importlib.import_module(module_path)
+        self.assertTrue(callable(getattr(module, handler)))
 
 
 if __name__ == "__main__":

@@ -1571,28 +1571,8 @@ class ImageManager(QWidget):
             if self.game_root is None:
                 raise ValueError("Select a game folder first.")
             game_root = Path(self.game_root).expanduser().resolve()
-            profile = get_image_profile(self.engine_id)
-            glossary_path = prepare_game_translation_context(game_root)
-            replacements = {
-                "{{ENGINE_NAME}}": profile.label,
-                "{{ENGINE_CONTEXT}}": profile.translation_skill_context,
-                "{{GAME_ROOT}}": str(game_root),
-                "{{EDITABLE_IMAGES_FOLDER}}": str(self._editable_image_root().resolve()),
-                "{{VOCAB_FILE}}": str(glossary_path),
-                "{{IMAGE_TOOL_PYTHON}}": str(Path(sys.executable).resolve()),
-                "{{IMAGE_INPAINT_CLI}}": str(
-                    (PROJECT_ROOT / "scripts" / "image_inpaint.py").resolve()
-                ),
-            }
-            prompt = load_clipboard_skill("image_translation.md")
-            missing = [token for token in replacements if token not in prompt]
-            if missing:
-                raise ValueError(
-                    "Image translation skill is missing required placeholder(s): "
-                    + ", ".join(missing)
-                )
-            for token, value in replacements.items():
-                prompt = prompt.replace(token, value)
+            from util.image_manager import build_translation_handoff
+            prompt = build_translation_handoff(game_root, self.engine_id, self.generic_image_root)
             QApplication.clipboard().setText(prompt)
             set_status_text(self.status_label,
                 f"Copied image translation skill for {len(editable_assets):,} editable PNG(s): "

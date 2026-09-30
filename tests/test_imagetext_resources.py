@@ -624,11 +624,11 @@ class TestSuitePartitionTests(unittest.TestCase):
             run_test_suite._module_names_for_profile(tests_root, "integration")
         )
         self.assertTrue(
-            core_modules.isdisjoint({"test_evaluation", "test_version_update"})
+            core_modules.isdisjoint({"test_evaluation", "test_version_update", "test_desktop_backend"})
         )
         self.assertEqual(
             integration_modules,
-            {"test_evaluation", "test_version_update"},
+            {"test_evaluation", "test_version_update", "test_desktop_backend"},
         )
 
         class NamedTest(unittest.TestCase):
