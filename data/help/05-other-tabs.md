@@ -74,7 +74,7 @@ API Batch shows the estimated cost, model, request count, tokens and rates befor
 Before extraction is complete, the estimate is unavailable rather than $0; the preparation prompt makes no translation API calls.
 The quote excludes retries, billed reasoning, images, assistant work, QA and provider waiting, and is not a spending cap.
 Changed settings, scope or request inputs require a fresh quote.
-The assistant reuses supported engine/API adapters and checks their final requests before submission; Len does not automatically submit every engine through the Translation tab.
+The assistant reuses supported engine/API adapters and checks their final requests before submission; Len does not automatically submit every engine through Manual engines.
 Some engine tools need additional dependencies documented in the skill.
 
 The game’s `.dazedtl/len-method` folder holds its settings, handoff, context and progress
@@ -93,7 +93,7 @@ English MV/MZ output uses `en_US`, with checks for English name entry and locale
 Completion requires reviewed strings, images within scope
 and in-game validation; a complete string count alone is insufficient.
 
-## Translation
+## Manual engines
 
 This is the manual translation screen. Workflow opens it for you at the correct time.
 
@@ -124,13 +124,13 @@ English neatly into the original design.
 The original game pictures are not changed until you click a Patch button. DazedTL also keeps
 backups, but you should keep your own untouched copy of the game.
 
-## Batches
+## Batch history
 
 This shows Claude, GPT, and Gemini Batch jobs that may take a while to finish. Open a finished job
-here to continue it on the Translation tab. If you only use Normal mode, you may never need this
+here to continue it on Manual engines. If you only use Normal mode, you may never need this
 tab.
 
-## Version Update
+## Git version updates
 
 This page keeps official game releases and translations on two Git branches. Select your
 translated game first. DazedTL immediately checks for the `original` and `translation` branches
@@ -179,11 +179,11 @@ Packed RPG Maker Ace and WOLF game updates are not supported here yet.
 ### Do not confuse the two update buttons
 
 - **Check for Updates** updates the DazedTL program itself.
-- **Version Update** moves your translation to a newer release of a game.
+- **Git version updates** moves your translation to a newer release of a game.
 
 They do not update each other.
 
-## Skills
+## Shared instructions
 
 These are detailed written instructions given to the translation AI and your AI helper. Most users
 should leave the shared instructions alone. Game-specific names and writing rules belong in
@@ -229,7 +229,7 @@ The comparison's **Needs human follow-up** filter finds uncertain samples, major
 and judge disagreements. Reimporting a corrected baseline invalidates checks exported against the
 old decisions; export a fresh check. Saved evaluation archives retain review history and mappings.
 
-## Configuration
+## Settings
 
 This is where you save your AI service, private API key, model, text width, and game-specific
 options.

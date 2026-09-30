@@ -68,8 +68,8 @@ def _game_path(root: Path, path: Path) -> Path:
     current = root
     for part in path.relative_to(root).parts:
         current = current / part
-        if current.is_symlink():
-            raise ValueError(f"Preparation cannot write through a symlink: {current}")
+        if current.is_symlink() or getattr(current, 'is_junction', lambda: False)():
+            raise ValueError(f"Preparation cannot write through a symlink or junction: {current}")
     return path
 
 

@@ -18,10 +18,16 @@ Use the smallest relevant test while iterating, then run the repository suites:
 ```bash
 ./tests/run_tests.sh core
 ./tests/run_tests.sh integration # persisted jobs/provider orchestration
-./tests/run_tests.sh extended  # Qt/workflow/navigation changes
+./tests/run_tests.sh extended  # Electron workflow/navigation changes
 ./tests/run_tests.sh imagetl   # OpenCV/ImageTL extras required
 ./tests/run_tests.sh full      # releases or shared test infrastructure
 ```
+
+The `extended` command runs the existing Electron suite. `full` runs the Python
+core/integration union and then that Electron suite, each under its existing
+runtime limits. Run `cd desktop && npm ci && npm run build` before UI checks.
+The prebuilt renderer and engine defaults are shipped assets; commit them after
+changing their inputs. End users use the one-click launchers without Node.
 
 ## Runtime retention
 

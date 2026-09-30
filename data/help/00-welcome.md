@@ -5,14 +5,14 @@ DazedTL helps turn Japanese game text into English with an online AI service. It
 
 ## Read these pages first
 
-Read the four pages under **DEFINITELY READ THESE** from top to bottom:
+Read the four pages under **Getting started** from top to bottom:
 
 1. **Start Here**
 2. **Set Up Your AI Helper**—required
 3. **Set Up Git**—optional, but strongly recommended
 4. **Full Translation Example**
 
-Everything under **EXTRA INFORMATION** is optional. Open those pages when you need more detail or
+Everything under **Reference** is optional. Open those pages when you need more detail or
 have a problem. You do not need to memorize them.
 
 ## Before you begin
@@ -27,19 +27,26 @@ The **game folder** is usually the folder containing `Game.exe`.
 
 ### Start DazedTL
 
-On Windows, double-click `START.bat`. On Linux or macOS, use `START.sh` or the desktop shortcut. If
+On Windows, double-click `START.bat`. On macOS, open `START.command`. On Linux, run
+`bash START.sh` or use the desktop shortcut. If
 you are reading this inside DazedTL, it is already running.
 
 The first start may take a while while DazedTL prepares what it needs. You normally do not need to
-install or configure Python yourself.
+install Python, Node, npm or Qt yourself. The first launch needs internet; later launches reuse
+the private runtimes.
+
+Upgrading from the old Qt app: click **Update**, close the app when it finishes, and open it again
+with the same launcher. Your settings and saved work are imported automatically. Open **Recent**
+for the migration report. Original files and logs stay in the old installation folder; migration
+does not start translation or resume paid jobs. Future updates are under **Updates & rollback**.
 
 ### Add your translation key
 
 An **API key** is a private password that lets DazedTL use an online AI company. Never share it or
 include it in screenshots.
 
-Open **Configuration → General Settings**. Choose the company under **Presets**, click **New** to
-save its API key, choose a model, and click **Save changes**. The beginner choices in this version
+Open **Settings → Provider**. Choose the company under **Presets**, enter and **Save credential**,
+choose a model, and click **Save settings**. The beginner choices in this version
 are:
 
 | Choice | Good for |
@@ -62,8 +69,8 @@ translation may cost money, so the example starts with one small map.
 
 ![Configuration General Settings with the provider preset, saved API key, model, and Save changes highlighted](images/configuration-api.png)
 
-*In Configuration → General Settings, work through the four highlighted controls from left to
-right. The key name is visible, but its secret stays hidden.*
+*This screenshot shows the previous Qt interface. In the new app, use Settings → Provider
+for the same provider, credential and model choices. The secret stays hidden.*
 
 ## What you will do
 

@@ -638,6 +638,53 @@ def sample_status(review: dict) -> str:
     return "Clear preference" if decisions[0]["strength"] == "clear" else "Slight preference"
 
 
+def comparison_sample_matches(sample: dict, selection="all", query="", *, mode="paired", scope=None) -> bool:
+    """Shared comparison filters, without exposing reserved output in search."""
+    scope = scope or {}
+    paired = sample.get('paired_review') or {}
+    comparisons = paired.get('comparisons', [])
+    assessments = paired.get('assessments', [])
+    if scope.get('candidate'):
+        if scope.get('opponent'):
+            if not any(r['pool'] == scope['pool'] and {r['left'], r['right']} == {scope['candidate'], scope['opponent']} for r in comparisons):
+                return False
+        elif not any(r['pool'] == scope['pool'] and r['candidate'] == scope['candidate'] for r in assessments):
+            return False
+    if selection == 'available' and sample.get('paired_holdout_locked'):
+        return False
+    review = sample.get('review')
+    has_review = bool(review)
+    if paired and mode == 'paired':
+        has_review = any(r.get('status') == 'judged' for r in comparisons + assessments)
+        if selection == 'reviewed' and not any(r['status'] == 'judged' for r in comparisons):
+            return False
+        if selection == 'ties' and sample_status(paired) not in ('Equivalent quality', 'Identical outputs'):
+            return False
+        review = {'notes': '\n'.join(r.get('notes', '') for r in comparisons),
+                  'overall': [['equivalent', 'equivalent']]} if comparisons else None
+    if selection == 'reviewed' and not review or selection == 'unreviewed' and has_review:
+        return False
+    if selection == 'follow_up' and not sample.get('human_follow_up'):
+        return False
+    if selection == 'ties' and not (review and any(len(tier) > 1 for tier in review.get('overall') or [])):
+        return False
+    if selection == 'notes' and not (review and str(review.get('notes') or '').strip()):
+        return False
+    if selection == 'problems' and not sample.get('has_problems'):
+        return False
+    if selection == 'disputed' and not any(r.get('disputed') for r in comparisons + assessments):
+        return False
+    query = query.strip().casefold()
+    if not query:
+        return True
+    values = [sample.get('id', ''), sample.get('scene_id', ''), sample.get('stratum', ''),
+              *(sample.get('sources') or []), str((review or {}).get('notes') or '')]
+    if not sample.get('paired_holdout_locked'):
+        for line in sample.get('lines') or []:
+            values.extend(output.get('translation', '') for output in (line.get('outputs') or {}).values())
+    return query in '\n'.join(str(value) for value in values).casefold()
+
+
 def format_summary(campaign: dict, labels: dict[str, str]) -> str:
     report = campaign.get("analysis") or summarize(campaign)
     name = lambda c: labels.get(c, c)

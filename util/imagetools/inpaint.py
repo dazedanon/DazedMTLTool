@@ -281,13 +281,9 @@ def _probe_runtime() -> tuple[bool, str]:
             "install — pip install --force-reinstall onnxruntime"
         )
     except ImportError as exc:
-        # Almost always the Visual C++ runtime: PyQt5 ships an older copy and
-        # claims the name first if it is allowed to load before this. Say so,
-        # because the message Windows gives names nothing at all.
         return False, (
-            f"onnxruntime will not load {where}: {exc} — on Windows this is "
-            "usually Qt's older Visual C++ runtime winning the race; see "
-            "util/msvc_runtime.py"
+            f"onnxruntime will not load {where}: {exc} — on Windows, check "
+            "the Microsoft Visual C++ runtime and the installed backend version."
         )
     except Exception as exc:
         return False, (

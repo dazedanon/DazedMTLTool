@@ -15,7 +15,7 @@ RPGMAKER_PROFILE_VERSION = 1
 
 def is_rpgmaker_mvmz(module_name: str) -> bool:
     normalized = str(module_name or "").casefold()
-    return "mv/mz" in normalized or "rpg maker" in normalized
+    return normalized in {"rpg maker mv/mz", "rpgmakermvmz", "modules.rpgmakermvmz"}
 
 
 def capture_batch_runtime_profile(
@@ -26,7 +26,7 @@ def capture_batch_runtime_profile(
     if not is_rpgmaker_mvmz(module_name):
         return None
 
-    from gui.config_integration import ConfigIntegration
+    from util.config_integration import ConfigIntegration
 
     integration = ConfigIntegration()
     if project_root is not None:

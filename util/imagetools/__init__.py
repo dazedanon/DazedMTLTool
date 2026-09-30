@@ -5,17 +5,13 @@ boxes and the text in a review editor, DazedTL translates the confirmed export
 through its normal pipeline, and only then is anything drawn back into the
 image. See ``docs/semi-manual-image-workflow.md`` for why.
 
-Nothing here imports PyQt - the GUI layer sits on top in
-``gui/image_text_editor.py``, so the model and the OCR backends stay testable
-headless.
+The Electron editor uses these services through ``desktop/backend/images.py``;
+the model and OCR backends remain testable without a graphical application.
 
 **The names below are re-exported lazily**, and that is load-bearing rather
-than tidiness. Most of this package needs numpy and OpenCV, which are not in
-``requirements.txt`` because only this workflow wants them.
-``util.imagetools.resources`` is what downloads them, and it lives in this
-package - so importing it must not drag in the very things it exists to fetch.
-Binding these eagerly made ``python -m util.imagetools.resources`` fail with
-``No module named 'numpy'`` on precisely the checkout it was written for.
+than tidiness. Rendering libraries load only when needed. The desktop runtime
+includes NumPy and OpenCV; optional OCR and inpainting resources are downloaded
+through ``util.imagetools.resources`` without eagerly loading image engines.
 """
 
 from importlib import import_module

@@ -7,7 +7,7 @@ matching problem below.
 
 ### The API key is invalid
 
-Open **Configuration** and carefully paste the key again. Check that the provider matches the
+Open **Settings** and carefully paste the key again. Check that the provider matches the
 company that gave you the key. For example, a Mistral key must use Mistral as the provider.
 
 ### Too many requests or rate limit
@@ -48,7 +48,7 @@ the `files`, `translated`, or `.dazedtl` folders. Open the same game folder when
 Already finished translations remain in the `translated` folder. You can select the unfinished
 files and continue without translating the completed files again.
 
-If you started a Batch job, open **Batches** later to check it. A Batch job may continue at the AI
+If you started a Batch job, open **Batch history** later to check it. A Batch job may continue at the AI
 company even while DazedTL is closed.
 
 ## The game stopped working

@@ -1,5 +1,8 @@
 # Full Example: Your First Translation
 
+Screenshots show the previous Qt interface; use **Guided workflow** for the corresponding stages
+and **Settings** for provider preferences.
+
 This example uses an RPG Maker game. WOLF RPG uses the same basic cycle; the few different buttons
 are listed near the end. The goal is to translate one small part, test it, and only then do more.
 
@@ -9,7 +12,7 @@ Before translating:
 
 - keep one untouched copy of the whole game;
 - complete **Set Up Your AI Helper**;
-- enter your translation API key and model under **Configuration → General Settings**; and
+- enter your translation API key and model under **Settings → Provider**; and
 - complete **Set Up Git** if you want easy checkpoints and recovery.
 
 Open the working game folder—the copy containing `Game.exe`—in Cursor or VS Code. Keep that same
@@ -141,4 +144,4 @@ The same idea applies to WOLF RPG:
 5. Build and test the playable game in Step 9.
 6. Fix layout problems in Step 10 before translating more.
 
-Open **WOLF RPG Steps** under **EXTRA INFORMATION** for the exact buttons and safety labels.
+Open **WOLF RPG Steps** under **Reference** for the exact buttons and safety labels.

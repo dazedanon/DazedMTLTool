@@ -1,5 +1,8 @@
 # RPG Maker Steps
 
+Screenshots show the previous Qt interface; use **Guided workflow** for the corresponding stages
+and **Settings** for provider preferences.
+
 Open **Workflow** and choose **RPG Maker**. Work from the top step to the bottom step. The **?**
 button on each page explains the controls on that page.
 

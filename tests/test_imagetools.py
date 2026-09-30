@@ -191,12 +191,14 @@ class JobTests(unittest.TestCase):
         entry = job.find("a.png")
         entry.blocks = [block("こんにちは世界", 10, 10, 200, 20)]
         entry.blocks[0].lines = [Line("こんにちは世界", Box.from_xywh(10, 10, 200, 20))]
+        entry.strokes = [{"tool": "paint", "points": [[4, 5]], "size": 3, "color": "#123456"}]
         entry.status = CONFIRMED
         job.save()
 
         reloaded = Job.load(self.root)
         again = reloaded.find("a.png")
         self.assertEqual(again.status, CONFIRMED)
+        self.assertEqual(again.strokes, entry.strokes)
         self.assertEqual(again.blocks[0].source_text, "こんにちは世界")
         self.assertEqual(again.blocks[0].lines[0].text, "こんにちは世界")
 
@@ -520,20 +522,10 @@ class ExportGuardTests(unittest.TestCase):
                 os.environ["IMGTL_FILES_DIR"] = previous
 
 
-class OnDemandOnlyTests(unittest.TestCase):
-    """Nothing this workflow needs may leak into the base installation.
+class OptionalImageResourcesTests(unittest.TestCase):
+    """OCR clients and neural models stay optional; basic rendering is bundled."""
 
-    Everyone who never opens the semi-manual workflow would otherwise pay for
-    numpy, OpenCV and an OCR client on every install and every update. Keeping
-    them out is the whole reason ``util/imagetools/resources.py`` exists, and
-    it is the kind of thing a well-meaning "add the missing dependency" commit
-    quietly undoes.
-
-    The declaration lives in the manifest instead, which is what the download
-    prompt reads.
-    """
-
-    PACKAGES = ("numpy", "opencv-python", "opencv-python-headless", "chrome-lens-py")
+    PACKAGES = ("chrome-lens-py", "onnxruntime", "rapidocr", "easyocr")
 
     def setUp(self):
         root = Path(__file__).resolve().parent.parent
@@ -544,7 +536,6 @@ class OnDemandOnlyTests(unittest.TestCase):
             for line in self.requirements.splitlines()
             if line.strip() and not line.strip().startswith("#")
         ]
-        self.start = (root / "START.bat").read_text(encoding="utf-8", errors="replace")
 
     def test_they_are_not_installed_with_everything_else(self):
         for package in self.PACKAGES:
@@ -555,15 +546,10 @@ class OnDemandOnlyTests(unittest.TestCase):
                     "downloads it whether or not they translate images",
                 )
 
-    def test_the_launcher_does_not_wait_on_them(self):
-        for module in ("numpy", "cv2", "chrome_lens_py"):
-            with self.subTest(module):
-                self.assertNotIn(f"import {module}", self.start)
-
     def test_the_startup_dependency_gate_ignores_them(self):
         from util.dependencies import REQUIRED_MODULES
 
-        for module in ("numpy", "cv2", "chrome_lens_py", "onnxruntime"):
+        for module in ("chrome_lens_py", "onnxruntime", "rapidocr", "easyocr"):
             with self.subTest(module):
                 self.assertNotIn(module, REQUIRED_MODULES.values())
 
@@ -578,10 +564,6 @@ class OnDemandOnlyTests(unittest.TestCase):
         for package in ("numpy", "opencv-python-headless", "chrome-lens-py"):
             with self.subTest(package):
                 self.assertIn(package, declared)
-
-    def test_requirements_says_where_they_went(self):
-        """A reader who greps for numpy and finds nothing needs a signpost."""
-        self.assertIn("util.imagetools.resources", self.requirements)
 
 
 class ImportProbeTests(unittest.TestCase):

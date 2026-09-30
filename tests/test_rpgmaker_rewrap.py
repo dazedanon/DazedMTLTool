@@ -99,64 +99,37 @@ class RpgMakerRewrapTests(unittest.TestCase):
         normal_anchor = next(c for c in commands if c.get("_original") == normal_original)
         self.assertEqual(normal_anchor["_original"], normal_original)
 
-    def test_code_401_is_never_blocked_by_row_protection(self):
-        path = self.root / "Map002.json"
-        original_text = "One two three four five six seven eight nine ten eleven twelve."
-        _write(
-            path,
-            _map_with(
-                [
-                    {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2]},
-                    {"code": 401, "indent": 0, "parameters": [original_text]},
-                ]
-            ),
+    def test_code_401_bypasses_row_protection_for_normal_and_face_messages(self):
+        # The same exception applies with the default/custom row limit and a
+        # face window. Keep these input variants together instead of duplicating
+        # the complete fixture and rewrap assertions three times.
+        cases = (
+            ("", DIALOGUE, 8, {}),
+            ("", DIALOGUE, 8, {"max_protected_rows": 2}),
+            ("Actor1", FACE_DIALOGUE, 14, {"max_protected_rows": 3}),
         )
-        result = rewrap_directory(
-            self.root,
-            self._options(
-                categories=frozenset({DIALOGUE}),
-                event_codes=frozenset({401}),
-                dialogue_width=8,
-                max_protected_rows=2,
-            ),
-            apply=True,
-        )
-        self.assertEqual(result.overflow_skipped, 0)
-        self.assertEqual(result.changes_applied, 1)
-        data = json.loads(path.read_text(encoding="utf-8"))
-        wrapped = data["events"]["1"]["pages"][0]["list"][1]["parameters"][0]
-        self.assertIn("\n", wrapped)
+        for face, category, width, overrides in cases:
+            with self.subTest(face=face, overrides=overrides):
+                path = self.root / "Map002.json"
+                text = ("[Alice]\n" if face else "") + "One two three four five six seven eight nine ten eleven twelve."
+                _write(path, _map_with([
+                    {"code": 101, "indent": 0, "parameters": [face, 0, 0, 2]},
+                    {"code": 401, "indent": 0, "parameters": [text]},
+                ]))
+                options = RewrapOptions(
+                    dialogue_width=width, face_dialogue_width=width,
+                    list_width=20, note_width=20,
+                    categories=frozenset({category}), event_codes=frozenset({401}), **overrides,
+                )
+                result = rewrap_directory(self.root, options, apply=True)
+                self.assertEqual(result.overflow_skipped, 0)
+                self.assertEqual(result.changes_applied, 1)
+                commands = json.loads(path.read_text(encoding="utf-8"))["events"]["1"]["pages"][0]["list"]
+                self.assertEqual([command.get("code") for command in commands], [101, 401])
+                self.assertGreater(len(commands[1]["parameters"][0].splitlines()), options.max_protected_rows)
+                if face:
+                    self.assertTrue(commands[1]["parameters"][0].startswith("[Alice]\n"))
 
-    def test_code_401_bypasses_default_row_protection(self):
-        path = self.root / "MapDefaultRows.json"
-        original_text = "One two three four five six seven eight nine ten eleven twelve."
-        _write(
-            path,
-            _map_with(
-                [
-                    {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2]},
-                    {"code": 401, "indent": 0, "parameters": [original_text]},
-                ]
-            ),
-        )
-        options = RewrapOptions(
-            dialogue_width=8,
-            face_dialogue_width=8,
-            list_width=20,
-            note_width=20,
-            categories=frozenset({DIALOGUE}),
-            event_codes=frozenset({401}),
-        )
-
-        result = rewrap_directory(self.root, options, apply=True)
-
-        self.assertEqual(result.overflow_skipped, 0)
-        self.assertEqual(result.changes_applied, 1)
-        data = json.loads(path.read_text(encoding="utf-8"))
-        commands = data["events"]["1"]["pages"][0]["list"]
-        rows = commands[1]["parameters"][0].splitlines()
-        self.assertEqual([command.get("code") for command in commands], [101, 401])
-        self.assertGreater(len(rows), 4)
 
     def test_dialogue_wrap_preserves_every_code_401_command(self):
         path = self.root / "MapPreserve401.json"
@@ -268,30 +241,6 @@ class RpgMakerRewrapTests(unittest.TestCase):
         self.assertEqual(data["description"], description)
         self.assertEqual(data["note"], f"<infowindow:{note_body}>")
 
-    def test_face_code_401_is_never_blocked_by_row_protection(self):
-        path = self.root / "MapSpeaker.json"
-        text = "[Alice]\nOne two three four five six seven eight."
-        _write(
-            path,
-            _map_with(
-                [
-                    {"code": 101, "indent": 0, "parameters": ["Actor1", 0, 0, 2]},
-                    {"code": 401, "indent": 0, "parameters": [text]},
-                ]
-            ),
-        )
-        result = rewrap_directory(
-            self.root,
-            self._options(
-                categories=frozenset({FACE_DIALOGUE}),
-                event_codes=frozenset({401}),
-                face_dialogue_width=14,
-                max_protected_rows=3,
-            ),
-            apply=True,
-        )
-        self.assertEqual(result.overflow_skipped, 0)
-        self.assertEqual(result.changes_applied, 1)
 
     def test_existing_translation_can_be_rewrapped_repeatedly(self):
         path = self.root / "Map003.json"

@@ -307,55 +307,24 @@ class OpenAIBatchAdapterTests(unittest.TestCase):
         self.assertEqual(result["cache_read_input_tokens"], 20)
         self.assertEqual(result["cache_creation_input_tokens"], 15)
 
-    def test_live_request_retries_only_schema_rejection(self):
+    def test_live_request_retries_schema_rejection_but_not_transport_failure(self):
         class SchemaRejected(Exception):
             status_code = 400
-
-        response = {
-            "choices": [{"message": {"content": '{"Line1":"Cat"}'}}],
-            "usage": {"prompt_tokens": 5, "completion_tokens": 1},
-        }
-        create = mock.Mock(
-            side_effect=[SchemaRejected("response_format json_schema unsupported"), response]
-        )
-        client = SimpleNamespace(
-            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-        )
-
-        BP.execute_live_request(
-            "openai",
-            {
-                "model": "local",
-                "messages": [],
-                "response_format": {"type": "json_schema"},
-            },
-            client=client,
-        )
-
-        self.assertEqual(create.call_count, 2)
-        self.assertEqual(
-            create.call_args_list[1].kwargs["response_format"],
-            {"type": "json_object"},
-        )
-
-    def test_live_request_does_not_retry_transport_failure(self):
-        create = mock.Mock(side_effect=TimeoutError("connection timed out"))
-        client = SimpleNamespace(
-            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-        )
-
-        with self.assertRaises(TimeoutError):
-            BP.execute_live_request(
-                "openai",
-                {
-                    "model": "local",
-                    "messages": [],
-                    "response_format": {"type": "json_schema"},
-                },
-                client=client,
-            )
-
-        self.assertEqual(create.call_count, 1)
+        response = {'choices': [{'message': {'content': '{"Line1":"Cat"}'}}], 'usage': {'prompt_tokens': 5, 'completion_tokens': 1}}
+        for schema in (True, False):
+            with self.subTest(schema=schema):
+                error = SchemaRejected('response_format json_schema unsupported') if schema else TimeoutError('connection timed out')
+                create = mock.Mock(side_effect=[error, response])
+                client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+                params = {'model': 'local', 'messages': [], 'response_format': {'type': 'json_schema'}}
+                if schema:
+                    BP.execute_live_request('openai', params, client=client)
+                    self.assertEqual(create.call_count, 2)
+                    self.assertEqual(create.call_args_list[1].kwargs['response_format'], {'type': 'json_object'})
+                else:
+                    with self.assertRaises(TimeoutError):
+                        BP.execute_live_request('openai', params, client=client)
+                    self.assertEqual(create.call_count, 1)
 
     def test_submit_uploads_official_jsonl_shape(self):
         files = _OpenAIFiles()

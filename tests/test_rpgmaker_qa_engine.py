@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -121,6 +122,13 @@ class RPGMakerQAEngineTests(unittest.TestCase):
         self.assertIn("corrections --task", readme)
         self.assertIn("--approve-all", readme)
         self.assertIn("do not ask the user to", readme)
+        import shlex
+        import sys
+        if os.name != 'nt':
+            command = next(line.split('`')[1] for line in readme.splitlines() if ' status --task ' in line)
+            self.assertEqual(shlex.split(command), [sys.executable,
+                str(Path(rpgmaker_qa.__file__).resolve().parents[1] / 'scripts/rpgmaker_qa.py'),
+                'status', '--task', str(task)])
 
         self._accept_clean_screen(task)
         self.assertEqual(rpgmaker_qa.advance(task)["stage"], "ready-finalize")

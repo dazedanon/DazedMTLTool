@@ -17,9 +17,9 @@ REQUIRED_MODULES = {
     "tqdm": "tqdm",
     "jsbeautifier": "jsbeautifier",
     "pillow": "PIL",
-    "PyQt5": "PyQt5",
-    "qtawesome": "qtawesome",
     "markdown": "markdown",
+    "numpy": "numpy",
+    "opencv-python-headless": "cv2",
 }
 
 

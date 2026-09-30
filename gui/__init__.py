@@ -1,4 +1,1 @@
-"""DazedTL GUI package."""
-
-__version__ = "1.0.0"
-__author__ = "DazedTranslations"
+"""Compatibility namespace for shortcuts created by the retired Qt app."""

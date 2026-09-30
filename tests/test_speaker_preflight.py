@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GUI-worker regression tests for deferred grouped speaker translation."""
+"""Shared-worker regression tests for deferred grouped speaker translation."""
 
 from __future__ import annotations
 
@@ -10,18 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PyQt5.QtWidgets import QMessageBox
-
-from gui.translation_tab import (
-    TranslationTab,
-    TranslationWorker,
-    _activate_configured_game_context,
-    _activate_game_context_root,
-    _configured_game_root,
-    _should_prepare_speakers_automatically,
-)
+from util.translation_task import TranslationTask as TranslationWorker, _should_prepare_speakers_automatically
 import modules.rpgmakermvmz as mvmz
 
 
@@ -113,35 +102,6 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
         self.assertAlmostEqual(estimate["estimated_cost"], 0.00072)
         self.assertFalse(estimate["cold_cache"])
 
-    def test_confirmation_shows_estimate_before_approval(self):
-        responses = []
-        dummy = SimpleNamespace(
-            translation_worker=SimpleNamespace(
-                set_speaker_translation_response=responses.append
-            )
-        )
-        payload = {
-            "speakers": ["騎士", "秘書官"],
-            "model": "test-model",
-            "request_count": 1,
-            "input_tokens": 1234,
-            "output_tokens": 56,
-            "estimated_cost": 0.012345,
-            "cold_cache": False,
-        }
-        with patch.object(
-            QMessageBox, "question", return_value=QMessageBox.Yes
-        ) as question:
-            TranslationTab._on_speaker_confirmation(dummy, payload)
-
-        message = question.call_args.args[2]
-        self.assertIn("Model: test-model", message)
-        self.assertIn("1 grouped request", message)
-        self.assertIn("1,234 in / 56 out", message)
-        self.assertIn("$0.012345", message)
-        self.assertIn("No API request has been sent", message)
-        self.assertIn("Live API", message)
-        self.assertEqual(responses, [True])
 
     def test_cancel_sends_no_speaker_translation(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -313,213 +273,11 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
             translate.assert_not_called()
             refresh.assert_called_once_with()
 
-    def test_game_root_and_widths_follow_the_selected_workflow(self):
-        class Settings:
-            def value(self, key, default=""):
-                return {
-                    "workflow/last_game_folder": "/current/game",
-                    "wolf_workflow/last_game_folder": "/current/wolf",
-                    "last_game_folder": "/legacy/game",
-                }.get(key, default)
-
-        self.assertEqual(_configured_game_root(Settings()), "/current/game")
-        self.assertEqual(
-            _configured_game_root(Settings(), "Wolf RPG (WolfDawn)"),
-            "/current/wolf",
-        )
-        class LegacyOnlySettings:
-            def value(self, key, default=""):
-                return "/legacy/rpg" if key == "last_game_folder" else default
-
-        self.assertEqual(
-            _configured_game_root(LegacyOnlySettings(), "Wolf RPG (WolfDawn)"),
-            "",
-        )
-        for module_name in ("CSV", "Tyrano", "Wolf RPG", "Regex", "Text"):
-            self.assertEqual(_configured_game_root(Settings(), module_name), "")
-
-        with tempfile.TemporaryDirectory() as raw:
-            root = Path(raw)
-            root.joinpath("data").mkdir()
-            root.joinpath("data", "System.json").write_text("{}", encoding="utf-8")
-            wolf_root = root / "Wolf Game"
-            wolf_root.mkdir()
-            wolf_root.joinpath("Data.wolf").write_bytes(b"")
-
-            class ExistingSettings:
-                def value(self, key, default=""):
-                    if key == "workflow/last_game_folder":
-                        return str(root)
-                    if key == "wolf_workflow/last_game_folder":
-                        return str(wolf_root)
-                    return default
-
-            saved = {
-                "width": 81,
-                "faceWidth": 67,
-                "listWidth": 103,
-                "noteWidth": 92,
-            }
-            with (
-                patch(
-                    "gui.translation_tab.load_game_wrap_widths",
-                    return_value=saved,
-                ) as load_widths,
-                patch("gui.translation_tab.prepare_game_translation_context"),
-                patch.dict(os.environ, {}, clear=False),
-            ):
-                active_root, active_widths = _activate_configured_game_context(
-                    ExistingSettings(), "RPG Maker MV/MZ"
-                )
-                self.assertEqual(active_root, str(root))
-                self.assertEqual(active_widths, saved)
-                self.assertEqual(os.environ["DAZED_GAME_ROOT"], str(root))
-                self.assertEqual(os.environ["width"], "81")
-                self.assertEqual(os.environ["faceWidth"], "67")
-            load_widths.assert_called_once_with(str(root))
-
-            with (
-                patch(
-                    "gui.translation_tab.load_game_wrap_widths",
-                    return_value=None,
-                ) as load_wolf_widths,
-                patch(
-                    "gui.translation_tab.prepare_game_translation_context"
-                ) as prepare_wolf,
-                patch.dict(os.environ, {}, clear=False),
-            ):
-                active_root, _ = _activate_configured_game_context(
-                    ExistingSettings(), "Wolf RPG (WolfDawn)"
-                )
-            self.assertEqual(active_root, str(wolf_root))
-            prepare_wolf.assert_called_once_with(str(wolf_root))
-            load_wolf_widths.assert_called_once_with(str(wolf_root))
-
-            with (
-                patch("gui.translation_tab.load_game_wrap_widths") as load_generic,
-                patch(
-                    "gui.translation_tab.prepare_game_translation_context"
-                ) as prepare_generic,
-                patch.dict(
-                    os.environ,
-                    {
-                        "DAZED_GAME_ROOT": "/previous/game",
-                        "DAZED_GLOSSARY_PATH": "/previous/glossary.txt",
-                        "DAZED_INCLUDE_GLOSSARY_BASE": "false",
-                        "width": "299",
-                    },
-                    clear=False,
-                ),
-            ):
-                active_root, _ = _activate_configured_game_context(
-                    ExistingSettings(), "CSV"
-                )
-                self.assertEqual(active_root, "")
-                self.assertNotIn("DAZED_GAME_ROOT", os.environ)
-                self.assertNotIn("DAZED_GLOSSARY_PATH", os.environ)
-                self.assertNotIn("DAZED_INCLUDE_GLOSSARY_BASE", os.environ)
-            load_generic.assert_not_called()
-            prepare_generic.assert_not_called()
-
-            unknown_root = root / "Unknown Project"
-            unknown_root.mkdir()
-            with (
-                patch(
-                    "gui.translation_tab.load_game_wrap_widths",
-                    return_value=None,
-                ),
-                patch(
-                    "gui.translation_tab.prepare_game_translation_context"
-                ) as prepare_unknown,
-                patch.dict(os.environ, {}, clear=False),
-            ):
-                active_root, _ = _activate_game_context_root(
-                    unknown_root,
-                    "RPG Maker MV/MZ",
-                    validate_engine=False,
-                )
-            self.assertEqual(active_root, str(unknown_root))
-            prepare_unknown.assert_called_once_with(str(unknown_root))
-
-            invalid_root = root / "Existing But Invalid"
-            invalid_root.joinpath("skills").mkdir(parents=True)
-            invalid_root.joinpath("glossary.txt").write_text(
-                "legacy glossary\n", encoding="utf-8"
-            )
-
-            class InvalidSettings:
-                def value(self, key, default=""):
-                    if key == "workflow/last_game_folder":
-                        return str(invalid_root)
-                    return default
-
-            with (
-                patch(
-                    "gui.translation_tab.prepare_game_translation_context"
-                ) as prepare_invalid,
-                patch.dict(os.environ, {}, clear=False),
-            ):
-                with self.assertRaisesRegex(ValueError, "not a recognized RPG Maker"):
-                    _activate_configured_game_context(
-                        InvalidSettings(), "RPG Maker MV/MZ"
-                    )
-            prepare_invalid.assert_not_called()
-            self.assertTrue(invalid_root.joinpath("glossary.txt").is_file())
-            self.assertFalse(invalid_root.joinpath(".dazedtl").exists())
-            self.assertFalse(invalid_root.joinpath(".gitignore").exists())
-
-            for label, marker_path in (
-                ("WOLF", invalid_root / "Data.wolf"),
-                ("unknown JSON", invalid_root / "config" / "settings.json"),
-            ):
-                with self.subTest(label):
-                    marker_path.parent.mkdir(parents=True, exist_ok=True)
-                    marker_path.write_bytes(
-                        b"" if marker_path.suffix == ".wolf" else b"{}"
-                    )
-                    with (
-                        patch(
-                            "gui.translation_tab.prepare_game_translation_context"
-                        ) as prepare_unsupported,
-                        patch.dict(os.environ, {}, clear=False),
-                    ):
-                        with self.assertRaisesRegex(
-                            ValueError, "not a recognized RPG Maker"
-                        ):
-                            _activate_configured_game_context(
-                                InvalidSettings(), "RPG Maker MV/MZ"
-                            )
-                    prepare_unsupported.assert_not_called()
-                    self.assertTrue(invalid_root.joinpath("glossary.txt").is_file())
-                    self.assertFalse(
-                        invalid_root.joinpath(".dazedtl", "glossary.txt").exists()
-                    )
-                    marker_path.unlink()
-
-            class MissingSettings:
-                def value(self, key, default=""):
-                    if key == "workflow/last_game_folder":
-                        return str(root / "Missing Game")
-                    return default
-
-            with (
-                patch("gui.translation_tab.PROJECT_ROOT", root),
-                patch.dict(
-                    os.environ,
-                    {"DAZED_GAME_ROOT": "/previous/game", "width": "299"},
-                    clear=False,
-                ),
-            ):
-                with self.assertRaisesRegex(FileNotFoundError, "no longer exists"):
-                    _activate_configured_game_context(
-                        MissingSettings(), "RPG Maker MV/MZ"
-                    )
-                self.assertNotIn("DAZED_GAME_ROOT", os.environ)
-                self.assertEqual(os.environ["width"], "60")
 
     def test_automatic_speaker_preflight_cases(self):
         cases = (
             ("RPG Maker workflow already collected", "RPG Maker MV/MZ", {}, False),
+            ("Plugin files are not RPG Maker event JSON", "RPG Maker Plugin", {"batch_mode": True}, False),
             ("RPG Maker fresh batch", "RPG Maker MV/MZ", {"batch_mode": True}, True),
             (
                 "RPG Maker batch resume",

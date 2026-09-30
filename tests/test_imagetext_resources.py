@@ -495,85 +495,6 @@ class CommandLineTests(unittest.TestCase):
             self.assertEqual(resmod.main(["--default"]), 1)
 
 
-class RuntimeOrderTests(unittest.TestCase):
-    """Every entry point must claim the C++ runtime before PyQt5 loads.
-
-    PyQt5 carries its own copy (14.26), Windows resolves a DLL by base name
-    against what is already loaded, and onnxruntime refuses to load against it.
-    Claiming the system runtime afterwards does nothing at all, so this is
-    purely a question of line order - and it fails as an unreadable "DLL
-    initialization routine failed" a long way from the cause.
-
-    It has already gone wrong once: scripts/run_test_suite.py discovers with no
-    top_level_dir, so test modules load as top-level names and tests/__init__.py
-    never runs. Every entry point needs its own call.
-    """
-
-    ENTRY_POINTS = (
-        "gui/main.py",
-        "scripts/start_gui.py",
-        "scripts/run_test_suite.py",
-        "tests/__init__.py",
-    )
-
-    def _lines(self, relpath):
-        """Statement lines only. Both names appear in prose in these files."""
-        from util.paths import PROJECT_ROOT
-
-        text = (PROJECT_ROOT / relpath).read_text(encoding="utf-8")
-        return [
-            line
-            for line in text.splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-
-    def _first(self, lines, predicate):
-        for index, line in enumerate(lines):
-            if predicate(line):
-                return index
-        return None
-
-    def test_each_entry_point_claims_the_runtime(self):
-        for relpath in self.ENTRY_POINTS:
-            with self.subTest(relpath):
-                claim = self._first(
-                    self._lines(relpath),
-                    lambda line: "msvc_runtime" in line and "import" in line,
-                )
-                self.assertIsNotNone(
-                    claim, f"{relpath} never imports util.msvc_runtime"
-                )
-
-    def test_it_is_claimed_before_qt_is_imported(self):
-        for relpath in self.ENTRY_POINTS:
-            lines = self._lines(relpath)
-            qt = self._first(
-                lines,
-                lambda line: line.lstrip().startswith(("from PyQt5", "import PyQt5")),
-            )
-            if qt is None:
-                continue
-            with self.subTest(relpath):
-                claim = self._first(
-                    lines, lambda line: "msvc_runtime" in line and "import" in line
-                )
-                self.assertIsNotNone(claim)
-                self.assertLess(
-                    claim,
-                    qt,
-                    f"{relpath} imports PyQt5 first, which silently disables "
-                    "every onnxruntime backend",
-                )
-
-    def test_claiming_twice_is_harmless(self):
-        """It runs from several entry points, which can share one process."""
-        from util import msvc_runtime
-
-        msvc_runtime.prepare()
-        self.assertEqual(
-            msvc_runtime.prepare(), [],
-            "a second call re-claimed the runtime instead of doing nothing",
-        )
 
 
 class TestSuitePartitionTests(unittest.TestCase):
@@ -585,14 +506,12 @@ class TestSuitePartitionTests(unittest.TestCase):
         cases = {
             "test_imagetools.GeometryTests.test_box_coerces_numpy_integers": "imagetl",
             "test_imagetools_render.PaintTests.test_flat_background": "imagetl",
-            "test_image_text_editor.GateTests.test_the_later_steps_start_shut": "imagetl",
+            "test_imagetools.GeometryTests.test_box": "imagetl",
             "unittest.loader.ModuleSkipped.test_imagetools": "imagetl",
             "unittest.loader.ModuleSkipped.test_imagetools_render": "imagetl",
-            "unittest.loader.ModuleSkipped.test_image_text_editor": "imagetl",
+            "unittest.loader.ModuleSkipped.test_imagetools_render": "imagetl",
             "test_evaluation.EvaluationManifestTests.test_default_corpus": "integration",
             "test_version_update.GitVersionUpdateTests.test_bootstrap": "integration",
-            "test_version_update.VersionUpdateUITests.test_prepare_card": "extended",
-            "test_workflow_ui.WorkflowShellTests.test_vertical_step_rail": "extended",
             "test_translation_cache.CacheTests.test_round_trip": "core",
         }
         for test_id, expected in cases.items():
@@ -624,11 +543,11 @@ class TestSuitePartitionTests(unittest.TestCase):
             run_test_suite._module_names_for_profile(tests_root, "integration")
         )
         self.assertTrue(
-            core_modules.isdisjoint({"test_evaluation", "test_version_update"})
+            core_modules.isdisjoint({"test_evaluation", "test_version_update", "test_desktop_backend"})
         )
         self.assertEqual(
             integration_modules,
-            {"test_evaluation", "test_version_update"},
+            {"test_evaluation", "test_version_update", "test_desktop_backend", "test_desktop_installation"},
         )
 
         class NamedTest(unittest.TestCase):
@@ -642,7 +561,6 @@ class TestSuitePartitionTests(unittest.TestCase):
         grouped_ids = {
             "test_translation_cache.CacheTests.test_round_trip": "core",
             "test_evaluation.EvaluationManifestTests.test_default_corpus": "integration",
-            "test_version_update.VersionUpdateUITests.test_prepare_card": "extended",
             "test_imagetools.GeometryTests.test_box": "imagetl",
         }
 

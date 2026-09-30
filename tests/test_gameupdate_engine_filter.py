@@ -9,18 +9,18 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from gui.workflow_tab import (
-    _FileCopyWorker,
-    _GAMEUPDATE_COPY_SKIP_NAMES,
-    _RPG_GAMEUPDATE_COPY_SKIP_NAMES,
-    _WOLF_ONLY_GAMEUPDATE_NAMES,
+from util.project_preparation import (
+    copy_files,
+    GAMEUPDATE_COPY_SKIP_NAMES as _GAMEUPDATE_COPY_SKIP_NAMES,
+    RPG_GAMEUPDATE_COPY_SKIP_NAMES as _RPG_GAMEUPDATE_COPY_SKIP_NAMES,
+    WOLF_ONLY_GAMEUPDATE_NAMES as _WOLF_ONLY_GAMEUPDATE_NAMES,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class GameUpdateGuiCopyTests(unittest.TestCase):
+class GameUpdateCopyTests(unittest.TestCase):
     def _copy_with(self, skip_names: frozenset[str]) -> tuple[Path, tempfile.TemporaryDirectory]:
         tmp = tempfile.TemporaryDirectory()
         base = Path(tmp.name)
@@ -31,12 +31,8 @@ class GameUpdateGuiCopyTests(unittest.TestCase):
         (src / "UberWolfCli.exe").write_bytes(b"wolf-cli")
         (src / "UberWolfCli.LICENSE.txt").write_text("license", encoding="utf-8")
 
-        result = []
-        worker = _FileCopyWorker(str(src), str(dst), skip_names=skip_names)
-        worker.done.connect(lambda count, errors: result.append((count, errors)))
-        worker.run()
-
-        self.assertEqual(result, [(1 if _WOLF_ONLY_GAMEUPDATE_NAMES <= skip_names else 3, [])])
+        result = copy_files(src, dst, skip_names=skip_names)
+        self.assertEqual(result, (1 if _WOLF_ONLY_GAMEUPDATE_NAMES <= skip_names else 3, []))
         return dst, tmp
 
     def test_rpg_copy_omits_uberwolf_files(self):
@@ -48,9 +44,10 @@ class GameUpdateGuiCopyTests(unittest.TestCase):
         finally:
             tmp.cleanup()
 
-        # Len must produce the same prepared files as the Workflow actions, with
+        # Len must produce the same prepared files as the guided service actions, with
         # saved per-game configuration intact and no provider/GUI dependency.
-        from gui.workflow_workers import JsonFormatWorker, JsFormatWorker
+        from util.dazedformat import format_json_files
+        from util.project_preparation import format_plugins_js
         from util.project_preparation import (GAMEUPDATE_PRESERVE_EXISTING, prepare_rpgmaker,
                                                write_gameupdate_config, install_startup_check)
         with tempfile.TemporaryDirectory() as raw:
@@ -67,7 +64,7 @@ class GameUpdateGuiCopyTests(unittest.TestCase):
             env = base / "defaults.env"
             env.write_text("gameUpdateForge=gitlab\ngameUpdateUsername=FixtureAuthor\ngameUpdateHost=example.invalid\ngameUpdateBranch=main\n")
             for variant in ("MV", "MZ"):
-                games = [base / f"{variant}-{method}" for method in ("workflow", "len")]
+                games = [base / f"{variant}-{method}" for method in ("guided", "len")]
                 for game in games:
                     content = game / "www" if variant == "MV" else game
                     (content / "data").mkdir(parents=True)
@@ -82,14 +79,13 @@ class GameUpdateGuiCopyTests(unittest.TestCase):
                 with patch("util.translation_update_check.installer.DEFAULT_PLUGIN_SRC", bundle / "gameupdate/TranslationUpdateCheck.js"):
                     workflow, selected = games
                     content = workflow / "www" if variant == "MV" else workflow
-                    outcomes = []
-                    for worker in (JsonFormatWorker(str(content / "data")), JsFormatWorker(str(content / "js/plugins.js"))):
-                        worker.done.connect(lambda ok, msg: outcomes.append(ok))
-                        worker.run()
-                    self.assertEqual(outcomes, [True, True])
-                    worker = _FileCopyWorker(str(bundle), str(workflow), skip_names=_RPG_GAMEUPDATE_COPY_SKIP_NAMES,
-                                             preserve_existing=GAMEUPDATE_PRESERVE_EXISTING)
-                    worker.run()
+                    count, errors = format_json_files(content / "data")
+                    self.assertEqual(errors, [])
+                    self.assertEqual(count, 1)
+                    format_plugins_js(content / "js/plugins.js")
+                    count, errors = copy_files(bundle, workflow, skip_names=_RPG_GAMEUPDATE_COPY_SKIP_NAMES,
+                                               preserve_existing=GAMEUPDATE_PRESERVE_EXISTING)
+                    self.assertEqual(errors, [])
                     write_gameupdate_config(workflow, env_path=env)
                     self.assertTrue(install_startup_check(workflow)[0])
                     report = prepare_rpgmaker(selected, gameupdate_source=bundle, env_path=env)

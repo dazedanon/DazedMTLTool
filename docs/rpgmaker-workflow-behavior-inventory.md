@@ -87,16 +87,27 @@ All four tasks are required for the guided workflow and are presented in order.
 | Preview rewrap | Runs deterministic rewrap analysis with `apply=False`. |
 | Apply rewrap | Runs the same options with `apply=True` against the resolved game data folder. `_original` remains protected. |
 | Copy final QA skill | Copies the existing RPG Maker QA skill. |
-| Build public release ZIP | Confirms destination and runs the existing sanitized release worker. |
 
-## Step 7: Images
+
+## Step 7: Translation QA
+
+| Action | Effect |
+|---|---|
+| Copy investigation skill | Copies the existing optional localization investigation prompt with the selected game context. |
+| Reload and review guidance | Reloads investigation changes into the Setup editors and opens the quirks document for review. |
+| QA pass selection | Chooses the full-game release gate or an existing targeted focus and refreshes that task's status. |
+| Prepare / resume QA | Builds or reuses validated immutable review bundles through `util.rpgmaker_qa.prepare_task`, then copies the existing README handoff. |
+| Copy final rebuild handoff | Uses the latest completed game/focus task to request a final-only rebuild with checksum-validated review receipts. |
+| Ace release ZIP | Offers the existing sanitized public-release action here because Images and Playtest are hidden for Ace. |
+
+## Step 8: Images
 
 | Action | Effect |
 |---|---|
 | Refresh readiness | Reads image readiness, encryption-key availability, Glossary, and workspace placement. |
 | Open Image Manager | Saves the current game folder and switches the host window to the shared Images page. |
 
-## Step 8: Playtest
+## Step 9: Playtest
 
 | Action | Effect |
 |---|---|
@@ -106,6 +117,9 @@ All four tasks are required for the guided workflow and are presented in order.
 | Install/Remove TL Inspector | Uses the existing installer and confirmation behavior. |
 | Install/Remove Forge | Uses the existing engine-specific Forge installer and confirmation behavior. |
 | Install both plugins | Invokes the existing combined installation sequence. |
+| Refresh plugin status | Reads the installed plugin state without changing game files. |
+| Copy walkthrough skill | Copies the existing playthrough/audit handoff for the selected game. |
+| Build public release ZIP | Confirms destination and runs the existing sanitized release worker. |
 
 ## Worker and mutation invariants
 
@@ -127,7 +141,7 @@ Run the behavior-preservation harness independently with:
 
 The harness has two layers:
 
-1. A virtual action probe clicks 49 production controls across all nine steps
+1. A virtual action probe clicks 53 production controls across all ten stages
    and verifies their Qt signals still reach the inventoried endpoints. It also
    covers Enter-to-detect, speaker checkboxes, editor Save/Reload actions,
    disclosures, help, and navigation.
