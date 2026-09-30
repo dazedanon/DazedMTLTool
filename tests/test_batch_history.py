@@ -88,16 +88,6 @@ class BatchRunStateTests(BatchHistoryTestBase):
                 T.translateAI(["日本語"], [], config)
 
         require_result.assert_called_once()
-        # An explicitly requested batch phase must never fall through to
-        # full-price live transport when its endpoint is unsupported.
-        for phase in ('collect', 'consume', 'estimate'):
-            with (self.subTest(phase=phase),
-                  mock.patch.object(T, 'get_batch_phase', return_value=phase),
-                  mock.patch.object(T, 'getBatchProvider', return_value=None),
-                  mock.patch.object(T, 'translateText') as live,
-                  self.assertRaisesRegex(ValueError, 'no live request')):
-                T.translateAI(['日本語'], [], config)
-            live.assert_not_called()
 
     def test_corrupt_state_blocks_resume_and_submission(self):
         T._write_batch_file(
@@ -439,17 +429,14 @@ class BatchRunStateTests(BatchHistoryTestBase):
             "enabled_plugins_357": [],
             "enabled_patterns_355655": [],
         }
-        with mock.patch.object(BH, "active_key_name_for_environment", return_value="Original"), mock.patch.dict("os.environ", {"api": "https://original.example/v1"}):
-            T.saveQueuedBatchMetadata(
-                ["Map001.json", "Map002.json"],
-                runtime_profile=runtime_profile,
-                workflow_return={
-                    "engine": "rpgmakermvmz",
-                    "step_index": 4,
-                },
-            )
-        self.assertEqual(T.batchRunMetadata()["key_name"], "Original")
-        self.assertEqual(T.batchRunMetadata()["endpoint"], "https://original.example/v1")
+        T.saveQueuedBatchMetadata(
+            ["Map001.json", "Map002.json"],
+            runtime_profile=runtime_profile,
+            workflow_return={
+                "engine": "rpgmakermvmz",
+                "step_index": 4,
+            },
+        )
 
         self.assertEqual(T.batchRunMetadata()["status"], "queued")
         self.assertEqual(
@@ -472,18 +459,6 @@ class BatchRunStateTests(BatchHistoryTestBase):
             T.batchRunMetadata()["runtime_profile"],
             confirmed_legacy_profile,
         )
-        legacy_state = T.batchRunMetadata()
-        legacy_state.pop('runtime_profile')
-        T._write_batch_file(T.BATCH_STATE_FILE, legacy_state)
-        # A confirmation cannot relabel a different run that became active
-        # while the desktop reviewed the legacy settings.
-        with self.assertRaisesRegex(ValueError, 'state changed'):
-            T.saveBatchRuntimeProfile(confirmed_legacy_profile, expected_state={**legacy_state, 'run_id': 'other'})
-        self.assertEqual(T.batchRunMetadata(), legacy_state)
-        T.saveBatchRuntimeProfile(confirmed_legacy_profile, expected_state=legacy_state)
-        self.assertEqual(T.batchRunMetadata()['runtime_profile'], confirmed_legacy_profile)
-        with self.assertRaisesRegex(ValueError, 'state changed'):
-            T.saveBatchRuntimeProfile(runtime_profile, expected_state=T.batchRunMetadata())
 
     def test_persistent_consume_reports_per_file_cost_not_running_total(self):
         original_accurate = T._global_accurate_cost
@@ -897,48 +872,6 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
         with T._batch_submit_lock():
             with self.assertRaisesRegex(RuntimeError, "already being submitted"):
                 T.submitTranslationBatches()
-        # A linked legacy run uses this same paid boundary. Queue fragments
-        # may compact, but a changed request or lost ownership cannot be paid.
-        T.queue_batch_request('{"Line1":"猫"}', "English", {"model": "gpt-test", "messages": []}, provider="openai")
-        T.flush_batch_queue()
-        queue = T._read_batch_queue(strict=True)
-        T._write_batch_file(T.BATCH_STATE_FILE, {"status": "queued", "run_id": "original"})
-        expected = {"digest": T.batchQueueDigest(queue), "run_id": "original"}
-        with mock.patch.object(T, "BATCH_QUEUE_EXPECTED", expected), mock.patch("util.batch_providers.submit_batch") as submit:
-            for mutation in ("request", "ownership", "foreign_paid_key"):
-                with self.subTest(mutation=mutation):
-                    changed = json.loads(json.dumps(queue))
-                    state = {"status": "queued", "run_id": "original"}
-                    if mutation == "request":
-                        next(iter(changed.values()))["params"]["model"] = "other-model"
-                    elif mutation == "ownership":
-                        state["run_id"] = "other-run"
-                    else:
-                        state["batches"] = [{"custom_ids": {"paid": "not-in-queue"}}]
-                    T._write_batch_file(T.BATCH_QUEUE_FILE, changed)
-                    T._write_batch_file(T.BATCH_STATE_FILE, state)
-                    with self.assertRaisesRegex(ValueError, "linked batch queue changed"):
-                        T.submitTranslationBatches()
-            submit.assert_not_called()
-            T._write_batch_file(T.BATCH_QUEUE_FILE, queue)
-            T._write_batch_file(T.BATCH_STATE_FILE, {"status": "queued", "run_id": "original"})
-            submit.return_value = {"id": "linked-paid"}
-            self.assertEqual(T.submitTranslationBatches(), ["linked-paid"])
-            self.assertEqual(T.submitTranslationBatches(), ["linked-paid"])
-            submit.assert_called_once()
-            saved_state = T.BATCH_STATE_FILE.read_bytes()
-            with mock.patch.object(BH, 'client_for_batch', return_value=object()), mock.patch.object(
-                BH, 'download_batch_results', side_effect=lambda *_args, **_kwargs: (
-                    T._write_batch_file(T.BATCH_STATE_FILE, {'run_id': 'other-run'}) or ({}, [], {}))
-            ):
-                with self.assertRaisesRegex(ValueError, 'changed while downloading'):
-                    T.fetchTranslationBatches()
-            with self.assertRaisesRegex(ValueError, 'owner changed'):
-                T.clearBatchFiles(strict=True)
-            self.assertEqual(T._read_batch_file(T.BATCH_STATE_FILE)['run_id'], 'other-run')
-            T.BATCH_STATE_FILE.write_bytes(saved_state)
-            T.clearBatchFiles(strict=True)
-            self.assertFalse(T.BATCH_STATE_FILE.exists())
 
     def test_openai_submission_persists_provider_and_recovery_map(self):
         T.queue_batch_request(

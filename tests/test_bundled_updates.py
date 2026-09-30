@@ -87,9 +87,6 @@ _SHIPPED_DATA_FILES = (
     "data/sfx_reference/j_ono.json",
     "data/sfx_reference/LICENSE.md",
     "data/sfx_reference/SOURCE.md",
-    "data/tokenizers/9b5ad71b2ce5302211f9c61530b329a4922fc6a4",
-    "data/tokenizers/README.md",
-    "data/tokenizers/LICENSE.txt",
 )
 
 
@@ -97,7 +94,7 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
     """Tool update must refresh shipped data/ assets while protecting user state."""
 
     def test_installs_translation_contexts_and_skills(self):
-        from util.source_updates import SourceUpdater as UpdateThread
+        from gui.main import UpdateThread
 
         for rel in (
             *_SHIPPED_DATA_FILES,
@@ -110,7 +107,7 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
                 self.assertTrue(UpdateThread.should_install(Path(rel)))
 
     def test_skips_user_local_data_and_workdir(self):
-        from util.source_updates import SourceUpdater as UpdateThread
+        from gui.main import UpdateThread
 
         for rel in (
             "data/vocab.txt",
@@ -133,7 +130,7 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
                 self.assertFalse(UpdateThread.should_install(Path(rel)))
 
     def test_archive_metadata_tracks_checkout_type(self):
-        from util.source_updates import SourceUpdater as UpdateThread
+        from gui.main import UpdateThread
 
         for checkout in ("directory", "file", "archive"):
             with self.subTest(checkout=checkout), tempfile.TemporaryDirectory() as raw:
@@ -153,7 +150,7 @@ class UpdateThreadArchiveRootTests(unittest.TestCase):
     """Gitea zips nest files under a single top folder (repo display name)."""
 
     def test_windows_filesystem_paths_support_long_local_and_unc_names(self):
-        from util.source_updates import SourceUpdater as UpdateThread
+        from gui.main import UpdateThread
 
         cases = (
             ("C:/Users/test/Temp/../Temp", "\\\\?\\C:\\Users\\test\\Temp"),
@@ -161,16 +158,16 @@ class UpdateThreadArchiveRootTests(unittest.TestCase):
             ("\\\\?\\C:\\tool", "\\\\?\\C:\\tool"),
             ("\\\\?\\UNC\\server\\share\\tool", "\\\\?\\UNC\\server\\share\\tool"),
         )
-        with patch("util.source_updates.sys.platform", "win32"):
+        with patch("gui.main.sys.platform", "win32"):
             for source, expected in cases:
                 with self.subTest(source=source):
                     self.assertEqual(str(UpdateThread._filesystem_path(source)), expected)
 
-        with patch("util.source_updates.sys.platform", "linux"):
+        with patch("gui.main.sys.platform", "linux"):
             self.assertEqual(UpdateThread._filesystem_path("/tmp/tool"), Path("/tmp/tool"))
 
     def test_deep_archive_apply_preserves_user_data_and_cleans_up_on_failure(self):
-        from util.source_updates import UpdateCandidate, SourceUpdater as UpdateThread
+        from gui.main import UpdateCandidate, UpdateThread
 
         candidate = UpdateCandidate("b" * 40, UpdateThread.UPDATE_SOURCES[0])
         archive_root = f"DazedMTLTool-{candidate}"
@@ -218,12 +215,12 @@ class UpdateThreadArchiveRootTests(unittest.TestCase):
                     return copy2(src, dst)
 
                 with (
-                    patch("util.source_updates.PROJECT_ROOT", root),
+                    patch("gui.main.PROJECT_ROOT", root),
                     patch.object(UpdateThread, "SHA_FILE", str(sha_file)),
-                    patch("util.source_updates.tempfile.gettempdir", return_value=str(staging)),
+                    patch("gui.main.tempfile.gettempdir", return_value=str(staging)),
                     patch.object(worker, "_download_archive", side_effect=download),
                     patch.object(zipfile.ZipFile, "extractall", extract),
-                    patch("util.source_updates.shutil.copy2", side_effect=copy),
+                    patch("gui.main.shutil.copy2", side_effect=copy),
                 ):
                     if failure:
                         with self.assertRaises(OSError):
@@ -248,7 +245,7 @@ class UpdateThreadArchiveRootTests(unittest.TestCase):
                 shutil.rmtree(UpdateThread._filesystem_path(root))
 
     def test_resolves_archive_roots_and_rejects_ambiguous_layouts(self):
-        from util.source_updates import SourceUpdater as UpdateThread
+        from gui.main import UpdateThread
 
         layouts = (
             ((UpdateThread.ARCHIVE_ROOT, "other"), UpdateThread.ARCHIVE_ROOT),
@@ -283,20 +280,6 @@ class ShippedDataTrackingTests(unittest.TestCase):
                     (_REPO_ROOT / rel).is_file(),
                     f"missing shipped asset {rel}",
                 )
-        # End users launch the archived build without Node. A stale renderer or
-        # engine default silently runs different code than this checkout.
-        import hashlib
-        import json
-        desktop = _REPO_ROOT / 'desktop'
-        renderer = json.loads((desktop / 'dist/renderer-manifest.json').read_text())
-        for folder, entries in ((desktop, renderer['inputs']), (desktop / 'dist', renderer['files'])):
-            for name, expected in entries.items():
-                self.assertEqual(hashlib.sha256((folder / name).read_bytes()).hexdigest(), expected,
-                                 f'Rebuild shipped desktop assets: {name}')
-        engines = json.loads((desktop / 'engine-defaults/manifest.json').read_text())
-        for name, expected in engines['files'].items():
-            for folder in (desktop / 'engine-defaults', _REPO_ROOT / 'modules'):
-                self.assertEqual(hashlib.sha256((folder / name).read_bytes()).hexdigest(), expected)
 
     def test_help_dir_markdown_matches_index(self):
         import json
@@ -328,9 +311,6 @@ class ShippedDataTrackingTests(unittest.TestCase):
     def test_shipped_data_files_are_not_gitignored(self):
         help_dir = _REPO_ROOT / "data" / "help"
         rels = list(_SHIPPED_DATA_FILES)
-        rels += ['desktop/setup-runtimes.json', 'desktop/retired-qt-files.json']
-        rels += [file.relative_to(_REPO_ROOT).as_posix() for folder in ('dist', 'engine-defaults')
-                 for file in (_REPO_ROOT / 'desktop' / folder).rglob('*') if file.is_file()]
         for path in sorted(help_dir.rglob("*")):
             if not path.is_file():
                 continue
@@ -443,7 +423,7 @@ class CheckToolUpdateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             sha_file = Path(raw) / "last_update_sha.txt"
             sha_file.write_text("aaaaaaaa", encoding="utf-8")
-            from util.source_updates import SourceUpdater as UpdateThread, check_tool_update
+            from gui.main import UpdateThread, check_tool_update
 
             with patch.object(UpdateThread, "SHA_FILE", str(sha_file)):
                 with patch.object(
@@ -455,7 +435,7 @@ class CheckToolUpdateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             sha_file = Path(raw) / "last_update_sha.txt"
             sha_file.write_text("same1234", encoding="utf-8")
-            from util.source_updates import SourceUpdater as UpdateThread, check_tool_update
+            from gui.main import UpdateThread, check_tool_update
 
             with patch.object(UpdateThread, "SHA_FILE", str(sha_file)):
                 with patch.object(
@@ -470,7 +450,7 @@ class CheckToolUpdateTests(unittest.TestCase):
             sha_file = base / "missing-last-update-sha.txt"
             archive_file = base / ".git_archival.txt"
             archive_file.write_text(f"node: {archived_sha}\n", encoding="utf-8")
-            from util.source_updates import SourceUpdater as UpdateThread, check_tool_update
+            from gui.main import UpdateThread, check_tool_update
 
             with patch.multiple(
                 UpdateThread,
@@ -488,7 +468,7 @@ class CheckToolUpdateTests(unittest.TestCase):
             base = Path(raw)
             archive_file = base / ".git_archival.txt"
             archive_file.write_text("node: $Format:%H$\n", encoding="utf-8")
-            from util.source_updates import SourceUpdater as UpdateThread, check_tool_update
+            from gui.main import UpdateThread, check_tool_update
 
             with patch.multiple(
                 UpdateThread,
@@ -541,6 +521,7 @@ class CheckToolUpdateTests(unittest.TestCase):
                 text=True,
             ).stdout.strip()
 
+            from gui.main import UpdateDialog
 
             with patch.multiple(
                 UpdateThread,
@@ -554,11 +535,11 @@ class CheckToolUpdateTests(unittest.TestCase):
                 ):
                     self.assertIsNone(check_tool_update())
                 self.assertEqual(
-                    UpdateThread.read_installed_sha(), installed_sha
+                    UpdateDialog._installed_sha_display(), installed_sha[:8]
                 )
 
     def test_fetch_failure_is_not_reported_as_up_to_date(self):
-        from util.source_updates import SourceUpdater as UpdateThread, check_tool_update
+        from gui.main import UpdateThread, check_tool_update
 
         with patch.object(
             UpdateThread, "fetch_latest_sha", side_effect=OSError("offline")
@@ -567,7 +548,7 @@ class CheckToolUpdateTests(unittest.TestCase):
                 check_tool_update()
 
     def test_update_sources_fall_back_in_priority_order(self):
-        from util.source_updates import UpdateCandidate, SourceUpdater as UpdateThread
+        from gui.main import UpdateCandidate, UpdateThread
 
         latest_sha = "b" * 40
         sources = UpdateThread.UPDATE_SOURCES
@@ -618,7 +599,7 @@ class CheckToolUpdateTests(unittest.TestCase):
                 UpdateThread.fetch_latest_sha()
 
     def test_archive_fallback_requires_the_same_commit(self):
-        from util.source_updates import UpdateCandidate, SourceUpdater as UpdateThread
+        from gui.main import UpdateCandidate, UpdateThread
 
         class Response:
             headers = {}
@@ -643,7 +624,7 @@ class CheckToolUpdateTests(unittest.TestCase):
             destination = Path(raw) / "update.zip"
             with (
                 patch(
-                    "util.source_updates.urllib.request.urlopen",
+                    "gui.main.urllib.request.urlopen",
                     side_effect=[OSError("primary archive unavailable"), Response()],
                 ) as urlopen,
                 patch.object(
@@ -667,7 +648,7 @@ class CheckToolUpdateTests(unittest.TestCase):
 
             with (
                 patch(
-                    "util.source_updates.urllib.request.urlopen",
+                    "gui.main.urllib.request.urlopen",
                     side_effect=OSError("primary archive unavailable"),
                 ) as urlopen,
                 patch.object(

@@ -15,7 +15,7 @@ from util.paths import (
     LEGACY_GAME_SKILL_RELATIVE,
     LEGACY_GAME_SKILLS_RELATIVE,
     LEGACY_QUIRKS_FILENAME,
-    PROMPT_PATH, runtime_data_file,
+    PROMPT_PATH,
     ensure_game_tool_gitignore,
     game_metadata_dir,
     prepare_game_translation_context,
@@ -295,9 +295,8 @@ def load_system_prompt(game_root: str | Path | None = None) -> str:
       2. ``DAZED_GAME_ROOT`` environment variable
     """
     base = ""
-    prompt_path = runtime_data_file(PROMPT_PATH)
-    if prompt_path.is_file():
-        base = prompt_path.read_text(encoding="utf-8")
+    if PROMPT_PATH.is_file():
+        base = PROMPT_PATH.read_text(encoding="utf-8")
 
     root = game_root or os.getenv("DAZED_GAME_ROOT") or ""
     root = str(root).strip()

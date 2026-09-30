@@ -37,7 +37,6 @@ data/wolf_speakers.json
 !data/glossary_base.txt
 !data/translation_contexts.json
 !data/sfx_reference/**
-!data/tokenizers/**
 
 # Len's generated output and dependency installs are excluded by its own
 # data/skills/game-translation/.gitignore, after the shipped-source exceptions.

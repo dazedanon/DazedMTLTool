@@ -13,9 +13,7 @@ import hashlib
 import json
 import os
 import re
-import shlex
 import shutil
-import sys
 import tempfile
 from collections import defaultdict
 from contextlib import contextmanager
@@ -1004,29 +1002,17 @@ def _write_bundles(
     return summaries
 
 
-def shell_argument(value: str | Path) -> str:
-    """Quote a handoff argument for PowerShell on Windows, sh elsewhere."""
-    text = str(value)
-    return "'" + text.replace("'", "''") + "'" if os.name == 'nt' else shlex.quote(text)
-
-
-def runtime_command(script: str | Path) -> str:
-    """Use the running managed interpreter, even with no Python on PATH."""
-    return ('& ' if os.name == 'nt' else '') + shell_argument(sys.executable) + ' ' + shell_argument(script)
-
-
 def _task_instructions(task_dir: Path, task: dict[str, Any]) -> str:
-    cli = runtime_command(Path(__file__).resolve().parents[1] / "scripts" / "rpgmaker_qa.py")
-    task_argument = shell_argument(task_dir)
+    cli = Path(__file__).resolve().parents[1] / "scripts" / "rpgmaker_qa.py"
     receipt_dir = (
         Path(task["game_root"]) / ".dazedtl" / "qa-receipts" / task_dir.name
     )
     if task["focus"] == "release":
         correction_workflow = f"""9. After every actionable correction passes, continue automatically; do not ask the user to
    approve stable finding IDs. Run
-   `{cli} corrections --task {task_argument} --approve-all`, followed by
-   `{cli} dry-run --task {task_argument}`, then
-   `{cli} apply --task {task_argument}`. The first command is restricted to the full-game
+   `python "{cli}" corrections --task "{task_dir}" --approve-all`, followed by
+   `python "{cli}" dry-run --task "{task_dir}"`, then
+   `python "{cli}" apply --task "{task_dir}"`. The first command is restricted to the full-game
    release focus and refuses to proceed when unresolved `uncertain_playtests` remain. If it
    refuses, ask the user only about those named playtest/context decisions. After the user
    explicitly chooses to apply the independently verified findings while leaving those records
@@ -1035,9 +1021,9 @@ def _task_instructions(task_dir: Path, task: dict[str, Any]) -> str:
     else:
         correction_workflow = f"""9. After every actionable correction passes, show the targeted findings to the user and wait
    for approval of specific stable IDs. Create and validate the selected correction map with
-   `{cli} corrections --task {task_argument} --approve QA-0001 ...` and
-   `{cli} dry-run --task {task_argument}`. Only then apply it with
-   `{cli} apply --task {task_argument}`. Targeted reruns never use `--approve-all`."""
+   `python "{cli}" corrections --task "{task_dir}" --approve QA-0001 ...` and
+   `python "{cli}" dry-run --task "{task_dir}"`. Only then apply it with
+   `python "{cli}" apply --task "{task_dir}"`. Targeted reruns never use `--approve-all`."""
     return f"""# AI-helper QA task
 
 This task is managed by DazedTL. Do not create another manifest, index, checkpoint, registry,
@@ -1058,17 +1044,17 @@ redistribute a scene outside the claim/release commands.
    advisory evidence of established wording. A reference difference is a reason to compare
    referent, function, tone, and scene context—not an automatic defect. The current source and
    explicit current-game glossary remain authoritative.
-2. Run `{cli} status --task {task_argument}`.
-3. Claim work with `{cli} next --task {task_argument} --worker "<unique-worker-name>"`.
+2. Run `python "{cli}" status --task "{task_dir}"`.
+3. Claim work with `python "{cli}" next --task "{task_dir}" --worker "<unique-worker-name>"`.
 4. Read the returned immutable bundle and write the result schema described below. Create the
    reviewer receipt workspace above and write every temporary screen/deep result there using a
    unique filename containing its bundle ID. Never write `.qa-*.json` or `qa-*.json` in the game
    root. DazedTL copies accepted receipts into the managed task directory; the ignored workspace
    only preserves convenient reviewer history.
-5. Submit it with `{cli} accept --task {task_argument} --result "<result.json>"`.
+5. Submit it with `python "{cli}" accept --task "{task_dir}" --result "<result.json>"`.
 6. Continue until `next` says the current stage is complete, then run
-   `{cli} advance --task {task_argument}` and continue the next stage.
-7. When every deep bundle is accepted, run `{cli} finalize --task {task_argument}`.
+   `python "{cli}" advance --task "{task_dir}"` and continue the next stage.
+7. When every deep bundle is accepted, run `python "{cli}" finalize --task "{task_dir}"`.
    Finalization audits exact mappings from the translation quirks and repeated structured UI
    headers across all proposed corrections. If it reports a conflict, do not present a partial
    report; reconcile the named deep receipts and run `rebuild-final` until the audit passes.
@@ -1086,14 +1072,14 @@ redistribute a scene outside the claim/release commands.
    scene support, and why the correction is not merely preferred wording. If independent review is
    unavailable or does not agree, withdraw the finding as clean before presenting results.
    If a correction needs revision, revise its corresponding deep result receipt, run
-   `{cli} rebuild-final --task {task_argument} --output-root
+   `python "{cli}" rebuild-final --task "{task_dir}" --output-root
    "<separate-output-root>"`, and repeat this pass on the returned task.
 {correction_workflow}
 
    DazedTL applies correction maps atomically and runs regression.
    If a final editorial adjustment is needed after approval but before applying, write one
    checksum-recorded review covering every approved finding exactly once, create its delta map
-   with `{cli} editorial-corrections --task {task_argument} --review
+   with `python "{cli}" editorial-corrections --task "{task_dir}" --review
    "<editorial-review.json>"`, then run `editorial-dry-run` and `editorial-apply` instead of the
    ordinary `apply`. A rejected finding requires fresh user approval; use this route only for an
    accepted correction or a publication-ready wording revision within the approved finding scope.
@@ -1191,7 +1177,7 @@ Do not use these categories for equally valid alternatives. Other categories and
 reviews must omit `editorial_basis`.
 
 If a worker cannot finish an assigned bundle, release it with
-`{cli} release --task {task_argument} --bundle "<bundle-id>"`.
+`python "{cli}" release --task "{task_dir}" --bundle "<bundle-id>"`.
 """
 
 

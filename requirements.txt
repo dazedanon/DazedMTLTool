@@ -8,10 +8,18 @@ tiktoken>=0.8.0
 tqdm>=4.65.0
 jsbeautifier>=1.14.0
 pillow>=12.1.0
+PyQt5>=5.15.0
+qtawesome>=1.3.0
 markdown>=3.5.0
 
-numpy>=2.0
-opencv-python-headless>=4.10
-
-# OCR clients and inpainting models remain optional. Install them from Images
-# or run: python -m util.imagetools.resources --default
+# The semi-manual image workflow (Images -> "Edit text...") needs numpy,
+# OpenCV, an OCR client and optionally a few hundred megabytes of inpainting
+# models. Deliberately not listed above: only that workflow wants any of it,
+# and it is fetched on demand the first time somebody opens it. To install it
+# up front instead, or from a terminal:
+#
+#   python -m util.imagetools.resources             # show what is missing
+#   python -m util.imagetools.resources --default   # the recommended set
+#   python -m util.imagetools.resources --all
+#
+# See util/imagetools/resources.py for the manifest and the sources.

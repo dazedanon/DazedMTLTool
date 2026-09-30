@@ -335,58 +335,6 @@ def update_vocab_section(
         os.replace(tmp_path, glossary_path)
 
 
-def merge_reviewed_character_names(content: str, pairs) -> str:
-    """Apply explicitly reviewed actor names without discarding voice notes.
-
-    Exact source/alias matches may replace English spellings. Other rows,
-    descriptive suffixes and the stock glossary remain untouched.
-    """
-    incoming = {}
-    for source, target in pairs:
-        source, target = normalize_generated_glossary_pair(source, target)
-        if source and target and not any(char in source + target for char in "\r\n"):
-            incoming[unicodedata.normalize("NFKC", source).casefold()] = (source, target)
-    if not incoming:
-        return content
-    game, base = _split_base(content)
-    pattern = re.compile(r"(?im)^([\t ]*#+\s*Game Characters\s*\r?\n)(.*?)(?=^[\t ]*#|\Z)", re.DOTALL)
-    section = pattern.search(game)
-    lines = section.group(2).splitlines(keepends=True) if section else []
-    covered, result = set(), []
-    for line in lines:
-        prefix = re.match(r"^\s*(.+?)\s+\(", line)
-        if prefix is None:
-            result.append(line)
-            continue
-        aliases = {unicodedata.normalize("NFKC", value.strip()).casefold() for value in re.split(r"[/／]", prefix.group(1))}
-        matches = aliases & incoming.keys()
-        if not matches:
-            result.append(line)
-            continue
-        names = {incoming[key][1] for key in matches}
-        if len(names) != 1:
-            raise ValueError("Reviewed actor aliases disagree on an English name; resolve the glossary entry first.")
-        opening = prefix.end() - 1
-        depth, closing = 0, None
-        for index in range(opening, len(line)):
-            depth += (line[index] == "(") - (line[index] == ")")
-            if depth == 0:
-                closing = index
-                break
-        if closing is None:
-            result.append(line)
-            continue
-        covered.update(matches)
-        result.append(line[:opening + 1] + next(iter(names)) + line[closing:])
-    missing = [value for key, value in incoming.items() if key not in covered]
-    body = "".join(result).rstrip("\r\n")
-    if missing:
-        body += ("\n" if body else "") + "\n".join(f"{source} ({target})" for source, target in missing)
-    replacement = (section.group(1) if section else "# Game Characters\n") + body + "\n\n"
-    game = game[:section.start()] + replacement + game[section.end():] if section else replacement + game
-    return game + base
-
-
 def remove_vocab_section(category: str, *, game_root=None) -> None:
     """Remove a ``# {category}`` section from the game-specific vocab, if present."""
     with _VOCAB_LOCK:

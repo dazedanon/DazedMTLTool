@@ -14,26 +14,52 @@ from collections.abc import Iterator
 from pathlib import Path
 
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ["DAZEDTL_TEST_OFFLINE"] = "1"
-os.environ["PYTHON_DOTENV_DISABLED"] = "1"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
-from tests.runtime_environment import configure as configure_test_environment
-configure_test_environment()
+# Before PyQt5, exactly as the launchers do - see util/msvc_runtime.py. It is
+# repeated here rather than left to tests/__init__.py because discovery below
+# passes no top_level_dir, so test modules are imported as top-level names and
+# the tests package itself is never imported. A no-op off Windows.
+from util.msvc_runtime import prepare as _prepare_msvc_runtime  # noqa: E402
 
-# Qt widgets are retired. The shell's extended/desktop profile runs the
-# existing Electron suite with its own unchanged 20s/60s limits.
-EXTENDED_TEST_MODULES = ()
-EXTENDED_TEST_PREFIXES = ()
+_prepare_msvc_runtime()
+
+
+# Full widget/workflow construction belongs here. Whole-module classifications
+# also let focused profiles avoid importing modules they cannot select.
+EXTENDED_TEST_MODULES = (
+    "test_batch_tab",
+    "test_evaluation_tab",
+    "test_file_list_selection",
+    "test_gui_ux_contract",
+    "test_image_manager_ui",
+    "test_log_viewer",
+    "test_workflow_actions",
+)
+EXTENDED_TEST_PREFIXES = (
+    "test_config_tab.ConfigTabRegressionTests.test_loads_every_option",
+    "test_config_tab.ConfigTabRegressionTests.test_selecting_saved_provider",
+    "test_config_tab.ConfigTabRegressionTests.test_provider_refresh",
+    "test_config_tab.ConfigTabRegressionTests.test_manual_model_refresh",
+    "test_config_tab.ConfigTabRegressionTests.test_save_and_reload",
+    "test_config_tab.ConfigTabRegressionTests.test_reset_restores",
+    "test_qt_icons.TestQtIcons.test_apply_button_icon",
+    "test_translation_engine_dropdown.TranslationEngineDropdownTests.test_all_engines",
+    "test_translation_engine_dropdown.TranslationEngineDropdownTests.test_translation_tab",
+    "test_translation_tab_ui.TranslationTabUITests.",
+    "test_version_update.VersionUpdateUITests.",
+    "test_workflow_ui.WorkflowShellTests.",
+    "test_workflow_ui.WolfWorkflowShellTests.",
+)
 
 # Subprocess-backed Git repositories and persisted end-to-end evaluation runs
 # are valuable integration coverage, not lightweight unit/component tests.
 INTEGRATION_TEST_MODULES = (
     "test_evaluation",
-    "test_desktop_backend",
-    "test_desktop_installation",
 )
 INTEGRATION_TEST_PREFIXES = (
     "test_version_update.GitVersionUpdateTests.",
@@ -49,6 +75,7 @@ CORE_EXCLUDED_TEST_MODULES = (
 # extras happen to be installed: otherwise discovery changes a three-module
 # skip into hundreds of tests based on the developer's local environment.
 IMAGETL_TEST_MODULES = (
+    "test_image_text_editor",
     "test_imagetools",
     "test_imagetools_render",
 )
@@ -111,9 +138,16 @@ MODULE_BUDGET_OVERRIDES_SECONDS = {
     ("core", "test_walkthrough_validation"): 1.5,
     ("integration", "test_evaluation"): 5.0,
     ("integration", "test_version_update"): 15.0,
+    ("extended", "test_image_manager_ui"): 2.5,
+    ("extended", "test_version_update"): 3.0,
+    ("extended", "test_workflow_actions"): 8.0,
+    ("extended", "test_workflow_ui"): 6.0,
     ("full", "test_evaluation"): 5.0,
+    ("full", "test_image_manager_ui"): 2.5,
     ("full", "test_version_update"): 18.0,
     ("full", "test_walkthrough_validation"): 1.5,
+    ("full", "test_workflow_actions"): 8.0,
+    ("full", "test_workflow_ui"): 6.0,
 }
 
 

@@ -25,16 +25,11 @@ from functools import lru_cache, wraps
 from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
-from util.paths import DATA_DIR, read_active_glossary
+from util.paths import read_active_glossary
 from util.provider_costs import cache_write_multiplier, has_billed_cache_writes
 from util import request_debug
 from util.sfx_reference import build_sfx_reference_text
 from util.vocab import decorative_glossary_alias
-
-# The fixed GPT-4 token counter is shared by translation and Len estimates.
-# Prefer its shipped table on clean/offline installations; explicit process
-# configuration can still choose another cache directory.
-os.environ.setdefault("TIKTOKEN_CACHE_DIR", str(DATA_DIR / "tokenizers"))
 
 
 def _batch_freeze_glossary_text(fallback=""):
@@ -346,15 +341,278 @@ def _estimate_static_token_count(static_system, model):
         return token_count
 
 
-# Keep the established import surface while allowing desktop review to use
-# runtime-code validation without loading provider SDKs.
-from util.runtime_text import (
-    PROTECTED_PATTERNS, _GENERAL_CONTROL_PATTERN, _ORPHAN_BACKSLASH_PATTERN,
-    _CONTROL_CODE_RE, _ORPHAN_BACKSLASH_RE, _FORMAT_SCOPE_RE,
-    _escaped_orphan_backslash, _mask_mapped_control_codes, _format_scope_signature,
-    extract_control_codes, validate_control_codes, protect_script_codes,
-    restore_script_codes, _reprotect_cached_codes,
+# ===== Placeholder Protection System =====
+# Patterns to protect from translation (sound effects, control codes, etc.)
+_GENERAL_CONTROL_PATTERN = (
+    r'[\\]+(?:[A-Za-z_][A-Za-z0-9_]*(?:\[(?:[^\[\]]|\[[^\]]*\])*\])?'
+    r'|[{}.!|^><#$@,\-])'
 )
+_ORPHAN_BACKSLASH_PATTERN = r'[\\]+(?=[^\W\d_])'
+
+PROTECTED_PATTERNS = [
+    r'\\SE\[[^\]]+\]',      # \SE[sound_effect_name]
+    r'\\ME\[[^\]]+\]',      # \ME[music_effect_name]
+    r'\\BGM\[[^\]]+\]',     # \BGM[background_music_name]
+    r'\\BGS\[[^\]]+\]',     # \BGS[background_sound_name]
+    r'_pum\[[^\]]+\]',      # _pum[name]
+    r'\\VS\[[^\]]+\]',      # \VS[name]
+    # General RPG Maker/plugin controls. Preserve the full spelling, parameter,
+    # slash count, and order rather than asking the model to reproduce them.
+    _GENERAL_CONTROL_PATTERN,
+    # A backslash before a non-ASCII word is not recognized as a control code,
+    # but translating that word can turn it into one (``\ヘレン`` ->
+    # ``\Helen``). Protect the slash run separately; target restoration escapes
+    # odd runs so they remain literal instead of becoming runtime commands.
+    _ORPHAN_BACKSLASH_PATTERN,
+]
+
+_CONTROL_CODE_RE = re.compile(_GENERAL_CONTROL_PATTERN)
+_ORPHAN_BACKSLASH_RE = re.compile(r'^[\\]+$')
+
+
+def _escaped_orphan_backslash(code):
+    """Return an even slash run so RPG Maker treats it as literal text."""
+    value = str(code)
+    if _ORPHAN_BACKSLASH_RE.fullmatch(value) and len(value) % 2:
+        return value + "\\"
+    return value
+
+
+def extract_control_codes(text):
+    """Return runtime control tokens in source order."""
+    if not isinstance(text, str) or not text:
+        return []
+    return _CONTROL_CODE_RE.findall(text)
+
+
+def _mask_mapped_control_codes(text, replacements):
+    """Mask restored placeholder codes regardless of their translated order."""
+    masked = str(text)
+    missing = []
+
+    # Match exact restored codes before using the generic parser. This matters
+    # for unparameterized codes such as ``\vc``: once restored before English
+    # text, ``\vcThat's`` would otherwise be greedily parsed as ``\vcThat``.
+    # Orphan slash placeholders are also masked. Cached/final translations may
+    # contain their even, literal-safe form, so prefer that form when present.
+    # Search from the beginning for each occurrence so normal translation word
+    # order may move standalone values/icons without making them look missing.
+    for original in replacements.values():
+        code = str(original)
+        is_orphan_backslash = _ORPHAN_BACKSLASH_RE.fullmatch(code) is not None
+        if _CONTROL_CODE_RE.fullmatch(code) is None and not is_orphan_backslash:
+            continue
+        matched_code = (
+            _escaped_orphan_backslash(code) if is_orphan_backslash else code
+        )
+        index = masked.find(matched_code)
+        if index < 0 and matched_code != code:
+            matched_code = code
+            index = masked.find(matched_code)
+        if index < 0:
+            missing.append(code)
+            continue
+        end = index + len(matched_code)
+        masked = masked[:index] + (" " * len(matched_code)) + masked[end:]
+
+    return masked, missing
+
+
+_FORMAT_SCOPE_RE = re.compile(r"\\(?:[cC]\[[^\]]+\]|[{}><])")
+
+
+def _format_scope_signature(text):
+    """Return structural open/close order for known stateful formatting codes."""
+    signatures = {"color": [], "font": [], "speed": []}
+    for code in _FORMAT_SCOPE_RE.findall(str(text)):
+        lowered = code.lower()
+        if lowered.startswith(r"\c["):
+            parameter = code[3:-1].strip()
+            signatures["color"].append("close" if parameter == "0" else "open")
+        elif code == r"\{":
+            signatures["font"].append("open")
+        elif code == r"\}":
+            signatures["font"].append("close")
+        elif code == r"\>":
+            signatures["speed"].append("open")
+        elif code == r"\<":
+            signatures["speed"].append("close")
+    return signatures
+
+
+def validate_control_codes(original_items, translated_items, replacements_by_line=None):
+    """Require exact control tokens while allowing translation-driven movement.
+
+    ``replacements_by_line`` is the per-line placeholder mapping produced by
+    :func:`protect_script_codes`. Known restored codes are matched exactly and
+    masked before the generic control-code regex runs. This avoids treating
+    adjacent English letters as part of an unparameterized code name. Token
+    spelling, parameters, and counts remain strict, while standalone tokens may
+    move with translated grammar. Known formatting scopes must retain their
+    open/close structure.
+    """
+    originals = original_items if isinstance(original_items, list) else [original_items]
+    translations = translated_items if isinstance(translated_items, list) else [translated_items]
+    if len(originals) != len(translations):
+        return False, [f"line count differs ({len(originals)} source, {len(translations)} translated)"]
+
+    errors = []
+    for index, (original, translated) in enumerate(zip(originals, translations), start=1):
+        replacements = (
+            replacements_by_line.get(index - 1, {})
+            if replacements_by_line
+            else {}
+        )
+        source_text, source_mapping_missing = _mask_mapped_control_codes(
+            original, replacements
+        )
+        target_text, target_mapping_missing = _mask_mapped_control_codes(
+            translated, replacements
+        )
+        source_sequence = extract_control_codes(source_text)
+        target_sequence = extract_control_codes(target_text)
+
+        if source_mapping_missing:
+            errors.append(
+                f"Line{index}: protected-code mapping absent from source "
+                f"{source_mapping_missing}"
+            )
+            continue
+        if target_mapping_missing:
+            errors.append(
+                f"Line{index}: missing protected codes {target_mapping_missing}"
+            )
+            continue
+
+        source_codes = Counter(source_sequence)
+        target_codes = Counter(target_sequence)
+        if source_codes != target_codes:
+            missing = list((source_codes - target_codes).elements())
+            extra = list((target_codes - source_codes).elements())
+            details = []
+            if missing:
+                details.append(f"missing {missing}")
+            if extra:
+                details.append(f"extra/altered {extra}")
+            errors.append(f"Line{index}: " + "; ".join(details))
+            continue
+
+        source_scopes = _format_scope_signature(original)
+        target_scopes = _format_scope_signature(translated)
+        changed_scopes = [
+            name for name in source_scopes
+            if source_scopes[name] != target_scopes[name]
+        ]
+        if changed_scopes:
+            errors.append(
+                f"Line{index}: formatting scope order changed for "
+                + ", ".join(changed_scopes)
+            )
+    return not errors, errors
+
+def protect_script_codes(text):
+    """
+    Replace script codes (like \\SE[タイプライター]) with unique placeholders before translation.
+    Returns: (protected_text, replacements_dict)
+    """
+    if not text or not isinstance(text, str):
+        return text, {}
+
+    # Normalize curly/smart quotes to ASCII equivalents BEFORE building the JSON
+    # payload.  When these characters appear inside a JSON string value the AI
+    # tends to treat them as regular ASCII double-quotes, which makes the value
+    # appear empty (e.g. `"スキルを"リセットする` → AI sees empty + stray text).
+    # This mirrors the identical normalization already applied to the AI's OUTPUT
+    # inside extractTranslation's translation_table.
+    quote_norm_table = str.maketrans({
+        '\u201C': "'",  # " left double quotation mark
+        '\u201D': "'",  # " right double quotation mark
+        '\uFF02': "'",  # ＂ fullwidth quotation mark
+        '\u2018': "'",  # ' left single quotation mark
+        '\u2019': "'",  # ' right single quotation mark
+        '\u201B': "'",  # ‛ single high-reversed-9 quotation mark
+        '\u02BC': "'",  # ʼ modifier letter apostrophe
+        '\uFF07': "'",  # ＇ fullwidth apostrophe
+    })
+    text = text.translate(quote_norm_table)
+
+    # Convert half-width katakana (U+FF61–U+FF9F) to full-width katakana so the
+    # AI recognises them as Japanese text and translates them correctly.
+    # NFKC is applied only to matched half-width kana spans to avoid altering
+    # intentional fullwidth Latin/digit characters elsewhere in the string.
+    text = re.sub(r'[\uFF61-\uFF9F]+', lambda m: unicodedata.normalize('NFKC', m.group(0)), text)
+
+    replacements = {}
+    protected_text = text
+    counter = 0
+    
+    # Combine all patterns
+    combined_pattern = '|'.join(f'({pattern})' for pattern in PROTECTED_PATTERNS)
+    
+    def replace_match(match):
+        nonlocal counter
+        original = match.group(0)
+        # Create a unique placeholder that won't be translated
+        placeholder = f"__PROTECTED_{counter}__"
+        replacements[placeholder] = original
+        counter += 1
+        return placeholder
+    
+    if combined_pattern:
+        protected_text = re.sub(combined_pattern, replace_match, protected_text)
+    
+    return protected_text, replacements
+
+
+def restore_script_codes(text, replacements, escape_orphan_backslashes=False):
+    """
+    Restore protected script codes from placeholders after translation.
+
+    When ``escape_orphan_backslashes`` is true, odd slash-only replacements are
+    made even. This preserves a literal backslash without allowing translated
+    ASCII text immediately after it to become a new RPG Maker control code.
+    """
+    if not text or not replacements:
+        return text
+    
+    if isinstance(text, str):
+        result = text
+        for placeholder, original in replacements.items():
+            restored = (
+                _escaped_orphan_backslash(original)
+                if escape_orphan_backslashes
+                else original
+            )
+            result = result.replace(placeholder, restored)
+        return result
+    elif isinstance(text, list):
+        return [
+            restore_script_codes(
+                item,
+                replacements,
+                escape_orphan_backslashes=escape_orphan_backslashes,
+            )
+            for item in text
+        ]
+    else:
+        return text
+
+
+def _reprotect_cached_codes(text, replacements):
+    """Reapply known placeholders before validating a restored cache value."""
+    protected = str(text)
+    for placeholder, original in replacements.items():
+        code = str(original)
+        cached_code = _escaped_orphan_backslash(code)
+        index = protected.find(cached_code)
+        if index < 0 and cached_code != code:
+            cached_code = code
+            index = protected.find(cached_code)
+        if index < 0:
+            continue
+        end = index + len(cached_code)
+        protected = protected[:index] + placeholder + protected[end:]
+    return protected
 
 
 def validate_placeholders(original_text, translated_text, replacements):
@@ -1436,9 +1694,6 @@ BATCH_STATE_FILE   = Path("log/batch_state.json")
 BATCH_RESULTS_FILE = Path("log/batch_results.json")
 BATCH_LOCK_FILE    = Path("log/batch_files.lock")
 BATCH_SUBMIT_LOCK_FILE = Path("log/batch_submit.lock")
-# A desktop recovery worker may pin a linked legacy queue. Other callers keep
-# the established queue lifecycle; the guard is checked inside the submit lock.
-BATCH_QUEUE_EXPECTED = None
 BATCH_LOCK = threading.RLock()
 # Legacy public constants retained for extensions/tests. Submission uses the
 # stricter provider-specific limits from util.batch_providers.
@@ -1582,12 +1837,6 @@ def _batch_queue_parts_dir(queue_file=None):
     """Directory of append-only collect fragments for one queue."""
     queue_file = Path(queue_file or _active_batch_queue_file())
     return queue_file.with_name(f"{queue_file.name}.parts")
-
-
-def batchQueueDigest(queue):
-    """Identify request content independently of queue fragment compaction."""
-    return hashlib.sha256(json.dumps(queue, sort_keys=True, separators=(",", ":"),
-                                     ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def _read_batch_queue(*, strict=False, queue_file=None):
@@ -2028,7 +2277,6 @@ def saveQueuedBatchMetadata(
 ):
     """Persist the file scope of an unsubmitted queue for safe resume."""
     from util.runtime_profile import copy_batch_runtime_profile
-    from util.batch_history import active_key_name_for_environment
 
     saved_profile = copy_batch_runtime_profile(runtime_profile)
     with BATCH_LOCK:
@@ -2041,8 +2289,6 @@ def saveQueuedBatchMetadata(
                 "model": os.getenv("model", ""),
                 "provider": getBatchProvider(os.getenv("model", "")),
                 "cache_key_version": BATCH_CACHE_KEY_VERSION,
-                "key_name": active_key_name_for_environment(),
-                "endpoint": os.getenv("api", "").strip(),
             })
             if saved_profile is not None:
                 state["runtime_profile"] = saved_profile
@@ -2064,7 +2310,7 @@ def saveQueuedBatchMetadata(
             _write_batch_file(BATCH_STATE_FILE, state)
 
 
-def saveBatchRuntimeProfile(runtime_profile, *, expected_state=None):
+def saveBatchRuntimeProfile(runtime_profile):
     """Attach an explicitly confirmed legacy profile to active recovery data."""
     from util.runtime_profile import copy_batch_runtime_profile
 
@@ -2077,10 +2323,6 @@ def saveBatchRuntimeProfile(runtime_profile, *, expected_state=None):
             state = _read_batch_file(BATCH_STATE_FILE, strict=True)
             if not state:
                 raise ValueError("No active batch state is available")
-            if expected_state is not None and (
-                state != expected_state or state.get("runtime_profile") is not None
-            ):
-                raise ValueError("The batch state changed before its legacy profile was confirmed")
             state["runtime_profile"] = saved_profile
             batch_ids = list(state.get("batch_ids") or [])
             batch_ids.extend(
@@ -2111,8 +2353,6 @@ def clearBatchFiles(*, strict=False):
         had_results = False
         with _batch_file_lock():
             state = _read_batch_file(BATCH_STATE_FILE)
-            if BATCH_QUEUE_EXPECTED is not None and state.get('run_id') != BATCH_QUEUE_EXPECTED['run_id']:
-                raise ValueError('The linked batch owner changed. Its recovery files were preserved.')
             had_results = bool(_read_batch_file(BATCH_RESULTS_FILE)) or state.get("status") == "fetched"
             if had_results:
                 fetched_ids = list(state.get("batch_ids") or [])
@@ -2529,13 +2769,6 @@ def _submit_translation_batches_unlocked(file_set=None, cost_estimate=None):
             strict=True, queue_file=BATCH_QUEUE_FILE
         )
         previous_state = _read_batch_file(BATCH_STATE_FILE, strict=True)
-    if BATCH_QUEUE_EXPECTED is not None:
-        submitted_keys = {key for batch in previous_state.get("batches", [])
-                          for key in (batch.get("custom_ids") or {}).values()}
-        if (batchQueueDigest(queue) != BATCH_QUEUE_EXPECTED["digest"]
-                or previous_state.get("run_id") != BATCH_QUEUE_EXPECTED["run_id"]
-                or not submitted_keys.issubset(queue)):
-            raise ValueError("The linked batch queue changed. Submission was blocked; prepare recovery again in Batch history.")
     if not queue:
         print("[BATCH] No batch requests queued.", flush=True)
         return []
@@ -3024,10 +3257,6 @@ def fetchTranslationBatches(batches=None):
             # exact snapshot of these batch ids. Cache keys omit the model, so
             # merging with a previous run can silently mix model outputs when
             # the new provider result set has errors or omissions.
-            if BATCH_QUEUE_EXPECTED is not None:
-                current = _read_batch_file(BATCH_STATE_FILE, strict=True)
-                if current != state or current.get('run_id') != BATCH_QUEUE_EXPECTED['run_id']:
-                    raise ValueError('The linked batch changed while downloading. Its recovery files were preserved.')
             _read_batch_file(BATCH_RESULTS_FILE, strict=True)
             _write_batch_file(BATCH_RESULTS_FILE, results)
             # Drop the queue; keep a lightweight fetched marker (ids for consume→history).
@@ -3317,8 +3546,7 @@ class TranslationConfig:
                  logFilePath="log/translationHistory.txt",
                  mismatchLogPath="log/mismatchHistory.txt",
                  convertQuotes=None,
-                 useSfxReference=None,
-                 validationRetries=2):
+                 useSfxReference=None):
         
         # Load from environment if not provided
         self.model = model or os.getenv("model")
@@ -3355,7 +3583,6 @@ class TranslationConfig:
         self.estimateMode = estimateMode
         self.logFilePath = logFilePath
         self.mismatchLogPath = mismatchLogPath
-        self.validationRetries = max(0, min(2, int(validationRetries)))
         if convertQuotes is None:
             self.convertQuotes = os.getenv("convertQuotes", "true").strip().lower() in (
                 "true", "1", "yes",
@@ -5345,12 +5572,12 @@ def last_translation_had_mismatch() -> bool:
 
 
 def _retry_live_translation(func):
-    """Retry live provider work; batch phases only read or write local data."""
+    """Retry live provider work, but never retry deterministic consume errors."""
     retried = retry(exceptions=Exception, tries=5, delay=5)(func)
 
     @wraps(func)
     def wrapped(*args, **kwargs):
-        if get_batch_phase():
+        if get_batch_phase() == "consume":
             return func(*args, **kwargs)
         return retried(*args, **kwargs)
 
@@ -5419,10 +5646,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
     # disposable queue and never reaches a provider call.
     batch_phase = get_batch_phase()
     batch_provider = getBatchProvider(config.model)
-    if batch_phase and not batch_provider:
-        raise ValueError("This endpoint does not support provider Batch jobs. The batch phase was stopped; no live request was made.")
-    if batch_phase and config.estimateMode and batch_phase != "estimate":
-        raise ValueError("An estimate cannot execute a provider batch phase. No live request was made.")
+    if batch_phase and (
+        not batch_provider
+        or (config.estimateMode and batch_phase != "estimate")
+    ):
+        batch_phase = None
     if batch_phase in {"collect", "estimate"} and isinstance(text, list):
         _record_batch_collect_stats(source_items=len(text))
     
@@ -5808,7 +6036,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
         # A fetched provider result may be validated once, but a consume pass
         # must never turn a missing/invalid discounted result into an implicit
         # full-price live retry. The user can start normal Translate explicitly.
-        max_retries = 0 if batch_phase == "consume" else getattr(config, "validationRetries", 2)
+        max_retries = 0 if batch_phase == "consume" else 2
         final_translations = None
         last_raw_translation = ""
         from_batch = False

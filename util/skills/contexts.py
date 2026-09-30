@@ -6,19 +6,18 @@ import json
 import os
 from typing import Any
 
-from util.paths import TRANSLATION_CONTEXTS_PATH, runtime_data_file
+from util.paths import TRANSLATION_CONTEXTS_PATH
 
 _cache: dict[str, Any] | None = None
-_cache_mtime: tuple | None = None
+_cache_mtime: float | None = None
 
 
 def _load() -> dict[str, Any]:
     global _cache, _cache_mtime
-    path = runtime_data_file(TRANSLATION_CONTEXTS_PATH)
+    path = TRANSLATION_CONTEXTS_PATH
     if not path.is_file():
         raise FileNotFoundError(f"Translation contexts file missing: {path}")
-    metadata = path.stat()
-    mtime = (path, metadata.st_mtime_ns, metadata.st_size)
+    mtime = path.stat().st_mtime
     if _cache is not None and _cache_mtime == mtime:
         return _cache
     data = json.loads(path.read_text(encoding="utf-8"))

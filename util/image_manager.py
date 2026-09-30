@@ -716,34 +716,3 @@ def thumbnail_profile_png_bytes(
         output = BytesIO()
         image.save(output, format="PNG")
         return output.getvalue()
-
-
-def build_translation_handoff(game_root: str | Path, engine_id: str, image_root: str | Path | None = None) -> str:
-    """Build the same image-localization instructions for either desktop UI."""
-    import sys
-    from util.paths import PROJECT_ROOT, prepare_game_translation_context
-    from util.skills import load_clipboard_skill
-    root = _resolved_root(game_root)
-    profile = get_image_profile(engine_id)
-    if engine_id == PROFILE_GENERIC:
-        source = normalize_generic_image_root(root, image_root or root)
-        images = editable_workspace_root(root) / source.relative_to(root)
-    else:
-        from util.rpgmaker_images import resolve_content_root
-        images = editable_workspace_root(root) / resolve_content_root(root).relative_to(root) / 'img'
-    replacements = {
-        "{{ENGINE_NAME}}": profile.label,
-        "{{ENGINE_CONTEXT}}": profile.translation_skill_context,
-        "{{GAME_ROOT}}": str(root),
-        "{{EDITABLE_IMAGES_FOLDER}}": str(images),
-        "{{VOCAB_FILE}}": str(prepare_game_translation_context(root)),
-        "{{IMAGE_TOOL_PYTHON}}": str(Path(sys.executable).resolve()),
-        "{{IMAGE_INPAINT_CLI}}": str((PROJECT_ROOT / "scripts" / "image_inpaint.py").resolve()),
-    }
-    prompt = load_clipboard_skill("image_translation.md")
-    missing = [token for token in replacements if token not in prompt]
-    if missing:
-        raise ValueError("Image translation skill is missing required placeholder(s): " + ", ".join(missing))
-    for token, value in replacements.items():
-        prompt = prompt.replace(token, value)
-    return prompt

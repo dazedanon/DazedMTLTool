@@ -29,20 +29,7 @@ if [[ "$#" -eq 0 ]]; then
 fi
 
 case "$1" in
-    full)
-        "$PYTHON" scripts/run_test_suite.py "$@"
-        cd "$ROOT/desktop"
-        export DAZEDTL_PYTHON="$PYTHON" DAZEDTL_DESKTOP_PROVIDERS=0 DAZEDTL_DESKTOP_ALLOW_LIVE=0
-        exec node node_modules/@playwright/test/cli.js test
-        ;;
-    extended|desktop)
-        # Reuse the established Electron suite; its own limits stay unchanged.
-        shift
-        cd "$ROOT/desktop"
-        export DAZEDTL_PYTHON="$PYTHON" DAZEDTL_DESKTOP_PROVIDERS=0 DAZEDTL_DESKTOP_ALLOW_LIVE=0
-        exec node node_modules/@playwright/test/cli.js test "$@"
-        ;;
-    core|integration|imagetl)
+    core|integration|extended|imagetl|full)
         exec "$PYTHON" scripts/run_test_suite.py "$@"
         ;;
     *)

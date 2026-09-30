@@ -336,20 +336,6 @@ class TestUpdateVocabSection(unittest.TestCase):
         self.assertNotIn("Bob (Robert)", text)
         self.assertEqual(text.count("# Game Characters"), 1)
 
-        reviewed = (
-            "# Game Characters\nノラ / ﾉﾗ (Nora (masked)) - female (quiet voice)\n"
-            "ユウ (Yuu) - narrator\n\n# Items\n薬 (Potion)\n\n"
-            + vocab.BASE_SEPARATOR + "# Base\nさん (san)\n"
-        )
-        changed = vocab.merge_reviewed_character_names(reviewed, [("ﾉﾗ", "Norah"), ("アイリ", "Airi")])
-        self.assertIn("ノラ / ﾉﾗ (Norah) - female (quiet voice)", changed)
-        self.assertIn("ユウ (Yuu) - narrator", changed)
-        self.assertIn("アイリ (Airi)", changed)
-        self.assertEqual(changed.split(vocab.BASE_SEPARATOR)[1], reviewed.split(vocab.BASE_SEPARATOR)[1])
-        self.assertIn("# Items\n薬 (Potion)", changed)
-        with self.assertRaisesRegex(ValueError, "aliases disagree"):
-            vocab.merge_reviewed_character_names("# Game Characters\nアオイ / 青井 (Aoi) - friend\n", [("アオイ", "Aoi"), ("青井", "Bluewell")])
-
     def test_skips_noop_pairs(self):
         before = self.vocab_path.read_text(encoding="utf-8")
         vocab.update_vocab_section("Items", [("Potion", "Potion"), ("", "X")], game_root=self.tmp.name)

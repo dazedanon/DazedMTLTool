@@ -125,9 +125,6 @@ class ImageEntry:
     error: str = ""
     blocks: list[TextBlock] = field(default_factory=list)
     words: list[Word] = field(default_factory=list)
-    # Portable vector brush drafts. Raster editors materialize these on save;
-    # renderers apply them over the existing paint/cut layers.
-    strokes: list[dict] = field(default_factory=list)
 
     @property
     def name(self) -> str:
@@ -161,7 +158,6 @@ class ImageEntry:
             "error": self.error,
             "blocks": [block.to_dict() for block in self.blocks],
             "words": [word.to_dict() for word in self.words],
-            "strokes": self.strokes,
         }
 
     @staticmethod
@@ -177,7 +173,6 @@ class ImageEntry:
         )
         entry.blocks = [TextBlock.from_dict(item) for item in data.get("blocks") or []]
         entry.words = [Word.from_dict(item) for item in data.get("words") or []]
-        entry.strokes = list(data.get("strokes") or [])
         return entry
 
 

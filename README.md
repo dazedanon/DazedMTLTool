@@ -15,66 +15,58 @@ forward when a game is updated.
 - CSV, JSON, text, subtitle, regex-driven, and prepared Aquedi4 data
 
 Support depth varies by engine. RPG Maker MV/MZ and WOLF have the most complete
-guided workflows; Manual engines provides adapters for the other formats.
+guided workflows; the Translation page provides adapters for the other formats.
 
 ## Requirements
 
-- 64-bit Windows, Linux with a graphical desktop, or macOS
+- Python 3.12, 3.13, or 3.14
 - An API key for provider-based translation, or access to a coding assistant for Len’s Method
-- An internet connection for the first setup and online translation
+- Windows, Linux, or macOS
 
-The launchers install private, verified Python and Electron runtimes automatically.
-You do not need to install Python, Node, npm, or Qt. Git is optional for version
-tracking; see the in-app Git setup guide. Linux needs its usual desktop libraries
-and curl or wget. Optional OCR/inpainting models are installed when requested.
+Download Python from [python.org](https://www.python.org/downloads/). On Windows,
+enable **Add python.exe to PATH** during installation. Verify the installation in
+a new terminal with:
+
+```text
+python -V
+```
 
 ## Quick start
 
 1. Download or clone the repository into its own folder.
 2. Launch DazedTL:
    - Windows: double-click `START.bat`.
-   - macOS: double-click `START.command`.
-   - Linux: run `bash START.sh`.
+   - Linux or macOS: run `./START.sh`.
    - Linux desktop: double-click `DazedTL.desktop` and allow launching when
      prompted.
-3. Wait for setup to finish. Later launches reuse the downloaded runtimes.
-4. Open **Settings** and add a provider, API key, and model.
-5. Choose **Guided workflow** for RPG Maker or WOLF, **Len’s Method** for
-   whole-game translation with your coding assistant, or **Manual engines**
-   for another supported format. **Guide** contains the detailed steps.
+3. Open **Configuration** and add a provider, API key, and model.
+4. Open **Guide**, then choose the RPG Maker or WOLF workflow for a guided
+   project, **Len’s Method** for skill-driven whole-game translation with your
+   coding assistant, or **Translation** for another supported format.
 
 For Len’s Method with direct assistant translation, skip provider configuration.
 Choose the game and scope, click **Copy starting prompt**, and paste it into your
 coding assistant. That one prompt includes setup and the selected task.
 See **Guide → What Other Tabs Do** for the full steps.
 
-Settings and saved work live in the per-user DazedTL profile. Setup does not
-change your system Python or PATH. `bash START.sh --offline` reuses a completed
-setup and disables provider requests; `--setup-only` prepares the app without
-opening it. Windows equivalents are `START.bat -Offline` and `-SetupOnly`.
-
-Existing Qt users: use **Update** in the old app, close it when the update
-finishes, then open DazedTL through the same launcher or shortcut. The first
-Electron launch backs up and imports `.env`, saved keys, engine preferences,
-batch history and evaluations. The old `files/`, `translated/`, `log/` and game
-folders stay in place. Conflicting credentials require an explicit selection
-before batch recovery. See [installation and migration](docs/desktop-setup.md).
+The launchers create a virtual environment and install missing dependencies.
+Advanced users may configure the same settings in a private `.env` copied from
+`.env.example`.
 
 ## Feature map
 
 | Area | Purpose |
 |---|---|
 | **Guide** | Built-in setup, workflow, recovery, and playtesting documentation |
-| **Guided workflow** | Guided RPG Maker and WOLF project translation |
+| **Workflow** | Guided RPG Maker and WOLF project translation |
 | **Len’s Method** | Whole-game translation with your AI assistant, using Workflow’s shared glossary, skills and references |
 | **Images** | Extract, edit, review, and safely patch translatable images |
-| **Manual engines** | Direct translation with engine-specific adapters |
-| **Batch history** | Submit and resume supported provider batch jobs |
+| **Translation** | Direct translation with engine-specific adapters |
+| **Batches** | Submit and resume supported provider batch jobs |
 | **Evaluation** | Compare models on the same deterministic translation sample |
-| **Git version updates** | Carry an existing translation into a newer official game build |
-| **Shared instructions** | Manage shared translation instructions |
-| **Settings** | Provider, model, engine, wrapping, and workflow defaults |
-| **Updates & rollback** | Update the application or restore its previous build |
+| **Version Update** | Carry an existing translation into a newer official game build |
+| **Skills** | Manage shared and per-game translation instructions |
+| **Configuration** | Provider, model, engine, wrapping, and workflow defaults |
 
 The Version Update feature uses two Git branches for every engine and file
 format. `original` records official releases, while the repository's registered
@@ -132,8 +124,7 @@ the feature does not contact an online dictionary.
 | `docs/` | Maintainer contracts, plans, roadmap, and audits |
 | `files/` | Imported source files for direct translation |
 | `gameupdate/` | Standalone player patch/update component |
-| `desktop/` | Electron/React UI, Python service and one-click setup |
-| `gui/` | Compatibility launcher for existing shortcuts |
+| `gui/` | Application UI and workflow code |
 | `log/` | Translation logs, caches, history, and resumable run state |
 | `modules/` | Engine and format translation adapters |
 | `scripts/` | Launch, maintenance, capture, and test utilities |

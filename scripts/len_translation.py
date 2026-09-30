@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 import sys
 
@@ -19,9 +18,6 @@ from util.len_translation import (  # noqa: E402
 
 
 def main(argv=None) -> int:
-    if os.environ.get("DAZEDTL_DESKTOP_WORKSPACE"):
-        from desktop.backend.cli_environment import configure
-        configure(os.environ["DAZEDTL_DESKTOP_WORKSPACE"])
     from util.version_update import GitWorkflowError
 
     parser = argparse.ArgumentParser(description=__doc__)

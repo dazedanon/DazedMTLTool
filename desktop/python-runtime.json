@@ -1,6 +1,0 @@
-{
-  "implementation": "cpython",
-  "version": "3.12.14",
-  "provider": "python-build-standalone via uv",
-  "uv": "0.12.20"
-}

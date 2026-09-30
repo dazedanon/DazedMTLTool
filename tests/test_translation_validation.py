@@ -268,20 +268,37 @@ class TranslationContentValidationTests(unittest.TestCase):
                 if reason:
                     self.assertIn(reason, reasons[0])
 
-    def test_truncation_and_repeated_punctuation_are_failures_and_warnings(self):
-        cases = (
-            ('これはとても長い日本語の文章です', '!', 'unusually short'),
-            ('[ルシア]: ………………………………………………………………。', '[Lucia]: ' + '.' * 50, 'Excessive character repetition'),
+    def test_short_translation_is_hard_failure(self):
+        source = "これはとても長い日本語の文章です"
+        valid, indices, reasons = tr.validate_translation_content(
+            [source], ["!"], r"[一-龠ぁ-ゔァ-ヴー]+"
         )
-        for source, translated, reason in cases:
-            with self.subTest(reason=reason):
-                valid, indices, reasons = tr.validate_translation_content([source], [translated], r"[一-龠ぁ-ゔァ-ヴー]+")
-                warning_indices, warnings = tr.translation_content_warnings([source], [translated], r"[一-龠ぁ-ゔァ-ヴー]+")
-                self.assertFalse(valid)
-                self.assertEqual(indices, [0])
-                self.assertIn(reason, reasons[0])
-                self.assertEqual(warning_indices, [0])
-                self.assertIn(reason, warnings[0])
+        warning_indices, warnings = tr.translation_content_warnings(
+            [source], ["!"], r"[一-龠ぁ-ゔァ-ヴー]+"
+        )
+
+        self.assertFalse(valid)
+        self.assertEqual(indices, [0])
+        self.assertIn("unusually short", reasons[0])
+        self.assertEqual(warning_indices, [0])
+        self.assertIn("unusually short", warnings[0])
+
+    def test_repeated_punctuation_is_hard_failure(self):
+        source = "[ルシア]: ………………………………………………………………。"
+        translated = "[Lucia]: " + "." * 50
+        valid, indices, reasons = tr.validate_translation_content(
+            [source], [translated], r"[一-龠ぁ-ゔァ-ヴー]+"
+        )
+        warning_indices, warnings = tr.translation_content_warnings(
+            [source], [translated], r"[一-龠ぁ-ゔァ-ヴー]+"
+        )
+
+        self.assertFalse(valid)
+        self.assertEqual(indices, [0])
+        self.assertIn("Excessive character repetition", reasons[0])
+        self.assertEqual(warning_indices, [0])
+        self.assertIn("Excessive character repetition", warnings[0])
+
 
 class TranslationResponseSchemaTests(unittest.TestCase):
     def test_schema_matches_input_line_keys(self):
@@ -355,52 +372,49 @@ class EmptyProviderContentTests(unittest.TestCase):
             usage = SimpleNamespace(prompt_tokens=10, completion_tokens=20)
             return SimpleNamespace(choices=[choice], usage=usage)
 
-        for retries in (0, 2):
-            progress_messages.clear()
-            with self.subTest(validation_retries=retries), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                config = tr.TranslationConfig(
-                    model="gpt-5",
-                    language="English",
-                    prompt="Translate Japanese to English.",
-                    vocab="",
-                    batchSize=30,
-                    logFilePath=str(root / "translation.log"),
-                    mismatchLogPath=str(root / "mismatch.log"),
-                    useSfxReference=False,
-                    **({"validationRetries": 0} if retries == 0 else {}),
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = tr.TranslationConfig(
+                model="gpt-5",
+                language="English",
+                prompt="Translate Japanese to English.",
+                vocab="",
+                batchSize=30,
+                logFilePath=str(root / "translation.log"),
+                mismatchLogPath=str(root / "mismatch.log"),
+                useSfxReference=False,
+            )
+            mismatches = []
+            with (
+                mock.patch.object(tr, "get_batch_phase", return_value=None),
+                mock.patch.object(tr, "getBatchProvider", return_value=None),
+                mock.patch.object(tr, "get_cached_translation", return_value=None),
+                mock.patch.object(
+                    tr, "translateText", side_effect=refused_response
+                ) as translate,
+                mock.patch.object(tr, "cache_translation"),
+                mock.patch("builtins.print"),
+            ):
+                result = tr.translateAI(
+                    source,
+                    [],
+                    config,
+                    filename="Armors.json",
+                    pbar=progress,
+                    mismatchList=mismatches,
                 )
-                mismatches = []
-                with (
-                    mock.patch.object(tr, "get_batch_phase", return_value=None),
-                    mock.patch.object(tr, "getBatchProvider", return_value=None),
-                    mock.patch.object(tr, "get_cached_translation", return_value=None),
-                    mock.patch.object(
-                        tr, "translateText", side_effect=refused_response
-                    ) as translate,
-                    mock.patch.object(tr, "cache_translation"),
-                    mock.patch("builtins.print"),
-                ):
-                    result = tr.translateAI(
-                        source,
-                        [],
-                        config,
-                        filename="Armors.json",
-                        pbar=progress,
-                        mismatchList=mismatches,
-                    )
 
-                self.assertEqual(result, [source, [10 * (retries + 1), 20 * (retries + 1)]])
-                self.assertEqual(translate.call_count, retries + 1)
-                self.assertEqual(mismatches, ["Armors.json"])
-                self.assertTrue(any(
-                    "finish_reason=content_filter" in message
-                    and "Provider declined" in message
-                    for message in progress_messages
-                ))
-                mismatch_log = (root / "mismatch.log").read_text(encoding="utf-8")
-                self.assertIn("No translation content returned", mismatch_log)
-                self.assertIn("finish_reason=content_filter", mismatch_log)
+            self.assertEqual(result, [source, [30, 60]])
+            self.assertEqual(translate.call_count, 3)
+            self.assertEqual(mismatches, ["Armors.json"])
+            self.assertTrue(any(
+                "finish_reason=content_filter" in message
+                and "Provider declined" in message
+                for message in progress_messages
+            ))
+            mismatch_log = (root / "mismatch.log").read_text(encoding="utf-8")
+            self.assertIn("No translation content returned", mismatch_log)
+            self.assertIn("finish_reason=content_filter", mismatch_log)
 
 
 class EstimateModeSafetyTests(unittest.TestCase):

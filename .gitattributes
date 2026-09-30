@@ -1,9 +1,6 @@
 # Cmd.exe parses LF-only .bat files incorrectly on Windows (joined tokens / mangled commands).
 *.bat text eol=crlf
 
-# Tokenizer tables are verified against upstream byte hashes on every platform.
-data/tokenizers/9b5ad71b2ce5302211f9c61530b329a4922fc6a4 -text
-
 # Keep development-only agent/editor metadata out of user-facing source and
 # update archives.
 .agents export-ignore
@@ -15,24 +12,3 @@ data/tokenizers/9b5ad71b2ce5302211f9c61530b329a4922fc6a4 -text
 # Expand the exact archived commit so a fresh source download can identify the
 # version it already contains without committing a self-referential literal SHA.
 .git_archival.txt export-subst
-
-# Qt's existing updater must leave embedded engine preferences available for
-# the first Electron launch. Matching code is shipped in desktop/engine-defaults
-# and installed only after those preferences have been migrated.
-modules/rpgmakermvmz.py export-ignore
-modules/csv.py export-ignore
-modules/wolf.py export-ignore
-modules/srpg.py export-ignore
-
-# Hash-verified build outputs must retain their exact bytes on every platform.
-# Defaults deliberately preserve the original engine source, including spacing.
-desktop/dist/** -text -whitespace
-desktop/engine-defaults/** -text -whitespace
-desktop/src/** text eol=lf
-desktop/*.json text eol=lf
-desktop/index.html text eol=lf
-desktop/vite.config.ts text eol=lf
-modules/rpgmakermvmz.py text eol=lf
-modules/csv.py text eol=lf
-modules/wolf.py text eol=lf
-modules/srpg.py text eol=lf

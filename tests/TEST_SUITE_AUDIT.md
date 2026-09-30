@@ -2,38 +2,6 @@
 
 Audit dates: 2026-08-02, 2026-08-21, and 2026-08-25
 
-## 2026-09-30 Qt retirement
-
-Retired Qt widget cases were removed with their implementation. Shared contracts
-remain at cheaper boundaries: Git/update behavior uses the extracted source
-updater, engine filtering uses the registry, GameUpdate copying uses its file
-services, and worker/cost behavior uses the shared translation task. Image
-rendering/controller coverage remains separate from the retired Qt editor.
-
-Three core setup cases protect verified/offline downloads, archive extraction,
-engine restoration and workspace/ledger preservation. Four integration cases
-protect the actual old Qt archive protocol, credential-collision safeguards,
-transactional source update/recovery, and fresh setup without Python or Node on
-PATH. Related interrupted evaluation imports extend the existing archive case;
-managed QA command coverage extends its existing handoff case. Miniature fixtures
-replace user workspaces, inherited `.env` and provider access.
-
-Python counts moved from 776 core + 124 integration + 100 Qt UI cases to 764 core
-and 128 integration. `full` runs that 892-case union, then the established five
-Electron flows. The Electron suite retains its 20-second per-test and 60-second
-global limits. Python ceilings and count caps were not increased. ImageTL retains
-216 rendering/controller cases. Qt widget cases and two obsolete launcher-source/
-comment assertions were removed; OCR/inpainting extras remain optional while
-NumPy and OpenCV are bundled for the desktop editor.
-
-The last pre-retirement full Python run took 36.779 seconds; the new full Python
-run took 20.056 seconds, including discovery, with two existing skips. Separate
-core and integration checks took 4.891 and 16.713 seconds respectively. Core meets
-its 5-second ratchet target and 8-second ceiling; integration is within its
-18-second target and 20-second ceiling. Source Electron and package Electron runs passed
-in 54.2 and 59.5 seconds. See the current [parity report](../docs/desktop-parity.md)
-for final package and runtime validation.
-
 ## 2026-08-25 scalable tiering follow-up
 
 The 900-test core profile had grown to 16.0–16.9 seconds despite every test

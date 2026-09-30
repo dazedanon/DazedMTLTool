@@ -74,31 +74,12 @@ def is_clear(layer: np.ndarray | None) -> bool:
 
 def load_layer(job, entry, shape: tuple[int, ...]) -> np.ndarray:
     """This image's strokes, or a blank layer. Never None - the caller paints."""
-    layer = _read(layer_path(job, entry), shape)
-    apply_strokes(layer, getattr(entry, "strokes", []), cut=False)
-    return layer
+    return _read(layer_path(job, entry), shape)
 
 
 def load_cut(job, entry, shape: tuple[int, ...]) -> np.ndarray:
     """This image's erased-to-transparent marks, or a blank layer."""
-    layer = _read(cut_path(job, entry), shape)
-    apply_strokes(layer, getattr(entry, "strokes", []), cut=True)
-    return layer
-
-
-def apply_strokes(layer, strokes, *, cut=False):
-    """Apply portable brush vectors using the same pixel footprint as Qt."""
-    for item in strokes:
-        if (item["tool"] == "cut") != cut:
-            continue
-        points = item["points"]
-        colour = item.get("color", "#000000")
-        rgba = [int(colour[i:i + 2], 16) for i in (1, 3, 5)] + [255]
-        for start, end in zip(points, points[1:] or points):
-            if item["tool"] == "erase-paint":
-                wipe(layer, start, end, item["size"])
-            else:
-                stroke(layer, start, end, item["size"], rgba)
+    return _read(cut_path(job, entry), shape)
 
 
 def _read(path: Path, shape: tuple[int, ...]) -> np.ndarray:
@@ -122,16 +103,12 @@ def save_layer(job, entry, layer: np.ndarray | None) -> Path | None:
     the next session loads a layer, and "is there paint on this image?" stops
     being answerable from the workspace.
     """
-    result = _write(layer_path(job, entry), layer)
-    entry.strokes = [s for s in getattr(entry, "strokes", []) if s["tool"] == "cut"]
-    return result
+    return _write(layer_path(job, entry), layer)
 
 
 def save_cut(job, entry, cut: np.ndarray | None) -> Path | None:
     """Write the erased-to-transparent marks, or delete the file once empty."""
-    result = _write(cut_path(job, entry), cut)
-    entry.strokes = [s for s in getattr(entry, "strokes", []) if s["tool"] != "cut"]
-    return result
+    return _write(cut_path(job, entry), cut)
 
 
 def _write(path: Path, layer: np.ndarray | None) -> Path | None:

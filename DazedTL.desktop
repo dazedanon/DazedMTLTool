@@ -5,6 +5,6 @@ GenericName=AI Translation Tool
 Comment=AI translation tool for visual novels and RPG games
 Exec=bash -c 'exec "$(cd "$(dirname "%k")" && pwd)/scripts/launch.sh"'
 Icon=%k/assets/icon.png
-Terminal=true
+Terminal=false
 Categories=Development;Utility;
 StartupWMClass=DazedTL

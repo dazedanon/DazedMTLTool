@@ -7,7 +7,7 @@ Before adding or expanding tests:
 - Do not add coverage for a declarative registry/configuration entry when existing tests already exercise its processing path and schema consistency.
 - Use the cheapest level that detects the regression: pure function, component, workflow, then full application.
 - Do not add tests solely for coverage, implementation details, production-source substrings, exact prose, pixel geometry, widget ancestry, or constant values.
-- Full workflow or application construction belongs in the extended Electron suite. Keep controller checks in Python and explain any new application test in the handoff.
+- Full `QWidget`, workflow, or application construction belongs in the extended suite. Add its test ID prefix to `EXTENDED_TEST_PREFIXES` only when necessary and explain why in the handoff.
 - Keep tests hermetic: no network, ignored workspace data, `.env`, user configuration, existing logs, or pre-existing `files/` and `translated/` content.
 - Prefer small generated or committed fixtures inside a disposable directory.
 - Treat test-count headroom as capacity for distinct regressions, not permission
@@ -19,9 +19,9 @@ Before adding or expanding tests:
 
 - `core`: default development suite; deterministic behavior and lightweight component coverage.
 - `integration`: Git/subprocess workflows, persisted multi-step jobs, and provider orchestration with external calls faked.
-- `extended`: the existing five Electron tests for workflow composition and application navigation, with their existing 20-second per-test and 60-second global limits.
-- `imagetl`: image rendering/controller behavior using OpenCV.
-- `full`: core plus integration, followed by extended; required for test-runner and suite-partition changes. The Python and Electron runners retain separate existing budgets.
+- `extended`: full Qt widgets, workflow composition, and application navigation.
+- `imagetl`: semi-manual image rendering/editor behavior; requires the on-demand OpenCV extras.
+- `full`: core plus integration plus extended; required for test-runner and suite-partition changes.
 
 ## Code Review Rules
 

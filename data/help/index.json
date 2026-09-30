@@ -1,7 +1,7 @@
 [
   {
     "type": "group",
-    "title": "Getting started"
+    "title": "Definitely Read These"
   },
   {
     "id": "welcome",
@@ -25,7 +25,7 @@
   },
   {
     "type": "group",
-    "title": "Reference"
+    "title": "Extra Information"
   },
   {
     "id": "workflow-rpg",

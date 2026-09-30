@@ -5,14 +5,13 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import hashlib
 import json
-import os
 from pathlib import Path
 import sys
 import tempfile
 from types import SimpleNamespace
 
 from util.paths import (
-    DATA_DIR, GLOSSARY_BASE_SEPARATOR, SKILLS_DIR, game_glossary_path, runtime_data_file,
+    DATA_DIR, GLOSSARY_BASE_SEPARATOR, SKILLS_DIR, game_glossary_path,
     prepare_game_translation_context, read_game_glossary,
 )
 from util.skills import load_generic_project_setup, load_project_setup, load_system_prompt
@@ -125,7 +124,7 @@ def shared_context(project: LenProject) -> dict:
     glossary = read_game_glossary(project.game_root)
     custom = glossary.split(GLOSSARY_BASE_SEPARATOR, 1)[0].rstrip()
     # The shared editor owns the custom section; refreshed shipped defaults are derived.
-    base = runtime_data_file(DATA_DIR / "glossary_base.txt")
+    base = DATA_DIR / "glossary_base.txt"
     glossary = custom + "\n"
     if project.include_glossary_base and base.is_file():
         glossary += "\n" + GLOSSARY_BASE_SEPARATOR + base.read_text(encoding="utf-8")
@@ -372,7 +371,7 @@ def import_glossary(project: LenProject, document: dict) -> dict:
             "extraction_metadata": document.get("do_not_translate", [])}
 
 
-def build_handoff(project: LenProject, skill_root: Path = BUNDLED_SKILL, *, desktop_workspace=None) -> str:
+def build_handoff(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> str:
     _validate_project(project)
     mode = (
         "Translate with the coding assistant's existing access. No DazedTL translation API calls, "
@@ -391,15 +390,6 @@ def build_handoff(project: LenProject, skill_root: Path = BUNDLED_SKILL, *, desk
         if project.include_images else
         "Image translation is excluded. Report remaining baked Japanese labels separately."
     )
-    desktop_note = ""
-    if desktop_workspace is not None:
-        desktop_note = ("\nDesktop profile workspace (DAZEDTL_DESKTOP_WORKSPACE): "
-                        + json.dumps(str(Path(desktop_workspace).resolve()), ensure_ascii=False)
-                        + "\nSet DAZEDTL_DESKTOP_WORKSPACE to this path in every live DazedTL helper process. "
-                        "The Len CLI loads this profile's settings and active credential internally. "
-                        "For custom Python provider adapters, call desktop.backend.cli_environment.configure "
-                        "with this path before importing translation/provider modules. Do not copy credentials "
-                        "into scripts, command arguments, prompts or game files.\n")
     return f"""Use Len's game-translation skill to translate this Japanese game into English and deliver a validated local patch.
 
 Game folder: {json.dumps(str(project.game_root), ensure_ascii=False)}
@@ -407,7 +397,6 @@ Skill entrypoint: {json.dumps(str(skill_root / 'SKILL.md'), ensure_ascii=False)}
 Workspace: {json.dumps(str(project.workspace), ensure_ascii=False)}
 DazedTL application (DAZEDTL_ROOT): {json.dumps(str(DATA_DIR.parent), ensure_ascii=False)}
 Python executable: {json.dumps(sys.executable)}
-{desktop_note}
 
 Read the skill entrypoint first. Resolve references/ and tools/ relative to that file and use the live DazedTL application for its helpers. Run the skill's scripts/check_tools.py with the Python executable above. Follow references/project-lifecycle.md and references/progress-reporting.md throughout.
 
@@ -483,13 +472,7 @@ def setup_forge(project: LenProject) -> dict:
     from util.project_preparation import format_plugins_js
 
     try:
-        cfg = load_config(DATA_DIR.parent / ".env")
-        if os.environ.get("DAZEDTL_DESKTOP_WORKSPACE"):
-            from desktop.backend.cli_environment import public_values
-            values = public_values(os.environ["DAZEDTL_DESKTOP_WORKSPACE"])
-            cfg = {"hotkey": values["tlHotkey"], "forgeHotkey": values["forgeHotkey"],
-                   "uiScale": values["playtestUiScale"], "editorCmd": values["tlEditorCmd"], "workspaceFolder": "auto"}
-        ok, message = install(project.game_root, cfg=cfg)
+        ok, message = install(project.game_root, cfg=load_config(DATA_DIR.parent / ".env"))
         if not ok:
             raise ValueError(message)
         format_plugins_js(layout["plugins_js"])
@@ -500,9 +483,9 @@ def setup_forge(project: LenProject) -> dict:
     return {"status": "installed", "message": message}
 
 
-def prepare_project(project: LenProject, skill_root: Path = BUNDLED_SKILL, *, desktop_workspace=None) -> Path:
+def prepare_project(project: LenProject, skill_root: Path = BUNDLED_SKILL) -> Path:
     """Prepare shared guidance and handoff; leave prior project tools and translations intact."""
-    prompt = build_handoff(project, skill_root, desktop_workspace=desktop_workspace or os.environ.get("DAZEDTL_DESKTOP_WORKSPACE"))
+    prompt = build_handoff(project, skill_root)
     _validate_skill(skill_root)
     context = shared_context(project)
     project.workspace.mkdir(parents=True, exist_ok=True)

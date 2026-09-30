@@ -728,23 +728,6 @@ class PaintFileTests(unittest.TestCase):
         back = paint.load_layer(self.job, self.entry, (40, 60, 4))
         self.assertTrue((back == layer).all())
 
-        # A desktop vector draft must compose over existing Qt raster paint,
-        # then materialize once when a raster editor saves it.
-        self.entry.strokes = [
-            {"tool": "paint", "points": [[10, 10], [20, 10]], "size": 3, "color": "#123456"},
-            {"tool": "cut", "points": [[30, 30]], "size": 2, "color": "#000000"},
-        ]
-        composed = paint.load_layer(self.job, self.entry, (40, 60, 4))
-        self.assertEqual(list(composed[10, 15]), [18, 52, 86, 255])
-        self.assertEqual(list(composed[20, 15]), [7, 8, 9, 255])
-        paint.save_layer(self.job, self.entry, composed)
-        self.assertEqual([s["tool"] for s in self.entry.strokes], ["cut"])
-        self.assertTrue((paint.load_layer(self.job, self.entry, (40, 60, 4)) == composed).all())
-        cut = paint.load_cut(self.job, self.entry, (40, 60, 4))
-        self.assertTrue(cut[:, :, 3].any())
-        paint.save_cut(self.job, self.entry, cut)
-        self.assertEqual(self.entry.strokes, [])
-
     def test_an_empty_layer_is_not_written(self):
         """Leaving a fully transparent PNG behind means the next session loads
         a layer, and "is this image painted on?" stops being answerable."""
@@ -1794,9 +1777,7 @@ class InpaintBackendTests(unittest.TestCase):
                 # ...and name something the user can actually go and do: a
                 # place to get the file, or the command that installs it.
                 self.assertTrue(
-                    "http" in detail
-                    or "pip install" in detail
-                    or "python -m util.imagetools.resources" in detail,
+                    "http" in detail or "pip install" in detail,
                     f"{method} gave no next step: {detail}",
                 )
 
