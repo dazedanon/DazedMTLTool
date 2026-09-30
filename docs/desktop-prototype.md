@@ -103,8 +103,8 @@ credential migration/sync, content failures and schema-versus-transport retries.
 GUI assertions remain in the extended/Electron tiers; provider and persistence
 behavior is checked at the cheaper shared-service boundary where practical.
 
-The full suite passes all 1,000 tests in 36.394 seconds (two existing skips).
-Final source and packaged Electron runs pass in 58.2 and 58.3 seconds. Several
+The full suite passes all 1,000 tests in 35.984 seconds (two existing skips).
+Final source and packaged Electron runs pass in 58.2 and 59.7 seconds. Several
 preceding GUI runs exceeded 60 seconds; active progress refresh and test
 completion polling were shortened without changing scenarios, expected states
 or timeouts. The suite remains close to its global ceiling. Detailed tier and

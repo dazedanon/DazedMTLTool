@@ -94,10 +94,14 @@ def action_guard(project, folder):
     """Bind a confirmation to its current source, outputs and portable guidance."""
     root, folder = Path(project["source"]), Path(folder)
     layout = describe_game(root)
+    binary_data = (Path(layout['binary_data']) if layout['engine'] == 'WOLF'
+                   else root / 'Data' if layout['engine'] == 'ACE' else None)
+    archives = (sorted(root.glob('*.wolf*')) if layout['engine'] == 'WOLF'
+                else [Path(name) for name in layout['encrypted']] if layout['engine'] == 'ACE' else None)
     return {"layout": {key: layout[key] for key in ("source", "engine", "data", "plugins", "encrypted")},
             "data": tree_hashes(root, Path(layout["data"])),
-            "binary_data": tree_hashes(root, Path(layout["binary_data"])) if layout["engine"] == "WOLF" else None,
-            "archives": {str(path.relative_to(root)): file_hash(root, path) for path in sorted(root.glob("*.wolf*"))} if layout["engine"] == "WOLF" else None,
+            "binary_data": tree_hashes(root, binary_data) if binary_data is not None else None,
+            "archives": {str(path.relative_to(root)): file_hash(root, path) for path in archives} if archives is not None else None,
             "plugins": file_hash(root, Path(layout["plugins"])) if layout["plugins"] else None,
             "plugin_files": tree_hashes(root, Path(layout["plugins"]).parent / "plugins") if layout["plugins"] else None,
             "settings": file_hash(root, root / ".dazedtl/settings.json"),

@@ -127,6 +127,23 @@ downloads are excluded. The public tokenizer table is included for offline token
 counting. Moving the package preserves the profile and installed extras. Runtime
 installation is journaled and backs up local customizations when defaults change.
 
+The native engine check runs real bundled tools against generated archives and
+Ruby data, records executable hashes, and verifies original-file preservation:
+
+```sh
+.venv/bin/python desktop/scripts/check-native.py --packaged
+# Optional Windows-binary compatibility check on Linux, in a disposable prefix:
+.venv/bin/python desktop/scripts/check-native.py --packaged --wine
+```
+
+Linux checks WOLF archive round trips; Windows also checks Ace decryption and
+JSON extraction/repacking. The optional Wine run exercises the Windows binaries
+but does not replace a native Windows run. Commands have a 45-second cap within
+a 180-second tool-execution deadline. Reports are written under
+`.tmp-ui/desktop-evidence/`. CI runs these checks on Linux/Windows and retains
+validation evidence. A macOS WolfDawn binary is currently absent; macOS WOLF
+acceptance remains blocked until one is provided.
+
 Run the relevant Python suites from the repository root:
 
 ```sh

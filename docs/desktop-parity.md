@@ -14,8 +14,8 @@ through their existing services. No package is signed or published by this work.
 | Runtime and saved work | Existing engine helpers/defaults; isolated inputs and saved jobs | Linux standalone package, readonly snapshot import, frozen plans, draft/approval recovery, cancellation, Unicode relocation and profile retention | Windows/macOS native runs; cold-cache measurements |
 | RPG Maker MV/MZ | Production parser, glossary, speakers, runtime codes, wrapping, `_original` | Real offline database/dialogue translation; actor dependencies; shared phase profiles, variable-cache/glossary handoff; reviewed export and original preservation | Additional real translated-game playtests |
 | Guided RPG Maker | [Behavior inventory](rpgmaker-workflow-behavior-inventory.md) | All ten stages call shared preparation, translation, references, rewrap, QA, images, playtest and release services. Electron phase→export, stale-action rejection, drafts, reference/setup and release/plugin flows pass | Native Ace and real-game playtests; full QA task completion belongs to the invoked QA workflow |
-| RPG Maker Ace | Existing decrypter, RV2JSON, Ruby audit and packing | Engine detection, supported stages, native tool routes, Ruby handoff and public ZIP controls exposed | Native Windows extraction/decryption/packing |
-| WOLF | WolfDawn extraction/originals/precheck/injection/package helpers | Ten stages, safe names, database profiles/scopes, speakers, wrapping and saves exposed. Offline event extraction→translation→repeat injection passes in Electron; component checks cover relocated manifests, database scopes and stale injection | Native archive/map/database/save fixtures and real-game playtests |
+| RPG Maker Ace | Existing decrypter, RV2JSON, Ruby audit and packing | Engine detection, supported stages, native tool routes, Ruby handoff and public ZIP controls exposed. Real bundled tools pass generated decryption/extraction/repacking under Wine; originals/backups are preserved. Changed native databases or archives invalidate action previews; game preparation rejects directory junctions as well as symlinks | Native Windows execution remains required; Wine is compatibility evidence |
+| WOLF | WolfDawn extraction/originals/precheck/injection/package helpers | Ten stages, safe names, database profiles/scopes, speakers, wrapping and saves exposed. Offline event extraction→translation→repeat injection passes in Electron; component checks cover relocated manifests, database scopes and stale injection. Real Linux and Wine-hosted Windows binaries pass archive pack/unpack/repack with original payload preservation | Native Windows/macOS runs and map/database/save fixtures; no macOS WolfDawn binary is currently bundled |
 | Manual engines | Same 19-engine registry and shared Qt-free `TranslationTask` | All handlers/settings exposed; real RPG Maker estimates, CSV output/export, WOLF workflow, saved-job recovery, speaker/batch approval boundaries and source isolation | Real fixtures for engines outside the exercised set |
 | Len’s Method | `len_translation`, `len_api`, Git, progress and patch scope | Both handoff modes, scope switches, guidance, references, profile-aware CLI, saved drafts and progress. Source/package handoff→Git flow passes; native reference add/pair/build/remove and counted-progress display pass | Actual assistant-driven completion and game validation remain the handoff’s work |
 | Git version updates | Existing bootstrap/reconcile, registration, branches, exact update plan, assets, conflicts and handoff | Electron rejects changed official input then applies a fresh preview; worker checks cover abort/retry, conflict continuation, registration/switch and metadata using disposable repos | Native Windows/macOS subprocess/path behavior |
@@ -35,10 +35,10 @@ Latest relevant Python gates on Linux:
 
 | Suite | Tests | Total | Enforced ceiling | Result |
 | --- | ---: | ---: | ---: | --- |
-| Core | 776 | 5.019 s | 8 s | Pass; slightly above the 5 s ratchet target |
-| Integration | 124 | 16.039 s | 20 s | Pass |
+| Core | 776 | 5.157 s | 8 s | Pass; slightly above the 5 s ratchet target |
+| Integration | 124 | 15.915 s | 20 s | Pass |
 | Extended | 100 | 18.178 s | 30 s | Pass |
-| Full | 1,000 | 36.394 s | 45 s | Pass; 2 existing skips |
+| Full | 1,000 | 35.984 s | 45 s | Pass; 2 existing skips |
 
 Ten overlapping case groups were parameterized with their assertions retained.
 The full count now meets its existing 1,000-test ceiling. No runtime, module,
@@ -47,8 +47,8 @@ per-test or count limit was raised. The six desktop integration cases take about
 [validation report](desktop-prototype.md) for acceptance scope and earlier image
 and paid-test evidence.
 
-The final five-flow Electron suite passes from source in **58.2 seconds** and
-from the rebuilt Linux package in **58.3 seconds**, within the unchanged
+The five-flow Electron suite passed from source at the feature checkpoint in
+**58.2 seconds** and from the latest Linux package in **59.7 seconds**, within the unchanged
 60-second global and 20-second per-test ceilings. Earlier runs exceeded the
 global limit. Active-job refresh now updates completion/approval controls more
 promptly, and completion assertions poll more often while retaining their
@@ -56,12 +56,30 @@ expected states and 10-second deadlines. The suite still has limited runtime
 headroom; native platform checks remain required.
 
 The current package ID is
-`f9e1cf26127418333f646500ecd98e4046f6f9fbd0b46e924b900bf80800448a`.
+`3dc76e32afd6aba87cba6e25efec6dde3054394d12399e9203acb40e2d6dd183`.
 Its archive SHA-256 is
-`76629751bf752ce57516d6c0eca60ceb9fa2ef52ab801af4cd0ea968299c7235`.
+`1911a65fca16c701338dfc148d15e9977dd61376147cbca0128deac16eae6f74`.
 The standalone legacy-profile, reference/progress and release/playtest checks
-also passed before the final refresh-interval-only change. The complete package
-inventory is verified after the final smoke suite.
+passed at the feature checkpoint. The current package also passes 13 real
+native-tool steps in 9.647 seconds: Linux WOLF archives, Windows WOLF through
+Wine, and Ace decryption/extraction/repacking through Wine. Original archives,
+untouched payloads and Ace backups remain intact. These are compatibility
+checks; native Windows execution and its real junction fixture remain pending.
+The complete package inventory is verified after the final smoke suite.
+
+## Saved checkpoint and native continuation
+
+Local checkpoint `1bce6748` is retained under
+`refs/checkpoints/electron-replacement-20260930T030201Z`. Its validated package
+and checksum are preserved in the ignored `.tmp-ui/desktop-checkpoints/` folder.
+The current branch and staging were preserved.
+
+The continuation adds Ace native-input preview guards, junction protection and
+`desktop/scripts/check-native.py`. The CI workflow can select a native OS and
+retains its generated evidence. A push to a dedicated
+`codex/electron-validation-*` branch runs Linux/Windows checks; other branches
+remain manual. The workflow does not publish application releases. No validation
+branch has been pushed and no native CI run is claimed here.
 
 ## Cutover requirements
 

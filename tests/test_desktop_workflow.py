@@ -65,6 +65,32 @@ class DesktopWorkflowTests(unittest.TestCase):
             self.service.workflow_execute(preview['token'])
         start.assert_not_called()
         self.assertEqual(output.read_bytes(), b'newer-release')
+        # Ace conversion consumes native files as well as its JSON workspace.
+        # A changed native database or archive must invalidate approval before
+        # any converter/decrypter process is launched.
+        ace = self.root / 'Ace game'
+        native = ace / 'Data/Items.rvdata2'
+        native.parent.mkdir(parents=True)
+        native.write_bytes(b'original native fixture')
+        archive = ace / 'Game.rgss3a'
+        archive.write_bytes(b'original archive fixture')
+        atomic_json(ace / 'ace_json/Items.json', [None, {'id': 1, 'name': 'Medicine'}])
+        ace_id = self.service.workflow_open(str(ace))['project']['id']
+        # Windows directory junctions are a separate filesystem type from
+        # symbolic links. Keep the same no-indirection write boundary.
+        with patch.object(Path, 'is_junction', lambda path: path == ace / 'Data', create=True):
+            with self.assertRaisesRegex(ValueError, 'junction'):
+                self.service.workflow_preview(ace_id, 'ace_pack')
+        self.assertEqual(native.read_bytes(), b'original native fixture')
+        for action, path in (('ace_extract', native), ('ace_pack', native), ('ace_decrypt', archive)):
+            with self.subTest(action=action):
+                preview = self.service.workflow_preview(ace_id, action)
+                path.write_bytes(path.read_bytes() + b'changed')
+                changed = path.read_bytes()
+                with patch.object(self.service.operations, 'start') as start, self.assertRaisesRegex(ValueError, 'changed after'):
+                    self.service.workflow_execute(preview['token'])
+                start.assert_not_called()
+                self.assertEqual(path.read_bytes(), changed)
         apply = self.service.workflow_preview(identity, 'rewrap_apply', values)
         target = self.root / "unrelated.json"
         target.write_text("{}")

@@ -1,9 +1,18 @@
 name: Desktop package validation
 
-# Kept manual until the replacement's parity gates are complete. This workflow
-# builds and tests locally on each runner; it does not publish applications.
+# Normal branches remain manual. A dedicated validation branch can exercise
+# Linux/Windows before this new workflow reaches the default branch. No release
+# assets or applications are published by this workflow.
 on:
+  push:
+    branches: ["codex/electron-validation-*"]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Native runner to validate (macOS still needs its WolfDawn binary)
+        type: choice
+        default: all
+        options: [all, linux, windows, macos]
 
 permissions:
   contents: read
@@ -14,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest","windows-latest"]' || inputs.platform == 'linux' && '["ubuntu-latest"]' || inputs.platform == 'windows' && '["windows-latest"]' || inputs.platform == 'macos' && '["macos-latest"]' || '["ubuntu-latest","windows-latest","macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:
@@ -52,6 +61,9 @@ jobs:
         run: |
           npm run test:updates
           npm run package
+      - name: Validate packaged native engine tools
+        if: runner.os != 'macOS'
+        run: python desktop/scripts/check-native.py --packaged
       - name: Linux source and packaged UI regression
         if: runner.os == 'Linux'
         working-directory: desktop
@@ -66,3 +78,15 @@ jobs:
           npm test
           npm run test:packaged
           npm run test:updates:packaged
+      - name: Retain validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-validation-${{ runner.os }}
+          path: |
+            .tmp-ui/desktop-evidence/
+            desktop/test-results/
+            desktop/out/package-result.json
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 14
