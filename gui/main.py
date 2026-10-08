@@ -132,10 +132,12 @@ class UpdateThread(QThread):
             "https://gitgud.io/DazedAnon/DazedMTLTool/-/archive/{sha}/DazedMTLTool-{sha}.zip",
             ("commit", "id"),
         ),
+        # This tool moved to dazed/DazedMTL when DazedTL 2.0 took the
+        # dazed/DazedTL name; updates must never install 2.0 over it.
         UpdateSource(
             "git.dazedtl.dev",
-            "https://git.dazedtl.dev/api/v1/repos/dazed/DazedTL/branches/{branch}",
-            "https://git.dazedtl.dev/dazed/DazedTL/archive/{sha}.zip",
+            "https://git.dazedtl.dev/api/v1/repos/dazed/DazedMTL/branches/{branch}",
+            "https://git.dazedtl.dev/dazed/DazedMTL/archive/{sha}.zip",
             ("commit", "id"),
         ),
     )
@@ -928,6 +930,7 @@ class DazedMTLGUI(QMainWindow):
         self.setup_font_scaling()
         self.restore_window_state()
         QTimer.singleShot(500, self.start_background_update_check)
+        QTimer.singleShot(900, self.show_dazedtl2_notice_once)
         
     def restore_window_state(self):
         """Restore window geometry and state from settings."""
@@ -1278,6 +1281,16 @@ class DazedMTLGUI(QMainWindow):
         
         sidebar_layout.addStretch()
 
+        # DazedTL 2.0 replaces this tool; its notice stays one click away.
+        from gui.platform_glyph import configure_nav_toolbutton
+        btn_dazedtl2 = self.create_nav_button("🆕", "DazedTL 2.0 is out")
+        btn_dazedtl2.setCheckable(False)
+        configure_nav_toolbutton(
+            btn_dazedtl2, "🆕", horizontal=False, update_available=True,
+        )
+        btn_dazedtl2.clicked.connect(self.show_dazedtl2_notice)
+        sidebar_layout.addWidget(btn_dazedtl2)
+
         # Update button at the bottom of the sidebar
         self.btn_update = self.create_nav_button(self._update_icon, "Check for Updates")
         self.btn_update.setCheckable(False)
@@ -1539,6 +1552,16 @@ class DazedMTLGUI(QMainWindow):
             horizontal=False,
             update_available=False,
         )
+
+    def show_dazedtl2_notice(self):
+        """Explain DazedTL 2.0 and link its downloads."""
+        from gui.dazedtl2_notice import DazedTL2Dialog
+        DazedTL2Dialog(self).exec_()
+
+    def show_dazedtl2_notice_once(self):
+        """Show the DazedTL 2.0 notice on the first start after this update."""
+        from gui.dazedtl2_notice import show_once
+        show_once(self)
 
     def show_update_dialog(self):
         """Open the update dialog and check for a newer version."""

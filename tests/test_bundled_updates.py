@@ -554,11 +554,11 @@ class CheckToolUpdateTests(unittest.TestCase):
         sources = UpdateThread.UPDATE_SOURCES
         self.assertEqual(
             UpdateThread.branch_api_url(sources[2]),
-            "https://git.dazedtl.dev/api/v1/repos/dazed/DazedTL/branches/main",
+            "https://git.dazedtl.dev/api/v1/repos/dazed/DazedMTL/branches/main",
         )
         self.assertEqual(
             UpdateThread.archive_zip_url(sources[2], latest_sha),
-            f"https://git.dazedtl.dev/dazed/DazedTL/archive/{latest_sha}.zip",
+            f"https://git.dazedtl.dev/dazed/DazedMTL/archive/{latest_sha}.zip",
         )
         scenarios = (
             ([OSError("primary unavailable"), latest_sha], sources[1]),

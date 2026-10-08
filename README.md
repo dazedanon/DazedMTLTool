@@ -1,5 +1,13 @@
 # DazedTL
 
+> **DazedTL 2.0 replaces this tool.** It is a new app with a guided workflow for
+> RPG Maker MV/MZ and Ace games, assistant-led translation for any other engine,
+> and safe built-in updates. Download it from
+> [GitGud](https://gitgud.io/DazedAnon/dazedtl) or
+> [git.dazedtl.dev](https://git.dazedtl.dev/dazed/DazedTL), unpack it into a new
+> folder and run START. This repository keeps the original tool working for
+> existing users; new features and fixes go into 2.0.
+
 DazedTL is a desktop game-translation toolkit for translating Japanese games
 with OpenAI, Gemini, Mistral, Anthropic, and compatible AI providers. Its guided
 workflows cover importing game data, building translation context, translating
